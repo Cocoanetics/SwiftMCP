@@ -70,11 +70,13 @@ public struct MCPFunctionMetadata: Sendable {
     public let name: String
     public let parameters: [ParameterInfo]
     public let returnType: String?
+    public let description: String?
     
-    public init(name: String, parameters: [ParameterInfo], returnType: String?) {
+    public init(name: String, parameters: [ParameterInfo], returnType: String?, description: String? = nil) {
         self.name = name
         self.parameters = parameters
         self.returnType = returnType
+        self.description = description
     }
     
     public func toJSON() -> String {
@@ -95,6 +97,10 @@ public struct MCPFunctionMetadata: Sendable {
             json += "\"returnType\": \"\(returnType)\""
         } else {
             json += "\"returnType\": null"
+        }
+        
+        if let description = description {
+            json += ", \"description\": \"\(description)\""
         }
         
         json += "}"
@@ -146,15 +152,19 @@ public class MCPFunctionRegistry {
 
 /// Helper function to register a function with the MCPFunctionRegistry
 @MainActor
-public func registerMCPFunction(name: String, parameters: [(name: String, type: String)], returnType: String?) {
+public func registerMCPFunction(name: String, parameters: [(name: String, type: String)], returnType: String?, description: String? = nil) {
     let parameterInfos = parameters.map { ParameterInfo(name: $0.name, type: $0.type) }
-    let metadata = MCPFunctionMetadata(name: name, parameters: parameterInfos, returnType: returnType)
+    let metadata = MCPFunctionMetadata(name: name, parameters: parameterInfos, returnType: returnType, description: description)
     MCPFunctionRegistry.shared.register(function: metadata)
 }
 
 /// A macro that automatically extracts parameter information from a function declaration
-@attached(peer, names: prefixed(__Register_))
-public macro MCPFunction() = #externalMacro(module: "SwiftMCPMacros", type: "MCPFunctionMacro")
+@attached(peer, names: prefixed(__metadata_))
+public macro MCPFunction(description: String? = nil) = #externalMacro(module: "SwiftMCPMacros", type: "MCPFunctionMacro")
+
+/// A macro that adds a jsonSchema function to aggregate function metadata
+@attached(member, names: named(mcpTools))
+public macro MCPTool() = #externalMacro(module: "SwiftMCPMacros", type: "MCPToolMacro")
 
 // Extension to safely access array elements
 extension Array {

@@ -15,6 +15,17 @@ func run() async throws {
     
     // Demonstrate the functions
     calculator.demonstrateFunctions()
+	
+	print(calculator.mcpTools)
+	
+	let encoder = JSONEncoder()
+	encoder.outputFormatting = [.prettyPrinted]
+	
+	let jsonData = try encoder.encode(calculator.mcpTools)
+	let jsonString = String(data: jsonData, encoding: .utf8)
+	
+	print(jsonString!)
+	
 }
 
 // Run the async function
