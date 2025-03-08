@@ -7,7 +7,7 @@ class Calculator {
     /// - Parameter a: First number to add
     /// - Parameter b: Second number to add
     /// - Returns: The sum of a and b
-    @MCPFunction(description: "Adds two integers and returns their sum")
+    @MCPFunction
     func add(a: Int, b: Int) -> Int {
         return a + b
     }
@@ -16,23 +16,27 @@ class Calculator {
     /// - Parameter a: Number to subtract from
     /// - Parameter b: Number to subtract
     /// - Returns: The difference between a and b
-    @MCPFunction(description: "Subtracts the second integer from the first and returns the difference")
+    @MCPFunction
     func subtract(a: Int, b: Int) -> Int {
         return a - b
     }
 	
-    /// A test function that processes an array of integers
-    /// - Parameter a: Array of integers to process
-	@MCPFunction(description: "A Test")
+    /** 
+     A test function that processes an array of integers
+     - Parameter a: Array of integers to process
+     */
+	@MCPFunction
 	func testArray(a: [Int]) {
 		
 	}
     
-    /// Multiplies two integers and returns their product
-    /// - Parameter a: First factor
-    /// - Parameter b: Second factor
-    /// - Returns: The product of a and b
-    @MCPFunction(description: "Multiplies two integers and returns their product")
+    /**
+     Multiplies two integers and returns their product
+     - Parameter a: First factor
+     - Parameter b: Second factor
+     - Returns: The product of a and b
+     */
+    @MCPFunction
     func multiply(a: Int, b: Int) -> Int {
         return a * b
     }
@@ -41,21 +45,20 @@ class Calculator {
     /// - Parameter numerator: Number to be divided
     /// - Parameter denominator: Number to divide by
     /// - Returns: The quotient of numerator divided by denominator
-    @MCPFunction(description: "Divides the numerator by the denominator and returns the quotient")
+    @MCPFunction
     func divide(numerator: Double, denominator: Double) -> Double {
         return numerator / denominator
     }
     
     /// Prints a greeting message with the provided name
     /// - Parameter name: Name of the person to greet
-    @MCPFunction(description: "Prints a greeting message with the provided name")
+    @MCPFunction
     func greet(name: String) {
         print("Hello, \(name)!")
     }
 	
-    /// A simple ping function that returns 'pong'
-    /// - Returns: The string "pong"
-	@MCPFunction(description: "A simple ping function that returns 'pong'")
+    /** A simple ping function that returns 'pong' */
+	@MCPFunction
 	func ping() -> String {
 		return "pong"
 	}

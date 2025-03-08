@@ -68,13 +68,70 @@ public struct MCPFunctionMacro: PeerMacro {
             }
         }
         
+        // If no description was provided in the attribute, try to extract it from the leading documentation comment
+        if descriptionArg == "nil" {
+            let leadingTrivia = funcDecl.leadingTrivia.description
+            
+            // Extract the function description from Swift's standard documentation styles
+            var foundDescription = false
+            
+            // 1. Check for /// style comments (Swift's preferred style)
+            let docLines = leadingTrivia.split(separator: "\n")
+            
+            // First try to find /// style comments
+            for line in docLines {
+                let trimmedLine = line.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+                if trimmedLine.hasPrefix("///") && 
+                   !trimmedLine.contains("- Parameter") && 
+                   !trimmedLine.contains("- Returns") {
+                    // Extract the description (remove the /// prefix and trim whitespace)
+                    let description = trimmedLine.dropFirst(3).trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+                    if !description.isEmpty {
+                        descriptionArg = "\"\(description.replacingOccurrences(of: "\"", with: "\\\""))\""
+                        foundDescription = true
+                        break
+                    }
+                }
+            }
+            
+            // 2. If no description found, check for /** */ style comments (Swift's multi-line doc style)
+            if !foundDescription {
+                // Use regex to extract content between /** and */
+                let multilineRegex = try? NSRegularExpression(pattern: "/\\*\\*(.*?)\\*/", options: [.dotMatchesLineSeparators])
+                if let multilineRegex = multilineRegex {
+                    let nsString = leadingTrivia as NSString
+                    let matches = multilineRegex.matches(in: leadingTrivia, options: [], range: NSRange(location: 0, length: nsString.length))
+                    
+                    if let match = matches.first, match.numberOfRanges >= 2 {
+                        let docBlock = nsString.substring(with: match.range(at: 1))
+                        
+                        // Split the doc block into lines and find the first non-empty line that's not a parameter or return description
+                        let blockLines = docBlock.split(separator: "\n")
+                        for line in blockLines {
+                            let trimmedLine = line.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+                            // Skip empty lines, parameter descriptions, and return descriptions
+                            if !trimmedLine.isEmpty && 
+                               !trimmedLine.contains("- Parameter") && 
+                               !trimmedLine.contains("- Returns") {
+                                descriptionArg = "\"\(trimmedLine.replacingOccurrences(of: "\"", with: "\\\""))\""
+                                foundDescription = true
+                                break
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
         // Extract parameter descriptions from leading trivia (documentation comments)
         var paramDescriptions: [String: String] = [:]
         let leadingTrivia = funcDecl.leadingTrivia.description
         
-        // Use regex to find parameter descriptions in the format: "- Parameter name: description"
-        let regex = try? NSRegularExpression(pattern: "- Parameter (\\w+):\\s*(.*)", options: [])
-        if let regex = regex {
+        // Use regex to find parameter descriptions in Swift's standard format
+        
+        // Swift-style: "- Parameter name: description"
+        let swiftParamRegex = try? NSRegularExpression(pattern: "- Parameter (\\w+):\\s*(.*)", options: [])
+        if let regex = swiftParamRegex {
             let nsString = leadingTrivia as NSString
             let matches = regex.matches(in: leadingTrivia, options: [], range: NSRange(location: 0, length: nsString.length))
             
