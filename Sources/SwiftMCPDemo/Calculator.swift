@@ -7,7 +7,7 @@ class Calculator {
     /// - Parameter a: First number to add
     /// - Parameter b: Second number to add
     /// - Returns: The sum of a and b
-    @MCPFunction
+    @MCPFunction(description: "Custom description: Performs addition of two numbers")
     func add(a: Int, b: Int) -> Int {
         return a + b
     }
@@ -25,7 +25,7 @@ class Calculator {
      A test function that processes an array of integers
      - Parameter a: Array of integers to process
      */
-	@MCPFunction
+	@MCPFunction(description: "Custom description: Tests array processing")
 	func testArray(a: [Int]) {
 		
 	}
@@ -52,7 +52,7 @@ class Calculator {
     
     /// Prints a greeting message with the provided name
     /// - Parameter name: Name of the person to greet
-    @MCPFunction
+    @MCPFunction(description: "Custom description: Shows a greeting message")
     func greet(name: String) {
         print("Hello, \(name)!")
     }
