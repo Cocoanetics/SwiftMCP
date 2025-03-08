@@ -8,19 +8,19 @@
 import Foundation
 
 /**
- * MCPTool represents a tool for Model Context Protocol (MCP).
- *
- * This struct is primarily designed for encoding and decoding JSON representations
- * of functions, making them accessible to AI models and other systems that need to
- * understand the function's signature, parameters, and behavior.
- *
- * Each MCPTool contains:
- * - A name identifying the function
- * - An optional description explaining the function's purpose
- * - An inputSchema defining the parameters the function accepts
- *
- * The JSON encoding implementation handles special cases for numeric and boolean values,
- * ensuring they are properly represented without quotes in the JSON output.
+ MCPTool represents a tool for Model Context Protocol (MCP).
+
+ This struct is primarily designed for encoding and decoding JSON representations
+ of functions, making them accessible to AI models and other systems that need to
+ understand the function's signature, parameters, and behavior.
+
+ Each MCPTool contains:
+ - A name identifying the function
+ - An optional description explaining the function's purpose
+ - An inputSchema defining the parameters the function accepts
+
+ The JSON encoding implementation handles special cases for numeric and boolean values,
+ ensuring they are properly represented without quotes in the JSON output.
  */
 public struct MCPTool: Codable {
 	// MARK: - Properties
@@ -37,12 +37,12 @@ public struct MCPTool: Codable {
 	// MARK: - Initialization
 	
 	/**
-	 * Creates a new MCPTool instance.
-	 *
-	 * - Parameters:
-	 *   - name: The name of the function
-	 *   - description: An optional description of the function's purpose
-	 *   - inputSchema: The schema defining the function's input parameters
+	 Creates a new MCPTool instance.
+
+	 - Parameters:
+	   - name: The name of the function
+	   - description: An optional description of the function's purpose
+	   - inputSchema: The schema defining the function's input parameters
 	 */
 	public init(name: String, description: String? = nil, inputSchema: JSONSchema) {
 		self.name = name
@@ -59,12 +59,12 @@ public struct MCPTool: Codable {
 	}
 	
 	/**
-	 * Represents the JSON schema for a function's input parameters.
-	 *
-	 * This struct defines the structure of a function's parameters, including:
-	 * - The type of the schema (typically "object")
-	 * - The properties representing individual parameters
-	 * - The required parameters that must be provided
+	 Represents the JSON schema for a function's input parameters.
+
+	 This struct defines the structure of a function's parameters, including:
+	 - The type of the schema (typically "object")
+	 - The properties representing individual parameters
+	 - The required parameters that must be provided
 	 */
 	public struct JSONSchema: Codable {
 		// MARK: - Properties
@@ -81,12 +81,12 @@ public struct MCPTool: Codable {
 		// MARK: - Initialization
 		
 		/**
-		 * Creates a new JSONSchema instance.
-		 *
-		 * - Parameters:
-		 *   - type: The type of the schema (typically "object")
-		 *   - properties: The properties representing individual parameters
-		 *   - required: The required parameters that must be provided
+		 Creates a new JSONSchema instance.
+
+		 - Parameters:
+		   - type: The type of the schema (typically "object")
+		   - properties: The properties representing individual parameters
+		   - required: The required parameters that must be provided
 		 */
 		public init(type: String, properties: [String: Property]? = nil, required: [String]? = nil) {
 			self.type = type
@@ -103,13 +103,13 @@ public struct MCPTool: Codable {
 		}
 		
 		/**
-		 * Represents a property in a JSON schema.
-		 *
-		 * This class defines the structure of a parameter, including:
-		 * - The type of the parameter (e.g., "string", "number", "boolean")
-		 * - An optional description of the parameter
-		 * - Optional nested items for array types
-		 * - An optional default value
+		 Represents a property in a JSON schema.
+
+		 This class defines the structure of a parameter, including:
+		 - The type of the parameter (e.g., "string", "number", "boolean")
+		 - An optional description of the parameter
+		 - Optional nested items for array types
+		 - An optional default value
 		 */
 		public class Property: Codable {
 			// MARK: - Properties
@@ -129,13 +129,13 @@ public struct MCPTool: Codable {
 			// MARK: - Initialization
 			
 			/**
-			 * Creates a new Property instance.
-			 *
-			 * - Parameters:
-			 *   - type: The type of the parameter
-			 *   - description: An optional description of the parameter
-			 *   - items: Optional nested items for array types
-			 *   - defaultValue: An optional default value
+			 Creates a new Property instance.
+
+			 - Parameters:
+			   - type: The type of the parameter
+			   - description: An optional description of the parameter
+			   - items: Optional nested items for array types
+			   - defaultValue: An optional default value
 			 */
 			public init(type: String, description: String? = nil, items: Property? = nil, defaultValue: String? = nil) {
 				self.type = type

@@ -8,10 +8,10 @@
 import Foundation
 
 /**
- * Macros for the Model Context Protocol (MCP).
- *
- * This file contains macro declarations that are used to automatically
- * generate metadata for functions and classes in the MCP.
+ Macros for the Model Context Protocol (MCP).
+
+ This file contains macro declarations that are used to automatically
+ generate metadata for functions and classes in the MCP.
  */
 
 /// A macro that automatically extracts parameter information from a function declaration.

@@ -1,58 +1,34 @@
+//
+//  MCPFunctionMacro.swift
+//  SwiftMCPMacros
+//
+//  Created by Oliver Drobnik on 08.03.25.
+//
+
 import SwiftSyntax
 import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
-import SwiftCompilerPlugin
 import SwiftDiagnostics
 import Foundation
+import SwiftMCP
 
-// MARK: - Diagnostics
-
-enum MCPFunctionDiagnostic: DiagnosticMessage {
-    case onlyFunctions
-    case missingDescription(functionName: String)
-
-    var message: String {
-        switch self {
-        case .onlyFunctions:
-            return "@MCPFunction can only be applied to functions"
-        case .missingDescription(let functionName):
-            return "Function '\(functionName)' is missing a description. Consider adding a documentation comment or providing a description parameter."
-        }
-    }
-
-    var severity: DiagnosticSeverity {
-        switch self {
-        case .onlyFunctions:
-            return .error
-        case .missingDescription:
-            return .warning
-        }
-    }
-
-    var diagnosticID: MessageID {
-        switch self {
-        case .onlyFunctions:
-            return MessageID(domain: "MCPFunctionMacro", id: "onlyFunctions")
-        case .missingDescription:
-            return MessageID(domain: "MCPFunctionMacro", id: "missingDescription")
-        }
-    }
-}
-
-// MARK: - Plugin
-
-@main
-struct SwiftMCPPlugin: CompilerPlugin {
-    let providingMacros: [Macro.Type] = [
-        MCPFunctionMacro.self,
-        MCPToolMacro.self,
-    ]
-}
-
-// MARK: - Macro Implementation
-
-/// Implementation of the MCPFunction macro
+/**
+ Implementation of the MCPFunction macro.
+ 
+ This macro extracts metadata from a function declaration and generates
+ a peer declaration that registers the function with the MCP system.
+ */
 public struct MCPFunctionMacro: PeerMacro {
+    /**
+     Expands the macro to provide peers for the declaration.
+     
+     - Parameters:
+       - node: The attribute syntax node
+       - declaration: The declaration syntax
+       - context: The macro expansion context
+     
+     - Returns: An array of declaration syntax nodes
+     */
     public static func expansion(
         of node: AttributeSyntax,
         providingPeersOf declaration: some DeclSyntaxProtocol,
@@ -226,7 +202,7 @@ public struct MCPFunctionMacro: PeerMacro {
                 parameterString += ", "
             }
             
-            parameterString += "ParameterInfo(name: \"\(paramName)\", type: \"\(paramType)\", description: \(paramDescription), defaultValue: \(defaultValue))"
+            parameterString += "MCPFunctionParameterInfo(name: \"\(paramName)\", type: \"\(paramType)\", description: \(paramDescription), defaultValue: \(defaultValue))"
         }
         
         // Extract return type if it exists
@@ -246,28 +222,4 @@ public struct MCPFunctionMacro: PeerMacro {
         
         return [DeclSyntax(stringLiteral: registrationDecl)]
     }
-}
-
-/// Implementation of the MCPTool macro
-public struct MCPToolMacro: MemberMacro {
-    public static func expansion(
-        of node: AttributeSyntax,
-        providingMembersOf declaration: some DeclGroupSyntax,
-        in context: some MacroExpansionContext
-    ) throws -> [DeclSyntax] {
-        // Create a mcpTools computed property that returns the registered functions
-        let mcpToolsProperty = """
-        /// Returns an array of all MCP Tools
-        var mcpTools: [MCPTool] {
-            let mirror = Mirror(reflecting: self)
-            let metadata: [MCPFunctionMetadata] = mirror.children.compactMap { child in
-                guard let label = child.label, label.hasPrefix("__metadata_") else { return nil }
-                return child.value as? MCPFunctionMetadata
-            }
-
-            return metadata.convertedToTools()
-        }
-        """
-        return [DeclSyntax(stringLiteral: mcpToolsProperty)]
-    }
-}
+} 

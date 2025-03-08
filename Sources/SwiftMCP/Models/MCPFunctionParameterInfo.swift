@@ -1,5 +1,5 @@
 //
-//  ParameterInfo.swift
+//  MCPFunctionParameterInfo.swift
 //  SwiftMCP
 //
 //  Created by Oliver Drobnik on 08.03.25.
@@ -8,13 +8,13 @@
 import Foundation
 
 /**
- * Represents information about a function parameter in the Model Context Protocol (MCP).
- *
- * This struct holds details about a parameter, including its name, type,
- * description, and default value. It is used to generate JSON schema
- * representations of function parameters for AI models.
+ Represents information about a function parameter in the Model Context Protocol (MCP).
+
+ This struct holds details about a parameter, including its name, type,
+ description, and default value. It is used to generate JSON schema
+ representations of function parameters for AI models.
  */
-public struct ParameterInfo: Sendable {
+public struct MCPFunctionParameterInfo: Sendable {
     // MARK: - Properties
     
     /// The name of the parameter
@@ -32,13 +32,13 @@ public struct ParameterInfo: Sendable {
     // MARK: - Initialization
     
     /**
-     * Creates a new ParameterInfo instance.
-     *
-     * - Parameters:
-     *   - name: The name of the parameter
-     *   - type: The type of the parameter
-     *   - description: An optional description of the parameter
-     *   - defaultValue: An optional default value for the parameter
+     Creates a new ParameterInfo instance.
+
+     - Parameters:
+       - name: The name of the parameter
+       - type: The type of the parameter
+       - description: An optional description of the parameter
+       - defaultValue: An optional default value for the parameter
      */
     public init(name: String, type: String, description: String? = nil, defaultValue: Any? = nil) {
         self.name = name
