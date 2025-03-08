@@ -7,18 +7,19 @@
 
 import SwiftCompilerPlugin
 import SwiftSyntaxMacros
+import SwiftMCP
 
 /**
- The main entry point for the Swift MCP compiler plugin.
+ Entry point for the Swift MCP compiler plugin.
  
- This struct conforms to `CompilerPlugin` and provides the macros
- that are available in this package.
+ This struct conforms to the CompilerPlugin protocol and provides
+ the macros available in this package.
  */
 @main
-struct SwiftMCPPlugin: CompilerPlugin {
+public struct SwiftMCPPlugin: CompilerPlugin {
     /// The macros provided by this plugin
-    let providingMacros: [Macro.Type] = [
+    public var providingMacros: [Macro.Type] = [
         MCPFunctionMacro.self,
-        MCPToolMacro.self,
+        MCPToolMacro.self
     ]
 } 
