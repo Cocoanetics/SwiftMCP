@@ -1,146 +1,104 @@
 # SwiftMCP
 
-SwiftMCP is a Swift package that provides a way to generate JSON descriptions of functions for use in a Multi-Call Protocol (MCP) system. It uses property wrappers to extract function metadata at runtime.
+SwiftMCP is a Swift package that provides a way to generate JSON descriptions of functions for use in a Multi-Call Protocol (MCP) system. It uses Swift macros to extract function metadata at compile time.
 
 ## Features
 
 - Automatically extracts function parameter types and return types
-- Generates JSON descriptions of functions
-- Provides a registry for MCP functions
-- Simple to use with property wrappers
+- Generates JSON descriptions of functions with proper type information
+- Supports parameters with default values
+- Handles numeric default values correctly in JSON output
+- Simple to use with Swift macros
 
 ## Usage
 
 ```swift
 import SwiftMCP
 
+@MCPTool
 class Calculator {
-    @MCPFunction(name: "add")
-    var add: (Int, Int) -> Int = { a, b in
+    /// Adds two integers and returns their sum
+    /// - Parameter a: First number to add
+    /// - Parameter b: Second number to add
+    /// - Returns: The sum of a and b
+    @MCPFunction
+    func add(a: Int, b: Int) -> Int {
         return a + b
     }
     
-    @MCPFunction(name: "subtract")
-    var subtract: (Int, Int) -> Int = { a, b in
+    /// Subtracts the second integer from the first and returns the difference
+    /// - Parameter a: Number to subtract from
+    /// - Parameter b: Number to subtract (defaults to 3)
+    /// - Returns: The difference between a and b
+    @MCPFunction
+    func subtract(a: Int, b: Int = 3) -> Int {
         return a - b
-    }
-    
-    init() {
-        // Register functions with the registry
-        MCPFunctionRegistry.shared.register(function: _add.projectedValue)
-        MCPFunctionRegistry.shared.register(function: _subtract.projectedValue)
     }
 }
 
-// Get JSON descriptions of all registered functions
-let json = MCPFunctionRegistry.shared.getAllFunctionsJSON()
+// Get JSON descriptions of all functions
+let tools = calculator.mcpTools
+let json = MCPTool.encodeToJSON(tools)
 print(json)
 ```
 
-## Future Improvements with Swift Macros
+The `@MCPFunction` macro automatically:
+- Extracts parameter names and types from the function declaration
+- Captures documentation comments for descriptions
+- Detects default parameter values
+- Generates metadata at compile time
 
-While the current implementation uses property wrappers to extract function metadata at runtime, a more powerful approach would be to use Swift macros to extract this information at compile time. Here's how it could work:
+The `@MCPTool` macro adds a `mcpTools` computed property that collects all the function metadata and converts it to a format suitable for JSON encoding.
 
-### Using Swift Macros for Parameter Extraction
+## JSON Output
 
-Swift macros allow for compile-time code generation and inspection. With macros, we could:
+The generated JSON includes detailed information about each function, including parameter types, descriptions, and default values:
 
-1. Automatically extract parameter names from function declarations
-2. Generate more accurate type information
-3. Reduce runtime overhead
-
-#### Example Implementation
-
-A macro-based approach would look like this:
-
-```swift
-import SwiftMCP
-
-class Calculator {
-    @MCPFunction
-    var add: (Int, Int) -> Int = { a, b in
-        return a + b
-    }
-    
-    @MCPFunction
-    var subtract: (Int, Int) -> Int = { a, b in
-        return a - b
-    }
-}
-```
-
-The `@MCPFunction` macro would automatically:
-- Extract parameter names (`a` and `b`) from the closure
-- Generate metadata at compile time
-- Register the function with the registry
-
-#### Setting Up Swift Macros
-
-To implement this approach, you would need to:
-
-1. Create a macro implementation target in your package
-2. Define a peer macro that analyzes function declarations
-3. Use SwiftSyntax to extract parameter information from the AST
-
-Here's a simplified example of how to set up a Swift package with macros:
-
-```swift
-// Package.swift
-import PackageDescription
-
-let package = Package(
-    name: "SwiftMCP",
-    platforms: [.macOS(.v13)],
-    products: [
-        .library(name: "SwiftMCP", targets: ["SwiftMCP"]),
-    ],
-    dependencies: [
-        .package(url: "https://github.com/apple/swift-syntax.git", from: "509.0.0"),
-    ],
-    targets: [
-        // Macro implementation target
-        .target(
-            name: "SwiftMCPMacros",
-            dependencies: [
-                .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
-                .product(name: "SwiftCompilerPlugin", package: "swift-syntax")
-            ]
-        ),
-        
-        // Library target
-        .target(
-            name: "SwiftMCP",
-            dependencies: ["SwiftMCPMacros"]
-        ),
-    ]
-)
-```
-
-The macro implementation would analyze the function's AST to extract parameter names and types:
-
-```swift
-import SwiftSyntax
-import SwiftSyntaxMacros
-import SwiftCompilerPlugin
-
-@main
-struct SwiftMCPPlugin: CompilerPlugin {
-    let providingMacros: [Macro.Type] = [
-        MCPFunctionMacro.self,
-    ]
-}
-
-public struct MCPFunctionMacro: PeerMacro {
-    public static func expansion(
-        of node: AttributeSyntax,
-        providingPeersOf declaration: some DeclSyntaxProtocol,
-        in context: some MacroExpansionContext
-    ) throws -> [DeclSyntax] {
-        // Extract function information from the AST
-        // Generate metadata declaration
-        // ...
-    }
-}
+```json
+[
+  {
+    "description": "Adds two integers and returns their sum",
+    "inputSchema": {
+      "properties": {
+        "a": {
+          "description": "First number to add",
+          "type": "number"
+        },
+        "b": {
+          "description": "Second number to add",
+          "type": "number"
+        }
+      },
+      "required": [
+        "a",
+        "b"
+      ],
+      "type": "object"
+    },
+    "name": "add"
+  },
+  {
+    "description": "Subtracts the second integer from the first and returns the difference",
+    "inputSchema": {
+      "properties": {
+        "a": {
+          "description": "Number to subtract from",
+          "type": "number"
+        },
+        "b": {
+          "default": 3,
+          "description": "Number to subtract (defaults to 3)",
+          "type": "number"
+        }
+      },
+      "required": [
+        "a"
+      ],
+      "type": "object"
+    },
+    "name": "subtract"
+  }
+]
 ```
 
 ## Requirements

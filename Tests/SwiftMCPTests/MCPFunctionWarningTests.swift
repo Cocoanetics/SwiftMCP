@@ -9,6 +9,7 @@ final class MCPFunctionWarningTests: XCTestCase {
     @MCPTool
     class MissingDescriptions {
         // No documentation comment or description parameter
+        // This function is intentionally missing a description for testing purposes
         @MCPFunction
         func missingBoth() {}
         

@@ -200,11 +200,33 @@ public struct MCPFunctionMacro: PeerMacro {
                 }
             }
             
+            // Extract default value if present
+            var defaultValue = "nil"
+            if let defaultExpr = param.defaultValue?.value {
+                // For simple literals, we can use their string representation
+                if let intLiteral = defaultExpr.as(IntegerLiteralExprSyntax.self) {
+                    defaultValue = intLiteral.description
+                } else if let floatLiteral = defaultExpr.as(FloatLiteralExprSyntax.self) {
+                    defaultValue = floatLiteral.description
+                } else if let boolLiteral = defaultExpr.as(BooleanLiteralExprSyntax.self) {
+                    defaultValue = boolLiteral.description
+                } else if let stringLiteral = defaultExpr.as(StringLiteralExprSyntax.self) {
+                    // For string literals, we need to wrap them in quotes
+                    let stringValue = stringLiteral.segments.description
+                        .replacingOccurrences(of: "\"", with: "\\\"")
+                    defaultValue = "\"\(stringValue)\""
+                } else {
+                    // For more complex expressions, use the full syntax description
+                    // This is a simplification and might not work for all cases
+                    defaultValue = "\"\(defaultExpr.description)\""
+                }
+            }
+            
             if !parameterString.isEmpty {
                 parameterString += ", "
             }
             
-            parameterString += "ParameterInfo(name: \"\(paramName)\", type: \"\(paramType)\", description: \(paramDescription))"
+            parameterString += "ParameterInfo(name: \"\(paramName)\", type: \"\(paramType)\", description: \(paramDescription), defaultValue: \(defaultValue))"
         }
         
         // Extract return type if it exists

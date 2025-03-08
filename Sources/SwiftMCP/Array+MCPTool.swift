@@ -15,21 +15,27 @@ extension Array where Element == MCPFunctionMetadata {
 
 			for parameter in meta.parameters {
 				let jsonSchemaType = parameter.type.JSONSchemaType
+                
+                // Convert defaultValue to String if it exists
+                let defaultValueString: String? = parameter.defaultValue
 
 				if jsonSchemaType == "array", let elementType = parameter.type.arrayElementType {
 					let itemsProperty = MCPTool.JSONSchema.Property(type: elementType.JSONSchemaType)
-					properties[parameter.name] = MCPTool.JSONSchema.Property(type: "array", description: parameter.description, items: itemsProperty)
+					properties[parameter.name] = MCPTool.JSONSchema.Property(type: "array", description: parameter.description, items: itemsProperty, defaultValue: defaultValueString)
 				} else {
-					properties[parameter.name] = MCPTool.JSONSchema.Property(type: jsonSchemaType, description: parameter.description)
+					properties[parameter.name] = MCPTool.JSONSchema.Property(type: jsonSchemaType, description: parameter.description, defaultValue: defaultValueString)
 				}
 
-				required.append(parameter.name)
+				// Only add to required if there's no default value
+				if parameter.defaultValue == nil {
+					required.append(parameter.name)
+				}
 			}
 
 			let schema = MCPTool.JSONSchema(
 				type: "object",
 				properties: properties.isEmpty ? nil : properties,
-				required: required.isEmpty ? nil : required
+				required: required
 			)
 
 			return MCPTool(name: meta.name, description: meta.description, inputSchema: schema)

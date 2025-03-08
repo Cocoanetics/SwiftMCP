@@ -18,14 +18,18 @@ func run() async throws {
 	
 	print(calculator.mcpTools)
 	
+	// Use the standard JSON encoder for the array output
 	let encoder = JSONEncoder()
-	encoder.outputFormatting = [.prettyPrinted]
+	encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
 	
 	let jsonData = try encoder.encode(calculator.mcpTools)
 	let jsonString = String(data: jsonData, encoding: .utf8)
 	
 	print(jsonString!)
 	
+	// The standard JSONEncoder now properly handles numeric and boolean default values
+	print("\nJSON with properly typed default values:")
+	print(jsonString!)
 }
 
 // Run the async function
