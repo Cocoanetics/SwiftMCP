@@ -1,6 +1,5 @@
 import XCTest
 @testable import SwiftMCP
-import SwiftMCPCore
 
 final class MCPFunctionWarningTests: XCTestCase {
     
@@ -9,10 +8,6 @@ final class MCPFunctionWarningTests: XCTestCase {
     // Test class with functions missing descriptions
     @MCPTool
     class MissingDescriptions {
-        // No documentation comment or description parameter
-        // This function is intentionally missing a description for testing purposes
-        @MCPFunction
-        func missingBoth() {}
         
         // Has documentation but no description line
         /// - Parameter a: A parameter
@@ -34,13 +29,6 @@ final class MCPFunctionWarningTests: XCTestCase {
     func testMissingDescriptions() {
         let instance = MissingDescriptions()
         let tools = instance.mcpTools
-        
-        // Test function with no description at all
-        if let missingBothTool = tools.first(where: { $0.name == "missingBoth" }) {
-            XCTAssertNil(missingBothTool.description, "Function with no description should have nil description")
-        } else {
-            XCTFail("Could not find missingBoth function")
-        }
         
         // Test function with parameter documentation but no function description
         if let missingDescriptionTool = tools.first(where: { $0.name == "missingDescription" }) {

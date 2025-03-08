@@ -1,6 +1,5 @@
 import XCTest
 @testable import SwiftMCP
-import SwiftMCPCore
 
 final class MCPFunctionTests: XCTestCase {
     
