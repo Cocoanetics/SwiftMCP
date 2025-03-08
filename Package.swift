@@ -16,42 +16,30 @@ let package = Package(
             name: "SwiftMCPDemo",
             targets: ["SwiftMCPDemo"]
         ),
-        // Add SwiftMCPCore as a library product
-        .library(
-            name: "SwiftMCPCore",
-            targets: ["SwiftMCPCore"]
-        ),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-syntax.git", from: "600.0.1"),
     ],
     targets: [
-        // Core types shared between the macro implementation and the main library
-        .target(
-            name: "SwiftMCPCore",
-            dependencies: []
-        ),
-        
         // Macro implementation that performs the source transformation of a macro.
         .macro(
             name: "SwiftMCPMacros",
             dependencies: [
                 .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
                 .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
-                "SwiftMCPCore", // Add dependency on the core target
             ]
         ),
 
         // Library that exposes a macro as part of its API, which is used in client programs.
-        .target(name: "SwiftMCP", dependencies: ["SwiftMCPMacros", "SwiftMCPCore"]),
+        .target(name: "SwiftMCP", dependencies: ["SwiftMCPMacros"]),
 
         // A client of the library, which is able to use the macro in its own code.
-        .executableTarget(name: "SwiftMCPDemo", dependencies: ["SwiftMCP", "SwiftMCPCore"]),
+        .executableTarget(name: "SwiftMCPDemo", dependencies: ["SwiftMCP"]),
         
         // Test target for unit tests
         .testTarget(
             name: "SwiftMCPTests",
-            dependencies: ["SwiftMCP", "SwiftMCPCore"]
+            dependencies: ["SwiftMCP"]
         ),
     ]
 )

@@ -1,6 +1,6 @@
 //
 //  MCPFunctionMetadata.swift
-//  SwiftMCPCore
+//  SwiftMCP
 //
 //  Created by Oliver Drobnik on 08.03.25.
 //

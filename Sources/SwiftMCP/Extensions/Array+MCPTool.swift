@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import SwiftMCPCore
+import SwiftMCP
 
 extension Array where Element == MCPFunctionMetadata {
     public func convertedToTools() -> [MCPTool] {
