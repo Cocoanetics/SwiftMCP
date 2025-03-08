@@ -85,7 +85,13 @@ public struct MCPFunctionMetadata: Sendable {
         json += "\"parameters\": ["
         
         for (index, param) in parameters.enumerated() {
-            json += "{\"name\": \"\(param.name)\", \"type\": \"\(param.type)\"}"
+            json += "{"
+            json += "\"name\": \"\(param.name)\", "
+            json += "\"type\": \"\(param.type)\""
+            if let description = param.description {
+                json += ", \"description\": \"\(description)\""
+            }
+            json += "}"
             if index < parameters.count - 1 {
                 json += ", "
             }
@@ -112,10 +118,12 @@ public struct MCPFunctionMetadata: Sendable {
 public struct ParameterInfo: Sendable {
     public let name: String
     public let type: String
+    public let description: String?
     
-    public init(name: String, type: String) {
+    public init(name: String, type: String, description: String? = nil) {
         self.name = name
         self.type = type
+        self.description = description
     }
 }
 
@@ -152,8 +160,8 @@ public class MCPFunctionRegistry {
 
 /// Helper function to register a function with the MCPFunctionRegistry
 @MainActor
-public func registerMCPFunction(name: String, parameters: [(name: String, type: String)], returnType: String?, description: String? = nil) {
-    let parameterInfos = parameters.map { ParameterInfo(name: $0.name, type: $0.type) }
+public func registerMCPFunction(name: String, parameters: [(name: String, type: String, description: String?)], returnType: String?, description: String? = nil) {
+    let parameterInfos = parameters.map { ParameterInfo(name: $0.name, type: $0.type, description: $0.description) }
     let metadata = MCPFunctionMetadata(name: name, parameters: parameterInfos, returnType: returnType, description: description)
     MCPFunctionRegistry.shared.register(function: metadata)
 }

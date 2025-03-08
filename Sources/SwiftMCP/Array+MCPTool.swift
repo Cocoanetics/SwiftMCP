@@ -18,9 +18,9 @@ extension Array where Element == MCPFunctionMetadata {
 
 				if jsonSchemaType == "array", let elementType = parameter.type.arrayElementType {
 					let itemsProperty = MCPTool.JSONSchema.Property(type: elementType.JSONSchemaType)
-					properties[parameter.name] = MCPTool.JSONSchema.Property(type: "array", items: itemsProperty)
+					properties[parameter.name] = MCPTool.JSONSchema.Property(type: "array", description: parameter.description, items: itemsProperty)
 				} else {
-					properties[parameter.name] = MCPTool.JSONSchema.Property(type: jsonSchemaType)
+					properties[parameter.name] = MCPTool.JSONSchema.Property(type: jsonSchemaType, description: parameter.description)
 				}
 
 				required.append(parameter.name)
