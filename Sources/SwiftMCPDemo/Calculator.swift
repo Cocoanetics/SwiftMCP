@@ -13,6 +13,12 @@ class Calculator {
     func subtract(a: Int, b: Int) -> Int {
         return a - b
     }
+	
+	@MCPFunction(description: "A Test")
+	func testArray(a: [Int])
+	{
+		
+	}
     
     @MCPFunction(description: "Multiplies two integers and returns their product")
     func multiply(a: Int, b: Int) -> Int {
