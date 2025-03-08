@@ -5,11 +5,10 @@
 //  Created by Oliver Drobnik on 08.03.25.
 //
 
+import Foundation
 import SwiftSyntax
 import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
-import Foundation
-import SwiftMCP
 
 /**
  Implementation of the MCPTool macro.
@@ -44,7 +43,20 @@ public struct MCPToolMacro: MemberMacro {
                 if let metadata = child.value as? MCPFunctionMetadata,
                    child.label?.hasPrefix("__metadata_") == true {
                     let functionName = String(child.label!.dropFirst("__metadata_".count))
-                    let tool = MCPTool(name: functionName, metadata: metadata)
+                    
+                    // Create a JSON schema from the function metadata
+                    let schema = JSONSchema.object(
+                        properties: Dictionary(uniqueKeysWithValues: metadata.parameters.map { param in
+                            (param.name, JSONSchema.string(description: param.description))
+                        }),
+                        required: metadata.parameters.filter { $0.defaultValue == nil }.map { $0.name }
+                    )
+                    
+                    let tool = MCPTool(
+                        name: functionName,
+                        description: metadata.description,
+                        inputSchema: schema
+                    )
                     tools.append(tool)
                 }
             }

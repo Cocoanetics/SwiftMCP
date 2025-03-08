@@ -1,5 +1,6 @@
 import Foundation
 import SwiftMCP
+import SwiftMCPCore
 
 @MCPTool
 class Calculator {

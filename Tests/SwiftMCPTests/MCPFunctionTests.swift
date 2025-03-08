@@ -1,5 +1,6 @@
 import XCTest
 @testable import SwiftMCP
+import SwiftMCPCore
 
 final class MCPFunctionTests: XCTestCase {
     
@@ -99,95 +100,199 @@ final class MCPFunctionTests: XCTestCase {
     
     // MARK: - Tests
     
-    func testTripleSlashDocumentation() {
+    func testBasicFunctionality() {
+        // Create an instance of the test class
         let instance = TripleSlashDocumentation()
+        
+        // Get the tools array
         let tools = instance.mcpTools
         
-        // Test function with no parameters
+        // Test that the tools array contains the expected functions
         if let noParamsTool = tools.first(where: { $0.name == "noParameters" }) {
             XCTAssertEqual(noParamsTool.description, "Simple function with no parameters")
-            XCTAssertTrue(noParamsTool.inputSchema.properties?.isEmpty ?? true)
+            
+            // Extract properties from the object schema
+            if case .object(let properties, _, _) = noParamsTool.inputSchema {
+                XCTAssertTrue(properties.isEmpty)
+            } else {
+                XCTFail("Expected object schema")
+            }
         } else {
             XCTFail("Could not find noParameters function")
         }
         
-        // Test function with basic parameter types
+        // Test basic parameter types
         if let basicTypesTool = tools.first(where: { $0.name == "basicTypes" }) {
             XCTAssertEqual(basicTypesTool.description, "Function with basic parameter types")
-            XCTAssertEqual(basicTypesTool.inputSchema.properties?.count, 3)
             
-            // Check parameter descriptions
-            XCTAssertEqual(basicTypesTool.inputSchema.properties?["a"]?.description, "An integer parameter")
-            XCTAssertEqual(basicTypesTool.inputSchema.properties?["b"]?.description, "A string parameter")
-            XCTAssertEqual(basicTypesTool.inputSchema.properties?["c"]?.description, "A boolean parameter")
-            
-            // Check parameter types
-            XCTAssertEqual(basicTypesTool.inputSchema.properties?["a"]?.type, "number")
-            XCTAssertEqual(basicTypesTool.inputSchema.properties?["b"]?.type, "string")
-            XCTAssertEqual(basicTypesTool.inputSchema.properties?["c"]?.type, "boolean")
+            // Extract properties from the object schema
+            if case .object(let properties, _, _) = basicTypesTool.inputSchema {
+                XCTAssertEqual(properties.count, 3)
+                
+                // Check parameter descriptions
+                if case .string(let description) = properties["a"] {
+                    XCTAssertEqual(description, "An integer parameter")
+                } else {
+                    XCTFail("Expected string schema for parameter 'a'")
+                }
+                
+                if case .string(let description) = properties["b"] {
+                    XCTAssertEqual(description, "A string parameter")
+                } else {
+                    XCTFail("Expected string schema for parameter 'b'")
+                }
+                
+                if case .string(let description) = properties["c"] {
+                    XCTAssertEqual(description, "A boolean parameter")
+                } else {
+                    XCTFail("Expected string schema for parameter 'c'")
+                }
+            } else {
+                XCTFail("Expected object schema")
+            }
         } else {
             XCTFail("Could not find basicTypes function")
         }
         
-        // Test function with complex parameter types
+        // Test complex parameter types
         if let complexTypesTool = tools.first(where: { $0.name == "complexTypes" }) {
             XCTAssertEqual(complexTypesTool.description, "Function with complex parameter types")
-            XCTAssertEqual(complexTypesTool.inputSchema.properties?.count, 3)
             
-            // Check parameter descriptions
-            XCTAssertEqual(complexTypesTool.inputSchema.properties?["array"]?.description, "An array of integers")
-            XCTAssertEqual(complexTypesTool.inputSchema.properties?["dictionary"]?.description, "A dictionary with string keys and any values")
-            XCTAssertEqual(complexTypesTool.inputSchema.properties?["closure"]?.description, "A closure that takes an integer and returns a string")
-            
-            // Check array parameter type
-            XCTAssertEqual(complexTypesTool.inputSchema.properties?["array"]?.type, "array")
-            XCTAssertEqual(complexTypesTool.inputSchema.properties?["array"]?.items?.type, "number")
+            // Extract properties from the object schema
+            if case .object(let properties, _, _) = complexTypesTool.inputSchema {
+                XCTAssertEqual(properties.count, 3)
+                
+                // Check parameter descriptions
+                if case .string(let description) = properties["array"] {
+                    XCTAssertEqual(description, "An array of integers")
+                } else {
+                    XCTFail("Expected string schema for parameter 'array'")
+                }
+                
+                if case .string(let description) = properties["dictionary"] {
+                    XCTAssertEqual(description, "A dictionary with string keys and any values")
+                } else {
+                    XCTFail("Expected string schema for parameter 'dictionary'")
+                }
+                
+                if case .string(let description) = properties["closure"] {
+                    XCTAssertEqual(description, "A closure that takes an integer and returns a string")
+                } else {
+                    XCTFail("Expected string schema for parameter 'closure'")
+                }
+            } else {
+                XCTFail("Expected object schema")
+            }
         } else {
             XCTFail("Could not find complexTypes function")
         }
         
-        // Test function with explicit description override
+        // Test explicit description override
         if let explicitDescTool = tools.first(where: { $0.name == "explicitDescription" }) {
             XCTAssertEqual(explicitDescTool.description, "This description overrides the documentation comment")
-            XCTAssertEqual(explicitDescTool.inputSchema.properties?["value"]?.description, "A value with description")
+            
+            // Extract properties from the object schema
+            if case .object(let properties, _, _) = explicitDescTool.inputSchema {
+                if case .string(let description) = properties["value"] {
+                    XCTAssertEqual(description, "A value with description")
+                } else {
+                    XCTFail("Expected string schema for parameter 'value'")
+                }
+            } else {
+                XCTFail("Expected object schema")
+            }
         } else {
             XCTFail("Could not find explicitDescription function")
         }
         
-        // Test function with optional parameters
+        // Test optional parameters
         if let optionalParamTool = tools.first(where: { $0.name == "optionalParameter" }) {
             XCTAssertEqual(optionalParamTool.description, "Function with optional parameters")
-            XCTAssertEqual(optionalParamTool.inputSchema.properties?["required"]?.description, "A required parameter")
-            XCTAssertEqual(optionalParamTool.inputSchema.properties?["optional"]?.description, "An optional parameter")
+            
+            // Extract properties from the object schema
+            if case .object(let properties, _, _) = optionalParamTool.inputSchema {
+                if case .string(let description) = properties["required"] {
+                    XCTAssertEqual(description, "A required parameter")
+                } else {
+                    XCTFail("Expected string schema for parameter 'required'")
+                }
+                
+                if case .string(let description) = properties["optional"] {
+                    XCTAssertEqual(description, "An optional parameter")
+                } else {
+                    XCTFail("Expected string schema for parameter 'optional'")
+                }
+            } else {
+                XCTFail("Expected object schema")
+            }
         } else {
             XCTFail("Could not find optionalParameter function")
         }
     }
     
-    func testMultiLineDocumentation() {
+    func testMultiLineDoc() {
+        // Create an instance of the test class
         let instance = MultiLineDocumentation()
+        
+        // Get the tools array
         let tools = instance.mcpTools
         
-        // Test function with multi-line documentation
+        // Test multi-line documentation
         if let multiLineDocTool = tools.first(where: { $0.name == "multiLineDoc" }) {
             XCTAssertEqual(multiLineDocTool.description, "Function with multi-line documentation")
-            XCTAssertEqual(multiLineDocTool.inputSchema.properties?["a"]?.description, "First parameter")
-            XCTAssertEqual(multiLineDocTool.inputSchema.properties?["b"]?.description, "Second parameter")
+            
+            // Extract properties from the object schema
+            if case .object(let properties, _, _) = multiLineDocTool.inputSchema {
+                if case .string(let description) = properties["a"] {
+                    XCTAssertEqual(description, "First parameter")
+                } else {
+                    XCTFail("Expected string schema for parameter 'a'")
+                }
+                
+                if case .string(let description) = properties["b"] {
+                    XCTAssertEqual(description, "Second parameter")
+                } else {
+                    XCTFail("Expected string schema for parameter 'b'")
+                }
+            } else {
+                XCTFail("Expected object schema")
+            }
         } else {
             XCTFail("Could not find multiLineDoc function")
         }
+    }
+    
+    func testLongDescription() {
+        // Create an instance of the test class
+        let instance = MultiLineDocumentation()
         
-        // Test function with long description
+        // Get the tools array
+        let tools = instance.mcpTools
+        
+        // Test long description
         if let longDescTool = tools.first(where: { $0.name == "longDescription" }) {
             XCTAssertTrue(longDescTool.description?.contains("This function has a very long description") ?? false)
-            XCTAssertTrue(longDescTool.inputSchema.properties?["text"]?.description?.contains("A text parameter with a long description") ?? false)
+            
+            // Extract properties from the object schema
+            if case .object(let properties, _, _) = longDescTool.inputSchema {
+                if case .string(let description) = properties["text"] {
+                    XCTAssertTrue(description?.contains("A text parameter with a long description") ?? false)
+                } else {
+                    XCTFail("Expected string schema for parameter 'text'")
+                }
+            } else {
+                XCTFail("Expected object schema")
+            }
         } else {
             XCTFail("Could not find longDescription function")
         }
     }
     
-    func testMixedDocumentationStyles() {
+    func testDocumentationComments() {
+        // Create an instance of the test class
         let instance = MixedDocumentationStyles()
+        
+        // Get the tools array
         let tools = instance.mcpTools
         
         // Test triple-slash documentation

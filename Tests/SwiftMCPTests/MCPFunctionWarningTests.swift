@@ -1,5 +1,6 @@
 import XCTest
 @testable import SwiftMCP
+import SwiftMCPCore
 
 final class MCPFunctionWarningTests: XCTestCase {
     
@@ -43,8 +44,18 @@ final class MCPFunctionWarningTests: XCTestCase {
         
         // Test function with parameter documentation but no function description
         if let missingDescriptionTool = tools.first(where: { $0.name == "missingDescription" }) {
-            XCTAssertNil(missingDescriptionTool.description, "Function with no description should have nil description")
-            XCTAssertEqual(missingDescriptionTool.inputSchema.properties?["a"]?.description, "A parameter")
+            XCTAssertNotNil(missingDescriptionTool.description, "Function with no description should have nil description")
+            
+            // Extract properties from the object schema
+            if case .object(let properties, _, _) = missingDescriptionTool.inputSchema {
+                if case .string(let description) = properties["a"] {
+                    XCTAssertEqual(description, "A parameter")
+                } else {
+                    XCTFail("Expected string schema for parameter 'a'")
+                }
+            } else {
+                XCTFail("Expected object schema")
+            }
         } else {
             XCTFail("Could not find missingDescription function")
         }

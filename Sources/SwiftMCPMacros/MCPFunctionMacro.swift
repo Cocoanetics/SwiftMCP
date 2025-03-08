@@ -5,12 +5,11 @@
 //  Created by Oliver Drobnik on 08.03.25.
 //
 
+import Foundation
+import SwiftDiagnostics
 import SwiftSyntax
 import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
-import SwiftDiagnostics
-import Foundation
-import SwiftMCP
 
 /**
  Implementation of the MCPFunction macro.
@@ -75,14 +74,11 @@ public struct MCPFunctionMacro: PeerMacro {
             
             // First try to find /// style comments
             for line in docLines {
-                let trimmedLine = line.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
-                if trimmedLine.hasPrefix("///") && 
-                   !trimmedLine.contains("- Parameter") && 
-                   !trimmedLine.contains("- Returns") {
-                    // Extract the description (remove the /// prefix and trim whitespace)
-                    let description = trimmedLine.dropFirst(3).trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
-                    if !description.isEmpty {
-                        descriptionArg = "\"\(description.replacingOccurrences(of: "\"", with: "\\\""))\""
+                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmed.starts(with: "///") {
+                    let docContent = trimmed.dropFirst(3).trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !docContent.isEmpty && !foundDescription {
+                        descriptionArg = "\"\(docContent.replacingOccurrences(of: "\"", with: "\\\""))\""
                         foundDescription = true
                         foundDescriptionInDocs = true
                         break
@@ -90,29 +86,32 @@ public struct MCPFunctionMacro: PeerMacro {
                 }
             }
             
-            // 2. If no description found, check for /** */ style comments (Swift's multi-line doc style)
+            // If no /// comments, try /** */ style
             if !foundDescription {
-                // Use regex to extract content between /** and */
-                let multilineRegex = try? NSRegularExpression(pattern: "/\\*\\*(.*?)\\*/", options: [.dotMatchesLineSeparators])
-                if let multilineRegex = multilineRegex {
-                    let nsString = leadingTrivia as NSString
-                    let matches = multilineRegex.matches(in: leadingTrivia, options: [], range: NSRange(location: 0, length: nsString.length))
-                    
-                    if let match = matches.first, match.numberOfRanges >= 2 {
-                        let docBlock = nsString.substring(with: match.range(at: 1))
-                        
-                        // Split the doc block into lines and find the first non-empty line that's not a parameter or return description
-                        let blockLines = docBlock.split(separator: "\n")
-                        for line in blockLines {
-                            let trimmedLine = line.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
-                            // Skip empty lines, parameter descriptions, and return descriptions
-                            if !trimmedLine.isEmpty && 
-                               !trimmedLine.contains("- Parameter") && 
-                               !trimmedLine.contains("- Returns") {
-                                descriptionArg = "\"\(trimmedLine.replacingOccurrences(of: "\"", with: "\\\""))\""
+                let docBlockPattern = try? NSRegularExpression(pattern: "/\\*\\*(.*?)\\*/", options: [.dotMatchesLineSeparators])
+                if let docBlockPattern = docBlockPattern,
+                   let match = docBlockPattern.firstMatch(in: leadingTrivia, options: [], range: NSRange(leadingTrivia.startIndex..., in: leadingTrivia)) {
+                    if let range = Range(match.range(at: 1), in: leadingTrivia) {
+                        let docContent = leadingTrivia[range].trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !docContent.isEmpty {
+                            // Clean up the doc content by removing * at the beginning of lines
+                            let cleanedContent = docContent.split(separator: "\n")
+                                .map { line -> String in
+                                    let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    if trimmed.starts(with: "*") {
+                                        return trimmed.dropFirst().trimmingCharacters(in: .whitespacesAndNewlines)
+                                    }
+                                    return trimmed
+                                }
+                                .first ?? ""
+                            
+                            if !cleanedContent.isEmpty {
+                                // Ensure the description is properly escaped and terminated
+                                let escapedContent = cleanedContent.replacingOccurrences(of: "\"", with: "\\\"")
+                                                                  .replacingOccurrences(of: "\n", with: " ")
+                                descriptionArg = "\"\(escapedContent)\""
                                 foundDescription = true
                                 foundDescriptionInDocs = true
-                                break
                             }
                         }
                     }
@@ -120,31 +119,10 @@ public struct MCPFunctionMacro: PeerMacro {
             }
         }
         
-        // Emit a warning if no description was found
-        if !hasExplicitDescription && !foundDescriptionInDocs {
-            let diagnostic = Diagnostic(node: node, message: MCPFunctionDiagnostic.missingDescription(functionName: functionName))
+        // If no description was found, emit a warning
+        if descriptionArg == "nil" && !hasExplicitDescription && !foundDescriptionInDocs {
+            let diagnostic = Diagnostic(node: funcDecl.name, message: MCPFunctionDiagnostic.missingDescription(functionName: functionName))
             context.diagnose(diagnostic)
-        }
-        
-        // Extract parameter descriptions from leading trivia (documentation comments)
-        var paramDescriptions: [String: String] = [:]
-        let leadingTrivia = funcDecl.leadingTrivia.description
-        
-        // Use regex to find parameter descriptions in Swift's standard format
-        
-        // Swift-style: "- Parameter name: description"
-        let swiftParamRegex = try? NSRegularExpression(pattern: "- Parameter (\\w+):\\s*(.*)", options: [])
-        if let regex = swiftParamRegex {
-            let nsString = leadingTrivia as NSString
-            let matches = regex.matches(in: leadingTrivia, options: [], range: NSRange(location: 0, length: nsString.length))
-            
-            for match in matches {
-                if match.numberOfRanges >= 3 {
-                    let paramName = nsString.substring(with: match.range(at: 1))
-                    let paramDesc = nsString.substring(with: match.range(at: 2)).trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
-                    paramDescriptions[paramName] = paramDesc
-                }
-            }
         }
         
         // Extract parameter information
@@ -153,48 +131,74 @@ public struct MCPFunctionMacro: PeerMacro {
             let paramName = param.firstName.text
             let paramType = param.type.description.trimmingCharacters(in: .whitespacesAndNewlines)
             
-            // Get parameter description from trivia or from MCPParameterDescription attribute
+            // Extract parameter description from documentation comments
             var paramDescription = "nil"
+            let leadingTrivia = funcDecl.leadingTrivia.description
             
-            // First check if we have a description from the documentation comments
-            if let docDescription = paramDescriptions[paramName] {
-                paramDescription = "\"\(docDescription.replacingOccurrences(of: "\"", with: "\\\""))\""
-            }
-            
-            // Then check for MCPParameterDescription attribute (this will override doc comments if both exist)
-            for attribute in param.attributes {
-                if let attributeIdent = attribute.as(AttributeSyntax.self)?.attributeName.as(IdentifierTypeSyntax.self),
-                   attributeIdent.name.text == "MCPParameterDescription",
-                   let arguments = attribute.as(AttributeSyntax.self)?.arguments?.as(LabeledExprListSyntax.self),
-                   let firstArg = arguments.first?.expression.as(StringLiteralExprSyntax.self) {
-                    let descriptionValue = firstArg.segments.description
-                    // Clean up the description string
-                    let cleanedValue = descriptionValue
-                        .replacingOccurrences(of: "\"", with: "\\\"")
-                    paramDescription = "\"\(cleanedValue)\""
-                    break
+            // Look for parameter descriptions in the format: "- Parameter paramName: description"
+            let paramPattern = try? NSRegularExpression(pattern: "- [Pp]arameter\\s+\(paramName):\\s*(.*?)(?=\\n\\s*-|\\n\\s*\\n|$)", options: [.dotMatchesLineSeparators])
+            if let paramPattern = paramPattern,
+               let match = paramPattern.firstMatch(in: leadingTrivia, options: [], range: NSRange(leadingTrivia.startIndex..., in: leadingTrivia)) {
+                if let range = Range(match.range(at: 1), in: leadingTrivia) {
+                    let description = leadingTrivia[range].trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !description.isEmpty {
+                        // Ensure the parameter description is properly escaped and terminated
+                        // Also ensure it doesn't include other parameter descriptions
+                        let lines = description.split(separator: "\n")
+                        let firstLine = String(lines.first ?? "")
+                        let escapedDescription = firstLine.replacingOccurrences(of: "\"", with: "\\\"")
+                        paramDescription = "\"\(escapedDescription)\""
+                    }
                 }
             }
             
-            // Extract default value if present
+            // Extract default value if it exists
             var defaultValue = "nil"
             if let defaultExpr = param.defaultValue?.value {
+                // Check for supported default value types
+                var isValidDefaultType = false
+                var typeName = "unknown"
+                
                 // For simple literals, we can use their string representation
                 if let intLiteral = defaultExpr.as(IntegerLiteralExprSyntax.self) {
-                    defaultValue = intLiteral.description
+                    defaultValue = "\"\(intLiteral.description)\""
+                    isValidDefaultType = true
                 } else if let floatLiteral = defaultExpr.as(FloatLiteralExprSyntax.self) {
-                    defaultValue = floatLiteral.description
+                    defaultValue = "\"\(floatLiteral.description)\""
+                    isValidDefaultType = true
                 } else if let boolLiteral = defaultExpr.as(BooleanLiteralExprSyntax.self) {
-                    defaultValue = boolLiteral.description
+                    defaultValue = "\"\(boolLiteral.description)\""
+                    isValidDefaultType = true
                 } else if let stringLiteral = defaultExpr.as(StringLiteralExprSyntax.self) {
                     // For string literals, we need to wrap them in quotes
                     let stringValue = stringLiteral.segments.description
                         .replacingOccurrences(of: "\"", with: "\\\"")
                     defaultValue = "\"\(stringValue)\""
+                    isValidDefaultType = true
+                } else if defaultExpr.is(NilLiteralExprSyntax.self) {
+                    // For nil literals, we can use nil
+                    defaultValue = "nil"
+                    isValidDefaultType = true
+                } else if let arrayExpr = defaultExpr.as(ArrayExprSyntax.self) {
+                    // For array literals, convert to a string representation
+                    defaultValue = "\"\(arrayExpr.description)\""
+                    isValidDefaultType = true
                 } else {
-                    // For more complex expressions, use the full syntax description
-                    // This is a simplification and might not work for all cases
-                    defaultValue = "\"\(defaultExpr.description)\""
+                    // For unsupported types, emit a diagnostic
+                    typeName = defaultExpr.description
+                    let diagnostic = Diagnostic(
+                        node: defaultExpr,
+                        message: MCPFunctionDiagnostic.invalidDefaultValueType(
+                            paramName: paramName,
+                            typeName: typeName
+                        )
+                    )
+                    context.diagnose(diagnostic)
+                }
+                
+                // If it's not a valid type, don't include the default value
+                if !isValidDefaultType {
+                    defaultValue = "nil"
                 }
             }
             
@@ -217,7 +221,7 @@ public struct MCPFunctionMacro: PeerMacro {
         let registrationDecl = """
         ///
         /// autogenerated
-        let __metadata_\(functionName) = MCPFunctionMetadata(name: "\(functionName)", parameters: [\(parameterString)], returnType: \(returnTypeString),  description: \(descriptionArg))
+        let __metadata_\(functionName) = MCPFunctionMetadata(name: "\(functionName)\", parameters: [\(parameterString)], returnType: \(returnTypeString),  description: \(descriptionArg))
         """
         
         return [DeclSyntax(stringLiteral: registrationDecl)]
