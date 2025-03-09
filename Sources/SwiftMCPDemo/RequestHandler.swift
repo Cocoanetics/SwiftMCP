@@ -60,12 +60,6 @@ class RequestHandler {
         
         // Log the arguments for debugging
         logToStderr("Arguments: \(arguments)")
-        if let numerator = arguments["numerator"] {
-            logToStderr("Numerator: \(numerator) (type: \(type(of: numerator)))")
-        }
-        if let denominator = arguments["denominator"] {
-            logToStderr("Denominator: \(denominator) (type: \(type(of: denominator)))")
-        }
         
         // Call the appropriate wrapper method based on the tool name
         do {

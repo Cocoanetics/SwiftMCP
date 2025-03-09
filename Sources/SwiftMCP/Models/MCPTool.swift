@@ -100,22 +100,18 @@ extension MCPTool {
 				case "Int":
 					if let intValue = Int(defaultValue) {
 						enrichedArguments[param.name] = intValue
-						print("Added default value for \(param.name): \(intValue) (type: Int)")
 					}
 				case "Double", "Float":
 					if let doubleValue = Double(defaultValue) {
 						enrichedArguments[param.name] = doubleValue
-						print("Added default value for \(param.name): \(doubleValue) (type: \(param.type))")
 					}
 				case "Bool":
 					if let boolValue = Bool(defaultValue) {
 						enrichedArguments[param.name] = boolValue
-						print("Added default value for \(param.name): \(boolValue) (type: Bool)")
 					}
 				default:
 					// For string and other types, use the default value as is
 					enrichedArguments[param.name] = defaultValue
-					print("Added default value for \(param.name): \(defaultValue) (type: String)")
 				}
 			}
 		}
