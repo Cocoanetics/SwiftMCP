@@ -5,6 +5,9 @@ import Foundation
 import SwiftMCP
 import AnyCodable
 
+// Create an instance of the Calculator
+let calculator = Calculator()
+
 // MARK: - Helper Functions
 
 // Function to read a line from stdin
@@ -70,7 +73,7 @@ let initializeResponseStruct = InitializeResponse(
 			experimental: [:],
 			tools: .init(listChanged: false)
 		),
-		serverInfo: .init(name: "mcp-time", version: "1.0.0")
+		serverInfo: .init(name: "mcp-calculator", version: "1.0.0")
 	)
 )
 
@@ -81,13 +84,7 @@ struct ToolsListResponse: Codable {
 	let result: Result
 
 	struct Result: Codable {
-		let tools: [Tool]
-	}
-
-	struct Tool: Codable {
-		let name: String
-		let description: String
-		let inputSchema: InputSchema
+		let tools: [MCPTool]
 	}
 
 	struct InputSchema: Codable {
@@ -102,49 +99,42 @@ struct ToolsListResponse: Codable {
 	}
 }
 
-// Create an instance of the tools list response
+// Define a struct for the tool call response
+struct ToolCallResponse: Codable {
+    let jsonrpc: String
+    let id: Int
+    let result: Result
+    
+    struct Result: Codable {
+        let content: [ContentItem]
+        let isError: Bool
+        
+        struct ContentItem: Codable {
+            let type: String
+            let text: String
+        }
+    }
+    
+    init(id: Int, text: String, isError: Bool = false) {
+        self.jsonrpc = "2.0"
+        self.id = id
+        self.result = Result(
+            content: [Result.ContentItem(type: "text", text: text)],
+            isError: isError
+        )
+    }
+}
+
+// Create an instance of the tools list response using the mcpTools from Calculator
 func createToolsListResponse(id: Int) -> ToolsListResponse {
+	// Convert MCPTool array to ToolsListResponse.Tool array
+	let tools = calculator.mcpTools
+	
+	// Create and return the response
 	return ToolsListResponse(
 		jsonrpc: "2.0",
 		id: id,
-		result: .init(tools: [
-			.init(
-				name: "get_current_time",
-				description: "Get current time in a specific timezones",
-				inputSchema: .init(
-					type: "object",
-					properties: [
-						"timezone": .init(
-							type: "string",
-							description: "IANA timezone name (e.g., 'America/New_York', 'Europe/London'). Use 'CET' as local timezone if no timezone provided by the user."
-						)
-					],
-					required: ["timezone"]
-				)
-			),
-			.init(
-				name: "convert_time",
-				description: "Convert time between timezones",
-				inputSchema: .init(
-					type: "object",
-					properties: [
-						"source_timezone": .init(
-							type: "string",
-							description: "Source IANA timezone name (e.g., 'America/New_York', 'Europe/London'). Use 'CET' as local timezone if no source timezone provided by the user."
-						),
-						"time": .init(
-							type: "string",
-							description: "Time to convert in 24-hour format (HH:MM)"
-						),
-						"target_timezone": .init(
-							type: "string",
-							description: "Target IANA timezone name (e.g., 'Asia/Tokyo', 'America/San_Francisco'). Use 'CET' as local timezone if no target timezone provided by the user."
-						)
-					],
-					required: ["source_timezone", "time", "target_timezone"]
-				)
-			)
-		])
+		result: .init(tools: tools)
 	)
 }
 
@@ -192,6 +182,104 @@ while true {
 					let toolsListResponseStruct = createToolsListResponse(id: request.id)
 					let encodedResponse = try! JSONEncoder().encode(toolsListResponseStruct)
 					response = String(data: encodedResponse, encoding: .utf8)!
+				case "tools/call":
+					// Handle tool call
+					if let params = request.params,
+					   let toolName = params["name"]?.value as? String {
+						
+						logToStderr("Tool call: \(toolName)")
+						
+						// Get the arguments and prepare response text
+						var responseText = ""
+						var isError = false
+						
+						if toolName == "greet" {
+							if let arguments = params["arguments"]?.value as? [String: Any],
+							   let name = arguments["name"] as? String {
+								// Instead of calling the function directly, capture what it would output
+								responseText = "Hello, \(name)!"
+							} else {
+								responseText = "Error: Missing or invalid 'name' parameter"
+								isError = true
+							}
+						} else if toolName == "add" {
+							if let arguments = params["arguments"]?.value as? [String: Any],
+							   let a = arguments["a"] as? Int,
+							   let b = arguments["b"] as? Int {
+								// Call the add function
+								let result = calculator.add(a: a, b: b)
+								responseText = "The sum of \(a) and \(b) is \(result)"
+							} else {
+								responseText = "Error: Missing or invalid parameters for 'add'"
+								isError = true
+							}
+						} else if toolName == "subtract" {
+							if let arguments = params["arguments"]?.value as? [String: Any],
+							   let a = arguments["a"] as? Int {
+								// Call the subtract function with optional parameter b
+								let result: Int
+								if let b = arguments["b"] as? Int {
+									result = calculator.subtract(a: a, b: b)
+									responseText = "The difference between \(a) and \(b) is \(result)"
+								} else {
+									result = calculator.subtract(a: a)
+									responseText = "The difference between \(a) and the default value is \(result)"
+								}
+							} else {
+								responseText = "Error: Missing or invalid parameters for 'subtract'"
+								isError = true
+							}
+						} else if toolName == "multiply" {
+							if let arguments = params["arguments"]?.value as? [String: Any],
+							   let a = arguments["a"] as? Int,
+							   let b = arguments["b"] as? Int {
+								// Call the multiply function
+								let result = calculator.multiply(a: a, b: b)
+								responseText = "The product of \(a) and \(b) is \(result)"
+							} else {
+								responseText = "Error: Missing or invalid parameters for 'multiply'"
+								isError = true
+							}
+						} else if toolName == "divide" {
+							if let arguments = params["arguments"]?.value as? [String: Any],
+							   let numerator = arguments["numerator"] as? Double {
+								// Call the divide function with optional parameter denominator
+								let result: Double
+								if let denominator = arguments["denominator"] as? Double {
+									result = calculator.divide(numerator: numerator, denominator: denominator)
+									responseText = "The quotient of \(numerator) divided by \(denominator) is \(result)"
+								} else {
+									result = calculator.divide(numerator: numerator)
+									responseText = "The quotient of \(numerator) divided by the default value is \(result)"
+								}
+							} else {
+								responseText = "Error: Missing or invalid parameters for 'divide'"
+								isError = true
+							}
+						} else if toolName == "testArray" {
+							if let arguments = params["arguments"]?.value as? [String: Any],
+							   let a = arguments["a"] as? [Int] {
+								// Call the testArray function
+								calculator.testArray(a: a)
+								responseText = "Array processed: \(a)"
+							} else {
+								responseText = "Error: Missing or invalid parameters for 'testArray'"
+								isError = true
+							}
+						} else {
+							responseText = "Error: Unknown tool '\(toolName)'"
+							isError = true
+						}
+						
+						// Create and encode the response
+						let toolCallResponseStruct = ToolCallResponse(id: request.id, text: responseText, isError: isError)
+						let encodedResponse = try! JSONEncoder().encode(toolCallResponseStruct)
+						response = String(data: encodedResponse, encoding: .utf8)!
+					} else {
+						// Invalid tool call request
+						logToStderr("Invalid tool call request: missing tool name or arguments")
+						continue
+					}
 				default:
 					continue
 			}
@@ -220,6 +308,104 @@ while true {
 						let toolsListResponseStruct = createToolsListResponse(id: id)
 						let encodedResponse = try! JSONEncoder().encode(toolsListResponseStruct)
 						response = String(data: encodedResponse, encoding: .utf8)!
+					case "tools/call":
+						// Handle tool call in fallback mode
+						if let params = json["params"] as? [String: Any],
+						   let toolName = params["name"] as? String {
+							
+							logToStderr("Tool call (fallback): \(toolName)")
+							
+							// Get the arguments and prepare response text
+							var responseText = ""
+							var isError = false
+							
+							if toolName == "greet" {
+								if let arguments = params["arguments"] as? [String: Any],
+								   let name = arguments["name"] as? String {
+									// Instead of calling the function directly, capture what it would output
+									responseText = "Hello, \(name)!"
+								} else {
+									responseText = "Error: Missing or invalid 'name' parameter"
+									isError = true
+								}
+							} else if toolName == "add" {
+								if let arguments = params["arguments"] as? [String: Any],
+								   let a = arguments["a"] as? Int,
+								   let b = arguments["b"] as? Int {
+									// Call the add function
+									let result = calculator.add(a: a, b: b)
+									responseText = "The sum of \(a) and \(b) is \(result)"
+								} else {
+									responseText = "Error: Missing or invalid parameters for 'add'"
+									isError = true
+								}
+							} else if toolName == "subtract" {
+								if let arguments = params["arguments"] as? [String: Any],
+								   let a = arguments["a"] as? Int {
+									// Call the subtract function with optional parameter b
+									let result: Int
+									if let b = arguments["b"] as? Int {
+										result = calculator.subtract(a: a, b: b)
+										responseText = "The difference between \(a) and \(b) is \(result)"
+									} else {
+										result = calculator.subtract(a: a)
+										responseText = "The difference between \(a) and the default value is \(result)"
+									}
+								} else {
+									responseText = "Error: Missing or invalid parameters for 'subtract'"
+									isError = true
+								}
+							} else if toolName == "multiply" {
+								if let arguments = params["arguments"] as? [String: Any],
+								   let a = arguments["a"] as? Int,
+								   let b = arguments["b"] as? Int {
+									// Call the multiply function
+									let result = calculator.multiply(a: a, b: b)
+									responseText = "The product of \(a) and \(b) is \(result)"
+								} else {
+									responseText = "Error: Missing or invalid parameters for 'multiply'"
+									isError = true
+								}
+							} else if toolName == "divide" {
+								if let arguments = params["arguments"] as? [String: Any],
+								   let numerator = arguments["numerator"] as? Double {
+									// Call the divide function with optional parameter denominator
+									let result: Double
+									if let denominator = arguments["denominator"] as? Double {
+										result = calculator.divide(numerator: numerator, denominator: denominator)
+										responseText = "The quotient of \(numerator) divided by \(denominator) is \(result)"
+									} else {
+										result = calculator.divide(numerator: numerator)
+										responseText = "The quotient of \(numerator) divided by the default value is \(result)"
+									}
+								} else {
+									responseText = "Error: Missing or invalid parameters for 'divide'"
+									isError = true
+								}
+							} else if toolName == "testArray" {
+								if let arguments = params["arguments"] as? [String: Any],
+								   let a = arguments["a"] as? [Int] {
+									// Call the testArray function
+									calculator.testArray(a: a)
+									responseText = "Array processed: \(a)"
+								} else {
+									responseText = "Error: Missing or invalid parameters for 'testArray'"
+									isError = true
+								}
+							} else {
+								responseText = "Error: Unknown tool '\(toolName)'"
+								isError = true
+							}
+							
+							// Create and encode the response
+							let toolCallResponseStruct = ToolCallResponse(id: id, text: responseText, isError: isError)
+							let encodedResponse = try! JSONEncoder().encode(toolCallResponseStruct)
+							response = String(data: encodedResponse, encoding: .utf8)!
+						} else {
+							// Invalid tool call request
+							logToStderr("Invalid tool call request (fallback): missing tool name or arguments")
+							continue
+						}
 					default:
 						continue
 				}
