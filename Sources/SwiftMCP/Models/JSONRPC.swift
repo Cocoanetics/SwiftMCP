@@ -294,4 +294,73 @@ extension AnyCodable: ExpressibleByNilLiteral,
         let dictionary = Dictionary(uniqueKeysWithValues: elements)
         self.init(dictionary)
     }
+}
+
+// JSON-RPC Request structure
+public struct JSONRPCRequest: Codable {
+    public let jsonrpc: String
+    public let id: Int
+    public let method: String
+    public let params: [String: AnyCodable]?
+}
+
+// JSON-RPC Response structures
+public struct JSONRPCResponse: Codable {
+    public var jsonrpc: String = "2.0"
+    public let id: Int
+    public let result: ResponseResult
+    
+    public struct ResponseResult: Codable {
+        public let protocolVersion: String
+        public let capabilities: Capabilities
+        public let serverInfo: ServerInfo
+        
+        public struct Capabilities: Codable {
+            public var experimental: [String: String]? = [:]
+            public let tools: Tools
+            
+            public struct Tools: Codable {
+                public let listChanged: Bool
+            }
+        }
+        
+        public struct ServerInfo: Codable {
+            public let name: String
+            public let version: String
+        }
+    }
+}
+
+// Tools Response structure
+public struct ToolsResponse: Codable {
+    public let jsonrpc: String
+    public let id: Int
+    public let result: ToolsResult
+    
+    public init(jsonrpc: String = "2.0", id: Int, result: ToolsResult) {
+        self.jsonrpc = jsonrpc
+        self.id = id
+        self.result = result
+    }
+    
+    public struct ToolsResult: Codable {
+        public let tools: [Tool]
+        
+        public struct Tool: Codable {
+            public let name: String
+            public let description: String
+            public let inputSchema: InputSchema
+            
+            public struct InputSchema: Codable {
+                public let type: String
+                public let properties: [String: Property]
+                public let required: [String]?
+                
+                public struct Property: Codable {
+                    public let type: String
+                    public let description: String
+                }
+            }
+        }
+    }
 } 

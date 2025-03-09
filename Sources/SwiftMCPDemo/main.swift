@@ -143,6 +143,55 @@ func createToolsListResponse(id: Int) -> ToolsListResponse {
 	)
 }
 
+// Define a type to handle any JSON value
+struct AnyCodable: Codable {
+	let value: Any
+
+	init(_ value: Any) {
+		self.value = value
+	}
+
+	init(from decoder: Decoder) throws {
+		let container = try decoder.singleValueContainer()
+		if let intValue = try? container.decode(Int.self) {
+			value = intValue
+		} else if let doubleValue = try? container.decode(Double.self) {
+			value = doubleValue
+		} else if let stringValue = try? container.decode(String.self) {
+			value = stringValue
+		} else if let boolValue = try? container.decode(Bool.self) {
+			value = boolValue
+		} else if let arrayValue = try? container.decode([AnyCodable].self) {
+			value = arrayValue.map { $0.value }
+		} else if let dictionaryValue = try? container.decode([String: AnyCodable].self) {
+			value = dictionaryValue.mapValues { $0.value }
+		} else {
+			throw DecodingError.dataCorruptedError(in: container, debugDescription: "Cannot decode value")
+		}
+	}
+
+	func encode(to encoder: Encoder) throws {
+		var container = encoder.singleValueContainer()
+		if let intValue = value as? Int {
+			try container.encode(intValue)
+		} else if let doubleValue = value as? Double {
+			try container.encode(doubleValue)
+		} else if let stringValue = value as? String {
+			try container.encode(stringValue)
+		} else if let boolValue = value as? Bool {
+			try container.encode(boolValue)
+		} else if let arrayValue = value as? [Any] {
+			let anyCodableArray = arrayValue.map { AnyCodable($0) }
+			try container.encode(anyCodableArray)
+		} else if let dictionaryValue = value as? [String: Any] {
+			let anyCodableDictionary = dictionaryValue.mapValues { AnyCodable($0) }
+			try container.encode(anyCodableDictionary)
+		} else {
+			throw EncodingError.invalidValue(value, EncodingError.Context(codingPath: container.codingPath, debugDescription: "Cannot encode value"))
+		}
+	}
+}
+
 // MARK: - Main Loop
 
 // Continue processing additional inputs
@@ -150,32 +199,22 @@ while true {
 	if let input = readLineFromStdin() {
 		// Decode the JSON-RPC request
 		if let data = input.data(using: .utf8),
-		   let json = try? JSONSerialization.jsonObject(with: data, options: []),
-		   let request = json as? [String: Any],
-		   let method = request["method"] as? String {
+		   let request = try? JSONDecoder().decode(JSONRPCRequest.self, from: data) {
 
 			// Prepare the response based on the method
 			var response: String
-			switch method {
+			switch request.method {
 				case "initialize":
+					// You can access request.params here if needed
 					let encodedResponse = try! JSONEncoder().encode(initializeResponseStruct)
-						let jsonString = String(data: encodedResponse, encoding: .utf8)!
-					
-					
+					let jsonString = String(data: encodedResponse, encoding: .utf8)!
 					response = jsonString
-					
-					
 				case "notifications/initialized":
-					//logToStderr("\(request.description)")
 					continue
 				case "tools/list":
-					if let id = request["id"] as? Int {
-						let toolsListResponseStruct = createToolsListResponse(id: id)
-						let encodedResponse = try! JSONEncoder().encode(toolsListResponseStruct)
-						response = String(data: encodedResponse, encoding: .utf8)!
-					} else {
-						continue
-					}
+					let toolsListResponseStruct = createToolsListResponse(id: request.id ?? 0)
+					let encodedResponse = try! JSONEncoder().encode(toolsListResponseStruct)
+					response = String(data: encodedResponse, encoding: .utf8)!
 				default:
 					continue
 			}
