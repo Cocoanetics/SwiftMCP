@@ -1,4 +1,5 @@
 import Foundation
+import AnyCodable
 
 /// Namespace for JSON-RPC 2.0 types
 public enum JSONRPC {
@@ -176,123 +177,6 @@ public enum JSONRPC {
                 try container.encode(value)
             }
         }
-    }
-}
-
-/// A type that can encode and decode any JSON value
-public struct AnyCodable: Codable {
-    /// The underlying value
-    private let _value: Any
-    
-    /// Public getter for the underlying value
-    public var value: Any {
-        return _value
-    }
-    
-    /// Initialize with any value
-    public init(_ value: Any) {
-        self._value = value
-    }
-    
-    /// Initialize with a dictionary
-    public init(_ dictionary: [String: Any]) {
-        self._value = dictionary
-    }
-    
-    /// Initialize with an array
-    public init(_ array: [Any]) {
-        self._value = array
-    }
-    
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.singleValueContainer()
-        
-        if container.decodeNil() {
-            self._value = NSNull()
-        } else if let bool = try? container.decode(Bool.self) {
-            self._value = bool
-        } else if let int = try? container.decode(Int.self) {
-            self._value = int
-        } else if let double = try? container.decode(Double.self) {
-            self._value = double
-        } else if let string = try? container.decode(String.self) {
-            self._value = string
-        } else if let array = try? container.decode([AnyCodable].self) {
-            self._value = array.map { $0.value }
-        } else if let dictionary = try? container.decode([String: AnyCodable].self) {
-            self._value = dictionary.mapValues { $0.value }
-        } else {
-            throw DecodingError.dataCorruptedError(
-                in: container,
-                debugDescription: "AnyCodable cannot decode value"
-            )
-        }
-    }
-    
-    public func encode(to encoder: Encoder) throws {
-        var container = encoder.singleValueContainer()
-        
-        switch self._value {
-        case is NSNull:
-            try container.encodeNil()
-        case let bool as Bool:
-            try container.encode(bool)
-        case let int as Int:
-            try container.encode(int)
-        case let double as Double:
-            try container.encode(double)
-        case let string as String:
-            try container.encode(string)
-        case let array as [Any]:
-            try container.encode(array.map { AnyCodable($0) })
-        case let dictionary as [String: Any]:
-            try container.encode(dictionary.mapValues { AnyCodable($0) })
-        default:
-            let context = EncodingError.Context(
-                codingPath: container.codingPath,
-                debugDescription: "AnyCodable cannot encode value of type \(type(of: self._value))"
-            )
-            throw EncodingError.invalidValue(self._value, context)
-        }
-    }
-}
-
-// Extension to make AnyCodable expressible by literals
-extension AnyCodable: ExpressibleByNilLiteral,
-                      ExpressibleByBooleanLiteral,
-                      ExpressibleByIntegerLiteral,
-                      ExpressibleByFloatLiteral,
-                      ExpressibleByStringLiteral,
-                      ExpressibleByArrayLiteral,
-                      ExpressibleByDictionaryLiteral {
-    
-    public init(nilLiteral: ()) {
-        self.init(NSNull())
-    }
-    
-    public init(booleanLiteral value: Bool) {
-        self.init(value)
-    }
-    
-    public init(integerLiteral value: Int) {
-        self.init(value)
-    }
-    
-    public init(floatLiteral value: Double) {
-        self.init(value)
-    }
-    
-    public init(stringLiteral value: String) {
-        self.init(value)
-    }
-    
-    public init(arrayLiteral elements: Any...) {
-        self.init(elements)
-    }
-    
-    public init(dictionaryLiteral elements: (String, Any)...) {
-        let dictionary = Dictionary(uniqueKeysWithValues: elements)
-        self.init(dictionary)
     }
 }
 

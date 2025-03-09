@@ -3,6 +3,7 @@
 
 import Foundation
 import SwiftMCP
+import AnyCodable
 
 // MARK: - Helper Functions
 
@@ -212,7 +213,7 @@ while true {
 				case "notifications/initialized":
 					continue
 				case "tools/list":
-					let toolsListResponseStruct = createToolsListResponse(id: request.id ?? 0)
+					let toolsListResponseStruct = createToolsListResponse(id: request.id)
 					let encodedResponse = try! JSONEncoder().encode(toolsListResponseStruct)
 					response = String(data: encodedResponse, encoding: .utf8)!
 				default:
