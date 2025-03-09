@@ -20,6 +20,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-syntax.git", from: "600.0.1"),
         .package(url: "https://github.com/Flight-School/AnyCodable", from: "0.6.0"),
+        .package(url: "https://github.com/apple/swift-argument-parser", from: "1.2.0"),
     ],
     targets: [
         // Library that exposes a macro as part of its API, which is used in client programs.
@@ -31,7 +32,10 @@ let package = Package(
         // A client of the library, which is able to use the macro in its own code.
         .executableTarget(
             name: "SwiftMCPDemo", 
-            dependencies: ["SwiftMCP"],
+            dependencies: [
+                "SwiftMCP",
+                .product(name: "ArgumentParser", package: "swift-argument-parser")
+            ],
             resources: [
                 .process("README_MCP.md")
             ]

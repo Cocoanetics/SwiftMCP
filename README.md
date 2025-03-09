@@ -9,6 +9,7 @@ SwiftMCP is a Swift package that provides a way to generate JSON descriptions of
 - Supports parameters with default values
 - Handles numeric default values correctly in JSON output
 - Simple to use with Swift macros
+- Command-line interface for one-off testing and interactive mode
 
 ## Usage
 
@@ -99,6 +100,76 @@ The generated JSON includes detailed information about each function, including 
     "name": "subtract"
   }
 ]
+```
+
+## Command-Line Interface
+
+SwiftMCP includes a command-line interface for testing and interacting with your MCP tools. The CLI supports one-off requests, interactive mode, and continuous mode.
+
+### One-Off Mode
+
+Process a single JSON-RPC request and exit:
+
+```bash
+# Process a single request
+echo '{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "divide", "arguments": {"numerator": "10"}}}' | ./.build/debug/SwiftMCPDemo
+
+# With verbose logging
+echo '{"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "add", "arguments": {"a": "5", "b": "7"}}}' | ./.build/debug/SwiftMCPDemo -v
+```
+
+### Interactive Mode
+
+Process multiple requests until EOF:
+
+```bash
+# Start in interactive mode
+./.build/debug/SwiftMCPDemo --interactive
+
+# Then input JSON-RPC requests one per line
+{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "divide", "arguments": {"numerator": "10"}}}
+{"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "add", "arguments": {"a": "5", "b": "7"}}}
+```
+
+### Continuous Mode
+
+Run indefinitely, processing requests as they arrive:
+
+```bash
+# Start in continuous mode
+./.build/debug/SwiftMCPDemo --continuous
+
+# The server will run indefinitely, waiting for input
+# You can send requests to it from another terminal or process
+```
+
+For more reliable communication in continuous mode, you can use a named pipe:
+
+```bash
+# In terminal 1 (create a named pipe and start the server)
+mkfifo /tmp/mcp_pipe
+cat /tmp/mcp_pipe | ./.build/debug/SwiftMCPDemo --continuous --verbose
+
+# In terminal 2 (send requests to the pipe)
+echo '{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "divide", "arguments": {"numerator": "10"}}}' > /tmp/mcp_pipe
+```
+
+This mode is useful for long-running services that need to process requests continuously without exiting.
+
+### Command-Line Options
+
+```
+USAGE: mcp [--interactive] [--continuous] [--input-file <input-file>] [--output-file <output-file>] [--verbose]
+
+OPTIONS:
+  --interactive            Run in interactive mode, processing multiple requests until EOF
+  --continuous             Run in continuous mode, processing requests indefinitely without exiting
+  -i, --input-file <input-file>
+                          The input file to read from (defaults to stdin)
+  -o, --output-file <output-file>
+                          The output file to write to (defaults to stdout)
+  -v, --verbose           Enable verbose logging
+  -h, --help              Show help information.
 ```
 
 ## Requirements
