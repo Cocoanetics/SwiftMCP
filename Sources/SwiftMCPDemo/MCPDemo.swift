@@ -15,96 +15,15 @@ struct MCPDemo {
         // Create a Calculator instance to get its tools for function listing
         let calculator = Calculator()
         
-        // **Continuous Read Loop for MCP Inspector**
-        while let jsonString = readLine() {
-            
-			logger.debug("Read: \(jsonString, privacy: .public)")
-			
-			guard let jsonData = jsonString.data(using: .utf8) else {
-				logger.debug("Invalid Data: \(jsonString, privacy: .public)")
-				continue
-			}
-			
-			do {
-				let request = try JSONDecoder().decode(JSONRPC.Request.self, from: jsonData)
-				
-				logger.debug("Success parsing, method \(request.method), id \(request.id)")
-				
-				// Handle different method types
-				switch request.method {
-				case "initialize":
-					// Extract protocol version from the request
-					var protocolVersion = "2024-11-05" // Default
-					
-					if let params = request.params?.value as? [String: Any] {
-						if let version = params["protocolVersion"] as? String {
-							protocolVersion = version
-						}
-					}
-					
-					// Create and send response
-					let response = createInitializeResponse(
-						id: request.id,
-						protocolVersion: protocolVersion
-					)
-					
-					// Use a custom encoder to handle the response
-					let encoder = JSONEncoder()
-					let responseData = try encoder.encode(response)
-					
-					if let responseString = String(data: responseData, encoding: .utf8) {
-						print(responseString + "\n")   // Sends response to stdout
-						
-						logger.debug("response: \(responseString, privacy: .public)")
-					}
-					
-				case "list_functions":
-					// Create and send response with available functions
-					let response = createListFunctionsResponse(
-						id: request.id,
-						tools: calculator.mcpTools
-					)
-					
-					// Use a custom encoder to handle the response
-					let encoder = JSONEncoder()
-					let responseData = try encoder.encode(response)
-					
-					if let responseString = String(data: responseData, encoding: .utf8) {
-						print(responseString)   // Sends response to stdout
-						fflush(stdout)      // Ensures immediate output
-						
-						logger.debug("response: \(responseString, privacy: .public)")
-					}
-					
-				default:
-					// Method not supported
-					let errorResponse = createErrorResponse(
-						id: request.id,
-						code: JSONRPC.ErrorCode.methodNotFound,
-						message: "Method not supported: \(request.method)"
-					)
-					
-					// Use a custom encoder to handle the response
-					let encoder = JSONEncoder()
-					let responseData = try encoder.encode(errorResponse)
-					
-					if let responseString = String(data: responseData, encoding: .utf8) {
-						print(responseString)   // Sends response to stdout
-						fflush(stdout)      // Ensures immediate output
-						
-						logger.debug("error response: \(responseString, privacy: .public)")
-					}
-				}
-			}
-			catch let error
-			{
-				logger.debug("Parse error: \(error.localizedDescription, privacy: .public)")
-			}
+        // Create and run the MCP server
+        let server = MCPServer(calculator: calculator)
+        
+        // Run the server asynchronously
+        Task {
+            await server.runForever()
         }
         
-        logger.info("End of input, keeping process running")
-        
-        // **Keep Process Running to Maintain Connection**
+        // Keep the main thread alive
         RunLoop.main.run()
     }
     
@@ -195,7 +114,7 @@ struct MCPDemo {
     }
     
     /// Create a dictionary for the inputSchema with properties in the desired order
-    private static func createInputSchemaDictionary(_ schema: JSONSchema) -> [String: Any] {
+    static func createInputSchemaDictionary(_ schema: JSONSchema) -> [String: Any] {
         switch schema {
         case .object(let properties, let required, let description):
             // For object schemas, ensure "type" comes first, then "properties"
@@ -230,7 +149,7 @@ struct MCPDemo {
     }
     
     /// Convert a JSONSchema to a dictionary representation
-    private static func convertJSONSchemaToDictionary(_ schema: JSONSchema) -> [String: Any] {
+    static func convertJSONSchemaToDictionary(_ schema: JSONSchema) -> [String: Any] {
         var result: [String: Any] = [:]
         
         switch schema {
@@ -281,23 +200,200 @@ struct MCPDemo {
         
         return result
     }
+}
+
+/// MCP Server implementation using async streams for I/O operations
+actor MCPServer {
+    private let logger = Logger(subsystem: "com.swiftmcp.demo", category: "MCPServer")
+    private let calculator: Calculator
+    private let stderr = FileHandle.standardError
     
-    /// Create a simplified fallback response when the full response cannot be encoded
-    private static func createFallbackResponse(id: JSONRPC.RequestID) -> JSONRPC.Response {
-        // Create a minimal result dictionary
-        let resultDict: [String: Any] = [
-            "protocolVersion": "2024-11-05",
-            "capabilities": [
-                "tools": ["listChanged": true],
-                "logging": true
-            ],
-            "serverInfo": [
-                "name": "ExampleServer",
-                "version": "1.0.0"
-            ]
-        ]
+    init(calculator: Calculator) {
+        self.calculator = calculator
+    }
+    
+    /// Log a message to stderr
+    private func logToStderr(_ message: String) {
+        if let data = (message + "\n").data(using: .utf8) {
+            stderr.write(data)
+        }
+    }
+    
+    /// Run the server forever, processing input and sending responses
+    func runForever() async {
+        logger.info("MCP Server started, waiting for input...")
+        logToStderr("MCP Server started, waiting for input...")
         
-        return JSONRPC.Response(id: id, result: AnyCodable(resultDict))
+        // Create an async stream for stdin
+        let stdinStream = AsyncStream<String> { continuation in
+            // Start a background task to read from stdin
+            Task.detached {
+                while let line = readLine() {
+                    continuation.yield(line)
+                }
+                continuation.finish()
+            }
+        }
+        
+        // Process each line from stdin
+        for await line in stdinStream {
+            logger.debug("Received line: \(line, privacy: .public)")
+            logToStderr("Received input: \(line)")
+            
+            if let message = await parseJSON(line) {
+                let response = await process(message)
+                await sendMessage(response)
+            } else {
+                logToStderr("Failed to parse JSON: \(line)")
+            }
+        }
+        
+        logger.info("Input stream ended")
+        logToStderr("Input stream ended")
+    }
+    
+    /// Parse a JSON string into a dictionary
+    private func parseJSON(_ jsonString: String) async -> [String: Any]? {
+        guard let jsonData = jsonString.data(using: .utf8) else {
+            logger.error("Failed to convert string to data")
+            logToStderr("Failed to convert string to data")
+            return nil
+        }
+        
+        do {
+            guard let json = try JSONSerialization.jsonObject(with: jsonData, options: []) as? [String: Any] else {
+                logger.error("Failed to parse JSON as dictionary")
+                logToStderr("Failed to parse JSON as dictionary")
+                return nil
+            }
+            return json
+        } catch {
+            logger.error("JSON parsing error: \(error.localizedDescription)")
+            logToStderr("JSON parsing error: \(error.localizedDescription)")
+            return nil
+        }
+    }
+    
+    /// Process a message and generate a response
+    private func process(_ message: [String: Any]) async -> [String: Any] {
+        // Extract method and id from the message
+        guard let method = message["method"] as? String else {
+            logger.error("Invalid request: missing method")
+            logToStderr("Invalid request: missing method")
+            return [
+                "jsonrpc": "2.0",
+                "error": [
+                    "code": JSONRPC.ErrorCode.invalidRequest,
+                    "message": "Invalid request: missing method"
+                ],
+                "id": message["id"] ?? NSNull()
+            ]
+        }
+        
+        // Extract id (can be number or string)
+        let id = message["id"]
+        logToStderr("Processing method: \(method), id: \(id ?? "null")")
+        
+        // Handle different methods
+        switch method {
+        case "initialize":
+            // Extract protocol version if available
+            var protocolVersion = "2024-11-05" // Default
+            if let params = message["params"] as? [String: Any],
+               let version = params["protocolVersion"] as? String {
+                protocolVersion = version
+            }
+            
+            logToStderr("Creating initialize response with protocol version: \(protocolVersion)")
+            
+            // Create capabilities response with the exact format requested
+            return [
+                "jsonrpc": "2.0",
+                "id": id ?? NSNull(),
+                "result": [
+                    "protocolVersion": protocolVersion,
+                    "capabilities": [
+                        "experimental": [String: Any](),
+                        "tools": [
+                            "listChanged": false
+                        ]
+                    ],
+                    "serverInfo": [
+                        "name": "mcp-time",
+                        "version": "1.0.0"
+                    ]
+                ]
+            ]
+            
+        case "list_functions":
+            logToStderr("Creating list_functions response with \(calculator.mcpTools.count) tools")
+            
+            // Create a list of tools
+            var toolsArray: [[String: Any]] = []
+            
+            for tool in calculator.mcpTools {
+                // Create a dictionary for each tool
+                var toolDict: [String: Any] = [
+                    "name": tool.name
+                ]
+                
+                if let description = tool.description {
+                    toolDict["description"] = description
+                }
+                
+                // Convert the input schema
+                toolDict["inputSchema"] = MCPDemo.createInputSchemaDictionary(tool.inputSchema)
+                
+                toolsArray.append(toolDict)
+            }
+            
+            // Return the list of functions
+            return [
+                "jsonrpc": "2.0",
+                "id": id ?? NSNull(),
+                "result": [
+                    "functions": toolsArray
+                ]
+            ]
+            
+        default:
+            // Method not supported
+            logger.error("Method not supported: \(method)")
+            logToStderr("Method not supported: \(method)")
+            return [
+                "jsonrpc": "2.0",
+                "id": id ?? NSNull(),
+                "error": [
+                    "code": JSONRPC.ErrorCode.methodNotFound,
+                    "message": "Method not found: \(method)"
+                ]
+            ]
+        }
+    }
+    
+    /// Send a message to stdout
+    private func sendMessage(_ response: [String: Any]) async {
+        do {
+            // Convert the response to JSON data
+            let jsonData = try JSONSerialization.data(withJSONObject: response, options: [])
+            
+            // Convert the data to a string
+            guard let jsonString = String(data: jsonData, encoding: .utf8) else {
+                logger.error("Failed to convert response to string")
+                logToStderr("Failed to convert response to string")
+                return
+            }
+            
+            // Send the response to stdout
+            print(jsonString)
+            print() // Add a newline to signal the end of the message
+            
+            logger.debug("Sent response: \(jsonString, privacy: .public)")
+            logToStderr("Sent response: \(jsonString)")
+        } catch {
+            logger.error("Error sending response: \(error.localizedDescription)")
+            logToStderr("Error sending response: \(error.localizedDescription)")
+        }
     }
 }
 
