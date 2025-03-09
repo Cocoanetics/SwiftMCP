@@ -46,4 +46,4 @@ public macro MCPFunction(description: String? = nil) = #externalMacro(module: "S
 /// }
 /// ```
 @attached(member, names: named(mcpTools), named(callTool))
-public macro MCPTool() = #externalMacro(module: "SwiftMCPMacros", type: "MCPToolMacro")
+public macro MCPServer() = #externalMacro(module: "SwiftMCPMacros", type: "MCPServerMacro")

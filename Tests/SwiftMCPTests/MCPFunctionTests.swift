@@ -6,7 +6,7 @@ final class MCPFunctionTests: XCTestCase {
     // MARK: - Test Classes
     
     // Test class with triple-slash documentation
-    @MCPTool
+    @MCPServer
     class TripleSlashDocumentation {
         /// Simple function with no parameters
         /// - Returns: A string
@@ -55,7 +55,7 @@ final class MCPFunctionTests: XCTestCase {
     }
     
     // Test class with multi-line documentation
-    @MCPTool
+    @MCPServer
     class MultiLineDocumentation {
         /**
          Function with multi-line documentation
@@ -82,7 +82,7 @@ final class MCPFunctionTests: XCTestCase {
     }
     
     // Test class with mixed documentation styles
-    @MCPTool
+    @MCPServer
     class MixedDocumentationStyles {
         /// Triple-slash documentation
         @MCPFunction

@@ -1,5 +1,5 @@
 //
-//  MCPToolMacro.swift
+//  MCPServerMacro.swift
 //  SwiftMCPMacros
 //
 //  Created by Oliver Drobnik on 08.03.25.
@@ -16,7 +16,7 @@ import SwiftSyntaxMacros
  This macro adds a `mcpTools` computed property to a class or struct,
  which returns an array of all MCP tools defined in that type.
  */
-public struct MCPToolMacro: MemberMacro {
+public struct MCPServerMacro: MemberMacro {
     /**
      Expands the macro to provide additional members for the declaration.
      

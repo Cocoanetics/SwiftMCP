@@ -6,7 +6,7 @@ final class MCPFunctionWarningTests: XCTestCase {
     // MARK: - Test Classes
     
     // Test class with functions missing descriptions
-    @MCPTool
+    @MCPServer
     class MissingDescriptions {
         
         // Has documentation but no description line

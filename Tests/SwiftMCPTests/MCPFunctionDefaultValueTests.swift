@@ -6,7 +6,7 @@ final class MCPFunctionDefaultValueTests: XCTestCase {
     // MARK: - Test Classes
     
     // Test class with functions that have parameters with default values
-    @MCPTool
+    @MCPServer
     class DefaultValueFunctions {
         /// Function with integer default value
         /// - Parameter a: First number
