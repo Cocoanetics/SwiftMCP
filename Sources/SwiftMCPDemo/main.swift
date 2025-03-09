@@ -197,27 +197,7 @@ while true {
 						let arguments = (params["arguments"]?.value as? [String: Any]) ?? [:]
 						
 						// Call the appropriate wrapper method based on the tool name
-						var result: Any? = nil
-						
-						switch toolName {
-						case "greet":
-							result = calculator.__call_greet(arguments)
-						case "add":
-							result = calculator.__call_add(arguments)
-						case "subtract":
-							result = calculator.__call_subtract(arguments)
-						case "multiply":
-							result = calculator.__call_multiply(arguments)
-						case "divide":
-							result = calculator.__call_divide(arguments)
-						case "testArray":
-							result = calculator.__call_testArray(arguments)
-						case "ping":
-							result = calculator.__call_ping(arguments)
-						default:
-							responseText = "Error: Unknown tool '\(toolName)'"
-							isError = true
-						}
+						let result = calculator.callTool(toolName, arguments: arguments)
 						
 						// If we got a result, format it as a response
 						if !isError {
@@ -246,91 +226,6 @@ while true {
 			sendResponse(response)
 		} catch {
 			logToStderr("Failed to decode JSON-RPC request: \(error)")
-			
-			// Fallback to the previous approach
-			if let json = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any],
-			   let method = json["method"] as? String,
-			   let _ = json["jsonrpc"] as? String,
-			   let id = json["id"] as? Int {
-				
-				// Prepare the response based on the method
-				var response: String
-				switch method {
-					case "initialize":
-						let encodedResponse = try! JSONEncoder().encode(initializeResponseStruct)
-						let jsonString = String(data: encodedResponse, encoding: .utf8)!
-						response = jsonString
-					case "notifications/initialized":
-						continue
-					case "tools/list":
-						let toolsListResponseStruct = createToolsListResponse(id: id)
-						let encodedResponse = try! JSONEncoder().encode(toolsListResponseStruct)
-						response = String(data: encodedResponse, encoding: .utf8)!
-					case "tools/call":
-						// Handle tool call in fallback mode
-						if let params = json["params"] as? [String: Any],
-						   let toolName = params["name"] as? String {
-							
-							logToStderr("Tool call (fallback): \(toolName)")
-							
-							// Get the arguments and prepare response text
-							var responseText = ""
-							var isError = false
-							
-							// Extract arguments from the request
-							let arguments = (params["arguments"] as? [String: Any]) ?? [:]
-							
-							// Call the appropriate wrapper method based on the tool name
-							var result: Any? = nil
-							
-							switch toolName {
-							case "greet":
-								result = calculator.__call_greet(arguments)
-							case "add":
-								result = calculator.__call_add(arguments)
-							case "subtract":
-								result = calculator.__call_subtract(arguments)
-							case "multiply":
-								result = calculator.__call_multiply(arguments)
-							case "divide":
-								result = calculator.__call_divide(arguments)
-							case "testArray":
-								result = calculator.__call_testArray(arguments)
-							case "ping":
-								result = calculator.__call_ping(arguments)
-							default:
-								responseText = "Error: Unknown tool '\(toolName)'"
-								isError = true
-							}
-							
-							// If we got a result, format it as a response
-							if !isError {
-								if let result = result {
-									responseText = "\(result)"
-								} else {
-									responseText = "Error: Function call failed"
-									isError = true
-								}
-							}
-							
-							// Create and encode the response
-							let toolCallResponseStruct = ToolCallResponse(id: id, text: responseText, isError: isError)
-							let encodedResponse = try! JSONEncoder().encode(toolCallResponseStruct)
-							response = String(data: encodedResponse, encoding: .utf8)!
-						} else {
-							// Invalid tool call request
-							logToStderr("Invalid tool call request (fallback): missing tool name or arguments")
-							continue
-						}
-					default:
-						continue
-				}
-				
-				// Send the response
-				sendResponse(response)
-			} else {
-				logToStderr("Failed to parse JSON-RPC request")
-			}
 		}
 	} else {
 		// If readLine() returns nil (EOF), sleep briefly and continue
