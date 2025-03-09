@@ -26,7 +26,7 @@ import Foundation
 ///     return a + b
 /// }
 /// ```
-@attached(peer, names: prefixed(__metadata_))
+@attached(peer, names: prefixed(__metadata_), prefixed(__call_))
 public macro MCPFunction(description: String? = nil) = #externalMacro(module: "SwiftMCPMacros", type: "MCPFunctionMacro")
 
 /// A macro that adds a `mcpTools` property to a class to aggregate function metadata.

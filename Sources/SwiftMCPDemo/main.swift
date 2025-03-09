@@ -193,82 +193,40 @@ while true {
 						var responseText = ""
 						var isError = false
 						
-						if toolName == "greet" {
-							if let arguments = params["arguments"]?.value as? [String: Any],
-							   let name = arguments["name"] as? String {
-								// Instead of calling the function directly, capture what it would output
-								responseText = "Hello, \(name)!"
-							} else {
-								responseText = "Error: Missing or invalid 'name' parameter"
-								isError = true
-							}
-						} else if toolName == "add" {
-							if let arguments = params["arguments"]?.value as? [String: Any],
-							   let a = arguments["a"] as? Int,
-							   let b = arguments["b"] as? Int {
-								// Call the add function
-								let result = calculator.add(a: a, b: b)
-								responseText = "The sum of \(a) and \(b) is \(result)"
-							} else {
-								responseText = "Error: Missing or invalid parameters for 'add'"
-								isError = true
-							}
-						} else if toolName == "subtract" {
-							if let arguments = params["arguments"]?.value as? [String: Any],
-							   let a = arguments["a"] as? Int {
-								// Call the subtract function with optional parameter b
-								let result: Int
-								if let b = arguments["b"] as? Int {
-									result = calculator.subtract(a: a, b: b)
-									responseText = "The difference between \(a) and \(b) is \(result)"
-								} else {
-									result = calculator.subtract(a: a)
-									responseText = "The difference between \(a) and the default value is \(result)"
-								}
-							} else {
-								responseText = "Error: Missing or invalid parameters for 'subtract'"
-								isError = true
-							}
-						} else if toolName == "multiply" {
-							if let arguments = params["arguments"]?.value as? [String: Any],
-							   let a = arguments["a"] as? Int,
-							   let b = arguments["b"] as? Int {
-								// Call the multiply function
-								let result = calculator.multiply(a: a, b: b)
-								responseText = "The product of \(a) and \(b) is \(result)"
-							} else {
-								responseText = "Error: Missing or invalid parameters for 'multiply'"
-								isError = true
-							}
-						} else if toolName == "divide" {
-							if let arguments = params["arguments"]?.value as? [String: Any],
-							   let numerator = arguments["numerator"] as? Double {
-								// Call the divide function with optional parameter denominator
-								let result: Double
-								if let denominator = arguments["denominator"] as? Double {
-									result = calculator.divide(numerator: numerator, denominator: denominator)
-									responseText = "The quotient of \(numerator) divided by \(denominator) is \(result)"
-								} else {
-									result = calculator.divide(numerator: numerator)
-									responseText = "The quotient of \(numerator) divided by the default value is \(result)"
-								}
-							} else {
-								responseText = "Error: Missing or invalid parameters for 'divide'"
-								isError = true
-							}
-						} else if toolName == "testArray" {
-							if let arguments = params["arguments"]?.value as? [String: Any],
-							   let a = arguments["a"] as? [Int] {
-								// Call the testArray function
-								calculator.testArray(a: a)
-								responseText = "Array processed: \(a)"
-							} else {
-								responseText = "Error: Missing or invalid parameters for 'testArray'"
-								isError = true
-							}
-						} else {
+						// Extract arguments from the request
+						let arguments = (params["arguments"]?.value as? [String: Any]) ?? [:]
+						
+						// Call the appropriate wrapper method based on the tool name
+						var result: Any? = nil
+						
+						switch toolName {
+						case "greet":
+							result = calculator.__call_greet(arguments)
+						case "add":
+							result = calculator.__call_add(arguments)
+						case "subtract":
+							result = calculator.__call_subtract(arguments)
+						case "multiply":
+							result = calculator.__call_multiply(arguments)
+						case "divide":
+							result = calculator.__call_divide(arguments)
+						case "testArray":
+							result = calculator.__call_testArray(arguments)
+						case "ping":
+							result = calculator.__call_ping(arguments)
+						default:
 							responseText = "Error: Unknown tool '\(toolName)'"
 							isError = true
+						}
+						
+						// If we got a result, format it as a response
+						if !isError {
+							if let result = result {
+								responseText = "\(result)"
+							} else {
+								responseText = "Error: Function call failed"
+								isError = true
+							}
 						}
 						
 						// Create and encode the response
@@ -319,82 +277,40 @@ while true {
 							var responseText = ""
 							var isError = false
 							
-							if toolName == "greet" {
-								if let arguments = params["arguments"] as? [String: Any],
-								   let name = arguments["name"] as? String {
-									// Instead of calling the function directly, capture what it would output
-									responseText = "Hello, \(name)!"
-								} else {
-									responseText = "Error: Missing or invalid 'name' parameter"
-									isError = true
-								}
-							} else if toolName == "add" {
-								if let arguments = params["arguments"] as? [String: Any],
-								   let a = arguments["a"] as? Int,
-								   let b = arguments["b"] as? Int {
-									// Call the add function
-									let result = calculator.add(a: a, b: b)
-									responseText = "The sum of \(a) and \(b) is \(result)"
-								} else {
-									responseText = "Error: Missing or invalid parameters for 'add'"
-									isError = true
-								}
-							} else if toolName == "subtract" {
-								if let arguments = params["arguments"] as? [String: Any],
-								   let a = arguments["a"] as? Int {
-									// Call the subtract function with optional parameter b
-									let result: Int
-									if let b = arguments["b"] as? Int {
-										result = calculator.subtract(a: a, b: b)
-										responseText = "The difference between \(a) and \(b) is \(result)"
-									} else {
-										result = calculator.subtract(a: a)
-										responseText = "The difference between \(a) and the default value is \(result)"
-									}
-								} else {
-									responseText = "Error: Missing or invalid parameters for 'subtract'"
-									isError = true
-								}
-							} else if toolName == "multiply" {
-								if let arguments = params["arguments"] as? [String: Any],
-								   let a = arguments["a"] as? Int,
-								   let b = arguments["b"] as? Int {
-									// Call the multiply function
-									let result = calculator.multiply(a: a, b: b)
-									responseText = "The product of \(a) and \(b) is \(result)"
-								} else {
-									responseText = "Error: Missing or invalid parameters for 'multiply'"
-									isError = true
-								}
-							} else if toolName == "divide" {
-								if let arguments = params["arguments"] as? [String: Any],
-								   let numerator = arguments["numerator"] as? Double {
-									// Call the divide function with optional parameter denominator
-									let result: Double
-									if let denominator = arguments["denominator"] as? Double {
-										result = calculator.divide(numerator: numerator, denominator: denominator)
-										responseText = "The quotient of \(numerator) divided by \(denominator) is \(result)"
-									} else {
-										result = calculator.divide(numerator: numerator)
-										responseText = "The quotient of \(numerator) divided by the default value is \(result)"
-									}
-								} else {
-									responseText = "Error: Missing or invalid parameters for 'divide'"
-									isError = true
-								}
-							} else if toolName == "testArray" {
-								if let arguments = params["arguments"] as? [String: Any],
-								   let a = arguments["a"] as? [Int] {
-									// Call the testArray function
-									calculator.testArray(a: a)
-									responseText = "Array processed: \(a)"
-								} else {
-									responseText = "Error: Missing or invalid parameters for 'testArray'"
-									isError = true
-								}
-							} else {
+							// Extract arguments from the request
+							let arguments = (params["arguments"] as? [String: Any]) ?? [:]
+							
+							// Call the appropriate wrapper method based on the tool name
+							var result: Any? = nil
+							
+							switch toolName {
+							case "greet":
+								result = calculator.__call_greet(arguments)
+							case "add":
+								result = calculator.__call_add(arguments)
+							case "subtract":
+								result = calculator.__call_subtract(arguments)
+							case "multiply":
+								result = calculator.__call_multiply(arguments)
+							case "divide":
+								result = calculator.__call_divide(arguments)
+							case "testArray":
+								result = calculator.__call_testArray(arguments)
+							case "ping":
+								result = calculator.__call_ping(arguments)
+							default:
 								responseText = "Error: Unknown tool '\(toolName)'"
 								isError = true
+							}
+							
+							// If we got a result, format it as a response
+							if !isError {
+								if let result = result {
+									responseText = "\(result)"
+								} else {
+									responseText = "Error: Function call failed"
+									isError = true
+								}
 							}
 							
 							// Create and encode the response

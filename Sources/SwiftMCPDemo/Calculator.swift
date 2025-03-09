@@ -50,11 +50,12 @@ class Calculator {
         return numerator / denominator
     }
     
-    /// Prints a greeting message with the provided name
+    /// Returns a greeting message with the provided name
     /// - Parameter name: Name of the person to greet
+    /// - Returns: The greeting message
     @MCPFunction(description: "Shows a greeting message")
-    func greet(name: String) {
-        print("Hello, \(name)!")
+    func greet(name: String) -> String {
+        return "Hello, \(name)!"
     }
 	
     /** A simple ping function that returns 'pong' */
