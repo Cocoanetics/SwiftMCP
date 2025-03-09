@@ -256,8 +256,39 @@ public struct MCPFunctionMacro: PeerMacro {
             
             // If it has a default value, use conditional binding
             if let defaultValue = param.defaultValue {
-                wrapperMethod += """
-                
+                if param.type == "Double" || param.type == "Float" {
+                    wrapperMethod += """
+                    
+                    let \(paramName): \(paramType)
+                    if let value = params["\(paramName)"] as? \(paramType) {
+                        \(paramName) = value
+                    } else if let intValue = params["\(paramName)"] as? Int {
+                        \(paramName) = \(paramType)(intValue)
+                    } else if let stringValue = params["\(paramName)"] as? String, let parsedValue = \(paramType)(stringValue) {
+                        \(paramName) = parsedValue
+                    } else {
+                        // Use default value from function definition
+                        \(paramName) = \(defaultValue)
+                    }
+                    """
+                } else if param.type == "Int" {
+                    wrapperMethod += """
+                    
+                    let \(paramName): \(paramType)
+                    if let value = params["\(paramName)"] as? \(paramType) {
+                        \(paramName) = value
+                    } else if let doubleValue = params["\(paramName)"] as? Double {
+                        \(paramName) = \(paramType)(doubleValue)
+                    } else if let stringValue = params["\(paramName)"] as? String, let parsedValue = \(paramType)(stringValue) {
+                        \(paramName) = parsedValue
+                    } else {
+                        // Use default value from function definition
+                        \(paramName) = \(defaultValue)
+                    }
+                    """
+                } else {
+                    wrapperMethod += """
+                    
                     let \(paramName): \(paramType)
                     if let value = params["\(paramName)"] as? \(paramType) {
                         \(paramName) = value
@@ -265,15 +296,46 @@ public struct MCPFunctionMacro: PeerMacro {
                         // Use default value from function definition
                         \(paramName) = \(defaultValue)
                     }
-                """
+                    """
+                }
             } else {
-                // For required parameters, use guard
-                wrapperMethod += """
-                
+                // For required parameters, use guard with type conversion
+                if param.type == "Double" || param.type == "Float" {
+                    wrapperMethod += """
+                    
+                    let \(paramName): \(paramType)
+                    if let value = params["\(paramName)"] as? \(paramType) {
+                        \(paramName) = value
+                    } else if let intValue = params["\(paramName)"] as? Int {
+                        \(paramName) = \(paramType)(intValue)
+                    } else if let stringValue = params["\(paramName)"] as? String, let parsedValue = \(paramType)(stringValue) {
+                        \(paramName) = parsedValue
+                    } else {
+                        return "Error: Missing or invalid '\(paramName)' parameter"
+                    }
+                    """
+                } else if param.type == "Int" {
+                    wrapperMethod += """
+                    
+                    let \(paramName): \(paramType)
+                    if let value = params["\(paramName)"] as? \(paramType) {
+                        \(paramName) = value
+                    } else if let doubleValue = params["\(paramName)"] as? Double {
+                        \(paramName) = \(paramType)(doubleValue)
+                    } else if let stringValue = params["\(paramName)"] as? String, let parsedValue = \(paramType)(stringValue) {
+                        \(paramName) = parsedValue
+                    } else {
+                        return "Error: Missing or invalid '\(paramName)' parameter"
+                    }
+                    """
+                } else {
+                    wrapperMethod += """
+                    
                     guard let \(paramName) = params["\(paramName)"] as? \(paramType) else {
                         return "Error: Missing or invalid '\(paramName)' parameter"
                     }
-                """
+                    """
+                }
             }
         }
         

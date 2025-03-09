@@ -26,8 +26,9 @@ class Calculator {
      - Parameter a: Array of integers to process
      */
 	@MCPFunction(description: "Custom description: Tests array processing")
-	func testArray(a: [Int]) {
+	func testArray(a: [Int]) -> String {
 		
+		return a.map(String.init).joined(separator: ", ")
 	}
     
     /**

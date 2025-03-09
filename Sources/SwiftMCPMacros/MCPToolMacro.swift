@@ -64,7 +64,29 @@ public struct MCPToolMacro: MemberMacro {
                     // Create a JSON schema from the function metadata
                     let schema = JSONSchema.object(
                         properties: Dictionary(uniqueKeysWithValues: metadata.parameters.map { param in
-                            (param.name, JSONSchema.string(description: param.description))
+                            let schemaType: JSONSchema
+                            switch param.type {
+                            case "Int", "Double", "Float", "CGFloat":
+                                schemaType = .number(description: param.description)
+                            case "Bool":
+                                schemaType = .boolean(description: param.description)
+                            case let arrayType where arrayType.hasPrefix("[") && arrayType.hasSuffix("]"):
+                                // Handle array types
+                                let elementType = String(arrayType.dropFirst().dropLast())
+                                let itemSchema: JSONSchema
+                                switch elementType {
+                                case "Int", "Double", "Float", "CGFloat":
+                                    itemSchema = .number(description: nil)
+                                case "Bool":
+                                    itemSchema = .boolean(description: nil)
+                                default:
+                                    itemSchema = .string(description: nil)
+                                }
+                                schemaType = .array(items: itemSchema, description: param.description)
+                            default:
+                                schemaType = .string(description: param.description)
+                            }
+                            return (param.name, schemaType)
                         }),
                         required: metadata.parameters.filter { $0.defaultValue == nil }.map { $0.name }
                     )
@@ -88,19 +110,10 @@ public struct MCPToolMacro: MemberMacro {
             handlersInitLines.append("            handlers[\"\(funcName)\"] = self.__call_\(funcName)")
         }
         
-        let functionHandlersProperty = """
-        /// Dictionary of function handlers for all MCP functions
-        lazy var functionHandlers: [String: ([String: Any]) -> Any?] = {
-            var handlers: [String: ([String: Any]) -> Any?] = [:]
-            \(handlersInitLines.joined(separator: "\n"))
-            return handlers
-        }()
-        """
-        
         // Create a callTool method that uses a switch statement to call the appropriate wrapper function
         var switchCases: [String] = []
         for funcName in mcpFunctions {
-            switchCases.append("            case \"\(funcName)\": return __call_\(funcName)(arguments)")
+            switchCases.append("            case \"\(funcName)\": return __call_\(funcName)(enrichedArguments)")
         }
         
         let callToolMethod = """
@@ -110,6 +123,15 @@ public struct MCPToolMacro: MemberMacro {
         ///   - arguments: A dictionary of arguments to pass to the tool
         /// - Returns: The result of the tool call, or nil if the tool could not be called
         func callTool(_ name: String, arguments: [String: Any]) -> Any? {
+            // Find the tool by name
+            guard let tool = mcpTools.first(where: { $0.name == name }) else {
+                return "Error: Unknown tool '\\(name)'"
+            }
+            
+            // Enrich arguments with default values
+            let enrichedArguments = tool.enrichArguments(arguments, forObject: self, functionName: name)
+            
+            // Call the appropriate wrapper method based on the tool name
             switch name {
             \(switchCases.joined(separator: "\n"))
             default: return "Error: Unknown tool '\\(name)'"

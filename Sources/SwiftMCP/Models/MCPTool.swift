@@ -63,6 +63,68 @@ extension MCPTool: Codable {
 }
 
 /**
+ Extension to provide utility methods for working with MCP tools.
+ */
+extension MCPTool {
+	/**
+	 Enriches the provided arguments dictionary with default values for missing parameters.
+	 
+	 - Parameters:
+	   - arguments: The original arguments dictionary
+	   - object: The object containing the function metadata
+	   - functionName: The name of the function to get default values for
+	 
+	 - Returns: A new dictionary with default values added for missing parameters
+	 */
+	public func enrichArguments(_ arguments: [String: Any], forObject object: Any, functionName: String? = nil) -> [String: Any] {
+		// Use the provided function name or fall back to the tool's name
+		let funcName = functionName ?? name
+		let metadataKey = "__metadata_\(funcName)"
+		
+		// Create a copy of the arguments dictionary
+		var enrichedArguments = arguments
+		
+		// Find the metadata for the function using reflection
+		let mirror = Mirror(reflecting: object)
+		guard let child = mirror.children.first(where: { $0.label == metadataKey }),
+			  let metadata = child.value as? MCPFunctionMetadata else {
+			// If no metadata is found, return the original arguments
+			return arguments
+		}
+		
+		// Add default values for parameters that are missing from the arguments dictionary
+		for param in metadata.parameters {
+			if enrichedArguments[param.name] == nil, let defaultValue = param.defaultValue {
+				// Convert the default value to the appropriate type based on the parameter type
+				switch param.type {
+				case "Int":
+					if let intValue = Int(defaultValue) {
+						enrichedArguments[param.name] = intValue
+						print("Added default value for \(param.name): \(intValue) (type: Int)")
+					}
+				case "Double", "Float":
+					if let doubleValue = Double(defaultValue) {
+						enrichedArguments[param.name] = doubleValue
+						print("Added default value for \(param.name): \(doubleValue) (type: \(param.type))")
+					}
+				case "Bool":
+					if let boolValue = Bool(defaultValue) {
+						enrichedArguments[param.name] = boolValue
+						print("Added default value for \(param.name): \(boolValue) (type: Bool)")
+					}
+				default:
+					// For string and other types, use the default value as is
+					enrichedArguments[param.name] = defaultValue
+					print("Added default value for \(param.name): \(defaultValue) (type: String)")
+				}
+			}
+		}
+		
+		return enrichedArguments
+	}
+}
+
+/**
  Extension to make JSONSchema conform to Codable
  */
 extension JSONSchema: Codable {
