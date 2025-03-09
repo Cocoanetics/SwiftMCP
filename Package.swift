@@ -34,7 +34,13 @@ let package = Package(
         .target(name: "SwiftMCP", dependencies: ["SwiftMCPMacros"]),
 
         // A client of the library, which is able to use the macro in its own code.
-        .executableTarget(name: "SwiftMCPDemo", dependencies: ["SwiftMCP"]),
+        .executableTarget(
+            name: "SwiftMCPDemo", 
+            dependencies: ["SwiftMCP"],
+            resources: [
+                .process("README_MCP.md")
+            ]
+        ),
         
         // Test target for unit tests
         .testTarget(
