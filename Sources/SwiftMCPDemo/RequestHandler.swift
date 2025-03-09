@@ -45,11 +45,9 @@ class RequestHandler {
     private func handleToolCall(_ request: SwiftMCP.JSONRPCRequest) -> String? {
         guard let params = request.params,
               let toolName = params["name"]?.value as? String else {
-            logToStderr("Invalid tool call request: missing tool name")
+            // Invalid request: missing tool name
             return nil
         }
-        
-        logToStderr("Tool call: \(toolName)")
         
         // Get the arguments and prepare response text
         var responseText = ""
@@ -58,9 +56,6 @@ class RequestHandler {
         // Extract arguments from the request
         let arguments = (params["arguments"]?.value as? [String: Any]) ?? [:]
         
-        // Log the arguments for debugging
-        logToStderr("Arguments: \(arguments)")
-        
         // Call the appropriate wrapper method based on the tool name
         do {
             let result = try calculator.callTool(toolName, arguments: arguments)
@@ -68,11 +63,9 @@ class RequestHandler {
         } catch let error as MCPToolError {
             responseText = error.description
             isError = true
-            logToStderr("Tool call error: \(error)")
         } catch {
             responseText = "Error: \(error)"
             isError = true
-            logToStderr("Unexpected error: \(error)")
         }
         
         // Create and encode the response

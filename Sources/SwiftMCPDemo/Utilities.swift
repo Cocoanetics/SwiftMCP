@@ -10,7 +10,7 @@ func readLineFromStdin() -> String? {
 
 /// Function to send a response to stdout
 func sendResponse(_ response: String) {
-    print(response)
+    fputs(response + "\n", stdout)
     fflush(stdout) // Ensure the output is flushed immediately
 }
 
