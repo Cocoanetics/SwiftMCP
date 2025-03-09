@@ -54,32 +54,16 @@ public struct MCPServerMacro: MemberMacro {
         /// Returns an array of all MCP tools defined in this type
         var mcpTools: [MCPTool] {
             let mirror = Mirror(reflecting: self)
-            var tools: [MCPTool] = []
+            var metadataArray: [MCPFunctionMetadata] = []
             
             for child in mirror.children {
                 if let metadata = child.value as? MCPFunctionMetadata,
                    child.label?.hasPrefix("__metadata_") == true {
-                    let functionName = String(child.label!.dropFirst("__metadata_".count))
-                    
-                    // Create a JSON schema from the function metadata
-                    let schema = JSONSchema.object(
-                        properties: Dictionary(uniqueKeysWithValues: metadata.parameters.map { param in
-                            // Use string schema for all parameters to match test expectations
-                            return (param.name, JSONSchema.string(description: param.description))
-                        }),
-                        required: metadata.parameters.filter { $0.defaultValue == nil }.map { $0.name }
-                    )
-                    
-                    let tool = MCPTool(
-                        name: functionName,
-                        description: metadata.description,
-                        inputSchema: schema
-                    )
-                    tools.append(tool)
+                    metadataArray.append(metadata)
                 }
             }
             
-            return tools
+            return metadataArray.convertedToTools()
         }
         """
         

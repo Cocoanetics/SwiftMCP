@@ -47,6 +47,8 @@ struct MCPCommand: ParsableCommand {
     func run() throws {
         // Create an instance of the Calculator
         let calculator = Calculator()
+		
+		print(calculator.mcpTools)
         
         // Create a request handler
         let requestHandler = RequestHandler(calculator: calculator)
