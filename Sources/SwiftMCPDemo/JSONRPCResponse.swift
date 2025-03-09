@@ -9,14 +9,6 @@ import Foundation
 
 // MARK: - JSON-RPC Structures
 
-// JSON-RPC Request structure
-struct JSONRPCRequest: Codable {
-	let jsonrpc: String
-	let id: Int
-	let method: String
-	let params: [String: String]?
-}
-
 // JSON-RPC Response structures
 struct JSONRPCResponse: Codable {
 	var jsonrpc: String = "2.0"

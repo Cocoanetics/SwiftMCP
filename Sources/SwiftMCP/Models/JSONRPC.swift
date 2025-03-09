@@ -186,6 +186,46 @@ public struct JSONRPCRequest: Codable {
     public let id: Int
     public let method: String
     public let params: [String: AnyCodable]?
+    
+    public init(jsonrpc: String, id: Int, method: String, params: [String: AnyCodable]? = nil) {
+        self.jsonrpc = jsonrpc
+        self.id = id
+        self.method = method
+        self.params = params
+    }
+    
+    // Helper method to access a specific param value
+    public func getParamValue(key: String) -> Any? {
+        return params?[key]?.value
+    }
+    
+    // Helper method to access a nested param value
+    public func getNestedParamValue(path: [String]) -> Any? {
+        guard let params = params, !path.isEmpty else { return nil }
+        
+        // Handle the first level
+        guard let firstValue = params[path[0]]?.value else { return nil }
+        
+        // If path has only one element, return the value
+        if path.count == 1 {
+            return firstValue
+        }
+        
+        // Handle nested levels
+        var current: Any? = firstValue
+        
+        for i in 1..<path.count {
+            if let dict = current as? [String: Any] {
+                current = dict[path[i]]
+            } else if let dict = current as? [String: AnyCodable] {
+                current = dict[path[i]]?.value
+            } else {
+                return nil // Not a dictionary, can't go deeper
+            }
+        }
+        
+        return current
+    }
 }
 
 // JSON-RPC Response structures
