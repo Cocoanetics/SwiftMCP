@@ -40,7 +40,7 @@ let package = Package(
         // Test target for unit tests
         .testTarget(
             name: "SwiftMCPTests",
-            dependencies: ["SwiftMCP"]
+            dependencies: ["SwiftMCP", "SwiftMCPDemo"]
         ),
 
         // The implementation of the macro, which is a separate target so that it

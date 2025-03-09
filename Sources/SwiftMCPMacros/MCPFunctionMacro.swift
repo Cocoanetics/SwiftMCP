@@ -260,8 +260,8 @@ public struct MCPFunctionMacro: PeerMacro {
                     wrapperMethod += """
                     
                     let \(paramName): \(paramType)
-                    if let value = params["\(paramName)"] as? \(paramType) {
-                        \(paramName) = value
+                    if let paramValue = params["\(paramName)"] as? \(paramType) {
+                        \(paramName) = paramValue
                     } else if let intValue = params["\(paramName)"] as? Int {
                         \(paramName) = \(paramType)(intValue)
                     } else if let stringValue = params["\(paramName)"] as? String, let parsedValue = \(paramType)(stringValue) {
@@ -275,8 +275,8 @@ public struct MCPFunctionMacro: PeerMacro {
                     wrapperMethod += """
                     
                     let \(paramName): \(paramType)
-                    if let value = params["\(paramName)"] as? \(paramType) {
-                        \(paramName) = value
+                    if let paramValue = params["\(paramName)"] as? \(paramType) {
+                        \(paramName) = paramValue
                     } else if let doubleValue = params["\(paramName)"] as? Double {
                         \(paramName) = \(paramType)(doubleValue)
                     } else if let stringValue = params["\(paramName)"] as? String, let parsedValue = \(paramType)(stringValue) {
@@ -290,8 +290,8 @@ public struct MCPFunctionMacro: PeerMacro {
                     wrapperMethod += """
                     
                     let \(paramName): \(paramType)
-                    if let value = params["\(paramName)"] as? \(paramType) {
-                        \(paramName) = value
+                    if let paramValue = params["\(paramName)"] as? \(paramType) {
+                        \(paramName) = paramValue
                     } else {
                         // Use default value from function definition
                         \(paramName) = \(defaultValue)
@@ -304,8 +304,8 @@ public struct MCPFunctionMacro: PeerMacro {
                     wrapperMethod += """
                     
                     let \(paramName): \(paramType)
-                    if let value = params["\(paramName)"] as? \(paramType) {
-                        \(paramName) = value
+                    if let paramValue = params["\(paramName)"] as? \(paramType) {
+                        \(paramName) = paramValue
                     } else if let intValue = params["\(paramName)"] as? Int {
                         \(paramName) = \(paramType)(intValue)
                     } else if let stringValue = params["\(paramName)"] as? String, let parsedValue = \(paramType)(stringValue) {
@@ -318,8 +318,8 @@ public struct MCPFunctionMacro: PeerMacro {
                     wrapperMethod += """
                     
                     let \(paramName): \(paramType)
-                    if let value = params["\(paramName)"] as? \(paramType) {
-                        \(paramName) = value
+                    if let paramValue = params["\(paramName)"] as? \(paramType) {
+                        \(paramName) = paramValue
                     } else if let doubleValue = params["\(paramName)"] as? Double {
                         \(paramName) = \(paramType)(doubleValue)
                     } else if let stringValue = params["\(paramName)"] as? String, let parsedValue = \(paramType)(stringValue) {

@@ -8,238 +8,30 @@ import AnyCodable
 // Create an instance of the Calculator
 let calculator = Calculator()
 
-// MARK: - Helper Functions
-
-// Function to read a line from stdin
-func readLineFromStdin() -> String? {
-	return readLine(strippingNewline: true)
-}
-
-// Function to send a response to stdout
-func sendResponse(_ response: String) {
-	print(response)
-	fflush(stdout) // Ensure the output is flushed immediately
-}
-
-// Function to log a message to stderr
-func logToStderr(_ message: String) {
-	
-	let stderr = FileHandle.standardError
-	if let data = (message + "\n").data(using: .utf8) {
-		stderr.write(data)
-	}
-}
-
-// MARK: - JSONRPCRequest Extensions
-
-// No need for extensions since we've moved the helper methods to the JSONRPCRequest struct
-
-// MARK: - Predefined Responses
-
-// Define a struct for the initialize response
-struct InitializeResponse: Codable {
-	struct ServerInfo: Codable {
-		let name: String
-		let version: String
-	}
-
-	struct Capabilities: Codable {
-		let experimental: [String: String]
-		let tools: Tools
-	}
-
-	struct Tools: Codable {
-		let listChanged: Bool
-	}
-
-	let jsonrpc: String
-	let id: Int
-	let result: Result
-
-	struct Result: Codable {
-		let protocolVersion: String
-		let capabilities: Capabilities
-		let serverInfo: ServerInfo
-	}
-}
-
-// Create an instance of the initialize response
-let initializeResponseStruct = InitializeResponse(
-	jsonrpc: "2.0",
-	id: 0,
-	result: .init(
-		protocolVersion: "2024-11-05",
-		capabilities: .init(
-			experimental: [:],
-			tools: .init(listChanged: false)
-		),
-		serverInfo: .init(name: "mcp-calculator", version: "1.0.0")
-	)
-)
-
-// Define a struct for the tools list response
-struct ToolsListResponse: Codable {
-	let jsonrpc: String
-	let id: Int
-	let result: Result
-
-	struct Result: Codable {
-		let tools: [MCPTool]
-	}
-
-	struct InputSchema: Codable {
-		let type: String
-		let properties: [String: Property]
-		let required: [String]
-	}
-
-	struct Property: Codable {
-		let type: String
-		let description: String
-	}
-}
-
-// Define a struct for the tool call response
-struct ToolCallResponse: Codable {
-    let jsonrpc: String
-    let id: Int
-    let result: Result
-    
-    struct Result: Codable {
-        let content: [ContentItem]
-        let isError: Bool
-        
-        struct ContentItem: Codable {
-            let type: String
-            let text: String
-        }
-    }
-    
-    init(id: Int, text: String, isError: Bool = false) {
-        self.jsonrpc = "2.0"
-        self.id = id
-        self.result = Result(
-            content: [Result.ContentItem(type: "text", text: text)],
-            isError: isError
-        )
-    }
-}
-
-// Create an instance of the tools list response using the mcpTools from Calculator
-func createToolsListResponse(id: Int) -> ToolsListResponse {
-	// Convert MCPTool array to ToolsListResponse.Tool array
-	let tools = calculator.mcpTools
-	
-	// Create and return the response
-	return ToolsListResponse(
-		jsonrpc: "2.0",
-		id: id,
-		result: .init(tools: tools)
-	)
-}
+// Create a request handler
+let requestHandler = RequestHandler(calculator: calculator)
 
 // MARK: - Main Loop
 
-// Continue processing additional inputs
+// Continue processing inputs
 while true {
-	if let input = readLineFromStdin(), let data = input.data(using: .utf8) {
-		// Log the input for debugging
-		logToStderr("Received input: \(input)")
+    if let input = readLineFromStdin(), let data = input.data(using: .utf8) {
+        // Log the input for debugging
+        logToStderr("Received input: \(input)")
 
-		do {
-			// Try to decode the JSON-RPC request
-			let request = try JSONDecoder().decode(JSONRPCRequest.self, from: data)
-			
-			// Prepare the response based on the method
-			var response: String
-			switch request.method {
-				case "initialize":
-					let encodedResponse = try! JSONEncoder().encode(initializeResponseStruct)
-					let jsonString = String(data: encodedResponse, encoding: .utf8)!
-					response = jsonString
-					
-					// Log the params for debugging
-					if let params = request.params {
-						logToStderr("Params: \(params)")
-						
-						// Access direct values
-						if let protocolVersion = request.getParamValue(key: "protocolVersion") {
-							logToStderr("Protocol Version: \(protocolVersion)")
-						}
-						
-						// Access nested values using path
-						if let tools = request.getNestedParamValue(path: ["capabilities", "tools"]) as? Bool {
-							logToStderr("Tools: \(tools)")
-						}
-						
-						if let clientName = request.getNestedParamValue(path: ["clientInfo", "name"]) as? String {
-							logToStderr("Client Name: \(clientName)")
-						}
-					}
-				case "notifications/initialized":
-					continue
-				case "tools/list":
-					let toolsListResponseStruct = createToolsListResponse(id: request.id)
-					let encodedResponse = try! JSONEncoder().encode(toolsListResponseStruct)
-					response = String(data: encodedResponse, encoding: .utf8)!
-				case "tools/call":
-					// Handle tool call
-					if let params = request.params,
-					   let toolName = params["name"]?.value as? String {
-						
-						logToStderr("Tool call: \(toolName)")
-						
-						// Get the arguments and prepare response text
-						var responseText = ""
-						var isError = false
-						
-						// Extract arguments from the request
-						let arguments = (params["arguments"]?.value as? [String: Any]) ?? [:]
-						
-						// Log the arguments for debugging
-						logToStderr("Arguments: \(arguments)")
-						if let numerator = arguments["numerator"] {
-							logToStderr("Numerator: \(numerator) (type: \(type(of: numerator)))")
-						}
-						if let denominator = arguments["denominator"] {
-							logToStderr("Denominator: \(denominator) (type: \(type(of: denominator)))")
-						}
-						
-						// Call the appropriate wrapper method based on the tool name
-						do {
-							let result = try calculator.callTool(toolName, arguments: arguments)
-							responseText = "\(result)"
-						} catch let error as MCPToolError {
-							responseText = error.description
-							isError = true
-							logToStderr("Tool call error: \(error)")
-						} catch {
-							responseText = "Error: \(error)"
-							isError = true
-							logToStderr("Unexpected error: \(error)")
-						}
-						
-						// Create and encode the response
-						let toolCallResponseStruct = ToolCallResponse(id: request.id, text: responseText, isError: isError)
-						let encodedResponse = try! JSONEncoder().encode(toolCallResponseStruct)
-						response = String(data: encodedResponse, encoding: .utf8)!
-					} else {
-						// Invalid tool call request
-						logToStderr("Invalid tool call request: missing tool name or arguments")
-						continue
-					}
-				default:
-					continue
-			}
-			
-			// Send the response
-			sendResponse(response)
-		} catch {
-			logToStderr("Failed to decode JSON-RPC request: \(error)")
-		}
-	} else {
-		// If readLine() returns nil (EOF), sleep briefly and continue
-		Thread.sleep(forTimeInterval: 0.1)
-	}
-}
-
+        do {
+            // Try to decode the JSON-RPC request
+            let request = try JSONDecoder().decode(SwiftMCP.JSONRPCRequest.self, from: data)
+            
+            // Handle the request
+            if let response = requestHandler.handleRequest(request) {
+                sendResponse(response)
+            }
+        } catch {
+            logToStderr("Failed to decode JSON-RPC request: \(error)")
+        }
+    } else {
+        // If readLine() returns nil (EOF), sleep briefly and continue
+        Thread.sleep(forTimeInterval: 0.1)
+    }
+} 
