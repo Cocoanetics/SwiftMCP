@@ -206,16 +206,17 @@ while true {
 						}
 						
 						// Call the appropriate wrapper method based on the tool name
-						let result = calculator.callTool(toolName, arguments: arguments)
-						
-						// If we got a result, format it as a response
-						if !isError {
-							if let result = result {
-								responseText = "\(result)"
-							} else {
-								responseText = "Error: Function call failed"
-								isError = true
-							}
+						do {
+							let result = try calculator.callTool(toolName, arguments: arguments)
+							responseText = "\(result)"
+						} catch let error as MCPToolError {
+							responseText = error.description
+							isError = true
+							logToStderr("Tool call error: \(error)")
+						} catch {
+							responseText = "Error: \(error)"
+							isError = true
+							logToStderr("Unexpected error: \(error)")
 						}
 						
 						// Create and encode the response

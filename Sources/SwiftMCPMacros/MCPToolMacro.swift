@@ -113,7 +113,13 @@ public struct MCPToolMacro: MemberMacro {
         // Create a callTool method that uses a switch statement to call the appropriate wrapper function
         var switchCases: [String] = []
         for funcName in mcpFunctions {
-            switchCases.append("            case \"\(funcName)\": return __call_\(funcName)(enrichedArguments)")
+            switchCases.append("""
+            case "\(funcName)":
+                guard let result = __call_\(funcName)(enrichedArguments) else {
+                    throw MCPToolError.callFailed(name: name, reason: "Function call returned nil")
+                }
+                return result
+            """)
         }
         
         let callToolMethod = """
@@ -121,11 +127,12 @@ public struct MCPToolMacro: MemberMacro {
         /// - Parameters:
         ///   - name: The name of the tool to call
         ///   - arguments: A dictionary of arguments to pass to the tool
-        /// - Returns: The result of the tool call, or nil if the tool could not be called
-        func callTool(_ name: String, arguments: [String: Any]) -> Any? {
+        /// - Returns: The result of the tool call
+        /// - Throws: MCPToolError if the tool doesn't exist or cannot be called
+        func callTool(_ name: String, arguments: [String: Any]) throws -> Any {
             // Find the tool by name
             guard let tool = mcpTools.first(where: { $0.name == name }) else {
-                return "Error: Unknown tool '\\(name)'"
+                throw MCPToolError.unknownTool(name: name)
             }
             
             // Enrich arguments with default values
@@ -134,7 +141,7 @@ public struct MCPToolMacro: MemberMacro {
             // Call the appropriate wrapper method based on the tool name
             switch name {
             \(switchCases.joined(separator: "\n"))
-            default: return "Error: Unknown tool '\\(name)'"
+            default: throw MCPToolError.unknownTool(name: name)
             }
         }
         """
