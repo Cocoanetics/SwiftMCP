@@ -115,10 +115,7 @@ public struct MCPToolMacro: MemberMacro {
         for funcName in mcpFunctions {
             switchCases.append("""
             case "\(funcName)":
-                guard let result = __call_\(funcName)(enrichedArguments) else {
-                    throw MCPToolError.callFailed(name: name, reason: "Function call returned nil")
-                }
-                return result
+                return try __call_\(funcName)(enrichedArguments)
             """)
         }
         

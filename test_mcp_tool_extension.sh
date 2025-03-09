@@ -12,5 +12,10 @@ echo ""
 echo "Testing error handling with an unknown tool..."
 echo '{"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "unknown_tool", "arguments": {}}}' | ./.build/debug/SwiftMCPDemo
 
+# Test error handling with an invalid argument type
+echo ""
+echo "Testing error handling with an invalid argument type..."
+echo '{"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "divide", "arguments": {"numerator": "not_a_number"}}}' | ./.build/debug/SwiftMCPDemo
+
 echo ""
 echo "Done!" 
