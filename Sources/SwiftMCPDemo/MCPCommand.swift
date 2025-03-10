@@ -27,7 +27,7 @@ struct MCPCommand: ParsableCommand {
 				   !input.isEmpty,
 				   let data = input.data(using: .utf8)
 				{
-					fputs("\(input)\n", stderr)
+					// fputs("\(input)\n", stderr)
 					
 					let request = try JSONDecoder().decode(SwiftMCP.JSONRPCRequest.self, from: data)
 					
