@@ -15,8 +15,9 @@ import SwiftSyntaxMacros
  
  This macro adds a `mcpTools` computed property to a class or struct,
  which returns an array of all MCP tools defined in that type.
+ It also automatically adds the MCPServer protocol conformance.
  */
-public struct MCPServerMacro: MemberMacro {
+public struct MCPServerMacro: MemberMacro, ExtensionMacro {
     /**
      Expands the macro to provide additional members for the declaration.
      
@@ -123,5 +124,41 @@ public struct MCPServerMacro: MemberMacro {
             DeclSyntax(stringLiteral: mcpToolsProperty),
             DeclSyntax(stringLiteral: callToolMethod)
         ]
+    }
+    
+    /**
+     Expands the macro to provide protocol conformances for the declaration.
+     
+     - Parameters:
+       - node: The attribute syntax node
+       - declaration: The declaration syntax
+       - type: The type to extend
+       - protocols: The protocols to conform to
+       - context: The macro expansion context
+     
+     - Returns: An array of extension declarations
+     */
+    public static func expansion(
+        of node: AttributeSyntax,
+        attachedTo declaration: some DeclGroupSyntax,
+        providingExtensionsOf type: some TypeSyntaxProtocol,
+        conformingTo protocols: [TypeSyntax],
+        in context: some MacroExpansionContext
+    ) throws -> [ExtensionDeclSyntax] {
+        // Check if the declaration already conforms to MCPServer
+        let inheritedTypes = declaration.inheritanceClause?.inheritedTypes ?? []
+        let alreadyConformsToMCPServer = inheritedTypes.contains { type in
+            type.type.trimmedDescription == "MCPServer"
+        }
+        
+        // If it already conforms, don't add the conformance again
+        if alreadyConformsToMCPServer {
+            return []
+        }
+        
+        // Create an extension that adds the MCPServer protocol conformance
+        let extensionDecl = try ExtensionDeclSyntax("extension \(type): MCPServer {}")
+        
+        return [extensionDecl]
     }
 } 

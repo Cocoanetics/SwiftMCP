@@ -34,6 +34,7 @@ public macro MCPTool(description: String? = nil) = #externalMacro(module: "Swift
 /// Apply this macro to classes that contain `MCPTool` annotated methods.
 /// It will generate a property that returns an array of `MCPTool` objects
 /// representing all the functions in the class.
+/// It also automatically adds the `MCPServer` protocol conformance.
 ///
 /// Example:
 /// ```swift
@@ -46,4 +47,5 @@ public macro MCPTool(description: String? = nil) = #externalMacro(module: "Swift
 /// }
 /// ```
 @attached(member, names: named(mcpTools), named(callTool), named(__mcpServerName), named(__mcpServerVersion))
+@attached(extension, conformances: MCPServer)
 public macro MCPServer(name: String? = nil, version: String? = nil) = #externalMacro(module: "SwiftMCPMacros", type: "MCPServerMacro")
