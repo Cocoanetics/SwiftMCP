@@ -32,6 +32,16 @@ public struct MCPServerMacro: MemberMacro {
         providingMembersOf declaration: some DeclGroupSyntax,
         in context: some MacroExpansionContext
     ) throws -> [DeclSyntax] {
+        let arguments = node.arguments?.as(LabeledExprListSyntax.self)
+        let nameArg = arguments?.first(where: { $0.label?.text == "name" })?.expression.description.trimmingCharacters(in: .punctuationCharacters)
+        let versionArg = arguments?.first(where: { $0.label?.text == "version" })?.expression.description.trimmingCharacters(in: .punctuationCharacters)
+
+        let serverName = nameArg ?? declaration.as(ClassDeclSyntax.self)?.name.text ?? "UnnamedServer"
+        let serverVersion = versionArg ?? "1.0"
+
+        let nameProperty = "private let __mcpServerName = \"\(serverName)\""
+        let versionProperty = "private let __mcpServerVersion = \"\(serverVersion)\""
+
         // Find all functions with the MCPTool macro
         var mcpTools: [String] = []
         
@@ -58,7 +68,7 @@ public struct MCPServerMacro: MemberMacro {
             
             for child in mirror.children {
                 if let metadata = child.value as? MCPToolMetadata,
-                   child.label?.hasPrefix("__metadata_") == true {
+                   child.label?.hasPrefix("__mcpMetadata_") == true {
                     metadataArray.append(metadata)
                 }
             }
@@ -70,7 +80,7 @@ public struct MCPServerMacro: MemberMacro {
         // Create a dictionary property that maps function names to their wrapper methods
         var handlersInitLines: [String] = []
         for funcName in mcpTools {
-            handlersInitLines.append("            handlers[\"\(funcName)\"] = self.__call_\(funcName)")
+            handlersInitLines.append("            handlers[\"\(funcName)\"] = self.__mcpCall_\(funcName)")
         }
         
         // Create a callTool method that uses a switch statement to call the appropriate wrapper function
@@ -78,7 +88,7 @@ public struct MCPServerMacro: MemberMacro {
         for funcName in mcpTools {
             switchCases.append("""
             case "\(funcName)":
-                return try __call_\(funcName)(enrichedArguments)
+                return try __mcpCall_\(funcName)(enrichedArguments)
             """)
         }
         
@@ -107,6 +117,8 @@ public struct MCPServerMacro: MemberMacro {
         """
         
         return [
+            DeclSyntax(stringLiteral: nameProperty),
+            DeclSyntax(stringLiteral: versionProperty),
             DeclSyntax(stringLiteral: mcpToolsProperty),
             DeclSyntax(stringLiteral: callToolMethod)
         ]

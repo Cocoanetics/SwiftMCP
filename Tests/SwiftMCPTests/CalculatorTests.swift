@@ -1,66 +1,64 @@
-import XCTest
+import Testing
 import SwiftMCP
 
-final class CalculatorTests: XCTestCase {
-    var calculator: Calculator!
+@Test("Addition")
+func testAdd() throws {
+    let calculator = Calculator()
     
-    override func setUp() {
-        super.setUp()
-        calculator = Calculator()
-    }
+    // Test direct function call
+    #expect(calculator.add(a: 2, b: 3) == 5)
     
-    override func tearDown() {
-        calculator = nil
-        super.tearDown()
-    }
+    // Test through callTool
+    let result = try calculator.callTool("add", arguments: ["a": 2, "b": 3])
+    #expect(result as? Int == 5)
+}
+
+@Test
+func testTestArray() throws {
+    let calculator = Calculator()
     
-    func testAdd() throws {
-        // Test direct function call
-        XCTAssertEqual(calculator.add(a: 2, b: 3), 5)
-        
-        // Test through callTool
-        let result = try calculator.callTool("add", arguments: ["a": 2, "b": 3])
-        XCTAssertEqual(result as? Int, 5)
-    }
+    // Test direct function call
+    #expect(calculator.testArray(a: [1, 2, 3]) == "1, 2, 3")
     
-    func testTestArray() throws {
-        // Test direct function call
-        XCTAssertEqual(calculator.testArray(a: [1, 2, 3]), "1, 2, 3")
-        
-        // Test through callTool
-        let result = try calculator.callTool("testArray", arguments: ["a": [1, 2, 3]])
-        XCTAssertEqual(result as? String, "1, 2, 3")
-    }
+    // Test through callTool
+    let result = try calculator.callTool("testArray", arguments: ["a": [1, 2, 3]])
+    #expect(result as? String == "1, 2, 3")
+}
+
+@Test
+func testUnknownTool() throws {
+    let calculator = Calculator()
     
-    func testUnknownTool() {
-        XCTAssertThrowsError(try calculator.callTool("unknown", arguments: [:]), "Should throw an error for unknown tool") { error in
-            guard let mcpError = error as? MCPToolError else {
-                XCTFail("Error should be MCPToolError")
-                return
-            }
-            
-            if case .unknownTool(let name) = mcpError {
-                XCTAssertEqual(name, "unknown")
-            } else {
-                XCTFail("Error should be unknownTool")
-            }
+    do {
+        _ = try calculator.callTool("unknown", arguments: [:])
+        #expect(Bool(false), "Should throw an error for unknown tool")
+    } catch let error as MCPToolError {
+        if case .unknownTool(let name) = error {
+            #expect(name == "unknown")
+        } else {
+            #expect(Bool(false), "Error should be unknownTool")
         }
+    } catch {
+        #expect(Bool(false), "Error should be MCPToolError")
     }
+}
+
+@Test
+func testInvalidArgumentType() throws {
+    let calculator = Calculator()
     
-    func testInvalidArgumentType() {
-        XCTAssertThrowsError(try calculator.callTool("add", arguments: ["a": "not_a_number", "b": 3]), "Should throw an error for invalid argument type") { error in
-            guard let mcpError = error as? MCPToolError else {
-                XCTFail("Error should be MCPToolError")
-                return
-            }
-            
-            if case .invalidArgumentType(let name, let parameterName, let expectedType, _) = mcpError {
-                XCTAssertEqual(name, "add")
-                XCTAssertEqual(parameterName, "a")
-                XCTAssertEqual(expectedType, "Int")
-            } else {
-                XCTFail("Error should be invalidArgumentType")
-            }
+    do {
+        _ = try calculator.callTool("add", arguments: ["a": "not_a_number", "b": 3])
+        #expect(Bool(false), "Should throw an error for invalid argument type")
+    } catch let error as MCPToolError {
+        if case .invalidArgumentType(let name, let parameterName, let expectedType, _) = error {
+            #expect(name == "add")
+            #expect(parameterName == "a")
+            #expect(expectedType == "Int")
+        } else {
+            #expect(Bool(false), "Error should be invalidArgumentType")
         }
+    } catch {
+        #expect(Bool(false), "Error should be MCPToolError")
     }
 } 

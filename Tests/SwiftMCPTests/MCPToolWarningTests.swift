@@ -1,4 +1,4 @@
-import XCTest
+import Testing
 @testable import SwiftMCP
 
 /**
@@ -9,65 +9,64 @@ import XCTest
  2. Functions with an explicit description parameter
  3. Functions with a documentation comment containing a description
  */
-final class MCPToolWarningTests: XCTestCase {
+
+// MARK: - Test Classes
+
+// Test class with functions missing descriptions
+@MCPServer
+class MissingDescriptions {
     
-    // MARK: - Test Classes
+    // Has documentation but no description line
+    /// - Parameter a: A parameter
+    @MCPTool
+    func missingDescription(a: Int) {}
     
-    // Test class with functions missing descriptions
-    @MCPServer
-    class MissingDescriptions {
-        
-        // Has documentation but no description line
-        /// - Parameter a: A parameter
-        @MCPTool
-        func missingDescription(a: Int) {}
-        
-        // Has description parameter
-        @MCPTool(description: "This function has a description parameter")
-        func hasDescriptionParameter() {}
-        
-        // Has documentation comment with description
-        /// This function has a documentation comment
-        @MCPTool
-        func hasDocumentationComment() {}
+    // Has description parameter
+    @MCPTool(description: "This function has a description parameter")
+    func hasDescriptionParameter() {}
+    
+    // Has documentation comment with description
+    /// This function has a documentation comment
+    @MCPTool
+    func hasDocumentationComment() {}
+}
+
+// MARK: - Tests
+
+@Test
+func testMissingDescriptions() throws {
+    let instance = MissingDescriptions()
+    let tools = instance.mcpTools
+    
+    // Test function with parameter documentation but no function description
+    guard let missingDescriptionTool = tools.first(where: { $0.name == "missingDescription" }) else {
+        throw TestError("Could not find missingDescription function")
     }
     
-    // MARK: - Tests
+    #expect(missingDescriptionTool.description == nil, "Function with no description should have nil description")
     
-    func testMissingDescriptions() {
-        let instance = MissingDescriptions()
-        let tools = instance.mcpTools
-        
-        // Test function with parameter documentation but no function description
-        if let missingDescriptionTool = tools.first(where: { $0.name == "missingDescription" }) {
-            XCTAssertNotNil(missingDescriptionTool.description, "Function with no description should have nil description")
-            
-            // Extract properties from the object schema
-            if case .object(let properties, _, _) = missingDescriptionTool.inputSchema {
-                if case .number(let description) = properties["a"] {
-                    XCTAssertEqual(description, "A parameter")
-                } else {
-                    XCTFail("Expected number schema for parameter 'a'")
-                }
-            } else {
-                XCTFail("Expected object schema")
-            }
+    // Extract properties from the object schema
+    if case .object(let properties, _, _) = missingDescriptionTool.inputSchema {
+        if case .number(let description) = properties["a"] {
+            #expect(description == "A parameter")
         } else {
-            XCTFail("Could not find missingDescription function")
+            #expect(Bool(false), "Expected number schema for parameter 'a'")
         }
-        
-        // Test function with description parameter
-        if let hasDescriptionParameterTool = tools.first(where: { $0.name == "hasDescriptionParameter" }) {
-            XCTAssertEqual(hasDescriptionParameterTool.description, "This function has a description parameter")
-        } else {
-            XCTFail("Could not find hasDescriptionParameter function")
-        }
-        
-        // Test function with documentation comment
-        if let hasDocumentationCommentTool = tools.first(where: { $0.name == "hasDocumentationComment" }) {
-            XCTAssertEqual(hasDocumentationCommentTool.description, "This function has a documentation comment")
-        } else {
-            XCTFail("Could not find hasDocumentationComment function")
-        }
+    } else {
+        #expect(Bool(false), "Expected object schema")
     }
-} 
+    
+    // Test function with description parameter
+    guard let hasDescriptionParameterTool = tools.first(where: { $0.name == "hasDescriptionParameter" }) else {
+        throw TestError("Could not find hasDescriptionParameter function")
+    }
+    
+    #expect(hasDescriptionParameterTool.description == "This function has a description parameter")
+    
+    // Test function with documentation comment
+    guard let hasDocumentationCommentTool = tools.first(where: { $0.name == "hasDocumentationComment" }) else {
+        throw TestError("Could not find hasDocumentationComment function")
+    }
+    
+    #expect(hasDocumentationCommentTool.description == "This function has a documentation comment")
+}
