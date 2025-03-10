@@ -5,10 +5,10 @@ import Foundation
 /// JSON-RPC Response structures
 public struct JSONRPCResponse: Codable {
     public var jsonrpc: String = "2.0"
-    public let id: Int
+    public let id: Int?
     public let result: ResponseResult
     
-    public init(jsonrpc: String = "2.0", id: Int, result: ResponseResult) {
+    public init(jsonrpc: String = "2.0", id: Int?, result: ResponseResult) {
         self.jsonrpc = jsonrpc
         self.id = id
         self.result = result

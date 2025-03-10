@@ -29,13 +29,14 @@ public extension MCPServer {
         // Prepare the response based on the method
         switch request.method {
             case "initialize":
-                return createInitializeResponse(id: request.id)
+				
+                return createInitializeResponse(id: request.id ?? 0)
                 
             case "notifications/initialized":
                 return nil
                 
             case "tools/list":
-                return createToolsResponse(id: request.id)
+                return createToolsResponse(id: request.id ?? 0)
                 
             case "tools/call":
                 return handleToolCall(request)
@@ -105,7 +106,7 @@ public extension MCPServer {
         }
         
         // Create and encode the response
-        return ToolCallResponse(id: request.id, text: responseText, isError: isError)
+        return ToolCallResponse(id: request.id ?? 0, text: responseText, isError: isError)
     }
     
     /// Function to log a message to stderr
