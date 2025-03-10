@@ -7,7 +7,7 @@
 
 import Foundation
 
-extension Array where Element == MCPFunctionMetadata {
+extension Array where Element == MCPToolMetadata {
     public func convertedToTools() -> [MCPTool] {
         return self.map { meta in
             // Create properties for the JSON schema

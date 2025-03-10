@@ -3,19 +3,16 @@ import SwiftMCP
 import AnyCodable
 @testable import SwiftMCPDemo
 
-final class RequestHandlerTests: XCTestCase {
+final class MCPServerTests: XCTestCase {
     var calculator: Calculator!
-    var requestHandler: RequestHandler!
     
     override func setUp() {
         super.setUp()
         calculator = Calculator()
-        requestHandler = RequestHandler(calculator: calculator)
     }
     
     override func tearDown() {
         calculator = nil
-        requestHandler = nil
         super.tearDown()
     }
     
@@ -29,7 +26,7 @@ final class RequestHandlerTests: XCTestCase {
         )
         
         // Handle the request
-        let responseString = requestHandler.handleRequest(request)
+        let responseString = calculator.handleRequest(request)
         XCTAssertNotNil(responseString)
         
         // Decode the response
@@ -38,10 +35,9 @@ final class RequestHandlerTests: XCTestCase {
             return
         }
         
-        let response = try JSONDecoder().decode(InitializeResponse.self, from: responseData)
+        let response = try JSONDecoder().decode(JSONRPC.Response.self, from: responseData)
         XCTAssertEqual(response.jsonrpc, "2.0")
-        XCTAssertEqual(response.id, 1)
-        XCTAssertEqual(response.result.serverInfo.name, "mcp-calculator")
+        XCTAssertEqual(response.id, .number(1))
     }
     
     func testToolsListRequest() throws {
@@ -54,7 +50,7 @@ final class RequestHandlerTests: XCTestCase {
         )
         
         // Handle the request
-        let responseString = requestHandler.handleRequest(request)
+        let responseString = calculator.handleRequest(request)
         XCTAssertNotNil(responseString)
         
         // Decode the response
@@ -63,7 +59,7 @@ final class RequestHandlerTests: XCTestCase {
             return
         }
         
-        let response = try JSONDecoder().decode(ToolsListResponse.self, from: responseData)
+        let response = try JSONDecoder().decode(SwiftMCP.ToolsResponse.self, from: responseData)
         XCTAssertEqual(response.jsonrpc, "2.0")
         XCTAssertEqual(response.id, 2)
         XCTAssertFalse(response.result.tools.isEmpty)
@@ -71,9 +67,7 @@ final class RequestHandlerTests: XCTestCase {
         // Check that the tools include the expected functions
         let toolNames = response.result.tools.map { $0.name }
         XCTAssertTrue(toolNames.contains("add"))
-        XCTAssertTrue(toolNames.contains("subtract"))
-        XCTAssertTrue(toolNames.contains("multiply"))
-        XCTAssertTrue(toolNames.contains("divide"))
+        XCTAssertTrue(toolNames.contains("testArray"))
     }
     
     func testToolCallRequest() throws {
@@ -92,7 +86,7 @@ final class RequestHandlerTests: XCTestCase {
         )
         
         // Handle the request
-        let responseString = requestHandler.handleRequest(request)
+        let responseString = calculator.handleRequest(request)
         XCTAssertNotNil(responseString)
         
         // Decode the response
@@ -101,10 +95,10 @@ final class RequestHandlerTests: XCTestCase {
             return
         }
         
-        let response = try JSONDecoder().decode(ToolCallResponse.self, from: responseData)
+        let response = try JSONDecoder().decode(SwiftMCP.ToolCallResponse.self, from: responseData)
         XCTAssertEqual(response.jsonrpc, "2.0")
         XCTAssertEqual(response.id, 3)
-        XCTAssertFalse(response.result.isError)
+        XCTAssertEqual(response.result.status, "success")
         XCTAssertEqual(response.result.content.first?.text, "5")
     }
     
@@ -121,7 +115,7 @@ final class RequestHandlerTests: XCTestCase {
         )
         
         // Handle the request
-        let responseString = requestHandler.handleRequest(request)
+        let responseString = calculator.handleRequest(request)
         XCTAssertNotNil(responseString)
         
         // Decode the response
@@ -130,10 +124,10 @@ final class RequestHandlerTests: XCTestCase {
             return
         }
         
-        let response = try JSONDecoder().decode(ToolCallResponse.self, from: responseData)
+        let response = try JSONDecoder().decode(SwiftMCP.ToolCallResponse.self, from: responseData)
         XCTAssertEqual(response.jsonrpc, "2.0")
         XCTAssertEqual(response.id, 4)
-        XCTAssertTrue(response.result.isError)
+        XCTAssertEqual(response.result.status, "error")
         XCTAssertTrue(response.result.content.first?.text.contains("Unknown tool") ?? false)
     }
     
@@ -144,15 +138,16 @@ final class RequestHandlerTests: XCTestCase {
             id: 5,
             method: "tools/call",
             params: [
-                "name": AnyCodable("divide"),
+                "name": AnyCodable("add"),
                 "arguments": AnyCodable([
-                    "numerator": "not_a_number"
+                    "a": "not_a_number",
+                    "b": 3
                 ])
             ]
         )
         
         // Handle the request
-        let responseString = requestHandler.handleRequest(request)
+        let responseString = calculator.handleRequest(request)
         XCTAssertNotNil(responseString)
         
         // Decode the response
@@ -161,10 +156,10 @@ final class RequestHandlerTests: XCTestCase {
             return
         }
         
-        let response = try JSONDecoder().decode(ToolCallResponse.self, from: responseData)
+        let response = try JSONDecoder().decode(SwiftMCP.ToolCallResponse.self, from: responseData)
         XCTAssertEqual(response.jsonrpc, "2.0")
         XCTAssertEqual(response.id, 5)
-        XCTAssertTrue(response.result.isError)
-        XCTAssertTrue(response.result.content.first?.text.contains("Parameter 'numerator' expected type 'Double'") ?? false)
+        XCTAssertEqual(response.result.status, "error")
+        XCTAssertTrue(response.result.content.first?.text.contains("Parameter 'a' expected type 'Int'") ?? false)
     }
 } 

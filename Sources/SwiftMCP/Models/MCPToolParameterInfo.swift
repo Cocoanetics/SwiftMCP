@@ -1,5 +1,5 @@
 //
-//  MCPFunctionParameterInfo.swift
+//  MCPToolParameterInfo.swift
 //  SwiftMCPCore
 //
 //  Created by Oliver Drobnik on 08.03.25.
@@ -8,7 +8,7 @@
 import Foundation
 
 /// Information about a function parameter
-public struct MCPFunctionParameterInfo: Sendable {
+public struct MCPToolParameterInfo: Sendable {
     /// The name of the parameter
     public let name: String
     

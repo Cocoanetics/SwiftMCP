@@ -16,13 +16,13 @@ SwiftMCP is a Swift package that provides a way to generate JSON descriptions of
 ```swift
 import SwiftMCP
 
-@MCPTool
+@MCPServer
 class Calculator {
     /// Adds two integers and returns their sum
     /// - Parameter a: First number to add
     /// - Parameter b: Second number to add
     /// - Returns: The sum of a and b
-    @MCPFunction
+    @MCPTool
     func add(a: Int, b: Int) -> Int {
         return a + b
     }
@@ -31,7 +31,7 @@ class Calculator {
     /// - Parameter a: Number to subtract from
     /// - Parameter b: Number to subtract (defaults to 3)
     /// - Returns: The difference between a and b
-    @MCPFunction
+    @MCPTool
     func subtract(a: Int, b: Int = 3) -> Int {
         return a - b
     }
@@ -43,7 +43,7 @@ let json = MCPTool.encodeToJSON(tools)
 print(json)
 ```
 
-The `@MCPFunction` macro automatically:
+The `MCPTool` macro automatically:
 - Extracts parameter names and types from the function declaration
 - Captures documentation comments for descriptions
 - Detects default parameter values

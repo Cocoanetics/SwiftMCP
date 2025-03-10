@@ -48,10 +48,9 @@ struct MCPCommand: ParsableCommand {
         // Create an instance of the Calculator
         let calculator = Calculator()
 		
-		print(calculator.mcpTools)
-        
-        // Create a request handler
-        let requestHandler = RequestHandler(calculator: calculator)
+		if verbose {
+            print(calculator.mcpTools)
+        }
         
         // Set up input and output
         let inputStream: InputStream
@@ -82,13 +81,13 @@ struct MCPCommand: ParsableCommand {
         // Process input
         if continuous {
             // Continuous mode: process requests indefinitely
-            processContinuousInput(inputStream: inputStream, outputStream: outputStream, requestHandler: requestHandler)
+            processContinuousInput(inputStream: inputStream, outputStream: outputStream, server: calculator)
         } else if interactive {
             // Interactive mode: process multiple requests until EOF
-            processInteractiveInput(inputStream: inputStream, outputStream: outputStream, requestHandler: requestHandler)
+            processInteractiveInput(inputStream: inputStream, outputStream: outputStream, server: calculator)
         } else {
             // One-off mode: process a single request and exit
-            processOneOffInput(inputStream: inputStream, outputStream: outputStream, requestHandler: requestHandler)
+            processOneOffInput(inputStream: inputStream, outputStream: outputStream, server: calculator)
         }
         
         // Close the streams
@@ -97,7 +96,27 @@ struct MCPCommand: ParsableCommand {
     }
     
     /// Process input in continuous mode (never exiting, waiting for input indefinitely)
-    private func processContinuousInput(inputStream: InputStream, outputStream: OutputStream, requestHandler: RequestHandler) {
+    private func processContinuousInput(inputStream: InputStream, outputStream: OutputStream, server: MCPServer) {
+        if verbose {
+            logToStderr("Starting continuous mode...")
+            
+            // Print available tools
+            logToStderr("Available tools:")
+            for tool in server.mcpTools {
+                logToStderr("Tool: \(tool.name)")
+                logToStderr("  Description: \(tool.description ?? "No description")")
+                logToStderr("  Input Schema: \(tool.inputSchema)")
+                
+                if case .object(let properties, let required, _) = tool.inputSchema {
+                    logToStderr("  Properties:")
+                    for (key, value) in properties {
+                        logToStderr("    \(key): \(value)")
+                    }
+                    logToStderr("  Required: \(required)")
+                }
+            }
+        }
+        
         // Continue processing inputs indefinitely
         while true {
             if let input = readLine(from: inputStream), let data = input.data(using: .utf8) {
@@ -106,7 +125,7 @@ struct MCPCommand: ParsableCommand {
                     logToStderr("Received input: \(input)")
                 }
                 
-                processJSONRPCRequest(data: data, outputStream: outputStream, requestHandler: requestHandler)
+                processJSONRPCRequest(data: data, outputStream: outputStream, server: server)
             } else {
                 // If readLine() returns nil, sleep briefly and continue
                 Thread.sleep(forTimeInterval: 0.1)
@@ -121,7 +140,7 @@ struct MCPCommand: ParsableCommand {
     }
     
     /// Process input in interactive mode (waiting for input until EOF)
-    private func processInteractiveInput(inputStream: InputStream, outputStream: OutputStream, requestHandler: RequestHandler) {
+    private func processInteractiveInput(inputStream: InputStream, outputStream: OutputStream, server: MCPServer) {
         // Continue processing inputs
         while true {
             if let input = readLine(from: inputStream), let data = input.data(using: .utf8) {
@@ -130,7 +149,7 @@ struct MCPCommand: ParsableCommand {
                     logToStderr("Received input: \(input)")
                 }
                 
-                processJSONRPCRequest(data: data, outputStream: outputStream, requestHandler: requestHandler)
+                processJSONRPCRequest(data: data, outputStream: outputStream, server: server)
             } else {
                 // If readLine() returns nil (EOF), exit
                 break
@@ -139,7 +158,7 @@ struct MCPCommand: ParsableCommand {
     }
     
     /// Process input in one-off mode (process a single request and exit)
-    private func processOneOffInput(inputStream: InputStream, outputStream: OutputStream, requestHandler: RequestHandler) {
+    private func processOneOffInput(inputStream: InputStream, outputStream: OutputStream, server: MCPServer) {
         // Read all input data
         var buffer = [UInt8](repeating: 0, count: 1024)
         var inputData = Data()
@@ -171,28 +190,28 @@ struct MCPCommand: ParsableCommand {
             // Multiple lines - process each one
             for line in lines {
                 if let data = line.data(using: .utf8) {
-                    processJSONRPCRequest(data: data, outputStream: outputStream, requestHandler: requestHandler)
+                    processJSONRPCRequest(data: data, outputStream: outputStream, server: server)
                 }
             }
         } else {
             // Single request - process it directly
-            processJSONRPCRequest(data: inputData, outputStream: outputStream, requestHandler: requestHandler)
+            processJSONRPCRequest(data: inputData, outputStream: outputStream, server: server)
         }
     }
     
     /// Process a JSON-RPC request
-    private func processJSONRPCRequest(data: Data, outputStream: OutputStream, requestHandler: RequestHandler) {
+    private func processJSONRPCRequest(data: Data, outputStream: OutputStream, server: MCPServer) {
         do {
             // Try to decode the JSON-RPC request
             let request = try JSONDecoder().decode(SwiftMCP.JSONRPCRequest.self, from: data)
             
             // Handle the request
-            if let response = requestHandler.handleRequest(request) {
+            if let response = server.handleRequest(request) {
                 write(response, to: outputStream)
                 write("\n", to: outputStream)
             }
         } catch {
-            logToStderr("Failed to decode JSON-RPC request: \(error)")
+            server.logToStderr("Failed to decode JSON-RPC request: \(error)")
         }
     }
     

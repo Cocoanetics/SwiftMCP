@@ -1,7 +1,15 @@
 import XCTest
 @testable import SwiftMCP
 
-final class MCPFunctionWarningTests: XCTestCase {
+/**
+ This test suite verifies that the MCPTool macro correctly handles functions with missing descriptions.
+ 
+ It tests:
+ 1. Functions with parameter documentation but no function description
+ 2. Functions with an explicit description parameter
+ 3. Functions with a documentation comment containing a description
+ */
+final class MCPToolWarningTests: XCTestCase {
     
     // MARK: - Test Classes
     
@@ -11,16 +19,16 @@ final class MCPFunctionWarningTests: XCTestCase {
         
         // Has documentation but no description line
         /// - Parameter a: A parameter
-        @MCPFunction
+        @MCPTool
         func missingDescription(a: Int) {}
         
         // Has description parameter
-        @MCPFunction(description: "This function has a description parameter")
+        @MCPTool(description: "This function has a description parameter")
         func hasDescriptionParameter() {}
         
         // Has documentation comment with description
         /// This function has a documentation comment
-        @MCPFunction
+        @MCPTool
         func hasDocumentationComment() {}
     }
     
@@ -36,10 +44,10 @@ final class MCPFunctionWarningTests: XCTestCase {
             
             // Extract properties from the object schema
             if case .object(let properties, _, _) = missingDescriptionTool.inputSchema {
-                if case .string(let description) = properties["a"] {
+                if case .number(let description) = properties["a"] {
                     XCTAssertEqual(description, "A parameter")
                 } else {
-                    XCTFail("Expected string schema for parameter 'a'")
+                    XCTFail("Expected number schema for parameter 'a'")
                 }
             } else {
                 XCTFail("Expected object schema")

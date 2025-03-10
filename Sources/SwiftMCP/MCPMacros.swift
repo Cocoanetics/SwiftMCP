@@ -21,25 +21,25 @@ import Foundation
 ///
 /// Example:
 /// ```swift
-/// @MCPFunction(description: "Adds two numbers")
+/// @MCPTool(description: "Adds two numbers")
 /// func add(a: Int, b: Int) -> Int {
 ///     return a + b
 /// }
 /// ```
 @attached(peer, names: prefixed(__metadata_), prefixed(__call_))
-public macro MCPFunction(description: String? = nil) = #externalMacro(module: "SwiftMCPMacros", type: "MCPFunctionMacro")
+public macro MCPTool(description: String? = nil) = #externalMacro(module: "SwiftMCPMacros", type: "MCPToolMacro")
 
 /// A macro that adds a `mcpTools` property to a class to aggregate function metadata.
 ///
-/// Apply this macro to classes that contain `@MCPFunction` annotated methods.
+/// Apply this macro to classes that contain `MCPTool` annotated methods.
 /// It will generate a property that returns an array of `MCPTool` objects
 /// representing all the functions in the class.
 ///
 /// Example:
 /// ```swift
-/// @MCPTool
+/// @MCPServer
 /// class Calculator {
-///     @MCPFunction(description: "Adds two numbers")
+///     @MCPTool(description: "Adds two numbers")
 ///     func add(a: Int, b: Int) -> Int {
 ///         return a + b
 ///     }

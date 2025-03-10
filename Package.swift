@@ -35,16 +35,13 @@ let package = Package(
             dependencies: [
                 "SwiftMCP",
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
-            ],
-            resources: [
-                .process("README_MCP.md")
             ]
         ),
         
         // Test target for unit tests
         .testTarget(
             name: "SwiftMCPTests",
-            dependencies: ["SwiftMCP", "SwiftMCPDemo"]
+            dependencies: ["SwiftMCP"]
         ),
 
         // The implementation of the macro, which is a separate target so that it

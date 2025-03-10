@@ -11,7 +11,7 @@ import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
 
 /**
- Implementation of the MCPTool macro.
+ Implementation of the MCPServer macro.
  
  This macro adds a `mcpTools` computed property to a class or struct,
  which returns an array of all MCP tools defined in that type.
@@ -32,17 +32,17 @@ public struct MCPServerMacro: MemberMacro {
         providingMembersOf declaration: some DeclGroupSyntax,
         in context: some MacroExpansionContext
     ) throws -> [DeclSyntax] {
-        // Find all functions with the MCPFunction macro
-        var mcpFunctions: [String] = []
+        // Find all functions with the MCPTool macro
+        var mcpTools: [String] = []
         
         for member in declaration.memberBlock.members {
             if let funcDecl = member.decl.as(FunctionDeclSyntax.self) {
-                // Check if the function has the MCPFunction macro
+                // Check if the function has the MCPTool macro
                 for attribute in funcDecl.attributes {
                     if let identifierAttr = attribute.as(AttributeSyntax.self),
                        let identifier = identifierAttr.attributeName.as(IdentifierTypeSyntax.self),
-                       identifier.name.text == "MCPFunction" {
-                        mcpFunctions.append(funcDecl.name.text)
+                       identifier.name.text == "MCPTool" {
+                        mcpTools.append(funcDecl.name.text)
                         break
                     }
                 }
@@ -54,10 +54,10 @@ public struct MCPServerMacro: MemberMacro {
         /// Returns an array of all MCP tools defined in this type
         var mcpTools: [MCPTool] {
             let mirror = Mirror(reflecting: self)
-            var metadataArray: [MCPFunctionMetadata] = []
+            var metadataArray: [MCPToolMetadata] = []
             
             for child in mirror.children {
-                if let metadata = child.value as? MCPFunctionMetadata,
+                if let metadata = child.value as? MCPToolMetadata,
                    child.label?.hasPrefix("__metadata_") == true {
                     metadataArray.append(metadata)
                 }
@@ -69,13 +69,13 @@ public struct MCPServerMacro: MemberMacro {
         
         // Create a dictionary property that maps function names to their wrapper methods
         var handlersInitLines: [String] = []
-        for funcName in mcpFunctions {
+        for funcName in mcpTools {
             handlersInitLines.append("            handlers[\"\(funcName)\"] = self.__call_\(funcName)")
         }
         
         // Create a callTool method that uses a switch statement to call the appropriate wrapper function
         var switchCases: [String] = []
-        for funcName in mcpFunctions {
+        for funcName in mcpTools {
             switchCases.append("""
             case "\(funcName)":
                 return try __call_\(funcName)(enrichedArguments)
