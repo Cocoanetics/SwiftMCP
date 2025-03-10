@@ -164,3 +164,43 @@ func testToolCallRequestWithInvalidArgument() throws {
     #expect(response.result.status == "error")
     #expect(response.result.content.first?.text.contains("Parameter 'a' expected type 'Int'") ?? false)
 }
+
+@Test("Custom Name and Version")
+func testCustomNameAndVersion() throws {
+    // Create an instance of CustomNameCalculator
+    let calculator = CustomNameCalculator()
+    
+    // Get the response using our test method
+    let response = calculator.createInitializeResponse(id: 1)
+    
+    // Extract server info from the response using dictionary access
+    guard let resultDict = response.result?.value as? [String: Any],
+          let serverInfoDict = resultDict["serverInfo"] as? [String: Any],
+          let name = serverInfoDict["name"] as? String,
+          let version = serverInfoDict["version"] as? String else {
+        throw TestError("Failed to extract server info from response")
+    }
+    
+    #expect(name == "CustomCalculator", "Server name should match specified name")
+    #expect(version == "2.0", "Server version should match specified version")
+}
+
+@Test("Default Name and Version")
+func testDefaultNameAndVersion() throws {
+    // Create an instance of DefaultNameCalculator
+    let calculator = DefaultNameCalculator()
+    
+    // Get the response using our test method
+    let response = calculator.createInitializeResponse(id: 1)
+    
+    // Extract server info from the response using dictionary access
+    guard let resultDict = response.result?.value as? [String: Any],
+          let serverInfoDict = resultDict["serverInfo"] as? [String: Any],
+          let name = serverInfoDict["name"] as? String,
+          let version = serverInfoDict["version"] as? String else {
+        throw TestError("Failed to extract server info from response")
+    }
+    
+    #expect(name == "DefaultNameCalculator", "Server name should match class name")
+    #expect(version == "1.0", "Server version should be default value")
+}
