@@ -5,12 +5,15 @@
 //  Created by Oliver Drobnik on 10.03.25.
 //
 
+import Foundation
 
 struct Documentation {
-	/// The function’s initial (multi‑line) description.
+	/// The function's initial (multi‑line) description.
 	let description: String
 	/// A dictionary mapping parameter names to their descriptions.
 	let parameters: [String: String]
+	/// The returns section of the documentation, if present.
+	let returns: String?
 	
 	
 	init(from text: String)
@@ -45,7 +48,10 @@ struct Documentation {
 				line = line.dropFirst().trimmingCharacters(in: .whitespaces)
 			}
 			
-			// If the line isn’t empty after cleaning, keep it.
+			// Remove unprintable ASCII characters
+			line = line.removingUnprintableCharacters
+			
+			// If the line isn't empty after cleaning, keep it.
 			if !line.isEmpty {
 				cleanedLines.append(line)
 			}
@@ -54,12 +60,14 @@ struct Documentation {
 		// We'll accumulate the initial description and any parameter descriptions.
 		var initialDescriptionLines = [String]()
 		var parameters = [String: String]()
+		var returnsLines = [String]()
 		
 		// Variables to hold state while processing a parameter that spans multiple lines.
 		var currentParameterName: String? = nil
 		var currentParameterLines = [String]()
+		var inReturnsSection = false
 		
-		// Helper to flush the current parameter’s accumulated lines into our dictionary.
+		// Helper to flush the current parameter's accumulated lines into our dictionary.
 		func flushCurrentParameter() {
 			if let paramName = currentParameterName {
 				let fullDescription = currentParameterLines.joined(separator: " ").trimmingCharacters(in: .whitespaces)
@@ -71,15 +79,32 @@ struct Documentation {
 		
 		// Process each cleaned line.
 		for line in cleanedLines {
+			// Check for Returns section
+			if line.lowercased().hasPrefix("- returns:") {
+				// Flush any parameter being processed
+				flushCurrentParameter()
+				
+				// Extract the returns description
+				let returnsDescription = line.dropFirst("- Returns:".count).trimmingCharacters(in: .whitespaces)
+				returnsLines.append(returnsDescription)
+				inReturnsSection = true
+				continue
+			}
+			
+			// Check for parameter line
 			if let param = parseParameterLine(from: line) {
 				// Start of a new parameter: flush any previous parameter data.
 				flushCurrentParameter()
+				inReturnsSection = false
 				currentParameterName = param.name
 				currentParameterLines.append(param.description)
 			} else {
 				// If we are in the middle of a parameter, treat the line as a continuation.
 				if currentParameterName != nil {
 					currentParameterLines.append(line)
+				} else if inReturnsSection {
+					// If we're in the returns section, add to returns lines
+					returnsLines.append(line)
 				} else {
 					// Otherwise, it belongs to the initial description.
 					initialDescriptionLines.append(line)
@@ -92,8 +117,12 @@ struct Documentation {
 		// Combine initial description lines into a single string.
 		let initialDescription = initialDescriptionLines.joined(separator: " ").trimmingCharacters(in: .whitespaces)
 		
+		// Combine returns lines into a single string.
+		let returnsDescription = returnsLines.isEmpty ? nil : returnsLines.joined(separator: " ").trimmingCharacters(in: .whitespaces)
+		
 		self.description = initialDescription
 		self.parameters = parameters
+		self.returns = returnsDescription
 	}
 }
 
@@ -114,4 +143,14 @@ fileprivate func parseParameterLine(from line: String) -> (name: String, descrip
 		}
 	}
 	return nil
+}
+
+extension String {
+	var removingUnprintableCharacters: String {
+		// Create a character set of printable ASCII characters (32-126) plus newline, tab, etc.
+		let printableCharacters = CharacterSet(charactersIn: " \t\n\r").union(CharacterSet(charactersIn: UnicodeScalar(32)...UnicodeScalar(126)))
+		
+		// Filter out any characters that are not in the printable set
+		return unicodeScalars.filter { printableCharacters.contains($0) }.map { String($0) }.joined()
+	}
 }

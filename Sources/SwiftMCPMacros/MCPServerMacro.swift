@@ -36,7 +36,8 @@ public struct MCPServerMacro: MemberMacro {
         let nameArg = arguments?.first(where: { $0.label?.text == "name" })?.expression.description.trimmingCharacters(in: .punctuationCharacters)
         let versionArg = arguments?.first(where: { $0.label?.text == "version" })?.expression.description.trimmingCharacters(in: .punctuationCharacters)
 
-        let serverName = nameArg ?? declaration.as(ClassDeclSyntax.self)?.name.text ?? "UnnamedServer"
+        let serverName = nameArg ?? declaration.as(ClassDeclSyntax.self)?.name.text ?? declaration.as(StructDeclSyntax.self)?.name.text ?? "UnnamedServer"
+        
         let serverVersion = versionArg ?? "1.0"
 
         let nameProperty = "private let __mcpServerName = \"\(serverName)\""
