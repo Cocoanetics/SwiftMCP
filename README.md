@@ -78,6 +78,52 @@ let request = JSONRPCRequest(
 let response = calculator.handleRequest(request)
 ```
 
+## Implementing the stdio Processing Loop
+
+At present, the stdio processing loop needs to be implemented manually as shown in the demo app SwiftMCPDemo:
+
+```swift
+// Create an instance of the Calculator
+let calculator = Calculator()
+
+do {
+    while true {
+        if let input = readLine(),
+           !input.isEmpty,
+           let data = input.data(using: .utf8)
+        {
+            let request = try JSONDecoder().decode(SwiftMCP.JSONRPCRequest.self, from: data)
+            
+            // Handle the request
+            if let response = calculator.handleRequest(request) {
+                
+                let data = try JSONEncoder().encode(response)
+                let json = String(data: data, encoding: .utf8)!
+                
+                // Print the response and flush immediately
+                print(json)
+                fflush(stdout)
+            }
+        } else {
+            // If no input is available, sleep briefly and try again
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+    }
+}
+catch
+{
+    fputs("\(error.localizedDescription)\n", stderr)
+}
+```
+
+This loop:
+1. Continuously reads from standard input
+2. Decodes each line as a JSON-RPC request
+3. Processes the request using your MCP server
+4. Encodes and prints the response to standard output
+5. Flushes stdout to ensure immediate delivery
+6. Sleeps briefly if no input is available
+
 ## How It Works
 
 SwiftMCP uses Swift macros to analyze your code at compile time:

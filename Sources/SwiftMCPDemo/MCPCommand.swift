@@ -47,13 +47,7 @@ struct MCPCommand: ParsableCommand {
 		}
 		catch
 		{
-			logToStderr("Error: \(error.localizedDescription)")
+			fputs("\(error.localizedDescription)\n", stderr)
 		}
-	}
-	
-	
-	/// Log a message to stderr
-	private func logToStderr(_ message: String) {
-		fputs("\(message)\n", stderr)
 	}
 }
