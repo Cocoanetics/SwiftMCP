@@ -17,29 +17,25 @@ public protocol MCPServer {
     /// Handles a JSON-RPC request
     /// - Parameter request: The JSON-RPC request to handle
     /// - Returns: The response as a string, or nil if no response should be sent
-    func handleRequest(_ request: JSONRPCRequest) -> String?
+    func handleRequest(_ request: JSONRPCRequest) -> Codable?
 }
 
 // MARK: - Default Implementations
 public extension MCPServer {
     /// Handles a JSON-RPC request with default implementation
     /// - Parameter request: The JSON-RPC request to handle
-    /// - Returns: The response as a string, or nil if no response should be sent
-    func handleRequest(_ request: JSONRPCRequest) -> String? {
+    /// - Returns: A JSON-RPC reesponse, or `nil` if no response is necessary
+    func handleRequest(_ request: JSONRPCRequest) -> Codable? {
         // Prepare the response based on the method
         switch request.method {
             case "initialize":
-                let response = createInitializeResponse(id: request.id)
-                let encodedResponse = try! JSONEncoder().encode(response)
-                return String(data: encodedResponse, encoding: .utf8)!
+                return createInitializeResponse(id: request.id)
                 
             case "notifications/initialized":
                 return nil
                 
             case "tools/list":
-                let response = createToolsResponse(id: request.id)
-                let encodedResponse = try! JSONEncoder().encode(response)
-                return String(data: encodedResponse, encoding: .utf8)!
+                return createToolsResponse(id: request.id)
                 
             case "tools/call":
                 return handleToolCall(request)
