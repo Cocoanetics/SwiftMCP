@@ -140,15 +140,6 @@ SwiftMCP implements the standard MCP JSON-RPC interface:
 - `tools/list`: Returns a list of available tools with their schemas
 - `tools/call`: Calls a specific tool with the provided arguments
 
-## Command-Line Interface
-
-SwiftMCP includes a ready-to-use command-line interface for stdio mode:
-
-```bash
-# Process a single request
-echo '{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "divide", "arguments": {"numerator": 10}}}' | swift run SwiftMCPDemo
-```
-
 ## Advanced Usage
 
 ### Custom Tool Descriptions
@@ -173,21 +164,6 @@ class MyServer {
 }
 ```
 
-## Requirements
-
-- Swift 5.9 or later
-- macOS 13.0 or later
-
-## Installation
-
-Add SwiftMCP to your Swift package dependencies:
-
-```swift
-dependencies: [
-    .package(url: "https://github.com/yourusername/SwiftMCP.git", from: "1.0.0")
-]
-```
-
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+This project is licensed under the BSD 2-clause License - see the LICENSE file for details. 
