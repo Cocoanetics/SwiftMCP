@@ -52,20 +52,20 @@ public extension MCPServer {
     /// Creates a default initialize response
     /// - Parameter id: The request ID
     /// - Returns: The initialize response
-    private func createInitializeResponse(id: Int) -> JSONRPC.Response {
-        let serverInfo = MCPServerInfo(
-            name: "SwiftMCP",
-            version: "1.0.0"
-        )
-        
-        let result = MCPCapabilitiesResult(
-            protocol_version: "0.1.0",
-            capabilities: MCPCapabilities(tools: mcpTools),
-            server_info: serverInfo,
-            instructions: "Welcome to SwiftMCP!"
-        )
-        
-        return JSONRPC.Response(id: .number(id), result: .init(result))
+    func createInitializeResponse(id: Int) -> JSONRPC.Response {
+        let responseDict: [String: Any] = [
+            "protocolVersion": "2024-11-05",
+            "capabilities": [
+                "experimental": [:],
+                "tools": ["listChanged": false]
+            ],
+            "serverInfo": [
+                "name": serverName,
+                "version": serverVersion
+            ]
+        ]
+
+        return JSONRPC.Response(id: .number(id), result: .init(responseDict))
     }
     
     /// Creates a tools response
@@ -126,5 +126,13 @@ public extension MCPServer {
     func sendResponse(_ response: String) {
         fputs(response + "\n", stdout)
         fflush(stdout) // Ensure the output is flushed immediately
+    }
+    
+    private var serverName: String {
+        Mirror(reflecting: self).children.first(where: { $0.label == "__mcpServerName" })?.value as? String ?? "UnknownServer"
+    }
+    
+    private var serverVersion: String {
+        Mirror(reflecting: self).children.first(where: { $0.label == "__mcpServerVersion" })?.value as? String ?? "UnknownVersion"
     }
 } 
