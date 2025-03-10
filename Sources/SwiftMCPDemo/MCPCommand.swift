@@ -10,10 +10,10 @@ struct MCPCommand: ParsableCommand {
 		commandName: "mcp",
 		abstract: "A utility for testing SwiftMCP functions",
 		discussion: """
-		Process JSON-RPC requests for SwiftMCP functions.
-		
-		The command reads JSON-RPC requests from stdin and writes responses to stdout.
-		"""
+  Process JSON-RPC requests for SwiftMCP functions.
+  
+  The command reads JSON-RPC requests from stdin and writes responses to stdout.
+  """
 	)
 	
 	/// The main entry point for the command

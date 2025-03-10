@@ -1,7 +1,7 @@
 import Foundation
 import SwiftMCP
 
-@MCPServer(version: "0.1")
+@MCPServer(name: "Custom Calculator", version: "0.1")
 struct Calculator {
     /// Adds two integers and returns their sum
     /// - Parameter a: First number to add
