@@ -8,6 +8,12 @@
 import Foundation
 import SwiftMCP
 
+/**
+  A simple MCP Server
+ 
+ - Version: 1.0
+ */
+
 @MCPServer
 class Calculator: MCPServer {
 	/// Adds two integers and returns their sum

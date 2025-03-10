@@ -138,4 +138,86 @@ func testReturnsSection() {
     let docWithMultiLineReturns = Documentation(from: multiLineReturns)
     #expect(docWithMultiLineReturns.description == "Function that returns something")
     #expect(docWithMultiLineReturns.returns == "A complex object with multiple properties and capabilities")
+}
+
+@Test("Handles Parameters section with dash-space format")
+func testParametersDashSpace() {
+    let docText = """
+    /// This is a function description
+    /// - Parameters:
+    ///   - x: X parameter description
+    ///   - y: Y parameter description
+    ///   - z: Z parameter description
+    """
+    let doc = Documentation(from: docText)
+    #expect(doc.description == "This is a function description")
+    #expect(doc.parameters["x"] == "X parameter description")
+    #expect(doc.parameters["y"] == "Y parameter description")
+    #expect(doc.parameters["z"] == "Z parameter description")
+    #expect(doc.returns == nil)
+}
+
+@Test("Handles various documentation field types")
+func testVariousFieldTypes() {
+    let docText = """
+    /// This is a function description
+    /// - Parameter x: X parameter
+    /// - Returns: Return value description
+    /// - Throws: Error description
+    /// - Note: Additional note
+    /// - Warning: Important warning
+    """
+    let doc = Documentation(from: docText)
+    #expect(doc.description == "This is a function description")
+    #expect(doc.parameters["x"] == "X parameter")
+    #expect(doc.returns == "Return value description")
+    // Currently we don't capture Throws and other fields, but the main point
+    // is to verify they terminate the description
+}
+
+@Test("Ensures any dash-prefixed line terminates description")
+func testDashTerminatesDescription() {
+    let docText = """
+    /// This is a function description
+    /// that should be terminated by the next line
+    /// - Anything: This should not be part of the description
+    /// More text that should not be in the description
+    """
+    let doc = Documentation(from: docText)
+    #expect(doc.description == "This is a function description that should be terminated by the next line")
+    // The "Anything" field is not captured, but it should terminate the description
+}
+
+@Test("Handles multiple field types in sequence")
+func testMultipleFieldTypes() {
+    let docText = """
+    /// This is a function description
+    /// - Parameter x: X parameter
+    /// - Important: Important note
+    /// - Returns: Return value
+    /// - Warning: Warning message
+    /// - Throws: Error description
+    """
+    let doc = Documentation(from: docText)
+    #expect(doc.description == "This is a function description")
+    #expect(doc.parameters["x"] == "X parameter")
+    #expect(doc.returns == "Return value")
+    // Other fields are not captured but should not affect the parsing
+}
+
+@Test("Handles empty lines between fields")
+func testEmptyLinesBetweenFields() {
+    let docText = """
+    /// This is a function description
+    ///
+    /// - Parameter x: X parameter
+    ///
+    /// - Returns: Return value
+    ///
+    /// - Note: Additional note
+    """
+    let doc = Documentation(from: docText)
+    #expect(doc.description == "This is a function description")
+    #expect(doc.parameters["x"] == "X parameter")
+    #expect(doc.returns == "Return value")
 } 
