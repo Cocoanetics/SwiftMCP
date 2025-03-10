@@ -1,6 +1,5 @@
 import Testing
 import SwiftMCP
-@testable import SwiftMCPDemo
 
 /**
  This test suite verifies that the MCPTool class correctly enriches arguments with default values.

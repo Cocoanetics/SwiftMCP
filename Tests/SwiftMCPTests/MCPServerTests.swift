@@ -2,7 +2,6 @@ import Foundation
 import Testing
 import SwiftMCP
 import AnyCodable
-@testable import SwiftMCPDemo
 
 @Test
 func testInitializeRequest() throws {
