@@ -1,175 +1,130 @@
 # SwiftMCP
 
-SwiftMCP is a Swift package that provides a way to generate JSON descriptions of functions for use in a Multi-Call Protocol (MCP) system. It uses Swift macros to extract function metadata at compile time.
+SwiftMCP is a Swift library that makes supporting the Model Context Protocol (MCP) easy. It uses Swift macros to automatically extract function metadata and generate the necessary JSON-RPC interface for MCP communication.
+
+## What is MCP?
+
+The Model Context Protocol (MCP) is a standardized way for AI models to interact with external tools and services. SwiftMCP makes it simple to expose your Swift functions as MCP-compatible tools that can be called by AI models.
+
+## MCP Transport Modes
+
+MCP supports two transport modes:
+
+- **stdio mode** ✅ - Fully implemented in SwiftMCP
+  - Communication happens over standard input/output
+  - Simple to implement and use for command-line tools
+  - Perfect for local development and testing
+
+- **HTTP+SSE mode** ⏳ - Not yet implemented
+  - Communication over HTTP with Server-Sent Events
+  - Better for networked applications and services
+  - Coming in a future release
 
 ## Features
 
-- Automatically extracts function parameter types and return types
-- Generates JSON descriptions of functions with proper type information
-- Supports parameters with default values
-- Handles numeric default values correctly in JSON output
-- Simple to use with Swift macros
-- Command-line interface for one-off testing and interactive mode
+- **Simple Macro-Based API**: Just add `@MCPServer` and `@MCPTool` annotations to your code
+- **Automatic Documentation Extraction**: Parameter names, types, and descriptions are extracted from your Swift documentation
+- **JSON-RPC Interface**: Fully compliant with the MCP specification
+- **Type Safety**: Leverages Swift's type system for safe parameter handling
+- **Default Values Support**: Handles parameters with default values
+- **Command-Line Interface**: Ready-to-use CLI for testing and integration
 
-## Usage
+## Quick Start
+
+Here's how to create an MCP-compatible server in just a few lines of code:
 
 ```swift
 import SwiftMCP
 
-@MCPServer
+// 1. Annotate your class with @MCPServer
+@MCPServer(name: "MyCalculator", version: "1.0.0")
 class Calculator {
+    // 2. Add documentation comments that describe your function and parameters
     /// Adds two integers and returns their sum
     /// - Parameter a: First number to add
     /// - Parameter b: Second number to add
     /// - Returns: The sum of a and b
+    // 3. Annotate your function with @MCPTool
     @MCPTool
     func add(a: Int, b: Int) -> Int {
         return a + b
     }
     
-    /// Subtracts the second integer from the first and returns the difference
-    /// - Parameter a: Number to subtract from
-    /// - Parameter b: Number to subtract (defaults to 3)
-    /// - Returns: The difference between a and b
+    /// Divides the numerator by the denominator
+    /// - Parameter numerator: Number to be divided
+    /// - Parameter denominator: Number to divide by (defaults to 1.0)
+    /// - Returns: The quotient of numerator divided by denominator
     @MCPTool
-    func subtract(a: Int, b: Int = 3) -> Int {
-        return a - b
+    func divide(numerator: Double, denominator: Double = 1.0) -> Double {
+        return numerator / denominator
     }
 }
 
-// Get JSON descriptions of all functions
-let tools = calculator.mcpTools
-let json = MCPTool.encodeToJSON(tools)
-print(json)
+// 4. That's it! Your class now has MCP capabilities
+let calculator = Calculator()
+
+// Process MCP requests
+let request = JSONRPCRequest(
+    jsonrpc: "2.0",
+    id: 1,
+    method: "tools/call",
+    params: [
+        "name": AnyCodable("add"),
+        "arguments": AnyCodable(["a": 5, "b": 3])
+    ]
+)
+
+// The response will be a properly formatted MCP response
+let response = calculator.handleRequest(request)
 ```
 
-The `MCPTool` macro automatically:
-- Extracts parameter names and types from the function declaration
-- Captures documentation comments for descriptions
-- Detects default parameter values
-- Generates metadata at compile time
+## How It Works
 
-The `@MCPTool` macro adds a `mcpTools` computed property that collects all the function metadata and converts it to a format suitable for JSON encoding.
+SwiftMCP uses Swift macros to analyze your code at compile time:
 
-## JSON Output
+1. **Documentation Extraction**: The `@MCPTool` macro extracts parameter names, types, and descriptions from your documentation comments
+2. **Schema Generation**: It automatically generates JSON Schema for your function parameters
+3. **Server Configuration**: The `@MCPServer` macro adds the necessary infrastructure to handle JSON-RPC requests
 
-The generated JSON includes detailed information about each function, including parameter types, descriptions, and default values:
+## JSON-RPC Interface
 
-```json
-[
-  {
-    "description": "Adds two integers and returns their sum",
-    "inputSchema": {
-      "properties": {
-        "a": {
-          "description": "First number to add",
-          "type": "number"
-        },
-        "b": {
-          "description": "Second number to add",
-          "type": "number"
-        }
-      },
-      "required": [
-        "a",
-        "b"
-      ],
-      "type": "object"
-    },
-    "name": "add"
-  },
-  {
-    "description": "Subtracts the second integer from the first and returns the difference",
-    "inputSchema": {
-      "properties": {
-        "a": {
-          "description": "Number to subtract from",
-          "type": "number"
-        },
-        "b": {
-          "default": 3,
-          "description": "Number to subtract (defaults to 3)",
-          "type": "number"
-        }
-      },
-      "required": [
-        "a"
-      ],
-      "type": "object"
-    },
-    "name": "subtract"
-  }
-]
-```
+SwiftMCP implements the standard MCP JSON-RPC interface:
+
+- `initialize`: Sets up the connection and returns server capabilities
+- `tools/list`: Returns a list of available tools with their schemas
+- `tools/call`: Calls a specific tool with the provided arguments
 
 ## Command-Line Interface
 
-SwiftMCP includes a command-line interface for testing and interacting with your MCP tools. The CLI supports one-off requests, interactive mode, and continuous mode.
-
-### One-Off Mode
-
-Process a single JSON-RPC request and exit:
+SwiftMCP includes a ready-to-use command-line interface for stdio mode:
 
 ```bash
 # Process a single request
-echo '{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "divide", "arguments": {"numerator": "10"}}}' | ./.build/debug/SwiftMCPDemo
-
-# With verbose logging
-echo '{"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "add", "arguments": {"a": "5", "b": "7"}}}' | ./.build/debug/SwiftMCPDemo -v
+echo '{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "divide", "arguments": {"numerator": 10}}}' | swift run SwiftMCPDemo
 ```
 
-### Interactive Mode
+## Advanced Usage
 
-Process multiple requests until EOF:
+### Custom Tool Descriptions
 
-```bash
-# Start in interactive mode
-./.build/debug/SwiftMCPDemo --interactive
+You can provide a custom description for a tool:
 
-# Then input JSON-RPC requests one per line
-{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "divide", "arguments": {"numerator": "10"}}}
-{"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "add", "arguments": {"a": "5", "b": "7"}}}
+```swift
+@MCPTool(description: "Custom description for this tool")
+func myFunction(param: String) -> String {
+    // ...
+}
 ```
 
-### Continuous Mode
+### Server Name and Version
 
-Run indefinitely, processing requests as they arrive:
+Customize your server's name and version:
 
-```bash
-# Start in continuous mode
-./.build/debug/SwiftMCPDemo --continuous
-
-# The server will run indefinitely, waiting for input
-# You can send requests to it from another terminal or process
-```
-
-For more reliable communication in continuous mode, you can use a named pipe:
-
-```bash
-# In terminal 1 (create a named pipe and start the server)
-mkfifo /tmp/mcp_pipe
-cat /tmp/mcp_pipe | ./.build/debug/SwiftMCPDemo --continuous --verbose
-
-# In terminal 2 (send requests to the pipe)
-echo '{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "divide", "arguments": {"numerator": "10"}}}' > /tmp/mcp_pipe
-```
-
-This mode is useful for long-running services that need to process requests continuously without exiting.
-
-### Command-Line Options
-
-```
-USAGE: mcp [--interactive] [--continuous] [--input-file <input-file>] [--output-file <output-file>] [--verbose]
-
-OPTIONS:
-  --interactive            Run in interactive mode, processing multiple requests until EOF
-  --continuous             Run in continuous mode, processing requests indefinitely without exiting
-  -i, --input-file <input-file>
-                          The input file to read from (defaults to stdin)
-  -o, --output-file <output-file>
-                          The output file to write to (defaults to stdout)
-  -v, --verbose           Enable verbose logging
-  -h, --help              Show help information.
+```swift
+@MCPServer(name: "MyCustomServer", version: "2.5.0")
+class MyServer {
+    // ...
+}
 ```
 
 ## Requirements
