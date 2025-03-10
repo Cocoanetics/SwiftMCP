@@ -16,16 +16,8 @@ func testInitializeRequest() throws {
     )
     
     // Handle the request
-    let responseString = calculator.handleRequest(request)
-    #expect(responseString != nil)
+	let response = unwrap(calculator.handleRequest(request) as? JSONRPC.Response)
     
-    // Decode the response
-    guard let responseString = responseString,
-          let responseData = responseString.data(using: String.Encoding.utf8) else {
-        throw TestError("Failed to convert response to data")
-    }
-    
-    let response = try JSONDecoder().decode(JSONRPC.Response.self, from: responseData)
     #expect(response.jsonrpc == "2.0")
     #expect(response.id == .number(1))
 }
@@ -42,17 +34,9 @@ func testToolsListRequest() throws {
         params: [:]
     )
     
-    // Handle the request
-    let responseString = calculator.handleRequest(request)
-    #expect(responseString != nil)
-    
-    // Decode the response
-    guard let responseString = responseString,
-          let responseData = responseString.data(using: String.Encoding.utf8) else {
-        throw TestError("Failed to convert response to data")
-    }
-    
-    let response = try JSONDecoder().decode(SwiftMCP.ToolsResponse.self, from: responseData)
+	// Handle the request
+	let response = unwrap(calculator.handleRequest(request) as? ToolsResponse)
+	
     #expect(response.jsonrpc == "2.0")
     #expect(response.id == 2)
     #expect(!response.result.tools.isEmpty)
@@ -81,17 +65,9 @@ func testToolCallRequest() throws {
         ]
     )
     
-    // Handle the request
-    let responseString = calculator.handleRequest(request)
-    #expect(responseString != nil)
+	// Handle the request
+	let response = unwrap(calculator.handleRequest(request) as? ToolCallResponse)
     
-    // Decode the response
-    guard let responseString = responseString,
-          let responseData = responseString.data(using: String.Encoding.utf8) else {
-        throw TestError("Failed to convert response to data")
-    }
-    
-    let response = try JSONDecoder().decode(SwiftMCP.ToolCallResponse.self, from: responseData)
     #expect(response.jsonrpc == "2.0")
     #expect(response.id == 3)
     #expect(response.result.status == "success")
@@ -113,18 +89,10 @@ func testToolCallRequestWithError() throws {
         ]
     )
     
-    // Handle the request
-    let responseString = calculator.handleRequest(request)
-    #expect(responseString != nil)
-    
-    // Decode the response
-    guard let responseString = responseString,
-          let responseData = responseString.data(using: String.Encoding.utf8) else {
-        throw TestError("Failed to convert response to data")
-    }
-    
-    let response = try JSONDecoder().decode(SwiftMCP.ToolCallResponse.self, from: responseData)
-    #expect(response.jsonrpc == "2.0")
+	// Handle the request
+	let response = unwrap(calculator.handleRequest(request) as? ToolCallResponse)
+
+	#expect(response.jsonrpc == "2.0")
     #expect(response.id == 4)
     #expect(response.result.status == "error")
     #expect(response.result.content.first?.text.contains("Unknown tool") ?? false)
@@ -147,18 +115,10 @@ func testToolCallRequestWithInvalidArgument() throws {
             ])
         ]
     )
-    
-    // Handle the request
-    let responseString = calculator.handleRequest(request)
-    #expect(responseString != nil)
-    
-    // Decode the response
-    guard let responseString = responseString,
-          let responseData = responseString.data(using: String.Encoding.utf8) else {
-        throw TestError("Failed to convert response to data")
-    }
-    
-    let response = try JSONDecoder().decode(SwiftMCP.ToolCallResponse.self, from: responseData)
+
+	// Handle the request
+	let response = unwrap(calculator.handleRequest(request) as? ToolCallResponse)
+	
     #expect(response.jsonrpc == "2.0")
     #expect(response.id == 5)
     #expect(response.result.status == "error")

@@ -78,7 +78,7 @@ public extension MCPServer {
     /// Handles a tool call request
     /// - Parameter request: The JSON-RPC request for a tool call
     /// - Returns: The response as a string, or nil if no response should be sent
-    private func handleToolCall(_ request: JSONRPCRequest) -> String? {
+    private func handleToolCall(_ request: JSONRPCRequest) -> Codable? {
         guard let params = request.params,
               let toolName = params["name"]?.value as? String else {
             // Invalid request: missing tool name
@@ -105,9 +105,7 @@ public extension MCPServer {
         }
         
         // Create and encode the response
-        let response = ToolCallResponse(id: request.id, text: responseText, isError: isError)
-        let encodedResponse = try! JSONEncoder().encode(response)
-        return String(data: encodedResponse, encoding: .utf8)!
+        return ToolCallResponse(id: request.id, text: responseText, isError: isError)
     }
     
     /// Function to log a message to stderr

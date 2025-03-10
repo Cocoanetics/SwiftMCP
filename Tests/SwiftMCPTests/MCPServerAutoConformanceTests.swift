@@ -27,6 +27,6 @@ func testAutoProtocolConformance() {
         let result = try calculator.callTool("add", arguments: ["a": 2, "b": 3])
         #expect(result as? Int == 5)
     } catch {
-        #expect(false, "Should not throw an error: \(error)")
+        #expect(Bool(false), "Should not throw an error: \(error)")
     }
 } 
