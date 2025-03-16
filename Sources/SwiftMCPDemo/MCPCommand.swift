@@ -2,6 +2,11 @@ import Foundation
 import ArgumentParser
 import SwiftMCP
 import AnyCodable
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 
 /// Command-line interface for the SwiftMCP demo
 @main
@@ -12,15 +17,52 @@ struct MCPCommand: ParsableCommand {
 		discussion: """
   Process JSON-RPC requests for SwiftMCP functions.
   
-  The command reads JSON-RPC requests from stdin and writes responses to stdout.
+  By default, the command reads JSON-RPC requests from stdin and writes responses to stdout.
+  If a port is specified, it starts an HTTP server with SSE support.
   """
 	)
+	
+	@Option(name: .long, help: "The port to listen on for HTTP requests. If not specified, uses stdin/stdout.")
+	var port: Int?
 	
 	/// The main entry point for the command
 	func run() throws {
 		// Create an instance of the Calculator
 		let calculator = Calculator()
 		
+		if let port = port {
+			// Start HTTP+SSE transport
+			runHTTPServer(calculator: calculator, port: port)
+		} else {
+			// Use standard input/output
+			runStdIO(calculator: calculator)
+		}
+	}
+	
+	/// Run the server using HTTP+SSE transport
+	private func runHTTPServer(calculator: Calculator, port: Int) {
+		// Create and start the HTTP SSE transport
+		let transport = HTTPSSETransport(server: calculator, port: port)
+		
+		print("Starting HTTP server on port \(port)...")
+		print("Press Ctrl+C to exit")
+		
+		// Add signal handler for SIGINT (Ctrl+C)
+		signal(SIGINT) { _ in
+			print("\nShutting down server...")
+			Foundation.exit(0)
+		}
+		
+		do {
+			try transport.start()
+		} catch {
+			fputs("Error starting server: \(error.localizedDescription)\n", stderr)
+			Foundation.exit(1)
+		}
+	}
+	
+	/// Run the server using stdin/stdout
+	private func runStdIO(calculator: Calculator) {
 		do {
 			while true {
 				if let input = readLine(),
