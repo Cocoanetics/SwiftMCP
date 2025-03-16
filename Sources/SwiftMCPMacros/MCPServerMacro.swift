@@ -111,10 +111,10 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
    var metadataArray: [MCPToolMetadata] = []
    
    for child in mirror.children {
-	if let metadata = child.value as? MCPToolMetadata,
-	   child.label?.hasPrefix("__mcpMetadata_") == true {
-	 metadataArray.append(metadata)
-	}
+      if let metadata = child.value as? MCPToolMetadata,
+      child.label?.hasPrefix("__mcpMetadata_") == true {
+      metadataArray.append(metadata)
+      }
    }
    
    return metadataArray.convertedToTools()
@@ -132,7 +132,7 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
 		for funcName in mcpTools {
 			switchCases.append("""
    case "\(funcName)":
-	return try __mcpCall_\(funcName)(enrichedArguments)
+      return try __mcpCall_\(funcName)(enrichedArguments)
    """)
 		}
 		
@@ -146,7 +146,7 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
   func callTool(_ name: String, arguments: [String: Any]) throws -> Any {
    // Find the tool by name
    guard let tool = mcpTools.first(where: { $0.name == name }) else {
-	throw MCPToolError.unknownTool(name: name)
+      throw MCPToolError.unknownTool(name: name)
    }
    
    // Enrich arguments with default values

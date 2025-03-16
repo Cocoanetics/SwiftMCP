@@ -2,7 +2,7 @@ import Foundation
 import AnyCodable
 
 /// Protocol defining the requirements for an MCP server
-public protocol MCPServer {
+public protocol MCPServer: AnyObject {
     /// Returns an array of all MCP tools defined in this type
     var mcpTools: [MCPTool] { get }
     
