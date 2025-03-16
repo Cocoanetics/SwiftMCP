@@ -56,13 +56,24 @@ public final class HTTPSSETransport {
             logger.info("Server started and listening on \(host):\(port)")
             try self.channel!.closeFuture.wait()
         } catch {
+            logger.error("Server error: \(error)")
             throw error
         }
     }
     
     /// Stop the HTTP server
     public func stop() throws {
+        logger.info("Stopping server...")
+        lock.lock()
+        // Close all SSE channels
+        for channel in sseChannels.values {
+            channel.close(promise: nil)
+        }
+        sseChannels.removeAll()
+        lock.unlock()
+        
         try group.syncShutdownGracefully()
+        logger.info("Server stopped")
     }
     
     /// Broadcast an event to all connected SSE clients
@@ -75,6 +86,7 @@ public final class HTTPSSETransport {
         
         // No channels connected
         if sseChannels.isEmpty {
+            logger.warning("No SSE clients connected to receive broadcast")
             return
         }
         
@@ -83,14 +95,31 @@ public final class HTTPSSETransport {
         
         // Use one of the connected channels for the allocator if main channel isn't available
         guard let allocator = channel?.allocator ?? sseChannels.values.first?.allocator else {
+            logger.error("No allocator available for broadcast")
             return
         }
         
         var buffer = allocator.buffer(capacity: data.utf8.count)
         buffer.writeString(data)
         
-        for channel in sseChannels.values {
-            _ = channel.writeAndFlush(HTTPServerResponsePart.body(.byteBuffer(buffer)))
+        var failedChannels = Set<ObjectIdentifier>()
+        
+        for (id, channel) in sseChannels {
+            guard channel.isActive else {
+                failedChannels.insert(id)
+                continue
+            }
+            
+            channel.write(HTTPServerResponsePart.body(.byteBuffer(buffer)), promise: nil)
+            channel.flush()
+        }
+        
+        // Clean up any failed channels
+        for id in failedChannels {
+            if let channel = sseChannels.removeValue(forKey: id) {
+                logger.trace("Removing inactive SSE client (remaining: \(sseChannels.count))")
+                channel.close(promise: nil)
+            }
         }
     }
     
@@ -119,7 +148,8 @@ public final class HTTPSSETransport {
         buffer.writeString(messageText)
         
         for channel in sseChannels.values {
-            _ = channel.writeAndFlush(HTTPServerResponsePart.body(.byteBuffer(buffer)))
+            channel.write(HTTPServerResponsePart.body(.byteBuffer(buffer)), promise: nil)
+            channel.flush()
         }
     }
     
@@ -137,7 +167,6 @@ public final class HTTPSSETransport {
             let encoder = JSONEncoder()
             let jsonData = try encoder.encode(response)
             guard let jsonString = String(data: jsonData, encoding: .utf8) else {
-                logger.error("Error creating string from JSON data")
                 return false
             }
             
@@ -145,7 +174,6 @@ public final class HTTPSSETransport {
             broadcast(jsonString)
             return true
         } catch {
-            logger.error("Error encoding JSON-RPC response: \(error)")
             return false
         }
     }
@@ -153,15 +181,20 @@ public final class HTTPSSETransport {
     private func addSSEChannel(_ channel: Channel) {
         lock.lock()
         defer { lock.unlock() }
-        sseChannels[ObjectIdentifier(channel)] = channel
-        logger.trace("SSE: Client connected")
+        let id = ObjectIdentifier(channel)
+        if sseChannels[id] == nil {
+            sseChannels[id] = channel
+            logger.trace("SSE: Client connected (total: \(sseChannels.count))")
+        }
     }
     
     private func removeSSEChannel(_ channel: Channel) {
         lock.lock()
         defer { lock.unlock() }
-        sseChannels.removeValue(forKey: ObjectIdentifier(channel))
-        logger.trace("SSE: Client disconnected")
+        let id = ObjectIdentifier(channel)
+        if sseChannels.removeValue(forKey: id) != nil {
+            logger.trace("SSE: Client disconnected (remaining: \(sseChannels.count))")
+        }
     }
     
     /// HTTP request handler
@@ -174,6 +207,18 @@ public final class HTTPSSETransport {
         
         init(transport: HTTPSSETransport) {
             self.transport = transport
+        }
+        
+        func channelInactive(context: ChannelHandlerContext) {
+            transport.logger.trace("Channel inactive")
+            transport.removeSSEChannel(context.channel)
+            context.fireChannelInactive()
+        }
+        
+        func errorCaught(context: ChannelHandlerContext, error: Error) {
+            transport.logger.error("Channel error: \(error)")
+            transport.removeSSEChannel(context.channel)
+            context.close(promise: nil)
         }
         
         private func sendResponse(context: ChannelHandlerContext, status: HTTPResponseStatus, headers: HTTPHeaders? = nil, body: ByteBuffer? = nil) {
@@ -239,11 +284,6 @@ public final class HTTPSSETransport {
             context.flush()
         }
         
-        func errorCaught(context: ChannelHandlerContext, error: Error) {
-            transport.logger.error("Channel error: \(error)")
-            context.close(promise: nil)
-        }
-        
         private func handleSSE(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?) {
             guard head.method == .GET else {
                 sendResponse(context: context, status: .methodNotAllowed)
@@ -275,8 +315,10 @@ public final class HTTPSSETransport {
             
             transport.addSSEChannel(context.channel)
             
+            // Set up channel close handlers
             context.channel.closeFuture.whenComplete { [weak self] _ in
                 guard let self = self else { return }
+                self.transport.logger.trace("Channel closed")
                 self.transport.removeSSEChannel(context.channel)
             }
         }
@@ -313,7 +355,6 @@ public final class HTTPSSETransport {
                 
                 sendResponse(context: context, status: .accepted, headers: headers)
             } catch {
-                transport.logger.error("Failed to decode JSON-RPC request: \(error)")
                 sendResponse(context: context, status: .badRequest)
             }
         }
