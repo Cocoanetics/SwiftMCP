@@ -27,12 +27,20 @@ let package = Package(
 		.package(url: "https://github.com/apple/swift-syntax.git", from: "600.0.1"),
 		.package(url: "https://github.com/Flight-School/AnyCodable", from: "0.6.0"),
 		.package(url: "https://github.com/apple/swift-argument-parser", from: "1.2.0"),
+		.package(url: "https://github.com/apple/swift-nio.git", from: "2.0.0"),
 	],
 	targets: [
 		// Library that exposes a macro as part of its API, which is used in client programs.
 		.target(
 			name: "SwiftMCP",
-			dependencies: ["AnyCodable", "SwiftMCPMacros"]
+			dependencies: [
+				"AnyCodable", 
+				"SwiftMCPMacros",
+				.product(name: "NIOCore", package: "swift-nio"),
+				.product(name: "NIOHTTP1", package: "swift-nio"),
+				.product(name: "NIOPosix", package: "swift-nio"),
+				.product(name: "NIOFoundationCompat", package: "swift-nio"),
+			]
 		),
 		
 		// A client of the library, which is able to use the macro in its own code.
