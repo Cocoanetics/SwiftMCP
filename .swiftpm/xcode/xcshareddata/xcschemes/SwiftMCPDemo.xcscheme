@@ -58,8 +58,8 @@
       </CommandLineArguments>
       <EnvironmentVariables>
          <EnvironmentVariable
-            key = "mcp"
-            value = ""
+            key = "ENABLE_DEBUG_OUTPUT"
+            value = "1"
             isEnabled = "YES">
          </EnvironmentVariable>
       </EnvironmentVariables>

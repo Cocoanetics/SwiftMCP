@@ -1,6 +1,7 @@
 import Foundation
 import ArgumentParser
 import SwiftMCP
+import Logging
 import AnyCodable
 #if canImport(Darwin)
 import Darwin
@@ -8,9 +9,14 @@ import Darwin
 import Glibc
 #endif
 
+#if canImport(OSLog)
+import OSLog
+#endif
+
 /// Command-line interface for the SwiftMCP demo
 @main
 struct MCPCommand: ParsableCommand {
+
 	static var configuration = CommandConfiguration(
 		commandName: "mcp",
 		abstract: "A utility for testing SwiftMCP functions",
@@ -27,6 +33,30 @@ struct MCPCommand: ParsableCommand {
 	
 	/// The main entry point for the command
 	func run() throws {
+		
+		
+#if canImport(OSLog)
+		// Set default log level to info - will only show important logs
+		// Per the cursor rules: Use OS_LOG_DISABLE=1 to see log output as needed
+		LoggingSystem.bootstrap { label in
+			// Create an OSLog-based logger
+			let category = label.split(separator: ".").last?.description ?? "default"
+			let osLogger = OSLog(subsystem: "com.cocoanetics.SwiftMCP", category: category)
+			
+			// Set log level to info by default (or trace if SWIFT_LOG_LEVEL is set to trace)
+			var handler = OSLogHandler(label: label, log: osLogger)
+			
+			// Check if we need verbose logging
+			if ProcessInfo.processInfo.environment["ENABLE_DEBUG_OUTPUT"] == "1" {
+				handler.logLevel = .trace
+			} else {
+				handler.logLevel = .info
+			}
+			
+			return handler
+		}
+#endif
+		
 		// Create an instance of the Calculator
 		let calculator = Calculator()
 		
