@@ -14,7 +14,7 @@ public final class HTTPSSETransport {
     private var channel: Channel?
     private let lock = NSLock()
     private var sseChannels: [ObjectIdentifier: Channel] = [:]
-    private let logger = Logger(label: "com.cocoanetics.SwiftMCP.HTTPSSETransport")
+    private let logger = Logger(label: "com.cocoanetics.SwiftMCP.Transport")
     
     /// The number of active SSE channels
     public var sseChannelCount: Int {
@@ -42,7 +42,7 @@ public final class HTTPSSETransport {
             .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
             .childChannelInitializer { channel in
                 channel.pipeline.configureHTTPServerPipeline().flatMap {
-                    channel.pipeline.addHandler(HTTPLogger(label: "com.cocoanetics.SwiftMCP.HTTP"))
+                    channel.pipeline.addHandler(HTTPLogger())
                 }.flatMap {
                     channel.pipeline.addHandler(HTTPHandler(transport: self))
                 }
