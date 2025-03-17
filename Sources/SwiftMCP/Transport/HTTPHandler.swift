@@ -70,6 +70,8 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
                     handleMessages(context: context, head: head, body: nil)
                 } else if head.uri == "/.well-known/ai-plugin.json" {
                     handleAIPluginManifest(context: context, head: head)
+                } else if head.uri == "/openapi.json" {
+                    handleOpenAPISpec(context: context, head: head)
                 } else {
                     sendResponse(context: context, status: .notFound)
                 }
@@ -81,6 +83,8 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
                     handleMessages(context: context, head: head, body: buffer)
                 } else if head.uri == "/.well-known/ai-plugin.json" {
                     handleAIPluginManifest(context: context, head: head)
+                } else if head.uri == "/openapi.json" {
+                    handleOpenAPISpec(context: context, head: head)
                 } else {
                     sendResponse(context: context, status: .notFound)
                 }
@@ -321,6 +325,52 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             sendResponse(context: context, status: .ok, headers: headers, body: buffer)
         } catch {
             transport.logger.error("Failed to encode AI plugin manifest: \(error)")
+            sendResponse(context: context, status: .internalServerError)
+        }
+    }
+    
+    private func handleOpenAPISpec(context: ChannelHandlerContext, head: HTTPRequestHead) {
+        guard head.method == .GET else {
+            sendResponse(context: context, status: .methodNotAllowed)
+            return
+        }
+
+        // Use forwarded headers if present, otherwise use transport defaults
+        let host: String
+        let scheme: String
+        
+        if let forwardedHost = head.headers["X-Forwarded-Host"].first {
+            host = forwardedHost
+        } else {
+            host = transport.host
+        }
+        
+        if let forwardedProto = head.headers["X-Forwarded-Proto"].first {
+            scheme = forwardedProto
+        } else {
+            scheme = "http"
+        }
+
+		let spec = OpenAPISpec(server: transport.server,
+							   scheme: scheme,
+							   host: host)
+        
+        // Convert spec to JSON data
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        
+        do {
+            let jsonData = try encoder.encode(spec)
+            var buffer = context.channel.allocator.buffer(capacity: jsonData.count)
+            buffer.writeBytes(jsonData)
+            
+            var headers = HTTPHeaders()
+            headers.add(name: "Content-Type", value: "application/json")
+            headers.add(name: "Access-Control-Allow-Origin", value: "*")
+            
+            sendResponse(context: context, status: .ok, headers: headers, body: buffer)
+        } catch {
+            transport.logger.error("Failed to encode OpenAPI spec: \(error)")
             sendResponse(context: context, status: .internalServerError)
         }
     }
