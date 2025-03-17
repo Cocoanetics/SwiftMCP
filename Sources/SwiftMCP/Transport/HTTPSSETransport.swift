@@ -8,13 +8,13 @@ import Logging
 /// A transport that exposes an HTTP server with SSE and JSON-RPC endpoints
 public final class HTTPSSETransport {
     private let server: MCPServer
-    private let host: String
+    let host: String
     public let port: Int
     private let group: EventLoopGroup
     private var channel: Channel?
     private let lock = NSLock()
-    private var sseChannels: [ObjectIdentifier: Channel] = [:]
-    private let logger = Logger(label: "com.cocoanetics.SwiftMCP.Transport")
+    private var sseChannels: [UUID: Channel] = [:]
+    let logger = Logger(label: "com.cocoanetics.SwiftMCP.Transport")
     
     /// The number of active SSE channels
     public var sseChannelCount: Int {
@@ -102,24 +102,13 @@ public final class HTTPSSETransport {
         var buffer = allocator.buffer(capacity: data.utf8.count)
         buffer.writeString(data)
         
-        var failedChannels = Set<ObjectIdentifier>()
-        
-        for (id, channel) in sseChannels {
+        for (_, channel) in sseChannels {
             guard channel.isActive else {
-                failedChannels.insert(id)
                 continue
             }
             
             channel.write(HTTPServerResponsePart.body(.byteBuffer(buffer)), promise: nil)
             channel.flush()
-        }
-        
-        // Clean up any failed channels
-        for id in failedChannels {
-            if let channel = sseChannels.removeValue(forKey: id) {
-                logger.trace("Removing inactive SSE client (remaining: \(sseChannels.count))")
-                channel.close(promise: nil)
-            }
         }
     }
     
@@ -148,6 +137,10 @@ public final class HTTPSSETransport {
         buffer.writeString(messageText)
         
         for channel in sseChannels.values {
+            guard channel.isActive else {
+                continue
+            }
+            
             channel.write(HTTPServerResponsePart.body(.byteBuffer(buffer)), promise: nil)
             channel.flush()
         }
@@ -156,7 +149,7 @@ public final class HTTPSSETransport {
     /// Handle a JSON-RPC request and send the response through the SSE channel
     /// - Parameter request: The JSON-RPC request
     /// - Returns: true if the request was handled, false otherwise
-    private func handleJSONRPCRequest(_ request: JSONRPCRequest) -> Bool {
+    func handleJSONRPCRequest(_ request: JSONRPCRequest) -> Bool {
         // Process the request
         guard let response = server.handleRequest(request) else {
             return false
@@ -178,191 +171,44 @@ public final class HTTPSSETransport {
         }
     }
     
-    private func addSSEChannel(_ channel: Channel) {
+    /// Register a new SSE channel if it doesn't already exist
+    /// - Parameters:
+    ///   - channel: The channel to register
+    ///   - id: The unique identifier for this channel
+    ///   - remoteAddress: The remote address for logging
+    /// - Returns: true if the channel was registered, false if it already existed
+    @discardableResult
+    func registerSSEChannel(_ channel: Channel, id: UUID, remoteAddress: String) -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        let id = ObjectIdentifier(channel)
-        if sseChannels[id] == nil {
-            sseChannels[id] = channel
-            logger.trace("SSE: Client connected (total: \(sseChannels.count))")
+        
+        guard sseChannels[id] == nil else {
+            logger.warning("Rejected duplicate SSE connection attempt from \(remoteAddress)")
+            return false
         }
+        
+        sseChannels[id] = channel
+        let channelCount = sseChannels.count
+        logger.info("New SSE channel registered from \(remoteAddress) (total: \(channelCount))")
+        
+        return true
     }
     
-    private func removeSSEChannel(_ channel: Channel) {
+    /// Remove an SSE channel and log the removal
+    /// - Parameters:
+    ///   - id: The unique identifier of the channel to remove
+    /// - Returns: true if a channel was removed, false if no channel was found
+    @discardableResult
+    func removeSSEChannel(id: UUID) -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        let id = ObjectIdentifier(channel)
+        
         if sseChannels.removeValue(forKey: id) != nil {
-            logger.trace("SSE: Client disconnected (remaining: \(sseChannels.count))")
-        }
-    }
-    
-    /// HTTP request handler
-    private final class HTTPHandler: ChannelInboundHandler {
-        typealias InboundIn = HTTPServerRequestPart
-        typealias OutboundOut = HTTPServerResponsePart
-        
-        private var requestState: RequestState = .idle
-        private let transport: HTTPSSETransport
-        
-        init(transport: HTTPSSETransport) {
-            self.transport = transport
+            let channelCount = sseChannels.count
+            logger.info("SSE channel removed, remaining open: \(channelCount))")
+            return true
         }
         
-        func channelInactive(context: ChannelHandlerContext) {
-            transport.logger.trace("Channel inactive")
-            transport.removeSSEChannel(context.channel)
-            context.fireChannelInactive()
-        }
-        
-        func errorCaught(context: ChannelHandlerContext, error: Error) {
-            transport.logger.error("Channel error: \(error)")
-            transport.removeSSEChannel(context.channel)
-            context.close(promise: nil)
-        }
-        
-        private func sendResponse(context: ChannelHandlerContext, status: HTTPResponseStatus, headers: HTTPHeaders? = nil, body: ByteBuffer? = nil) {
-            var responseHeaders = headers ?? HTTPHeaders()
-            if body != nil {
-                responseHeaders.add(name: "Content-Type", value: "application/json")
-            }
-            
-            let head = HTTPResponseHead(version: .http1_1, status: status, headers: responseHeaders)
-            context.write(self.wrapOutboundOut(.head(head)), promise: nil)
-            
-            if let body = body {
-                context.write(self.wrapOutboundOut(.body(.byteBuffer(body))), promise: nil)
-            }
-            
-            context.write(self.wrapOutboundOut(.end(nil)), promise: nil)
-            context.flush()
-        }
-        
-        func channelRead(context: ChannelHandlerContext, data: NIOAny) {
-            let reqPart = unwrapInboundIn(data)
-            
-            switch reqPart {
-            case .head(let head):
-                requestState = .head(head)
-                
-            case .body(let buffer):
-                switch requestState {
-                case .head(let head):
-                    requestState = .body(head: head, data: buffer)
-                default:
-                    break
-                }
-                
-            case .end:
-                switch requestState {
-                case .head(let head):
-                    if head.uri.hasPrefix("/sse") {
-                        handleSSE(context: context, head: head, body: nil)
-                    } else if head.uri.hasPrefix("/message") {
-                        handleMessages(context: context, head: head, body: nil)
-                    } else {
-                        sendResponse(context: context, status: .notFound)
-                    }
-                    
-                case .body(let head, let buffer):
-                    if head.uri.hasPrefix("/sse") {
-                        handleSSE(context: context, head: head, body: buffer)
-                    } else if head.uri.hasPrefix("/message") {
-                        handleMessages(context: context, head: head, body: buffer)
-                    } else {
-                        sendResponse(context: context, status: .notFound)
-                    }
-                    
-                case .idle:
-                    break
-                }
-                requestState = .idle
-            }
-        }
-        
-        func channelReadComplete(context: ChannelHandlerContext) {
-            context.flush()
-        }
-        
-        private func handleSSE(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?) {
-            guard head.method == .GET else {
-                sendResponse(context: context, status: .methodNotAllowed)
-                return
-            }
-            
-            var headers = HTTPHeaders()
-            headers.add(name: "Content-Type", value: "text/event-stream")
-            headers.add(name: "Cache-Control", value: "no-cache")
-            headers.add(name: "Connection", value: "keep-alive")
-            headers.add(name: "Access-Control-Allow-Origin", value: "*")
-            headers.add(name: "Access-Control-Allow-Methods", value: "GET")
-            headers.add(name: "Access-Control-Allow-Headers", value: "*")
-            
-            let response = HTTPResponseHead(version: head.version,
-                                         status: .ok,
-                                         headers: headers)
-            context.write(wrapOutboundOut(.head(response)), promise: nil)
-            context.flush()
-            
-            // Send endpoint event
-            let endpointUrl = "http://\(transport.host):\(transport.port)/message"
-            let initialData = "event: endpoint\ndata: \(endpointUrl)\n\n"
-            
-            var buffer = context.channel.allocator.buffer(capacity: initialData.utf8.count)
-            buffer.writeString(initialData)
-            context.write(wrapOutboundOut(.body(.byteBuffer(buffer))), promise: nil)
-            context.flush()
-            
-            transport.addSSEChannel(context.channel)
-            
-            // Set up channel close handlers
-            context.channel.closeFuture.whenComplete { [weak self] _ in
-                guard let self = self else { return }
-                self.transport.logger.trace("Channel closed")
-                self.transport.removeSSEChannel(context.channel)
-            }
-        }
-        
-        private func handleMessages(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?) {
-            if head.method == .OPTIONS {
-                var headers = HTTPHeaders()
-                headers.add(name: "Access-Control-Allow-Origin", value: "*")
-                headers.add(name: "Access-Control-Allow-Methods", value: "POST, OPTIONS")
-                headers.add(name: "Access-Control-Allow-Headers", value: "*")
-                
-                sendResponse(context: context, status: .ok, headers: headers)
-                return
-            }
-            
-            guard head.method == .POST else {
-                sendResponse(context: context, status: .methodNotAllowed)
-                return
-            }
-            
-            guard let body = body else {
-                sendResponse(context: context, status: .badRequest)
-                return
-            }
-            
-            let decoder = JSONDecoder()
-            do {
-                let request = try decoder.decode(JSONRPCRequest.self, from: body)
-                let handled = transport.handleJSONRPCRequest(request)
-                
-                var headers = HTTPHeaders()
-                headers.add(name: "Access-Control-Allow-Origin", value: "*")
-                headers.add(name: "Content-Type", value: "application/json")
-                
-                sendResponse(context: context, status: .accepted, headers: headers)
-            } catch {
-                sendResponse(context: context, status: .badRequest)
-            }
-        }
+        return false
     }
 }
-
-private enum RequestState {
-    case idle
-    case head(HTTPRequestHead)
-    case body(head: HTTPRequestHead, data: ByteBuffer)
-} 
