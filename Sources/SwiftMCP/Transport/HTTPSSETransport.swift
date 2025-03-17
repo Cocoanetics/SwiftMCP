@@ -22,6 +22,8 @@ public final class HTTPSSETransport {
         defer { lock.unlock() }
         return sseChannels.count
     }
+	
+	// MARK: - Initialization
     
     /// Initialize a new HTTP SSE transport
     /// - Parameters:
@@ -35,6 +37,8 @@ public final class HTTPSSETransport {
         self.group = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
     }
     
+	// MARK: - Server Lifecycle
+	
     /// Start the HTTP server
     public func start() throws {
         let bootstrap = ServerBootstrap(group: group)
@@ -76,47 +80,40 @@ public final class HTTPSSETransport {
         logger.info("Server stopped")
     }
     
-    /// Broadcast an event to all connected SSE clients
-    /// - Parameter event: The event to broadcast
-    public func broadcast(_ event: String) {
-        logger.trace("Broadcasting event: \(event)")
-        
-        lock.lock()
-        defer { lock.unlock() }
-        
-        // No channels connected
-        if sseChannels.isEmpty {
-            logger.warning("No SSE clients connected to receive broadcast")
-            return
-        }
-        
-        // Format as a proper SSE message
-        let data = "data: \(event)\n\n"
-        
-        // Use one of the connected channels for the allocator if main channel isn't available
-        guard let allocator = channel?.allocator ?? sseChannels.values.first?.allocator else {
-            logger.error("No allocator available for broadcast")
-            return
-        }
-        
-        var buffer = allocator.buffer(capacity: data.utf8.count)
-        buffer.writeString(data)
-        
-        for (_, channel) in sseChannels {
-            guard channel.isActive else {
-                continue
-            }
-            
-            channel.write(HTTPServerResponsePart.body(.byteBuffer(buffer)), promise: nil)
-            channel.flush()
-        }
-    }
-    
+	// MARK: - Request Handling
+	/// Handle a JSON-RPC request and send the response through the SSE channel
+	/// - Parameter request: The JSON-RPC request
+	/// - Returns: true if the request was handled, false otherwise
+	func handleJSONRPCRequest(_ request: JSONRPCRequest) -> Bool {
+		// Process the request
+		guard let response = server.handleRequest(request) else {
+			return false
+		}
+		
+		// Encode and broadcast the response
+		do {
+			let encoder = JSONEncoder()
+			let jsonData = try encoder.encode(response)
+			guard let jsonString = String(data: jsonData, encoding: .utf8) else {
+				return false
+			}
+			
+			// Broadcast the response to all SSE clients
+			broadcastSSE(data: jsonString)
+			
+			return true
+		} catch {
+			return false
+		}
+	}
+	
+	// MARK: - Handling SSE Connections
+	
     /// Broadcast a named event to all connected SSE clients
     /// - Parameters:
     ///   - name: The name of the event
     ///   - data: The data for the event
-    public func broadcastEvent(name: String, data: String) {
+    public func broadcastSSE(name: String? = nil, data: String) {
         lock.lock()
         defer { lock.unlock() }
         
@@ -126,7 +123,13 @@ public final class HTTPSSETransport {
         }
         
         // Format as a proper SSE message with event name
-        let messageText = "event: \(name)\ndata: \(data)\n\n"
+		var messageText: String = ""
+
+		if let name = name {
+			messageText = "event: \(name)\n"
+		}
+		
+		messageText += "data: \(data)\n\n"
         
         // Use one of the connected channels for the allocator if main channel isn't available
         guard let allocator = channel?.allocator ?? sseChannels.values.first?.allocator else {
@@ -143,31 +146,6 @@ public final class HTTPSSETransport {
             
             channel.write(HTTPServerResponsePart.body(.byteBuffer(buffer)), promise: nil)
             channel.flush()
-        }
-    }
-    
-    /// Handle a JSON-RPC request and send the response through the SSE channel
-    /// - Parameter request: The JSON-RPC request
-    /// - Returns: true if the request was handled, false otherwise
-    func handleJSONRPCRequest(_ request: JSONRPCRequest) -> Bool {
-        // Process the request
-        guard let response = server.handleRequest(request) else {
-            return false
-        }
-        
-        // Encode and broadcast the response
-        do {
-            let encoder = JSONEncoder()
-            let jsonData = try encoder.encode(response)
-            guard let jsonString = String(data: jsonData, encoding: .utf8) else {
-                return false
-            }
-            
-            // Broadcast the response to all SSE clients
-            broadcast(jsonString)
-            return true
-        } catch {
-            return false
         }
     }
     
