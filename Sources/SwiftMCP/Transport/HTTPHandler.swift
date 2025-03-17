@@ -215,11 +215,17 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
                 return
             }
             
+			if request.method == nil
+			{
+				sendResponse(context: context, status: .ok, headers: nil)
+				return
+			}
+			
             // Send Accepted first
             var headers = HTTPHeaders()
             headers.add(name: "Access-Control-Allow-Origin", value: "*")
             headers.add(name: "Content-Type", value: "application/json")
-            sendResponse(context: context, status: .accepted, headers: headers)
+			sendResponse(context: context, status: .accepted, headers: headers)
             
             // Handle the response with client ID
             transport.handleJSONRPCRequest(request, from: clientId)
