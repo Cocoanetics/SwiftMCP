@@ -38,12 +38,12 @@ struct MCPCommand: ParsableCommand {
 	@Option(name: .long, help: "The transport type to use (stdio or httpsse)")
 	var transport: TransportType = .stdio
 	
-	@Option(name: .long, help: "The port to listen on (required when transport is httpsse)")
+	@Option(name: .long, help: "The port to listen on (required when transport is HTTP+SSE)")
 	var port: Int?
 	
 	func validate() throws {
 		if transport == .httpsse && port == nil {
-			throw ValidationError("Port must be specified when using httpsse transport")
+			throw ValidationError("Port must be specified when using HTTP+SSE transport")
 		}
 	}
 	
@@ -72,7 +72,7 @@ struct MCPCommand: ParsableCommand {
 				
 			case .stdio:
 				
-				print("Stdio transport started.")
+				print("MCP Server \(calculator.serverName) (\(calculator.serverVersion)) started with Stdio transport")
 
 				let transport = StdioTransport(server: calculator)
 				try transport.start()
@@ -83,9 +83,11 @@ struct MCPCommand: ParsableCommand {
 					fatalError("Port should have been validated")
 				}
 				
-				print("HTTP+SSE transport started on http://localhost:\(port).")
-				
+				let host = String.localHostname
+				print("MCP Server \(calculator.serverName) (\(calculator.serverVersion)) started with HTTP+SSE transport on http://\(host):\(port)/sse")
+
 				let transport = HTTPSSETransport(server: calculator, port: port)
+
 				try transport.start()
 		}
 	}

@@ -1,7 +1,7 @@
 import Foundation
 import SwiftMCP
 
-@MCPServer(name: "Calculator", version: "1.0.0")
+@MCPServer(name: "Calculator", version: "0.1")
 class Calculator {
     /// Adds two integers and returns their sum
     /// - Parameter a: First number to add

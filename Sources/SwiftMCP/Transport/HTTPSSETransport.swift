@@ -8,7 +8,7 @@ import Logging
 /// A transport that exposes an HTTP server with SSE and JSON-RPC endpoints
 public final class HTTPSSETransport {
     private let server: MCPServer
-    let host: String
+    public let host: String
     public let port: Int
     private let group: EventLoopGroup
     private var channel: Channel?
@@ -58,7 +58,7 @@ public final class HTTPSSETransport {
     ///   - server: The MCP server to expose
     ///   - host: The host to bind to (default: localhost)
     ///   - port: The port to bind to (default: 8080)
-    public init(server: MCPServer, host: String = "localhost", port: Int = 8080) {
+	public init(server: MCPServer, host: String = String.localHostname, port: Int = 8080) {
         self.server = server
         self.host = host
         self.port = port

@@ -177,11 +177,11 @@ public extension MCPServer {
         fflush(stdout) // Ensure the output is flushed immediately
     }
     
-    private var serverName: String {
+    var serverName: String {
         Mirror(reflecting: self).children.first(where: { $0.label == "__mcpServerName" })?.value as? String ?? "UnknownServer"
     }
     
-    private var serverVersion: String {
+    var serverVersion: String {
         Mirror(reflecting: self).children.first(where: { $0.label == "__mcpServerVersion" })?.value as? String ?? "UnknownVersion"
     }
     
