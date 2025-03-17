@@ -56,12 +56,6 @@ struct MCPCommand: ParsableCommand {
 		LoggingSystem.bootstrapWithOSLog()
 #endif
 		
-		// Check if transport type is specified
-		if CommandLine.arguments.contains("--transport") == false {
-			print(MCPCommand.helpMessage())
-			Foundation.exit(0)
-		}
-		
 		let calculator = Calculator()
 		
 		do {
