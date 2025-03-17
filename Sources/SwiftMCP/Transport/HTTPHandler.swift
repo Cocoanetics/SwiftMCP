@@ -166,13 +166,16 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
         let decoder = JSONDecoder()
         do {
             let request = try decoder.decode(JSONRPCRequest.self, from: body)
-            let handled = transport.handleJSONRPCRequest(request)
             
+			// Send Accepted first
             var headers = HTTPHeaders()
             headers.add(name: "Access-Control-Allow-Origin", value: "*")
             headers.add(name: "Content-Type", value: "application/json")
-            
             sendResponse(context: context, status: .accepted, headers: headers)
+			
+			// Handle the response
+			transport.handleJSONRPCRequest(request)
+
         } catch {
             sendResponse(context: context, status: .badRequest)
         }

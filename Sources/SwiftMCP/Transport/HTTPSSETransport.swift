@@ -81,34 +81,45 @@ public final class HTTPSSETransport {
     }
     
 	// MARK: - Request Handling
-	/// Handle a JSON-RPC request and send the response through the SSE channel
+	/// Handle a JSON-RPC request and send the response through the SSE channels
 	/// - Parameter request: The JSON-RPC request
-	/// - Returns: true if the request was handled, false otherwise
-	func handleJSONRPCRequest(_ request: JSONRPCRequest) -> Bool {
-		// Process the request
+	func handleJSONRPCRequest(_ request: JSONRPCRequest) {
+		// Let the server process the request
 		guard let response = server.handleRequest(request) else {
-			return false
+			// If no response is needed (e.g. for notifications), just return
+			return
 		}
 		
-		// Encode and broadcast the response
-		do {
-			let encoder = JSONEncoder()
-			let jsonData = try encoder.encode(response)
-			guard let jsonString = String(data: jsonData, encoding: .utf8) else {
-				return false
-			}
-			
-			// Broadcast the response to all SSE clients
-			broadcastSSE(data: jsonString)
-			
-			return true
-		} catch {
-			return false
-		}
+		broadcastSSE(response: response)
 	}
 	
 	// MARK: - Handling SSE Connections
 	
+		public func broadcastSSE(response: any Codable)
+		{
+			do
+			{
+				// Encode and broadcast the response
+				let encoder = JSONEncoder()
+				let jsonData = try encoder.encode(response)
+				
+				guard let jsonString = String(data: jsonData, encoding: .utf8) else
+				{
+					logger.critical("Cannot convert JSON data to string")
+
+					return
+				}
+				
+				// Broadcast the response to all SSE clients
+				broadcastSSE(data: jsonString)
+			}
+			catch
+			{
+				logger.critical("\(error.localizedDescription)")
+			}
+		}
+		
+		
     /// Broadcast a named event to all connected SSE clients
     /// - Parameters:
     ///   - name: The name of the event
