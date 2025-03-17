@@ -74,7 +74,7 @@ struct MCPCommand: ParsableCommand {
 				case .stdio:
 					
 					// need to output to stderror or else npx complains
-					fputs("MCP Server \(calculator.serverName) (\(calculator.serverVersion)) started with Stdio transport", stderr)
+					fputs("MCP Server \(calculator.serverName) (\(calculator.serverVersion)) started with Stdio transport\n", stderr)
 
 					let transport = StdioTransport(server: calculator)
 					try transport.start()
