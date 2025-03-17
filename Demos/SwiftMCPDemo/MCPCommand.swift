@@ -82,7 +82,7 @@ struct MCPCommand: ParsableCommand {
 					}
 					
 					let host = String.localHostname
-					print("MCP Server \(calculator.serverName) (\(calculator.serverVersion)) started with HTTP+SSE transport on http://\(host):\(port)/sse")
+					fputs("MCP Server \(calculator.serverName) (\(calculator.serverVersion)) started with HTTP+SSE transport on http://\(host):\(port)/sse\n", stderr)
 					
 					let transport = HTTPSSETransport(server: calculator, port: port)
 					
