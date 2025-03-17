@@ -34,6 +34,9 @@ struct MCPCommand: ParsableCommand {
   
   - stdio: Reads JSON-RPC requests from stdin and writes responses to stdout
   - httpsse: Starts an HTTP server with Server-Sent Events (SSE) support on the specified port
+  
+  When using httpsse mode with --token, requests must include a valid bearer token
+  in the Authorization header.
 """
 	)
 	
@@ -42,6 +45,9 @@ struct MCPCommand: ParsableCommand {
 	
 	@Option(name: .long, help: "The port to listen on (required when transport is HTTP+SSE)")
 	var port: Int?
+    
+    @Option(name: .long, help: "Bearer token for authorization (optional, HTTP+SSE only)")
+    var token: String?
 	
 	func validate() throws {
 		if transport == .httpsse && port == nil {
@@ -56,6 +62,12 @@ struct MCPCommand: ParsableCommand {
 		LoggingSystem.bootstrapWithOSLog()
 #endif
 		
+		// Check if transport type is specified
+		if CommandLine.arguments.contains("--transport") == false {
+			print(MCPCommand.helpMessage())
+			Foundation.exit(0)
+		}
+
 		let calculator = Calculator()
 		
 		do {
@@ -65,7 +77,7 @@ struct MCPCommand: ParsableCommand {
 					
 					// need to output to stderror or else npx complains
 					fputs("MCP Server \(calculator.serverName) (\(calculator.serverVersion)) started with Stdio transport\n", stderr)
-					
+
 					let transport = StdioTransport(server: calculator)
 					try transport.run()
 					
@@ -76,25 +88,51 @@ struct MCPCommand: ParsableCommand {
 					}
 					
 					let host = String.localHostname
-					fputs("MCP Server \(calculator.serverName) (\(calculator.serverVersion)) started with HTTP+SSE transport on http://\(host):\(port)/sse\n", stderr)
-					
+					print("MCP Server \(calculator.serverName) (\(calculator.serverVersion)) started with HTTP+SSE transport on http://\(host):\(port)/sse")
+
 					let transport = HTTPSSETransport(server: calculator, port: port)
+                    
+                    // Set up authorization handler if token is provided
+                    if let requiredToken = token {
+                        transport.authorizationHandler = { token in
+							
+							guard let token else {
+								return .unauthorized("Missing bearer token")
+							}
+							
+                            guard token == requiredToken else {
+								return .unauthorized("Invalid bearer token")
+                            }
+							
+							return .authorized
+                        }
+                    }
 					
 					// Set up signal handling to shut down the transport on Ctrl+C
 					setupSignalHandler(transport: transport)
 					
+					// Run the server (blocking)
 					try transport.run()
 			}
+
 		}
 		catch let error as IOError {
-			let humanReadable = String(cString: strerror(error.errnoCode))
-			
-			fputs("IO Error: \(humanReadable)\n", stderr)
+			// Handle specific IO errors with more detail
+			let errorMessage = """
+				IO Error: \(error)
+				Code: \(error.errnoCode)
+				"""
+			fputs("\(errorMessage)\n", stderr)
+			Foundation.exit(1)
+		}
+		catch let error as ChannelError {
+			// Handle specific channel errors
+			fputs("Channel Error: \(error)\n", stderr)
 			Foundation.exit(1)
 		}
 		catch {
 			// Handle any other errors
-			fputs("Error: \(error.localizedDescription)\n", stderr)
+			fputs("Error: \(error)\n", stderr)
 			Foundation.exit(1)
 		}
 	}

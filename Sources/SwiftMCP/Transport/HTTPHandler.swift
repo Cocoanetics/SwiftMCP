@@ -162,7 +162,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             headers.add(name: "Access-Control-Allow-Origin", value: "*")
             headers.add(name: "Access-Control-Allow-Methods", value: "POST, OPTIONS")
             headers.add(name: "Access-Control-Allow-Headers", value: "*")
-            headers.add(name: "Access-Control-Allow-Headers", value: "Content-Type")
+            headers.add(name: "Access-Control-Allow-Headers", value: "Content-Type, Authorization")
             
             sendResponse(context: context, status: .ok, headers: headers)
             return
@@ -175,7 +175,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
         
         // Extract client ID from URL path using URLComponents
         guard let components = URLComponents(string: head.uri),
-			  let clientId = components.path.components(separatedBy: "/").last,
+              let clientId = components.path.components(separatedBy: "/").last,
               components.path.hasPrefix("/messages/") else {
             transport.logger.warning("Invalid message endpoint URL format: \(head.uri)")
             sendResponse(context: context, status: .badRequest)
@@ -216,17 +216,46 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
                 return
             }
             
-			if request.method == nil
-			{
-				sendResponse(context: context, status: .ok, headers: nil)
-				return
-			}
-			
+            if request.method == nil {
+                sendResponse(context: context, status: .ok, headers: nil)
+                return
+            }
+            
             // Send Accepted first
             var headers = HTTPHeaders()
             headers.add(name: "Access-Control-Allow-Origin", value: "*")
             headers.add(name: "Content-Type", value: "application/json")
-			sendResponse(context: context, status: .accepted, headers: headers)
+            sendResponse(context: context, status: .accepted, headers: headers)
+			
+			// Check authorization if handler is set
+			var token: String?
+			
+			if let authHeader = head.headers["Authorization"].first
+			{
+				let parts = authHeader.components(separatedBy: " ")
+				
+				if parts.count == 2 && parts[0].lowercased() == "bearer" {
+					
+					token = String(parts[1])
+				}
+			}
+						
+			// Validate token
+			switch transport.authorizationHandler(token) {
+				case .authorized:
+					break // Continue with request processing
+				case .unauthorized(let message):
+					// Create JSON-RPC error response
+					let errorResponse = """
+                    {"jsonrpc": "2.0", "error": {"code": -32001, "message": "\(message)"}, "id": \(request.id ?? 0)}
+                    """
+					
+					// Send error via SSE
+					let sseMessage = SSEMessage(data: errorResponse)
+					transport.sendSSE(sseMessage, to: clientId)
+				
+					return
+			}
             
             // Handle the response with client ID
             transport.handleJSONRPCRequest(request, from: clientId)

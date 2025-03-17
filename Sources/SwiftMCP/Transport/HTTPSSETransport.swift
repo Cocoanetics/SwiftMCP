@@ -18,6 +18,18 @@ public final class HTTPSSETransport {
     let logger = Logger(label: "com.cocoanetics.SwiftMCP.Transport")
     private var keepAliveTimer: DispatchSourceTimer?
 	
+    /// Result of authorization check
+    public enum AuthorizationResult {
+        case authorized
+        case unauthorized(String) // String is the error message
+    }
+    
+    /// Authorization handler type
+    public typealias AuthorizationHandler = (String?) -> AuthorizationResult
+    
+    /// authorization handler for bearer tokens, accepts all by default
+	public var authorizationHandler: AuthorizationHandler = { _ in return .authorized }
+	
 	public enum KeepAliveMode
 	{
 		case none
@@ -181,6 +193,7 @@ public final class HTTPSSETransport {
 	/// Handle a JSON-RPC request and send the response through the SSE channels
 	/// - Parameter request: The JSON-RPC request
 	func handleJSONRPCRequest(_ request: JSONRPCRequest, from clientId: String) {
+		
 		// Let the server process the request
 		guard let response = server.handleRequest(request) else {
 			// If no response is needed (e.g. for notifications), just return
