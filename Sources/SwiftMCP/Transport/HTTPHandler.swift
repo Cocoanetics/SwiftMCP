@@ -300,14 +300,32 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             return
         }
 
+        // Use forwarded headers if present, otherwise use transport defaults
+        let host: String
+        let scheme: String
+        
+        if let forwardedHost = head.headers["X-Forwarded-Host"].first {
+            host = forwardedHost
+        } else {
+            host = transport.host
+        }
+        
+        if let forwardedProto = head.headers["X-Forwarded-Proto"].first {
+            scheme = forwardedProto
+        } else {
+            scheme = "http"
+        }
+
 		let description = transport.server.description ?? "MCP Server providing tools for automation and integration"
 		
-		let manifest = AIPluginManifest(nameForHuman: transport.server.serverName,
-										nameForModel: transport.server.serverName.asModelName,
-										descriptionForHuman: description,
-										descriptionForModel: description,
-										auth: .none, 
-										api: .init(type: "openapi", url: "http:\(transport.host):\(transport.port)/openapi.json"))
+		let manifest = AIPluginManifest(
+            nameForHuman: transport.server.serverName,
+            nameForModel: transport.server.serverName.asModelName,
+            descriptionForHuman: description,
+            descriptionForModel: description,
+            auth: .none, 
+            api: .init(type: "openapi", url: "\(scheme)://\(host)/openapi.json")
+        )
 
         // Convert manifest to JSON data
         let encoder = JSONEncoder()
