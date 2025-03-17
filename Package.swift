@@ -51,7 +51,8 @@ let package = Package(
 			dependencies: [
 				"SwiftMCP",
 				.product(name: "ArgumentParser", package: "swift-argument-parser")
-			]
+			],
+			path: "Demos/SwiftMCPDemo"
 		),
 		
 		// Test target for unit tests
