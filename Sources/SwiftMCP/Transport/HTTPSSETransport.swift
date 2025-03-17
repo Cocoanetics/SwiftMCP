@@ -54,7 +54,6 @@ public final class HTTPSSETransport {
             .childChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
             .childChannelOption(ChannelOptions.maxMessagesPerRead, value: 16)
             .childChannelOption(ChannelOptions.allowRemoteHalfClosure, value: true)
-			.childChannelOption(ChannelOptions.timeout, value: nil) // Disable idle timeout
         
         do {
             self.channel = try bootstrap.bind(host: host, port: port).wait()
