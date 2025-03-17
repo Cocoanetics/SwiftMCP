@@ -16,44 +16,77 @@ import OSLog
 /// Command-line interface for the SwiftMCP demo
 @main
 struct MCPCommand: ParsableCommand {
-
+	
+	enum TransportType: String, ExpressibleByArgument {
+		case stdio
+		case httpsse
+	}
+	
 	static var configuration = CommandConfiguration(
-		commandName: "mcp",
+		commandName: "SwiftMCPDemo",
 		abstract: "A utility for testing SwiftMCP functions",
 		discussion: """
   Process JSON-RPC requests for SwiftMCP functions.
   
-  By default, the command reads JSON-RPC requests from stdin and writes responses to stdout.
-  If a port is specified, it starts an HTTP server with SSE support.
-  """
+  The command can operate in two modes:
+  
+  - stdio: Reads JSON-RPC requests from stdin and writes responses to stdout
+  - httpsse: Starts an HTTP server with Server-Sent Events (SSE) support on the specified port
+"""
 	)
 	
-	@Option(name: .long, help: "The port to listen on for HTTP requests. If not specified, uses stdin/stdout.")
+	@Option(name: .long, help: "The transport type to use (stdio or httpsse)")
+	var transport: TransportType = .stdio
+	
+	@Option(name: .long, help: "The port to listen on (required when transport is httpsse)")
 	var port: Int?
 	
+	func validate() throws {
+		if transport == .httpsse && port == nil {
+			throw ValidationError("Port must be specified when using httpsse transport")
+		}
+	}
+	
 	/// The main entry point for the command
-	func run() throws {
+	mutating func run() throws {
 		
-		#if canImport(OSLog)
-			LoggingSystem.bootstrapWithOSLog()
-		#endif
+#if canImport(OSLog)
+		LoggingSystem.bootstrapWithOSLog()
+#endif
 		
-		// Create an instance of the Calculator
+		// Check if transport type is specified
+		if CommandLine.arguments.contains("--transport") == false {
+			print(MCPCommand.helpMessage())
+			Foundation.exit(0)
+		}
+		
+		// Set up signal handler for graceful shutdown
+		signal(SIGINT) { _ in
+			print("\nShutting down...")
+			Foundation.exit(0)
+		}
+
 		let calculator = Calculator()
 		
-		do {
-			if let port = port {
-				// Start HTTP+SSE transport
-				try HTTPSSETransport(server: calculator, port: port).start()
-			} else {
-				// Use standard input/output
-				try StdioTransport(server: calculator).start()
-			}
-		}
-		catch
-		{
-			fputs("Error: \(error.localizedDescription)\n", stderr)
-			Foundation.exit(1)
+		switch transport {
+				
+			case .stdio:
+				
+				print("Stdio transport started.")
+
+				let transport = StdioTransport(server: calculator)
+				try transport.start()
+				
+			case .httpsse:
+				
+				guard let port else {
+					fatalError("Port should have been validated")
+				}
+				
+				print("HTTP+SSE transport started on http://localhost:\(port).")
+				
+				let transport = HTTPSSETransport(server: calculator, port: port)
+				try transport.start()
 		}
 	}
 }

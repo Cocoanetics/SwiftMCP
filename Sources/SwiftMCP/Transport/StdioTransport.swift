@@ -15,14 +15,7 @@ public final class StdioTransport {
     
     /// Start reading from stdin and writing to stdout
     public func start() throws {
-        logger.info("Starting stdio transport...")
         isRunning = true
-        
-        // Set up signal handler for graceful shutdown
-        signal(SIGINT) { _ in
-            print("\nShutting down...")
-            Foundation.exit(0)
-        }
         
         do {
             while isRunning {
