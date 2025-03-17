@@ -61,7 +61,7 @@ struct MCPCommand: ParsableCommand {
 			print(MCPCommand.helpMessage())
 			Foundation.exit(0)
 		}
-
+		
 		let calculator = Calculator()
 		
 		do {
@@ -71,9 +71,9 @@ struct MCPCommand: ParsableCommand {
 					
 					// need to output to stderror or else npx complains
 					fputs("MCP Server \(calculator.serverName) (\(calculator.serverVersion)) started with Stdio transport\n", stderr)
-
+					
 					let transport = StdioTransport(server: calculator)
-					try transport.start()
+					try transport.run()
 					
 				case .httpsse:
 					
@@ -83,7 +83,7 @@ struct MCPCommand: ParsableCommand {
 					
 					let host = String.localHostname
 					print("MCP Server \(calculator.serverName) (\(calculator.serverVersion)) started with HTTP+SSE transport on http://\(host):\(port)/sse")
-
+					
 					let transport = HTTPSSETransport(server: calculator, port: port)
 					
 					// Set up signal handling to shut down the transport on Ctrl+C
@@ -100,7 +100,7 @@ struct MCPCommand: ParsableCommand {
 		}
 		catch {
 			// Handle any other errors
-			fputs("Error: \(error)\n", stderr)
+			fputs("Error: \(error.localizedDescription)\n", stderr)
 			Foundation.exit(1)
 		}
 	}
