@@ -15,6 +15,7 @@ public final class HTTPSSETransport {
     private let lock = NSLock()
     private var sseChannels: [UUID: Channel] = [:]
     let logger = Logger(label: "com.cocoanetics.SwiftMCP.Transport")
+    private var keepAliveTimer: DispatchSourceTimer?
     
     /// The number of active SSE channels
     public var sseChannelCount: Int {
@@ -58,7 +59,26 @@ public final class HTTPSSETransport {
         do {
             self.channel = try bootstrap.bind(host: host, port: port).wait()
             logger.info("Server started and listening on \(host):\(port)")
-            try self.channel!.closeFuture.wait()
+            startKeepAliveTimer()
+            
+            // Create a semaphore that we'll never signal to keep the server running
+            let semaphore = DispatchSemaphore(value: 0)
+            
+            // Set up handler for channel closure
+            self.channel?.closeFuture.whenComplete { [weak self] result in
+                guard let self = self else { return }
+                
+                switch result {
+                case .success:
+                    self.logger.info("Server channel closed normally")
+                case .failure(let error):
+                    self.logger.error("Server channel closed with error: \(error)")
+                }
+            }
+            
+            // Wait forever
+            semaphore.wait()
+            
         } catch {
             logger.error("Server error: \(error)")
             throw error
@@ -68,6 +88,8 @@ public final class HTTPSSETransport {
     /// Stop the HTTP server
     public func stop() throws {
         logger.info("Stopping server...")
+        stopKeepAliveTimer()
+        
         lock.lock()
         // Close all SSE channels
         for channel in sseChannels.values {
@@ -78,6 +100,54 @@ public final class HTTPSSETransport {
         
         try group.syncShutdownGracefully()
         logger.info("Server stopped")
+    }
+    
+    /// Start the keep-alive timer that sends messages every 5 seconds
+    private func startKeepAliveTimer() {
+        keepAliveTimer = DispatchSource.makeTimerSource(queue: DispatchQueue.global())
+        keepAliveTimer?.schedule(deadline: .now(), repeating: .seconds(5))
+        keepAliveTimer?.setEventHandler { [weak self] in
+            self?.sendKeepAlive()
+        }
+        keepAliveTimer?.resume()
+        logger.trace("Started keep-alive timer")
+    }
+    
+    /// Stop the keep-alive timer
+    private func stopKeepAliveTimer() {
+        keepAliveTimer?.cancel()
+        keepAliveTimer = nil
+        logger.trace("Stopped keep-alive timer")
+    }
+    
+    /// Send a keep-alive message to all connected SSE clients
+    private func sendKeepAlive() {
+        lock.lock()
+        defer { lock.unlock() }
+        
+        // No channels connected
+        if sseChannels.isEmpty {
+            return
+        }
+        
+        let messageText = ": keep-alive\n\n"
+        
+        // Use one of the connected channels for the allocator if main channel isn't available
+        guard let allocator = channel?.allocator ?? sseChannels.values.first?.allocator else {
+            return
+        }
+        
+        var buffer = allocator.buffer(capacity: messageText.utf8.count)
+        buffer.writeString(messageText)
+        
+        for channel in sseChannels.values {
+            guard channel.isActive else {
+                continue
+            }
+            
+            channel.write(HTTPServerResponsePart.body(.byteBuffer(buffer)), promise: nil)
+            channel.flush()
+        }
     }
     
 	// MARK: - Request Handling
