@@ -11,7 +11,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
     private var requestState: RequestState = .idle
     private let transport: HTTPSSETransport
     let id = UUID()
-    private var clientId: String?
+    private var clientId: UUID?
     
     init(transport: HTTPSSETransport) {
         self.transport = transport
@@ -19,13 +19,13 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
     
     func channelInactive(context: ChannelHandlerContext) {
         transport.logger.trace("Channel inactive")
-        transport.removeSSEChannel(id: id)
+        transport.removeSSEChannel(id)
         context.fireChannelInactive()
     }
     
     func errorCaught(context: ChannelHandlerContext, error: Error) {
         transport.logger.error("Channel error: \(error)")
-        transport.removeSSEChannel(id: id)
+        transport.removeSSEChannel(id)
         context.close(promise: nil)
     }
     
@@ -110,7 +110,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
         let userAgent = head.headers["user-agent"].first ?? "unknown"
         
         // Generate client ID
-        let clientId = UUID().uuidString
+        let clientId = UUID()
         self.clientId = clientId
         
         transport.logger.info("""
@@ -135,8 +135,8 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
         context.write(wrapOutboundOut(.head(response)), promise: nil)
         context.flush()
         
-        // Register the channel with client ID first
-        transport.registerSSEChannel(context.channel, id: id, clientId: clientId)
+        // Register the channel with client ID
+        transport.registerSSEChannel(context.channel, clientId: clientId)
         
         // Then send endpoint event with client ID in URL
         var components = URLComponents()
@@ -174,7 +174,8 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
         
         // Extract client ID from URL path using URLComponents
         guard let components = URLComponents(string: head.uri),
-			  let clientId = components.path.components(separatedBy: "/").last,
+              let clientIdString = components.path.components(separatedBy: "/").last,
+              let clientId = UUID(uuidString: clientIdString),
               components.path.hasPrefix("/messages/") else {
             transport.logger.warning("Invalid message endpoint URL format: \(head.uri)")
             sendResponse(context: context, status: .badRequest)
@@ -215,17 +216,11 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
                 return
             }
             
-			if request.method == nil
-			{
-				sendResponse(context: context, status: .ok, headers: nil)
-				return
-			}
-			
             // Send Accepted first
             var headers = HTTPHeaders()
             headers.add(name: "Access-Control-Allow-Origin", value: "*")
             headers.add(name: "Content-Type", value: "application/json")
-			sendResponse(context: context, status: .accepted, headers: headers)
+            sendResponse(context: context, status: .accepted, headers: headers)
             
             // Handle the response with client ID
             transport.handleJSONRPCRequest(request, from: clientId)
