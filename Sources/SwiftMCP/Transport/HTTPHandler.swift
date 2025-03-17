@@ -182,6 +182,46 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             return
         }
         
+		// Check authorization if handler is set
+		var token: String?
+		
+		// First try to get token from Authorization header
+		if let authHeader = head.headers["Authorization"].first {
+			let parts = authHeader.split(separator: " ")
+			if parts.count == 2 && parts[0].lowercased() == "bearer" {
+				token = String(parts[1])
+			}
+		}
+		
+		// Validate token
+		switch transport.authorizationHandler(token) {
+			case .authorized:
+				break // Continue with request processing
+			case .unauthorized(let message):
+				// Create JSON-RPC error response
+				let errorResponse = """
+					{
+						"jsonrpc": "2.0",
+						"error": {
+							"code": -32001,
+							"message": "Unauthorized: \(message)"
+						},
+						"id": null
+					}
+					"""
+				
+				// Send error via SSE
+				let sseMessage = SSEMessage(data: errorResponse)
+				transport.sendSSE(sseMessage, to: clientId)
+				
+				// Send HTTP response
+				var headers = HTTPHeaders()
+				headers.add(name: "Access-Control-Allow-Origin", value: "*")
+				headers.add(name: "Content-Type", value: "application/json")
+				sendResponse(context: context, status: .unauthorized, headers: headers)
+				return
+		}
+		
         guard let body = body else {
             sendResponse(context: context, status: .badRequest)
             return
@@ -226,36 +266,6 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             headers.add(name: "Access-Control-Allow-Origin", value: "*")
             headers.add(name: "Content-Type", value: "application/json")
             sendResponse(context: context, status: .accepted, headers: headers)
-			
-			// Check authorization if handler is set
-			var token: String?
-			
-			if let authHeader = head.headers["Authorization"].first
-			{
-				let parts = authHeader.components(separatedBy: " ")
-				
-				if parts.count == 2 && parts[0].lowercased() == "bearer" {
-					
-					token = String(parts[1])
-				}
-			}
-						
-			// Validate token
-			switch transport.authorizationHandler(token) {
-				case .authorized:
-					break // Continue with request processing
-				case .unauthorized(let message):
-					// Create JSON-RPC error response
-					let errorResponse = """
-                    {"jsonrpc": "2.0", "error": {"code": -32001, "message": "\(message)"}, "id": \(request.id ?? 0)}
-                    """
-					
-					// Send error via SSE
-					let sseMessage = SSEMessage(data: errorResponse)
-					transport.sendSSE(sseMessage, to: clientId)
-				
-					return
-			}
             
             // Handle the response with client ID
             transport.handleJSONRPCRequest(request, from: clientId)
