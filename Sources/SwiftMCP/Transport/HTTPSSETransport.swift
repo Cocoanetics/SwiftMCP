@@ -159,74 +159,43 @@ public final class HTTPSSETransport {
 			// If no response is needed (e.g. for notifications), just return
 			return
 		}
-		
-		broadcastSSE(response: response)
+
+		do
+		{
+			// Encode and broadcast the response
+			let encoder = JSONEncoder()
+			let jsonData = try encoder.encode(response)
+			
+			guard let jsonString = String(data: jsonData, encoding: .utf8) else
+			{
+				// should never happen!
+				logger.critical("Cannot convert JSON data to string")
+
+				return
+			}
+			
+			// Broadcast the response to all SSE clients
+			let message = SSEMessage(data: jsonString)
+			broadcastSSE(message)
+		}
+		catch
+		{
+			logger.critical("\(error.localizedDescription)")
+		}
 	}
 	
 	// MARK: - Handling SSE Connections
-	
-		public func broadcastSSE(response: any Codable)
-		{
-			do
-			{
-				// Encode and broadcast the response
-				let encoder = JSONEncoder()
-				let jsonData = try encoder.encode(response)
-				
-				guard let jsonString = String(data: jsonData, encoding: .utf8) else
-				{
-					logger.critical("Cannot convert JSON data to string")
-
-					return
-				}
-				
-				// Broadcast the response to all SSE clients
-				broadcastSSE(data: jsonString)
-			}
-			catch
-			{
-				logger.critical("\(error.localizedDescription)")
-			}
-		}
-		
-		
     /// Broadcast a named event to all connected SSE clients
     /// - Parameters:
     ///   - name: The name of the event
     ///   - data: The data for the event
-    public func broadcastSSE(name: String? = nil, data: String) {
+	func broadcastSSE(_ message: SSEMessage) {
         lock.lock()
         defer { lock.unlock() }
         
-        // No channels connected
-        if sseChannels.isEmpty {
-            return
-        }
-        
-        // Format as a proper SSE message with event name
-		var messageText: String = ""
-
-		if let name = name {
-			messageText = "event: \(name)\n"
-		}
-		
-		messageText += "data: \(data)\n\n"
-        
-        // Use one of the connected channels for the allocator if main channel isn't available
-        guard let allocator = channel?.allocator ?? sseChannels.values.first?.allocator else {
-            return
-        }
-        
-        var buffer = allocator.buffer(capacity: messageText.utf8.count)
-        buffer.writeString(messageText)
-        
         for channel in sseChannels.values {
-            guard channel.isActive else {
-                continue
-            }
-            
-            channel.write(HTTPServerResponsePart.body(.byteBuffer(buffer)), promise: nil)
-            channel.flush()
+			
+			channel.sendSSE(message)
         }
     }
     
