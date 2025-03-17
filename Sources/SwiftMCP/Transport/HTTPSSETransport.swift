@@ -67,8 +67,8 @@ public final class HTTPSSETransport {
     
 	// MARK: - Server Lifecycle
 	
-    /// Start the HTTP server
-    public func start() throws {
+    /// Run the HTTP server and block until stopped
+    public func run() throws {
         let bootstrap = ServerBootstrap(group: group)
             .serverChannelOption(ChannelOptions.backlog, value: 256)
             .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
@@ -88,9 +88,6 @@ public final class HTTPSSETransport {
             logger.info("Server started and listening on \(host):\(port)")
             startKeepAliveTimer()
             
-            // Create a semaphore that we'll never signal to keep the server running
-            let semaphore = DispatchSemaphore(value: 0)
-            
             // Set up handler for channel closure
             self.channel?.closeFuture.whenComplete { [weak self] result in
                 guard let self = self else { return }
@@ -103,8 +100,8 @@ public final class HTTPSSETransport {
                 }
             }
             
-            // Wait forever
-            semaphore.wait()
+            // Wait for the channel to close
+            try self.channel?.closeFuture.wait()
             
         } catch {
             logger.error("Server error: \(error)")

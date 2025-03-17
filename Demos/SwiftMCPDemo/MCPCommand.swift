@@ -3,6 +3,8 @@ import ArgumentParser
 import SwiftMCP
 import Logging
 import AnyCodable
+import NIOCore
+import Dispatch
 #if canImport(Darwin)
 import Darwin
 #elseif canImport(Glibc)
@@ -59,12 +61,6 @@ struct MCPCommand: ParsableCommand {
 			print(MCPCommand.helpMessage())
 			Foundation.exit(0)
 		}
-		
-		// Set up signal handler for graceful shutdown
-		signal(SIGINT) { _ in
-			print("\nShutting down...")
-			Foundation.exit(0)
-		}
 
 		let calculator = Calculator()
 		
@@ -89,13 +85,22 @@ struct MCPCommand: ParsableCommand {
 					print("MCP Server \(calculator.serverName) (\(calculator.serverVersion)) started with HTTP+SSE transport on http://\(host):\(port)/sse")
 
 					let transport = HTTPSSETransport(server: calculator, port: port)
-
-					try transport.start()
+					
+					// Set up signal handling to shut down the transport on Ctrl+C
+					setupSignalHandler(transport: transport)
+					
+					try transport.run()
 			}
-
+		}
+		catch let error as IOError {
+			let humanReadable = String(cString: strerror(error.errnoCode))
+			
+			fputs("IO Error: \(humanReadable)\n", stderr)
+			Foundation.exit(1)
 		}
 		catch {
-			fputs("Error: \(error.localizedDescription)", stderr)
+			// Handle any other errors
+			fputs("Error: \(error)\n", stderr)
 			Foundation.exit(1)
 		}
 	}
