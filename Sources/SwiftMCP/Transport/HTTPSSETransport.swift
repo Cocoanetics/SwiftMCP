@@ -26,6 +26,8 @@ public final class HTTPSSETransport {
 	
 	public var keepAliveMode: KeepAliveMode = .ping
 	
+	// Number used as identifier for outputbound JSONRPCRequests, e.g. ping
+	fileprivate var sequenceNumber = 1
     
     /// The number of active SSE channels
     public var sseChannelCount: Int {
@@ -144,7 +146,7 @@ public final class HTTPSSETransport {
 
 			case .ping:
 				
-				let ping = JSONRPCRequest(jsonrpc: "2.0", id: 123, method: "ping")
+				let ping = JSONRPCRequest(jsonrpc: "2.0", id: sequenceNumber, method: "ping")
 				let encoder = JSONEncoder()
 				let data = try! encoder.encode(ping)
 				let string = String(data: data, encoding: .utf8)!
@@ -155,6 +157,8 @@ public final class HTTPSSETransport {
 				{
 					channel.sendSSE(message)
 				}
+				
+				sequenceNumber += 1
 		}
     }
     
