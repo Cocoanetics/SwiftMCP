@@ -30,7 +30,7 @@ public final class HTTPSSETransport {
 	fileprivate var sequenceNumber = 1
     
     /// The number of active SSE channels
-    public var sseChannelCount: Int {
+    var sseChannelCount: Int {
         lock.lock()
         defer { lock.unlock() }
         return sseChannels.count
@@ -117,7 +117,7 @@ public final class HTTPSSETransport {
     /// Start the keep-alive timer that sends messages every 5 seconds
     private func startKeepAliveTimer() {
         keepAliveTimer = DispatchSource.makeTimerSource(queue: DispatchQueue.global())
-        keepAliveTimer?.schedule(deadline: .now(), repeating: .seconds(5))
+        keepAliveTimer?.schedule(deadline: .now(), repeating: .seconds(30))
         keepAliveTimer?.setEventHandler { [weak self] in
             self?.sendKeepAlive()
         }
