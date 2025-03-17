@@ -53,6 +53,14 @@
       <CommandLineArguments>
          <CommandLineArgument
             argument = "--port 8081"
+            isEnabled = "YES">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "--transport httpsse"
+            isEnabled = "YES">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = ""
             isEnabled = "NO">
          </CommandLineArgument>
       </CommandLineArguments>

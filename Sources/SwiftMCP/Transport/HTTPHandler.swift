@@ -100,7 +100,8 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
         
         // Validate SSE headers
         let acceptHeader = head.headers["accept"].first ?? ""
-        guard acceptHeader.contains("text/event-stream") else {
+		
+		guard "text/event-stream".matchesAcceptHeader(acceptHeader) else {
             transport.logger.warning("Rejected non-SSE request (Accept: \(acceptHeader))")
             sendResponse(context: context, status: .badRequest)
             return

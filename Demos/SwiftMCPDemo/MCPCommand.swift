@@ -68,27 +68,35 @@ struct MCPCommand: ParsableCommand {
 
 		let calculator = Calculator()
 		
-		switch transport {
-				
-			case .stdio:
-				
-				print("MCP Server \(calculator.serverName) (\(calculator.serverVersion)) started with Stdio transport")
+		do {
+			switch transport {
+					
+				case .stdio:
+					
+					// need to output to stderror or else npx complains
+					fputs("MCP Server \(calculator.serverName) (\(calculator.serverVersion)) started with Stdio transport", stderr)
 
-				let transport = StdioTransport(server: calculator)
-				try transport.start()
-				
-			case .httpsse:
-				
-				guard let port else {
-					fatalError("Port should have been validated")
-				}
-				
-				let host = String.localHostname
-				print("MCP Server \(calculator.serverName) (\(calculator.serverVersion)) started with HTTP+SSE transport on http://\(host):\(port)/sse")
+					let transport = StdioTransport(server: calculator)
+					try transport.start()
+					
+				case .httpsse:
+					
+					guard let port else {
+						fatalError("Port should have been validated")
+					}
+					
+					let host = String.localHostname
+					print("MCP Server \(calculator.serverName) (\(calculator.serverVersion)) started with HTTP+SSE transport on http://\(host):\(port)/sse")
 
-				let transport = HTTPSSETransport(server: calculator, port: port)
+					let transport = HTTPSSETransport(server: calculator, port: port)
 
-				try transport.start()
+					try transport.start()
+			}
+
+		}
+		catch {
+			fputs("Error: \(error.localizedDescription)", stderr)
+			Foundation.exit(1)
 		}
 	}
 }
