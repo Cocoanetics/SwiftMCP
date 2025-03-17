@@ -83,8 +83,14 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
 		
 		let serverVersion = versionArg ?? "1.0"
 		
+		// Extract description from leading documentation
+		let leadingTrivia = declaration.leadingTrivia.description
+		let documentation = Documentation(from: leadingTrivia)
+		let serverDescription = documentation.description.isEmpty ? "nil" : "\"\(documentation.description.replacingOccurrences(of: "\"", with: "\\\""))\""
+		
 		let nameProperty = "private let __mcpServerName = \"\(serverName)\""
 		let versionProperty = "private let __mcpServerVersion = \"\(serverVersion)\""
+		let descriptionProperty = "private let __mcpServerDescription: String? = \(serverDescription)"
 		
 		// Find all functions with the MCPTool macro
 		var mcpTools: [String] = []
@@ -163,6 +169,7 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
 		return [
 			DeclSyntax(stringLiteral: nameProperty),
 			DeclSyntax(stringLiteral: versionProperty),
+			DeclSyntax(stringLiteral: descriptionProperty),
 			DeclSyntax(stringLiteral: mcpToolsProperty),
 			DeclSyntax(stringLiteral: callToolMethod)
 		]

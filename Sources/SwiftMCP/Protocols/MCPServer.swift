@@ -184,6 +184,10 @@ public extension MCPServer {
     var serverVersion: String {
         Mirror(reflecting: self).children.first(where: { $0.label == "__mcpServerVersion" })?.value as? String ?? "UnknownVersion"
     }
+	
+	var serverDescription: String? {
+		Mirror(reflecting: self).children.first(where: { $0.label == "__mcpServerDescription" })?.value as? String
+	}
     
     /// Creates a resources read response
     /// - Parameters:
@@ -295,4 +299,37 @@ public extension MCPServer {
 	func getResource(uri: URL) throws -> MCPResourceContent? {
 		return nil
 	}
+    
+    /// The name of the server
+    var name: String {
+        let mirror = Mirror(reflecting: self)
+        for child in mirror.children {
+            if child.label == "__mcpServerName" {
+                return child.value as? String ?? "UnnamedServer"
+            }
+        }
+        return "UnnamedServer"
+    }
+    
+    /// The version of the server
+    var version: String {
+        let mirror = Mirror(reflecting: self)
+        for child in mirror.children {
+            if child.label == "__mcpServerVersion" {
+                return child.value as? String ?? "1.0"
+            }
+        }
+        return "1.0"
+    }
+    
+    /// The description of the server from its documentation
+    var description: String? {
+        let mirror = Mirror(reflecting: self)
+        for child in mirror.children {
+            if child.label == "__mcpServerDescription" {
+                return child.value as? String
+            }
+        }
+        return nil
+    }
 }

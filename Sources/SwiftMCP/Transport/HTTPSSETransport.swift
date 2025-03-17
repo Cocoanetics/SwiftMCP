@@ -7,7 +7,7 @@ import Logging
 
 /// A transport that exposes an HTTP server with SSE and JSON-RPC endpoints
 public final class HTTPSSETransport {
-    private let server: MCPServer
+    public let server: MCPServer
     public let host: String
     public let port: Int
     private let group: EventLoopGroup

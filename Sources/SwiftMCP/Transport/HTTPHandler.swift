@@ -68,6 +68,8 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
                     handleSSE(context: context, head: head, body: nil)
                 } else if head.uri.hasPrefix("/messages") {
                     handleMessages(context: context, head: head, body: nil)
+                } else if head.uri == "/.well-known/ai-plugin.json" {
+                    handleAIPluginManifest(context: context, head: head)
                 } else {
                     sendResponse(context: context, status: .notFound)
                 }
@@ -77,6 +79,8 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
                     handleSSE(context: context, head: head, body: buffer)
                 } else if head.uri.hasPrefix("/messages") {
                     handleMessages(context: context, head: head, body: buffer)
+                } else if head.uri == "/.well-known/ai-plugin.json" {
+                    handleAIPluginManifest(context: context, head: head)
                 } else {
                     sendResponse(context: context, status: .notFound)
                 }
@@ -141,9 +145,20 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
         
         // Then send endpoint event with client ID in URL
         var components = URLComponents()
-        components.scheme = "http"
-        components.host = transport.host
-        components.port = Int(transport.port)
+        
+        // Use forwarded headers if present, otherwise use transport defaults
+        if let forwardedHost = head.headers["X-Forwarded-Host"].first {
+            components.host = forwardedHost
+        } else {
+            components.host = transport.host
+        }
+        
+        if let forwardedProto = head.headers["X-Forwarded-Proto"].first {
+            components.scheme = forwardedProto
+        } else {
+            components.scheme = "http"
+        }
+        
         components.path = "/messages/\(clientId)"
         
         guard let endpointUrl = components.string else {
@@ -272,6 +287,41 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             
         } catch {
             sendResponse(context: context, status: .badRequest)
+        }
+    }
+    
+    private func handleAIPluginManifest(context: ChannelHandlerContext, head: HTTPRequestHead) {
+        guard head.method == .GET else {
+            sendResponse(context: context, status: .methodNotAllowed)
+            return
+        }
+
+		let description = transport.server.description ?? "MCP Server providing tools for automation and integration"
+		
+		let manifest = AIPluginManifest(nameForHuman: transport.server.serverName,
+										nameForModel: transport.server.serverName.asModelName,
+										descriptionForHuman: description,
+										descriptionForModel: description,
+										auth: .none, 
+										api: .init(type: "openapi", url: "http:\(transport.host):\(transport.port)/openapi.json"))
+
+        // Convert manifest to JSON data
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        
+        do {
+            let jsonData = try encoder.encode(manifest)
+            var buffer = context.channel.allocator.buffer(capacity: jsonData.count)
+            buffer.writeBytes(jsonData)
+            
+            var headers = HTTPHeaders()
+            headers.add(name: "Content-Type", value: "application/json")
+            headers.add(name: "Access-Control-Allow-Origin", value: "*")
+            
+            sendResponse(context: context, status: .ok, headers: headers, body: buffer)
+        } catch {
+            transport.logger.error("Failed to encode AI plugin manifest: \(error)")
+            sendResponse(context: context, status: .internalServerError)
         }
     }
 } 
