@@ -14,6 +14,7 @@ public final class HTTPSSETransport {
     private var channel: Channel?
     private let lock = NSLock()
     private var sseChannels: [UUID: Channel] = [:]
+    private var clientToChannelMap: [String: UUID] = [:] // Map client IDs to channel IDs
     let logger = Logger(label: "com.cocoanetics.SwiftMCP.Transport")
     private var keepAliveTimer: DispatchSourceTimer?
     
@@ -153,7 +154,7 @@ public final class HTTPSSETransport {
 	// MARK: - Request Handling
 	/// Handle a JSON-RPC request and send the response through the SSE channels
 	/// - Parameter request: The JSON-RPC request
-	func handleJSONRPCRequest(_ request: JSONRPCRequest) {
+	func handleJSONRPCRequest(_ request: JSONRPCRequest, from clientId: String) {
 		// Let the server process the request
 		guard let response = server.handleRequest(request) else {
 			// If no response is needed (e.g. for notifications), just return
@@ -162,7 +163,7 @@ public final class HTTPSSETransport {
 
 		do
 		{
-			// Encode and broadcast the response
+			// Encode the response
 			let encoder = JSONEncoder()
 			let jsonData = try encoder.encode(response)
 			
@@ -174,9 +175,18 @@ public final class HTTPSSETransport {
 				return
 			}
 			
-			// Broadcast the response to all SSE clients
-			let message = SSEMessage(data: jsonString)
-			broadcastSSE(message)
+			// Send the response only to the client that made the request
+			lock.lock()
+			defer { lock.unlock() }
+			
+			if let channelId = clientToChannelMap[clientId],
+			   let channel = sseChannels[channelId],
+			   channel.isActive {
+				let message = SSEMessage(data: jsonString)
+				channel.sendSSE(message)
+			} else {
+				logger.warning("Could not find active channel for client \(clientId)")
+			}
 		}
 		catch
 		{
@@ -203,7 +213,8 @@ public final class HTTPSSETransport {
     /// - Parameters:
     ///   - channel: The channel to register
     ///   - id: The unique identifier for this channel
-    func registerSSEChannel(_ channel: Channel, id: UUID) {
+    ///   - clientId: The client identifier from the request
+    func registerSSEChannel(_ channel: Channel, id: UUID, clientId: String) {
         lock.lock()
         defer { lock.unlock() }
         
@@ -212,8 +223,9 @@ public final class HTTPSSETransport {
         }
         
         sseChannels[id] = channel
+        clientToChannelMap[clientId] = id
         let channelCount = sseChannels.count
-        logger.info("New SSE channel registered (total: \(channelCount))")
+        logger.info("New SSE channel registered for client \(clientId) (total: \(channelCount))")
         
         // Set up cleanup when connection closes
         channel.closeFuture.whenComplete { [weak self] _ in
@@ -232,11 +244,44 @@ public final class HTTPSSETransport {
         defer { lock.unlock() }
         
         if sseChannels.removeValue(forKey: id) != nil {
+            // Remove the client mapping as well
+            if let clientId = clientToChannelMap.first(where: { $0.value == id })?.key {
+                clientToChannelMap.removeValue(forKey: clientId)
+            }
             let channelCount = sseChannels.count
             logger.info("SSE channel removed (remaining: \(channelCount))")
             return true
         }
         
+        return false
+    }
+    
+    /// Send a message to a specific client
+    /// - Parameters:
+    ///   - message: The SSE message to send
+    ///   - clientId: The client identifier to send to
+    func sendSSE(_ message: SSEMessage, to clientId: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        
+        if let channelId = clientToChannelMap[clientId],
+           let channel = sseChannels[channelId],
+           channel.isActive {
+            channel.sendSSE(message)
+        }
+    }
+    
+    /// Check if a client has an active SSE connection
+    /// - Parameter clientId: The client identifier to check
+    /// - Returns: true if the client has an active SSE connection
+    public func hasActiveSSEConnection(for clientId: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        
+        if let channelId = clientToChannelMap[clientId],
+           let channel = sseChannels[channelId] {
+            return channel.isActive
+        }
         return false
     }
 }
