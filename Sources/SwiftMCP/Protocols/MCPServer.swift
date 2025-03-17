@@ -2,7 +2,7 @@ import Foundation
 import AnyCodable
 
 /// Protocol defining the requirements for an MCP server
-public protocol MCPServer {
+public protocol MCPServer: AnyObject {
     /// Returns an array of all MCP tools defined in this type
     var mcpTools: [MCPTool] { get }
     
@@ -177,11 +177,11 @@ public extension MCPServer {
         fflush(stdout) // Ensure the output is flushed immediately
     }
     
-    private var serverName: String {
+    var serverName: String {
         Mirror(reflecting: self).children.first(where: { $0.label == "__mcpServerName" })?.value as? String ?? "UnknownServer"
     }
     
-    private var serverVersion: String {
+    var serverVersion: String {
         Mirror(reflecting: self).children.first(where: { $0.label == "__mcpServerVersion" })?.value as? String ?? "UnknownVersion"
     }
     
