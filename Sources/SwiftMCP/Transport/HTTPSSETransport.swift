@@ -171,27 +171,27 @@ public final class HTTPSSETransport {
         }
     }
     
-    /// Register a new SSE channel if it doesn't already exist
+    /// Register a new SSE channel
     /// - Parameters:
     ///   - channel: The channel to register
     ///   - id: The unique identifier for this channel
-    ///   - remoteAddress: The remote address for logging
-    /// - Returns: true if the channel was registered, false if it already existed
-    @discardableResult
-    func registerSSEChannel(_ channel: Channel, id: UUID, remoteAddress: String) -> Bool {
+    func registerSSEChannel(_ channel: Channel, id: UUID) {
         lock.lock()
         defer { lock.unlock() }
         
         guard sseChannels[id] == nil else {
-            logger.warning("Rejected duplicate SSE connection attempt from \(remoteAddress)")
-            return false
+            return
         }
         
         sseChannels[id] = channel
         let channelCount = sseChannels.count
-        logger.info("New SSE channel registered from \(remoteAddress) (total: \(channelCount))")
+        logger.info("New SSE channel registered (total: \(channelCount))")
         
-        return true
+        // Set up cleanup when connection closes
+        channel.closeFuture.whenComplete { [weak self] _ in
+            guard let self = self else { return }
+            self.removeSSEChannel(id: id)
+        }
     }
     
     /// Remove an SSE channel and log the removal
@@ -205,7 +205,7 @@ public final class HTTPSSETransport {
         
         if sseChannels.removeValue(forKey: id) != nil {
             let channelCount = sseChannels.count
-            logger.info("SSE channel removed, remaining open: \(channelCount))")
+            logger.info("SSE channel removed (remaining: \(channelCount))")
             return true
         }
         

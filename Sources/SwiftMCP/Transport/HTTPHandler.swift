@@ -105,6 +105,16 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             return
         }
         
+        let remoteAddress = context.channel.remoteAddress?.description ?? "unknown"
+        let userAgent = head.headers["user-agent"].first ?? "unknown"
+        
+        transport.logger.info("""
+            SSE connection attempt:
+            - Remote: \(remoteAddress)
+            - User-Agent: \(userAgent)
+            - Accept: \(acceptHeader)
+            """)
+        
         var headers = HTTPHeaders()
         headers.add(name: "Content-Type", value: "text/event-stream")
         headers.add(name: "Cache-Control", value: "no-cache")
@@ -128,16 +138,8 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
         context.write(wrapOutboundOut(.body(.byteBuffer(buffer))), promise: nil)
         context.flush()
         
-        // Register the channel with our unique handler ID
-        let remoteAddress = context.channel.remoteAddress?.description ?? "unknown"
-        if transport.registerSSEChannel(context.channel, id: id, remoteAddress: remoteAddress) {
-            // Set up channel close handlers
-            context.channel.closeFuture.whenComplete { [weak self] _ in
-                guard let self = self else { return }
-                self.transport.logger.trace("Channel closed")
-                self.transport.removeSSEChannel(id: id)
-            }
-        }
+        // Register the channel
+        transport.registerSSEChannel(context.channel, id: id)
     }
     
     private func handleMessages(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?) {
