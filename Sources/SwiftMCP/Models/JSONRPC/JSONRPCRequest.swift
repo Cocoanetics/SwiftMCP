@@ -5,7 +5,7 @@ import AnyCodable
 public struct JSONRPCRequest: Codable {
     public let jsonrpc: String
     public let id: Int?
-    public let method: String
+    public let method: String?
     public let params: [String: AnyCodable]?
     
     public init(jsonrpc: String, id: Int?, method: String, params: [String: AnyCodable]? = nil) {

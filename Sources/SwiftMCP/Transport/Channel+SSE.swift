@@ -6,7 +6,7 @@ extension Channel {
     /// Send an SSE message through the channel
     /// - Parameter message: The SSE message to send
     /// - Returns: An EventLoopFuture that completes when the message has been written and flushed
-    func sendSSE(_ message: SSEMessage) {
+	func sendSSE(_ message: LosslessStringConvertible) {
 		
 		guard isActive else {
 			return

@@ -17,6 +17,15 @@ public final class HTTPSSETransport {
     private var clientToChannelMap: [String: UUID] = [:] // Map client IDs to channel IDs
     let logger = Logger(label: "com.cocoanetics.SwiftMCP.Transport")
     private var keepAliveTimer: DispatchSourceTimer?
+	
+	public enum KeepAliveMode
+	{
+		case sse
+		case ping
+	}
+	
+	public var keepAliveMode: KeepAliveMode = .ping
+	
     
     /// The number of active SSE channels
     public var sseChannelCount: Int {
@@ -125,30 +134,28 @@ public final class HTTPSSETransport {
     private func sendKeepAlive() {
         lock.lock()
         defer { lock.unlock() }
-        
-        // No channels connected
-        if sseChannels.isEmpty {
-            return
-        }
-        
-        let messageText = ": keep-alive\n\n"
-        
-        // Use one of the connected channels for the allocator if main channel isn't available
-        guard let allocator = channel?.allocator ?? sseChannels.values.first?.allocator else {
-            return
-        }
-        
-        var buffer = allocator.buffer(capacity: messageText.utf8.count)
-        buffer.writeString(messageText)
-        
-        for channel in sseChannels.values {
-            guard channel.isActive else {
-                continue
-            }
-            
-            channel.write(HTTPServerResponsePart.body(.byteBuffer(buffer)), promise: nil)
-            channel.flush()
-        }
+		
+		switch keepAliveMode {
+			case .sse:
+				for channel in sseChannels.values
+				{
+					channel.sendSSE(": keep-alive")
+				}
+
+			case .ping:
+				
+				let ping = JSONRPCRequest(jsonrpc: "2.0", id: 123, method: "ping")
+				let encoder = JSONEncoder()
+				let data = try! encoder.encode(ping)
+				let string = String(data: data, encoding: .utf8)!
+				
+				let message = SSEMessage(data: string)
+
+				for channel in sseChannels.values
+				{
+					channel.sendSSE(message)
+				}
+		}
     }
     
 	// MARK: - Request Handling
