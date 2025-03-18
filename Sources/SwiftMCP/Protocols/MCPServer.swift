@@ -19,7 +19,7 @@ public protocol MCPServer: AnyObject {
     ///   - arguments: A dictionary of arguments to pass to the tool
     /// - Returns: The result of the tool call
     /// - Throws: MCPToolError if the tool doesn't exist or cannot be called
-    func callTool(_ name: String, arguments: [String: Any]) throws -> Any
+    func callTool(_ name: String, arguments: [String: Any]) throws -> Codable
     
     /// Gets a resource by URI
     /// - Parameter uri: The URI of the resource to get

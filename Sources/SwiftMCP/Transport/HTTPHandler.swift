@@ -446,7 +446,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             let result = try transport.server.callTool(toolName, arguments: arguments)
             
             // Convert result to JSON data
-            let jsonData = try JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys])
+			let jsonData = try JSONEncoder().encode(result)
             
             var buffer = context.channel.allocator.buffer(capacity: jsonData.count)
             buffer.writeBytes(jsonData)
