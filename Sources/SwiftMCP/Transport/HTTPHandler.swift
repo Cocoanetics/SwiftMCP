@@ -257,32 +257,16 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
 		}
 		
 		// Validate token
-		switch transport.authorizationHandler(token) {
-			case .authorized:
-				break // Continue with request processing
-			case .unauthorized(let message):
-				// Create JSON-RPC error response
-				let errorResponse = """
-					{
-						"jsonrpc": "2.0",
-						"error": {
-							"code": -32001,
-							"message": "Unauthorized: \(message)"
-						},
-						"id": null
-					}
-					"""
-				
-				// Send error via SSE
-				let sseMessage = SSEMessage(data: errorResponse)
-				transport.sendSSE(sseMessage, to: clientId)
-				
-//				// Send HTTP response
-//				var headers = HTTPHeaders()
-//				headers.add(name: "Access-Control-Allow-Origin", value: "*")
-//				headers.add(name: "Content-Type", value: "application/json")
-//				sendResponse(context: context, status: .unauthorized, headers: headers)
-//				return
+		if case .unauthorized(let message) = transport.authorizationHandler(token) {
+
+			let errorMessage = JSONRPCMessage(error: .init(code: 401, message: "Unauthorized: \(message)"))
+			
+			let data = try! JSONEncoder().encode(errorMessage)
+			let errorResponse = String(data: data, encoding: .utf8)!
+			
+			// Send error via SSE
+			let sseMessage = SSEMessage(data: errorResponse)
+			transport.sendSSE(sseMessage, to: clientId)
 		}
 		
         guard let body = body else {
