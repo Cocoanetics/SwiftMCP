@@ -38,7 +38,7 @@ public final class StdioTransport {
 				}
 			} else {
 				// If no input is available, sleep briefly and try again
-				Thread.sleep(forTimeInterval: 0.1)
+				try await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds in nanoseconds
 			}
 		}
 	}

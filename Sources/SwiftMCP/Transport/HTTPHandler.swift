@@ -32,10 +32,14 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
     private func sendResponse(context: ChannelHandlerContext, status: HTTPResponseStatus, headers: HTTPHeaders? = nil, body: ByteBuffer? = nil) {
 		
 		context.eventLoop.execute {
+			
 			var responseHeaders = headers ?? HTTPHeaders()
+			
 			if body != nil {
 				responseHeaders.add(name: "Content-Type", value: "application/json")
 			}
+			
+			responseHeaders.add(name: "Access-Control-Allow-Origin", value: "*")
 			
 			let head = HTTPResponseHead(version: .http1_1, status: status, headers: responseHeaders)
 			context.write(self.wrapOutboundOut(.head(head)), promise: nil)
@@ -91,9 +95,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
                     if head.uri.hasPrefix(toolPath) {
                         if transport.serveOpenAPI {
                             let toolName = String(head.uri.dropFirst(toolPath.count + 1)) // +1 for the trailing slash
-							Task {
-								await handleToolCall(context: context, head: head, toolName: toolName, body: nil)
-							}
+							handleToolCall(context: context, head: head, toolName: toolName, body: nil)
                         } else {
                             sendResponse(context: context, status: .notFound)
                         }
@@ -126,10 +128,8 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
                     let toolPath = "/" + transport.server.serverName.asModelName
                     if head.uri.hasPrefix(toolPath) {
                         if transport.serveOpenAPI {
-							Task {
-								let toolName = String(head.uri.dropFirst(toolPath.count + 1)) // +1 for the trailing slash
-								await handleToolCall(context: context, head: head, toolName: toolName, body: buffer)
-							}
+							let toolName = String(head.uri.dropFirst(toolPath.count + 1)) // +1 for the trailing slash
+							handleToolCall(context: context, head: head, toolName: toolName, body: buffer)
                         } else {
                             sendResponse(context: context, status: .notFound)
                         }
@@ -183,7 +183,6 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
         headers.add(name: "Content-Type", value: "text/event-stream")
         headers.add(name: "Cache-Control", value: "no-cache")
         headers.add(name: "Connection", value: "keep-alive")
-        headers.add(name: "Access-Control-Allow-Origin", value: "*")
         headers.add(name: "Access-Control-Allow-Methods", value: "GET")
         headers.add(name: "Access-Control-Allow-Headers", value: "*")
         
@@ -194,7 +193,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
         context.flush()
         
         // Register the channel with client ID first
-        transport.registerSSEChannel(context.channel, id: id, clientId: clientId)
+        transport.registerSSEChannel(context.channel, id: id)
         
         // Then send endpoint event with client ID in URL
 		guard let endpointUrl = self.endpointUrl(from: head, clientId: clientId) else {
@@ -210,7 +209,6 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
 	private func handleMessages(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?) async {
         if head.method == .OPTIONS {
             var headers = HTTPHeaders()
-            headers.add(name: "Access-Control-Allow-Origin", value: "*")
             headers.add(name: "Access-Control-Allow-Methods", value: "POST, OPTIONS")
             headers.add(name: "Access-Control-Allow-Headers", value: "*")
             headers.add(name: "Access-Control-Allow-Headers", value: "Content-Type, Authorization")
@@ -269,9 +267,6 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             // Verify that this client has an active SSE connection
             if !transport.hasActiveSSEConnection(for: clientId) {
                 transport.logger.warning("Rejected POST request from client \(clientId) without active SSE connection")
-                var headers = HTTPHeaders()
-                headers.add(name: "Access-Control-Allow-Origin", value: "*")
-                headers.add(name: "Content-Type", value: "application/json")
                 
                 // Create error response
                 let errorResponse = """
@@ -287,7 +282,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
                 var buffer = context.channel.allocator.buffer(capacity: errorResponse.utf8.count)
                 buffer.writeString(errorResponse)
                 
-                sendResponse(context: context, status: .forbidden, headers: headers, body: buffer)
+                sendResponse(context: context, status: .forbidden, body: buffer)
                 return
             }
             
@@ -297,13 +292,10 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             }
             
             // Send Accepted first
-            var headers = HTTPHeaders()
-            headers.add(name: "Access-Control-Allow-Origin", value: "*")
-            headers.add(name: "Content-Type", value: "application/json")
-            sendResponse(context: context, status: .accepted, headers: headers)
+            sendResponse(context: context, status: .accepted)
             
             // Handle the response with client ID
-			await transport.handleJSONRPCRequest(request, from: clientId)
+			transport.handleJSONRPCRequest(request, from: clientId)
             
         } catch {
             sendResponse(context: context, status: .badRequest)
@@ -352,11 +344,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             var buffer = context.channel.allocator.buffer(capacity: jsonData.count)
             buffer.writeBytes(jsonData)
             
-            var headers = HTTPHeaders()
-            headers.add(name: "Content-Type", value: "application/json")
-            headers.add(name: "Access-Control-Allow-Origin", value: "*")
-            
-            sendResponse(context: context, status: .ok, headers: headers, body: buffer)
+            sendResponse(context: context, status: .ok, body: buffer)
         } catch {
             transport.logger.error("Failed to encode AI plugin manifest: \(error)")
             sendResponse(context: context, status: .internalServerError)
@@ -398,22 +386,17 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             var buffer = context.channel.allocator.buffer(capacity: jsonData.count)
             buffer.writeBytes(jsonData)
             
-            var headers = HTTPHeaders()
-            headers.add(name: "Content-Type", value: "application/json")
-            headers.add(name: "Access-Control-Allow-Origin", value: "*")
-            
-            sendResponse(context: context, status: .ok, headers: headers, body: buffer)
+            sendResponse(context: context, status: .ok, body: buffer)
         } catch {
             transport.logger.error("Failed to encode OpenAPI spec: \(error)")
             sendResponse(context: context, status: .internalServerError)
         }
     }
     
-    private func handleToolCall(context: ChannelHandlerContext, head: HTTPRequestHead, toolName: String, body: ByteBuffer?) async {
+    private func handleToolCall(context: ChannelHandlerContext, head: HTTPRequestHead, toolName: String, body: ByteBuffer?) {
         // Handle CORS preflight
         if head.method == .OPTIONS {
             var headers = HTTPHeaders()
-            headers.add(name: "Access-Control-Allow-Origin", value: "*")
             headers.add(name: "Access-Control-Allow-Methods", value: "POST, OPTIONS")
             headers.add(name: "Access-Control-Allow-Headers", value: "*")
             headers.add(name: "Access-Control-Allow-Headers", value: "Content-Type, Authorization")
@@ -446,10 +429,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             var buffer = context.channel.allocator.buffer(capacity: data.count)
             buffer.writeBytes(data)
             
-            var headers = HTTPHeaders()
-            headers.add(name: "Access-Control-Allow-Origin", value: "*")
-            
-            sendResponse(context: context, status: .unauthorized, headers: headers, body: buffer)
+             sendResponse(context: context, status: .unauthorized, body: buffer)
             return
         }
         
@@ -459,46 +439,50 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             return
         }
         
-        do {
-            // Get Data from ByteBuffer
-            let bodyData = Data(buffer: body)
-            
-            // Parse request body as JSON dictionary
-            guard let arguments = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any] else
-			{
-				throw MCPToolError.invalidJSONDictionary
-			}
-            
-            // Call the tool
-			let result = try await transport.server.callTool(toolName, arguments: arguments)
-            
-            // Convert result to JSON data
-			let jsonData = try JSONEncoder().encode(result)
-            
-            var buffer = context.channel.allocator.buffer(capacity: jsonData.count)
-            buffer.writeBytes(jsonData)
-            
-            var headers = HTTPHeaders()
-            headers.add(name: "Access-Control-Allow-Origin", value: "*")
-            
-            sendResponse(context: context, status: .ok, headers: headers, body: buffer)
-            
-        } catch {
-            transport.logger.error("Tool call error: \(error)")
-            
-			let errorDict = ["error": error.localizedDescription] as [String : String]
-			let data = try! JSONEncoder().encode(errorDict)
-			let string = String(data: data, encoding: .utf8)!
+
+		// Get Data from ByteBuffer
+		let bodyData = Data(buffer: body)
+		let allocator = context.channel.allocator
+		
+		Task {
 			
-            var buffer = context.channel.allocator.buffer(capacity: string.utf8.count)
-            buffer.writeString(string)
-            
-            var headers = HTTPHeaders()
-            headers.add(name: "Access-Control-Allow-Origin", value: "*")
-            
-            sendResponse(context: context, status: .badRequest, headers: headers, body: buffer)
-        }
-    }
+			do {
+				// Parse request body as JSON dictionary
+				guard let arguments = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any] else
+				{
+					throw MCPToolError.invalidJSONDictionary
+				}
+				
+				// Call the tool
+				let result = try await transport.server.callTool(toolName, arguments: arguments)
+				
+				// Convert result to JSON data
+				let jsonData = try JSONEncoder().encode(result)
+				
+			
+					var buffer = allocator.buffer(capacity: jsonData.count)
+					buffer.writeBytes(jsonData)
+					
+					self.sendResponse(context: context, status: .ok, body: buffer)
+				
+			} catch {
+				let errorDict = ["error": error.localizedDescription] as [String : String]
+				let data = try! JSONEncoder().encode(errorDict)
+				let string = String(data: data, encoding: .utf8)!
+				
+				var status = HTTPResponseStatus.badRequest
+				
+				if let mcpError = error as? MCPToolError, case .unknownTool(_) = mcpError {
+					status = .notFound
+				}
+				
+				var buffer = allocator.buffer(capacity: string.utf8.count)
+				buffer.writeString(string)
+				
+				self.sendResponse(context: context, status: status, body: buffer)
+			}
+		}
+	}
 	
 	// MARK: - Helpers
 	
