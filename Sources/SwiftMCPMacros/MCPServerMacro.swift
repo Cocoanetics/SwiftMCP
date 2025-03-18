@@ -111,8 +111,8 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
 		
 		// Create a computed property that returns an array of MCPTool objects
 		let mcpToolsProperty = """
-  /// Returns an array of all MCP tools defined in this type
-  var mcpTools: [MCPTool] {
+   /// Returns an array of all MCP tools defined in this type
+   public var mcpTools: [MCPTool] {
    let mirror = Mirror(reflecting: self)
    var metadataArray: [MCPToolMetadata] = []
    
