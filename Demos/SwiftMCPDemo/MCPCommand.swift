@@ -32,11 +32,24 @@ struct MCPCommand: ParsableCommand {
   
   The command can operate in two modes:
   
-  - stdio: Reads JSON-RPC requests from stdin and writes responses to stdout
-  - httpsse: Starts an HTTP server with Server-Sent Events (SSE) support on the specified port
+  1. stdio (default):
+     - Reads JSON-RPC requests from stdin
+     - Writes responses to stdout
+     - Perfect for integration with other tools via pipes
+     - Example: echo '{"jsonrpc": "2.0", "method": "add", "params": [1, 2]}' | SwiftMCPDemo
   
-  When using httpsse mode with --token, requests must include a valid bearer token
-  in the Authorization header.
+  2. HTTP+SSE:
+     - Starts an HTTP server with Server-Sent Events (SSE) support
+     - Requires --port to be specified
+     - Supports optional bearer token authentication
+     - Can expose OpenAPI endpoints for AI plugin integration
+     - Example: SwiftMCPDemo --transport httpsse --port 8080
+  
+  When using HTTP+SSE mode:
+  - Use --token to require bearer token authentication
+  - Use --openapi to expose AI plugin manifest and OpenAPI spec
+  - Connect to http://localhost:<port>/sse for SSE
+  - Send JSON-RPC requests to http://localhost:<port>/<serverName>/<toolName>
 """
 	)
 	
@@ -48,10 +61,29 @@ struct MCPCommand: ParsableCommand {
     
     @Option(name: .long, help: "Bearer token for authorization (optional, HTTP+SSE only)")
     var token: String?
+    
+    @Flag(name: .long, help: "Enable OpenAPI endpoints (optional, HTTP+SSE only)")
+    var openapi: Bool = false
 	
 	func validate() throws {
-		if transport == .httpsse && port == nil {
-			throw ValidationError("Port must be specified when using HTTP+SSE transport")
+		switch transport {
+			case .stdio:
+				// For stdio transport, ensure HTTP+SSE specific options are not set
+				if port != nil {
+					throw ValidationError("Port cannot be specified when using stdio transport")
+				}
+				if token != nil {
+					throw ValidationError("Token cannot be specified when using stdio transport")
+				}
+				if openapi {
+					throw ValidationError("OpenAPI cannot be enabled when using stdio transport")
+				}
+				
+			case .httpsse:
+				// For HTTP+SSE transport, port is required
+				if port == nil {
+					throw ValidationError("Port must be specified when using HTTP+SSE transport")
+				}
 		}
 	}
 	
@@ -62,12 +94,6 @@ struct MCPCommand: ParsableCommand {
 		LoggingSystem.bootstrapWithOSLog()
 #endif
 		
-		// Check if transport type is specified
-		if CommandLine.arguments.contains("--transport") == false {
-			print(MCPCommand.helpMessage())
-			Foundation.exit(0)
-		}
-
 		let calculator = Calculator()
 		
 		do {
@@ -107,6 +133,9 @@ struct MCPCommand: ParsableCommand {
 							return .authorized
                         }
                     }
+                    
+                    // Enable OpenAPI endpoints if requested
+                    transport.serveOpenAPI = openapi
 					
 					// Set up signal handling to shut down the transport on Ctrl+C
 					setupSignalHandler(transport: transport)

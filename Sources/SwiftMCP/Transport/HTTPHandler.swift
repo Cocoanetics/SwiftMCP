@@ -69,15 +69,27 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
                 } else if head.uri.hasPrefix("/messages") {
                     handleMessages(context: context, head: head, body: nil)
                 } else if head.uri == "/.well-known/ai-plugin.json" {
-                    handleAIPluginManifest(context: context, head: head)
+                    if transport.serveOpenAPI {
+                        handleAIPluginManifest(context: context, head: head)
+                    } else {
+                        sendResponse(context: context, status: .notFound)
+                    }
                 } else if head.uri == "/openapi.json" {
-                    handleOpenAPISpec(context: context, head: head)
+                    if transport.serveOpenAPI {
+                        handleOpenAPISpec(context: context, head: head)
+                    } else {
+                        sendResponse(context: context, status: .notFound)
+                    }
                 } else {
                     // Check if this is a tool endpoint
                     let toolPath = "/\(transport.server.serverName.lowercased())"
                     if head.uri.hasPrefix(toolPath) {
-                        let toolName = String(head.uri.dropFirst(toolPath.count + 1)) // +1 for the trailing slash
-                        handleToolCall(context: context, head: head, toolName: toolName, body: nil)
+                        if transport.serveOpenAPI {
+                            let toolName = String(head.uri.dropFirst(toolPath.count + 1)) // +1 for the trailing slash
+                            handleToolCall(context: context, head: head, toolName: toolName, body: nil)
+                        } else {
+                            sendResponse(context: context, status: .notFound)
+                        }
                     } else {
                         sendResponse(context: context, status: .notFound)
                     }
@@ -89,15 +101,27 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
                 } else if head.uri.hasPrefix("/messages") {
                     handleMessages(context: context, head: head, body: buffer)
                 } else if head.uri == "/.well-known/ai-plugin.json" {
-                    handleAIPluginManifest(context: context, head: head)
+                    if transport.serveOpenAPI {
+                        handleAIPluginManifest(context: context, head: head)
+                    } else {
+                        sendResponse(context: context, status: .notFound)
+                    }
                 } else if head.uri == "/openapi.json" {
-                    handleOpenAPISpec(context: context, head: head)
+                    if transport.serveOpenAPI {
+                        handleOpenAPISpec(context: context, head: head)
+                    } else {
+                        sendResponse(context: context, status: .notFound)
+                    }
                 } else {
                     // Check if this is a tool endpoint
                     let toolPath = "/" + transport.server.serverName.asModelName
                     if head.uri.hasPrefix(toolPath) {
-                        let toolName = String(head.uri.dropFirst(toolPath.count + 1)) // +1 for the trailing slash
-                        handleToolCall(context: context, head: head, toolName: toolName, body: buffer)
+                        if transport.serveOpenAPI {
+                            let toolName = String(head.uri.dropFirst(toolPath.count + 1)) // +1 for the trailing slash
+                            handleToolCall(context: context, head: head, toolName: toolName, body: buffer)
+                        } else {
+                            sendResponse(context: context, status: .notFound)
+                        }
                     } else {
                         sendResponse(context: context, status: .notFound)
                     }

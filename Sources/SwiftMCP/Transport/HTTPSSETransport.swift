@@ -17,7 +17,10 @@ public final class HTTPSSETransport {
     private var clientToChannelMap: [String: UUID] = [:] // Map client IDs to channel IDs
     let logger = Logger(label: "com.cocoanetics.SwiftMCP.Transport")
     private var keepAliveTimer: DispatchSourceTimer?
-	
+    
+    /// Whether to serve OpenAPI endpoints (manifest, spec, and tool calls)
+    public var serveOpenAPI: Bool = false
+    
     /// Result of authorization check
     public enum AuthorizationResult {
         case authorized
