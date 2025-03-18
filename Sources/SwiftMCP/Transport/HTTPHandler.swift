@@ -149,14 +149,21 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
     
     private func handleSSE(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?) {
         guard head.method == .GET else {
+            transport.logger.warning("Rejected non-GET SSE request")
             sendResponse(context: context, status: .methodNotAllowed)
             return
         }
         
         // Validate SSE headers
         let acceptHeader = head.headers["accept"].first ?? ""
-		
-		guard "text/event-stream".matchesAcceptHeader(acceptHeader) else {
+        
+        transport.logger.info("""
+            SSE connection attempt:
+            - Accept: \(acceptHeader)
+            - Headers: \(head.headers)
+            """)
+        
+        guard "text/event-stream".matchesAcceptHeader(acceptHeader) else {
             transport.logger.warning("Rejected non-SSE request (Accept: \(acceptHeader))")
             sendResponse(context: context, status: .badRequest)
             return
@@ -177,6 +184,18 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             - Accept: \(acceptHeader)
             """)
         
+        // Register the channel with client ID
+        transport.logger.info("Registering SSE channel for client \(clientId)")
+        transport.registerSSEChannel(context.channel, id: UUID(uuidString: clientId)!)
+        
+        // Then send endpoint event with client ID in URL
+        guard let endpointUrl = self.endpointUrl(from: head, clientId: clientId) else {
+            transport.logger.error("Failed to construct endpoint URL")
+            context.close(promise: nil)
+            return
+        }
+        
+        // Set up SSE response headers
         var headers = HTTPHeaders()
         headers.add(name: "Content-Type", value: "text/event-stream")
         headers.add(name: "Cache-Control", value: "no-cache")
@@ -187,21 +206,16 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
         let response = HTTPResponseHead(version: head.version,
                                      status: .ok,
                                      headers: headers)
+        
+        transport.logger.info("Sending SSE response headers")
         context.write(wrapOutboundOut(.head(response)), promise: nil)
         context.flush()
         
-        // Register the channel with client ID first
-        transport.registerSSEChannel(context.channel, id: id)
-        
-        // Then send endpoint event with client ID in URL
-		guard let endpointUrl = self.endpointUrl(from: head, clientId: clientId) else {
-            transport.logger.error("Failed to construct endpoint URL")
-            context.close(promise: nil)
-            return
-        }
-        
-		let message = SSEMessage(name: "endpoint", data: endpointUrl.absoluteString)
+        transport.logger.info("Sending endpoint event with URL: \(endpointUrl)")
+        let message = SSEMessage(name: "endpoint", data: endpointUrl.absoluteString)
         context.channel.sendSSE(message)
+        
+        transport.logger.info("SSE connection setup complete for client \(clientId)")
     }
     
 	private func handleMessages(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?) async {
@@ -261,27 +275,27 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
         do {
             let request = try decoder.decode(JSONRPCRequest.self, from: body)
             
-            // Verify that this client has an active SSE connection
-            if await !transport.hasActiveSSEConnection(for: clientId) {
-                transport.logger.warning("Rejected POST request from client \(clientId) without active SSE connection")
-                
-                // Create error response
-                let errorResponse = """
-                {
-                    "jsonrpc": "2.0",
-                    "error": {
-                        "code": -32600,
-                        "message": "No active SSE connection found for this client ID. Please establish an SSE connection first."
-                    },
-                    "id": \(request.id ?? 0)
-                }
-                """
-                var buffer = context.channel.allocator.buffer(capacity: errorResponse.utf8.count)
-                buffer.writeString(errorResponse)
-                
-                sendResponse(context: context, status: .forbidden, body: buffer)
-                return
-            }
+//            // Verify that this client has an active SSE connection
+//            if await !transport.hasActiveSSEConnection(for: clientId) {
+//                transport.logger.warning("Rejected POST request from client \(clientId) without active SSE connection")
+//                
+//                // Create error response
+//                let errorResponse = """
+//                {
+//                    "jsonrpc": "2.0",
+//                    "error": {
+//                        "code": -32600,
+//                        "message": "No active SSE connection found for this client ID. Please establish an SSE connection first."
+//                    },
+//                    "id": \(request.id ?? 0)
+//                }
+//                """
+//                var buffer = context.channel.allocator.buffer(capacity: errorResponse.utf8.count)
+//                buffer.writeString(errorResponse)
+//                
+//                sendResponse(context: context, status: .forbidden, body: buffer)
+//                return
+//            }
             
             if request.method == nil {
                 sendResponse(context: context, status: .ok, headers: nil)
@@ -483,24 +497,32 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
 	// MARK: - Helpers
 	
 	fileprivate func endpointUrl(from head: HTTPRequestHead, clientId: String) -> URL? {
-		
 		var components = URLComponents()
 		
-		// Use forwarded headers if present, otherwise use transport defaults
-		if let forwardedHost = head.headers["X-Forwarded-Host"].first {
-			components.host = forwardedHost
+		// Get the host from the request headers or connection
+		if let host = head.headers["Host"].first {
+			components.host = host
+		} else if let remoteAddress = head.headers["X-Forwarded-Host"].first {
+			components.host = remoteAddress
 		} else {
 			components.host = transport.host
 		}
 		
-		if let forwardedProto = head.headers["X-Forwarded-Proto"].first {
-			components.scheme = forwardedProto
+		// Get the scheme from the request headers or connection
+		if let proto = head.headers["X-Forwarded-Proto"].first {
+			components.scheme = proto
 		} else {
 			components.scheme = "http"
 		}
 		
-		if let forwardedPort = head.headers["X-Forwarded-Port"].first {
-			components.port = Int(forwardedPort)
+		// Get the port from the request headers or connection
+		if let port = head.headers["X-Forwarded-Port"].first {
+			components.port = Int(port)
+		} else if let host = components.host, host.contains(":") {
+			// Extract port from host if present
+			let parts = host.split(separator: ":")
+			components.host = String(parts[0])
+			components.port = Int(parts[1])
 		} else {
 			components.port = transport.port
 		}
@@ -515,6 +537,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
 			components.port = nil
 		}
 		
+		transport.logger.info("Generated endpoint URL: \(components.url?.absoluteString ?? "nil")")
 		return components.url
 	}
 }

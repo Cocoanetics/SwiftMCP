@@ -133,7 +133,12 @@ public final class HTTPLogger: ChannelDuplexHandler {
 	}
 	
 	private func logSSEMessage(_ message: String) {
-		sseLogger.trace("\(message)")
+		sseLogger.info("""
+			SSE Message:
+			- Raw: \(message)
+			- Length: \(message.utf8.count)
+			- Timestamp: \(Date())
+			""")
 	}
 	
 	public func handlerAdded(context: ChannelHandlerContext) {

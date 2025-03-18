@@ -185,7 +185,6 @@ public final class HTTPSSETransport {
                 let jsonData = try encoder.encode(response)
                 
                 guard let jsonString = String(data: jsonData, encoding: .utf8) else {
-                    // should never happen!
                     logger.critical("Cannot convert JSON data to string")
                     return
                 }
@@ -193,7 +192,7 @@ public final class HTTPSSETransport {
                 // Send the response only to the client that made the request
                 await channelManager.sendSSE(SSEMessage(data: jsonString), to: clientId)
             } catch {
-                logger.critical("\(error.localizedDescription)")
+                logger.critical("Failed to encode response: \(error.localizedDescription)")
             }
         }
     }
