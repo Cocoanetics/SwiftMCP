@@ -52,16 +52,24 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "--port 8081"
+            argument = "httpsse"
+            isEnabled = "YES">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "--openapi"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
             argument = "--transport httpsse"
+            isEnabled = "NO">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "--port 8090"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
             argument = "--token secret"
-            isEnabled = "NO">
+            isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>
       <EnvironmentVariables>

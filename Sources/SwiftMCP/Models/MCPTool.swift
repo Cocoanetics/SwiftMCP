@@ -76,16 +76,50 @@ extension MCPTool {
 	 
 	 - Returns: A new dictionary with default values added for missing parameters
 	 */
-	public func enrichArguments(_ arguments: [String: Any], forObject object: Any, functionName: String? = nil) -> [String: Any] {
+	public func enrichArguments(_ arguments: [String: Any], forObject object: Any) throws -> [String: Any] {
 		// Use the provided function name or fall back to the tool's name
-		let funcName = functionName ?? name
+		let metadataKey = "__mcpMetadata_\(name)"
 		
 		// Create a copy of the arguments dictionary
 		var enrichedArguments = arguments
 		
-		// For the tests to pass, we need to handle specific cases
-		if funcName == "divide" && enrichedArguments["numerator"] != nil && enrichedArguments["denominator"] == nil {
-			enrichedArguments["denominator"] = 1.0
+		// Find the metadata for the function using reflection
+		let mirror = Mirror(reflecting: object)
+		guard let child = mirror.children.first(where: { $0.label == metadataKey }),
+			  let metadata = child.value as? MCPToolMetadata else {
+			// If no metadata is found, return the original arguments
+			return arguments
+		}
+		
+		// Check for missing required parameters
+		for param in metadata.parameters {
+			if enrichedArguments[param.name] == nil && param.defaultValue == nil {
+				throw MCPToolError.missingRequiredParameter(parameterName: param.name)
+			}
+		}
+		
+		// Add default values for parameters that are missing from the arguments dictionary
+		for param in metadata.parameters {
+			if enrichedArguments[param.name] == nil, let defaultValue = param.defaultValue {
+				// Convert the default value to the appropriate type based on the parameter type
+				switch param.type {
+				case "Int":
+					if let intValue = Int(defaultValue) {
+						enrichedArguments[param.name] = intValue
+					}
+				case "Double", "Float":
+					if let doubleValue = Double(defaultValue) {
+						enrichedArguments[param.name] = doubleValue
+					}
+				case "Bool":
+					if let boolValue = Bool(defaultValue) {
+						enrichedArguments[param.name] = boolValue
+					}
+				default:
+					// For string and other types, use the default value as is
+					enrichedArguments[param.name] = defaultValue
+				}
+			}
 		}
 		
 		return enrichedArguments

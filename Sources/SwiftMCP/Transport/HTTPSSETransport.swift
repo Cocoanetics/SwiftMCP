@@ -7,7 +7,7 @@ import Logging
 
 /// A transport that exposes an HTTP server with SSE and JSON-RPC endpoints
 public final class HTTPSSETransport {
-    private let server: MCPServer
+    public let server: MCPServer
     public let host: String
     public let port: Int
     private let group: EventLoopGroup
@@ -17,7 +17,10 @@ public final class HTTPSSETransport {
     private var clientToChannelMap: [String: UUID] = [:] // Map client IDs to channel IDs
     let logger = Logger(label: "com.cocoanetics.SwiftMCP.Transport")
     private var keepAliveTimer: DispatchSourceTimer?
-	
+    
+    /// Whether to serve OpenAPI endpoints (manifest, spec, and tool calls)
+    public var serveOpenAPI: Bool = false
+    
     /// Result of authorization check
     public enum AuthorizationResult {
         case authorized

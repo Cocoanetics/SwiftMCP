@@ -19,7 +19,7 @@ public protocol MCPServer: AnyObject {
     ///   - arguments: A dictionary of arguments to pass to the tool
     /// - Returns: The result of the tool call
     /// - Throws: MCPToolError if the tool doesn't exist or cannot be called
-    func callTool(_ name: String, arguments: [String: Any]) throws -> Any
+    func callTool(_ name: String, arguments: [String: Any]) throws -> Codable
     
     /// Gets a resource by URI
     /// - Parameter uri: The URI of the resource to get
@@ -152,7 +152,7 @@ public extension MCPServer {
             let result = try self.callTool(toolName, arguments: arguments)
             responseText = "\(result)"
         } catch let error as MCPToolError {
-            responseText = error.description
+            responseText = error.localizedDescription
             isError = true
         } catch {
             responseText = "Error: \(error)"
@@ -184,6 +184,10 @@ public extension MCPServer {
     var serverVersion: String {
         Mirror(reflecting: self).children.first(where: { $0.label == "__mcpServerVersion" })?.value as? String ?? "UnknownVersion"
     }
+	
+	var serverDescription: String? {
+		Mirror(reflecting: self).children.first(where: { $0.label == "__mcpServerDescription" })?.value as? String
+	}
     
     /// Creates a resources read response
     /// - Parameters:
@@ -295,4 +299,37 @@ public extension MCPServer {
 	func getResource(uri: URL) throws -> MCPResourceContent? {
 		return nil
 	}
+    
+    /// The name of the server
+    var name: String {
+        let mirror = Mirror(reflecting: self)
+        for child in mirror.children {
+            if child.label == "__mcpServerName" {
+                return child.value as? String ?? "UnnamedServer"
+            }
+        }
+        return "UnnamedServer"
+    }
+    
+    /// The version of the server
+    var version: String {
+        let mirror = Mirror(reflecting: self)
+        for child in mirror.children {
+            if child.label == "__mcpServerVersion" {
+                return child.value as? String ?? "1.0"
+            }
+        }
+        return "1.0"
+    }
+    
+    /// The description of the server from its documentation
+    var description: String? {
+        let mirror = Mirror(reflecting: self)
+        for child in mirror.children {
+            if child.label == "__mcpServerDescription" {
+                return child.value as? String
+            }
+        }
+        return nil
+    }
 }

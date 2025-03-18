@@ -68,8 +68,31 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
                     handleSSE(context: context, head: head, body: nil)
                 } else if head.uri.hasPrefix("/messages") {
                     handleMessages(context: context, head: head, body: nil)
+                } else if head.uri == "/.well-known/ai-plugin.json" {
+                    if transport.serveOpenAPI {
+                        handleAIPluginManifest(context: context, head: head)
+                    } else {
+                        sendResponse(context: context, status: .notFound)
+                    }
+                } else if head.uri == "/openapi.json" {
+                    if transport.serveOpenAPI {
+                        handleOpenAPISpec(context: context, head: head)
+                    } else {
+                        sendResponse(context: context, status: .notFound)
+                    }
                 } else {
-                    sendResponse(context: context, status: .notFound)
+                    // Check if this is a tool endpoint
+					let toolPath = "/\(transport.server.serverName.asModelName)"
+                    if head.uri.hasPrefix(toolPath) {
+                        if transport.serveOpenAPI {
+                            let toolName = String(head.uri.dropFirst(toolPath.count + 1)) // +1 for the trailing slash
+                            handleToolCall(context: context, head: head, toolName: toolName, body: nil)
+                        } else {
+                            sendResponse(context: context, status: .notFound)
+                        }
+                    } else {
+                        sendResponse(context: context, status: .notFound)
+                    }
                 }
                 
             case .body(let head, let buffer):
@@ -77,8 +100,31 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
                     handleSSE(context: context, head: head, body: buffer)
                 } else if head.uri.hasPrefix("/messages") {
                     handleMessages(context: context, head: head, body: buffer)
+                } else if head.uri == "/.well-known/ai-plugin.json" {
+                    if transport.serveOpenAPI {
+                        handleAIPluginManifest(context: context, head: head)
+                    } else {
+                        sendResponse(context: context, status: .notFound)
+                    }
+                } else if head.uri == "/openapi.json" {
+                    if transport.serveOpenAPI {
+                        handleOpenAPISpec(context: context, head: head)
+                    } else {
+                        sendResponse(context: context, status: .notFound)
+                    }
                 } else {
-                    sendResponse(context: context, status: .notFound)
+                    // Check if this is a tool endpoint
+                    let toolPath = "/" + transport.server.serverName.asModelName
+                    if head.uri.hasPrefix(toolPath) {
+                        if transport.serveOpenAPI {
+                            let toolName = String(head.uri.dropFirst(toolPath.count + 1)) // +1 for the trailing slash
+                            handleToolCall(context: context, head: head, toolName: toolName, body: buffer)
+                        } else {
+                            sendResponse(context: context, status: .notFound)
+                        }
+                    } else {
+                        sendResponse(context: context, status: .notFound)
+                    }
                 }
                 
             case .idle:
@@ -140,19 +186,13 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
         transport.registerSSEChannel(context.channel, id: id, clientId: clientId)
         
         // Then send endpoint event with client ID in URL
-        var components = URLComponents()
-        components.scheme = "http"
-        components.host = transport.host
-        components.port = Int(transport.port)
-        components.path = "/messages/\(clientId)"
-        
-        guard let endpointUrl = components.string else {
+		guard let endpointUrl = self.endpointUrl(from: head, clientId: clientId) else {
             transport.logger.error("Failed to construct endpoint URL")
             context.close(promise: nil)
             return
         }
         
-        let message = SSEMessage(name: "endpoint", data: endpointUrl)
+		let message = SSEMessage(name: "endpoint", data: endpointUrl.absoluteString)
         context.channel.sendSSE(message)
     }
     
@@ -194,32 +234,16 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
 		}
 		
 		// Validate token
-		switch transport.authorizationHandler(token) {
-			case .authorized:
-				break // Continue with request processing
-			case .unauthorized(let message):
-				// Create JSON-RPC error response
-				let errorResponse = """
-					{
-						"jsonrpc": "2.0",
-						"error": {
-							"code": -32001,
-							"message": "Unauthorized: \(message)"
-						},
-						"id": null
-					}
-					"""
-				
-				// Send error via SSE
-				let sseMessage = SSEMessage(data: errorResponse)
-				transport.sendSSE(sseMessage, to: clientId)
-				
-				// Send HTTP response
-				var headers = HTTPHeaders()
-				headers.add(name: "Access-Control-Allow-Origin", value: "*")
-				headers.add(name: "Content-Type", value: "application/json")
-				sendResponse(context: context, status: .unauthorized, headers: headers)
-				return
+		if case .unauthorized(let message) = transport.authorizationHandler(token) {
+
+			let errorMessage = JSONRPCMessage(error: .init(code: 401, message: "Unauthorized: \(message)"))
+			
+			let data = try! JSONEncoder().encode(errorMessage)
+			let errorResponse = String(data: data, encoding: .utf8)!
+			
+			// Send error via SSE
+			let sseMessage = SSEMessage(data: errorResponse)
+			transport.sendSSE(sseMessage, to: clientId)
 		}
 		
         guard let body = body else {
@@ -274,4 +298,232 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             sendResponse(context: context, status: .badRequest)
         }
     }
-} 
+    
+    private func handleAIPluginManifest(context: ChannelHandlerContext, head: HTTPRequestHead) {
+        guard head.method == .GET else {
+            sendResponse(context: context, status: .methodNotAllowed)
+            return
+        }
+
+        // Use forwarded headers if present, otherwise use transport defaults
+        let host: String
+        let scheme: String
+        
+        if let forwardedHost = head.headers["X-Forwarded-Host"].first {
+            host = forwardedHost
+        } else {
+            host = transport.host
+        }
+        
+        if let forwardedProto = head.headers["X-Forwarded-Proto"].first {
+            scheme = forwardedProto
+        } else {
+            scheme = "http"
+        }
+
+		let description = transport.server.description ?? "MCP Server providing tools for automation and integration"
+		
+		let manifest = AIPluginManifest(
+            nameForHuman: transport.server.serverName,
+            nameForModel: transport.server.serverName.asModelName,
+            descriptionForHuman: description,
+            descriptionForModel: description,
+            auth: .none, 
+            api: .init(type: "openapi", url: "\(scheme)://\(host)/openapi.json")
+        )
+
+        // Convert manifest to JSON data
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        
+        do {
+            let jsonData = try encoder.encode(manifest)
+            var buffer = context.channel.allocator.buffer(capacity: jsonData.count)
+            buffer.writeBytes(jsonData)
+            
+            var headers = HTTPHeaders()
+            headers.add(name: "Content-Type", value: "application/json")
+            headers.add(name: "Access-Control-Allow-Origin", value: "*")
+            
+            sendResponse(context: context, status: .ok, headers: headers, body: buffer)
+        } catch {
+            transport.logger.error("Failed to encode AI plugin manifest: \(error)")
+            sendResponse(context: context, status: .internalServerError)
+        }
+    }
+    
+    private func handleOpenAPISpec(context: ChannelHandlerContext, head: HTTPRequestHead) {
+        guard head.method == .GET else {
+            sendResponse(context: context, status: .methodNotAllowed)
+            return
+        }
+
+        // Use forwarded headers if present, otherwise use transport defaults
+        let host: String
+        let scheme: String
+        
+        if let forwardedHost = head.headers["X-Forwarded-Host"].first {
+            host = forwardedHost
+        } else {
+            host = transport.host
+        }
+        
+        if let forwardedProto = head.headers["X-Forwarded-Proto"].first {
+            scheme = forwardedProto
+        } else {
+            scheme = "http"
+        }
+
+		let spec = OpenAPISpec(server: transport.server,
+							   scheme: scheme,
+							   host: host)
+        
+        // Convert spec to JSON data
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        
+        do {
+            let jsonData = try encoder.encode(spec)
+            var buffer = context.channel.allocator.buffer(capacity: jsonData.count)
+            buffer.writeBytes(jsonData)
+            
+            var headers = HTTPHeaders()
+            headers.add(name: "Content-Type", value: "application/json")
+            headers.add(name: "Access-Control-Allow-Origin", value: "*")
+            
+            sendResponse(context: context, status: .ok, headers: headers, body: buffer)
+        } catch {
+            transport.logger.error("Failed to encode OpenAPI spec: \(error)")
+            sendResponse(context: context, status: .internalServerError)
+        }
+    }
+    
+    private func handleToolCall(context: ChannelHandlerContext, head: HTTPRequestHead, toolName: String, body: ByteBuffer?) {
+        // Handle CORS preflight
+        if head.method == .OPTIONS {
+            var headers = HTTPHeaders()
+            headers.add(name: "Access-Control-Allow-Origin", value: "*")
+            headers.add(name: "Access-Control-Allow-Methods", value: "POST, OPTIONS")
+            headers.add(name: "Access-Control-Allow-Headers", value: "*")
+            headers.add(name: "Access-Control-Allow-Headers", value: "Content-Type, Authorization")
+            
+            sendResponse(context: context, status: .ok, headers: headers)
+            return
+        }
+        
+        // Only allow POST method
+        guard head.method == .POST else {
+            sendResponse(context: context, status: .methodNotAllowed)
+            return
+        }
+        
+        // Check authorization if handler is set
+        var token: String?
+        
+        // First try to get token from Authorization header
+        if let authHeader = head.headers["Authorization"].first {
+            let parts = authHeader.split(separator: " ")
+            if parts.count == 2 && parts[0].lowercased() == "bearer" {
+                token = String(parts[1])
+            }
+        }
+        
+        // Validate token
+        if case .unauthorized(let message) = transport.authorizationHandler(token) {
+            let errorDict = ["error": "Unauthorized: \(message)"] as [String: String]
+            let data = try! JSONEncoder().encode(errorDict)
+            var buffer = context.channel.allocator.buffer(capacity: data.count)
+            buffer.writeBytes(data)
+            
+            var headers = HTTPHeaders()
+            headers.add(name: "Access-Control-Allow-Origin", value: "*")
+            
+            sendResponse(context: context, status: .unauthorized, headers: headers, body: buffer)
+            return
+        }
+        
+        // Must have a body
+        guard let body = body else {
+            sendResponse(context: context, status: .badRequest)
+            return
+        }
+        
+        do {
+            // Get Data from ByteBuffer
+            let bodyData = Data(buffer: body)
+            
+            // Parse request body as JSON dictionary
+            guard let arguments = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any] else
+			{
+				throw MCPToolError.invalidJSONDictionary
+			}
+            
+            // Call the tool
+            let result = try transport.server.callTool(toolName, arguments: arguments)
+            
+            // Convert result to JSON data
+			let jsonData = try JSONEncoder().encode(result)
+            
+            var buffer = context.channel.allocator.buffer(capacity: jsonData.count)
+            buffer.writeBytes(jsonData)
+            
+            var headers = HTTPHeaders()
+            headers.add(name: "Access-Control-Allow-Origin", value: "*")
+            
+            sendResponse(context: context, status: .ok, headers: headers, body: buffer)
+            
+        } catch {
+            transport.logger.error("Tool call error: \(error)")
+            
+			let errorDict = ["error": error.localizedDescription] as [String : String]
+			let data = try! JSONEncoder().encode(errorDict)
+			let string = String(data: data, encoding: .utf8)!
+			
+            var buffer = context.channel.allocator.buffer(capacity: string.utf8.count)
+            buffer.writeString(string)
+            
+            var headers = HTTPHeaders()
+            headers.add(name: "Access-Control-Allow-Origin", value: "*")
+            
+            sendResponse(context: context, status: .badRequest, headers: headers, body: buffer)
+        }
+    }
+	
+	// MARK: - Helpers
+	
+	fileprivate func endpointUrl(from head: HTTPRequestHead, clientId: String) -> URL? {
+		
+		var components = URLComponents()
+		
+		// Use forwarded headers if present, otherwise use transport defaults
+		if let forwardedHost = head.headers["X-Forwarded-Host"].first {
+			components.host = forwardedHost
+		} else {
+			components.host = transport.host
+		}
+		
+		if let forwardedProto = head.headers["X-Forwarded-Proto"].first {
+			components.scheme = forwardedProto
+		} else {
+			components.scheme = "http"
+		}
+		
+		if let forwardedPort = head.headers["X-Forwarded-Port"].first {
+			components.port = Int(forwardedPort)
+		} else {
+			components.port = transport.port
+		}
+		
+		components.path = "/messages/\(clientId)"
+		
+		// remove port if implied by scheme
+		if components.port == 80, components.scheme == "http" {
+			components.port = nil
+		}
+		else if components.port == 443, components.scheme == "https" {
+			components.port = nil
+		}
+		
+		return components.url
+	}
+}

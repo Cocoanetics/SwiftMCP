@@ -83,8 +83,14 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
 		
 		let serverVersion = versionArg ?? "1.0"
 		
+		// Extract description from leading documentation
+		let leadingTrivia = declaration.leadingTrivia.description
+		let documentation = Documentation(from: leadingTrivia)
+		let serverDescription = documentation.description.isEmpty ? "nil" : "\"\(documentation.description.replacingOccurrences(of: "\"", with: "\\\""))\""
+		
 		let nameProperty = "private let __mcpServerName = \"\(serverName)\""
 		let versionProperty = "private let __mcpServerVersion = \"\(serverVersion)\""
+		let descriptionProperty = "private let __mcpServerDescription: String? = \(serverDescription)"
 		
 		// Find all functions with the MCPTool macro
 		var mcpTools: [String] = []
@@ -105,8 +111,8 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
 		
 		// Create a computed property that returns an array of MCPTool objects
 		let mcpToolsProperty = """
-  /// Returns an array of all MCP tools defined in this type
-  var mcpTools: [MCPTool] {
+   /// Returns an array of all MCP tools defined in this type
+   public var mcpTools: [MCPTool] {
    let mirror = Mirror(reflecting: self)
    var metadataArray: [MCPToolMetadata] = []
    
@@ -143,14 +149,14 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
   ///   - arguments: A dictionary of arguments to pass to the tool
   /// - Returns: The result of the tool call
   /// - Throws: MCPToolError if the tool doesn't exist or cannot be called
-  func callTool(_ name: String, arguments: [String: Any]) throws -> Any {
+  func callTool(_ name: String, arguments: [String: Any]) throws -> Codable {
    // Find the tool by name
    guard let tool = mcpTools.first(where: { $0.name == name }) else {
       throw MCPToolError.unknownTool(name: name)
    }
    
    // Enrich arguments with default values
-   let enrichedArguments = tool.enrichArguments(arguments, forObject: self, functionName: name)
+   let enrichedArguments = try tool.enrichArguments(arguments, forObject: self)
    
    // Call the appropriate wrapper method based on the tool name
    switch name {
@@ -163,6 +169,7 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
 		return [
 			DeclSyntax(stringLiteral: nameProperty),
 			DeclSyntax(stringLiteral: versionProperty),
+			DeclSyntax(stringLiteral: descriptionProperty),
 			DeclSyntax(stringLiteral: mcpToolsProperty),
 			DeclSyntax(stringLiteral: callToolMethod)
 		]
