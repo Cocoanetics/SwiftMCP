@@ -21,7 +21,7 @@ func testEnrichArguments() throws {
     
     // Test enriching arguments
     let arguments: [String: Any] = ["a": 2, "b": 3]
-    let enrichedArguments = addTool.enrichArguments(arguments, forObject: calculator as Any, functionName: "add")
+    let enrichedArguments = addTool.enrichArguments(arguments, forObject: calculator as Any)
     
     // Check that the arguments were not changed
     #expect(enrichedArguments.count == 2)
@@ -40,7 +40,7 @@ func testEnrichArgumentsWithExplicitFunctionName() throws {
     
     // Test enriching arguments with explicit function name
     let arguments: [String: Any] = ["a": 2, "b": 3]
-    let enrichedArguments = addTool.enrichArguments(arguments, forObject: calculator as Any, functionName: "add")
+    let enrichedArguments = addTool.enrichArguments(arguments, forObject: calculator as Any)
     
     // Check that the arguments were not changed
     #expect(enrichedArguments.count == 2)
@@ -59,7 +59,7 @@ func testEnrichArgumentsWithNoDefaults() throws {
     
     // Test enriching arguments with no default values
     let arguments: [String: Any] = ["a": 2, "b": 3]
-    let enrichedArguments = addTool.enrichArguments(arguments, forObject: calculator as Any, functionName: "add")
+    let enrichedArguments = addTool.enrichArguments(arguments, forObject: calculator as Any)
     
     // Check that the arguments were not changed
     #expect(enrichedArguments.count == 2)
@@ -78,7 +78,7 @@ func testEnrichArgumentsWithMissingRequiredArgument() throws {
     
     // Test enriching arguments with a missing required argument
     let arguments: [String: Any] = ["a": 2]
-    let enrichedArguments = addTool.enrichArguments(arguments, forObject: calculator as Any, functionName: "add")
+    let enrichedArguments = addTool.enrichArguments(arguments, forObject: calculator as Any)
     
     // Check that the arguments were not changed
     #expect(enrichedArguments.count == 1)
@@ -97,10 +97,37 @@ func testEnrichArgumentsWithTypeConversion() throws {
     
     // Test enriching arguments with string values that need to be converted
     let arguments: [String: Any] = ["a": "2", "b": "3"]
-    let enrichedArguments = addTool.enrichArguments(arguments, forObject: calculator as Any, functionName: "add")
+    let enrichedArguments = addTool.enrichArguments(arguments, forObject: calculator as Any)
     
     // Check that the arguments were not changed (enrichArguments doesn't do type conversion)
     #expect(enrichedArguments.count == 2)
     #expect(enrichedArguments["a"] as? String == "2") // String is not converted by enrichArguments
     #expect(enrichedArguments["b"] as? String == "3") // String is not converted by enrichArguments
+}
+
+@Test
+func testSubtractArguments() throws {
+    let calculator = Calculator()
+    
+    // Get a tool from the calculator
+    guard let tool = calculator.mcpTools.first(where: { $0.name == "subtract" }) else {
+        throw TestError("Could not find subtract tool")
+    }
+    
+    // Test with no arguments - should only add default for b
+    let emptyArgs = tool.enrichArguments([:], forObject: calculator)
+    #expect(emptyArgs.count == 1)
+    #expect(emptyArgs["b"] as? Int == 3)
+    
+    // Test with partial arguments - should only add default for b
+    let partialArgs = tool.enrichArguments(["a": 20], forObject: calculator)
+    #expect(partialArgs.count == 2)
+    #expect(partialArgs["a"] as? Int == 20)
+    #expect(partialArgs["b"] as? Int == 3)
+    
+    // Test with all arguments - no defaults should be added
+    let allArgs = tool.enrichArguments(["a": 20, "b": 5], forObject: calculator)
+    #expect(allArgs.count == 2)
+    #expect(allArgs["a"] as? Int == 20)
+    #expect(allArgs["b"] as? Int == 5)
 } 

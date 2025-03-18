@@ -443,9 +443,9 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             let bodyData = Data(buffer: body)
             
             // Parse request body as JSON dictionary
-            guard let arguments = try JSONSerialization.jsonObject(with: bodyData) as? [String: Any] else
+            guard let arguments = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any] else
 			{
-				throw MCPToolError.callFailed(name: "Error calling tool \(tool.name)", reason: "Arguments must be a JSON dictionary")
+				throw MCPToolError.invalidJSONDictionary(reason: "Arguments must be a JSON dictionary")
 			}
             
             // Call the tool

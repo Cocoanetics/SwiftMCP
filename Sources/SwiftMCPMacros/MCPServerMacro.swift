@@ -156,7 +156,7 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
    }
    
    // Enrich arguments with default values
-   let enrichedArguments = tool.enrichArguments(arguments, forObject: self, functionName: name)
+   let enrichedArguments = tool.enrichArguments(arguments, forObject: self)
    
    // Call the appropriate wrapper method based on the tool name
    switch name {
