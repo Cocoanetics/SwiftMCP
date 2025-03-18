@@ -140,27 +140,20 @@ public extension MCPServer {
             return nil
         }
         
-        // Get the arguments and prepare response text
-        var responseText = ""
-        var isError = false
-        
         // Extract arguments from the request
         let arguments = (params["arguments"]?.value as? [String: Any]) ?? [:]
         
         // Call the appropriate wrapper method based on the tool name
         do {
             let result = try await self.callTool(toolName, arguments: arguments)
-            responseText = "\(result)"
-        } catch let error as LocalizedError {
-            responseText = error.localizedDescription
-            isError = true
-        } catch {
-            responseText = "Error: \(error)"
-            isError = true
+			let responseText = "\(result)"
+			
+			return ToolCallResponse(id: request.id ?? 0, result: responseText)
+			
+		} catch {
+			
+			return ToolCallResponse(id: request.id ?? 0, error: error)
         }
-        
-        // Create and encode the response
-        return ToolCallResponse(id: request.id ?? 0, text: responseText, isError: isError)
     }
     
     /// Function to log a message to stderr
