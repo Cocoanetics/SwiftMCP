@@ -76,7 +76,7 @@ extension MCPTool {
 	 
 	 - Returns: A new dictionary with default values added for missing parameters
 	 */
-	public func enrichArguments(_ arguments: [String: Any], forObject object: Any) -> [String: Any] {
+	public func enrichArguments(_ arguments: [String: Any], forObject object: Any) throws -> [String: Any] {
 		// Use the provided function name or fall back to the tool's name
 		let metadataKey = "__mcpMetadata_\(name)"
 		
@@ -91,6 +91,13 @@ extension MCPTool {
 			return arguments
 		}
 		
+		// Check for missing required parameters
+		for param in metadata.parameters {
+			if enrichedArguments[param.name] == nil && param.defaultValue == nil {
+				throw MCPToolError.missingRequiredParameter(parameterName: param.name)
+			}
+		}
+		
 		// Add default values for parameters that are missing from the arguments dictionary
 		for param in metadata.parameters {
 			if enrichedArguments[param.name] == nil, let defaultValue = param.defaultValue {
@@ -99,22 +106,18 @@ extension MCPTool {
 				case "Int":
 					if let intValue = Int(defaultValue) {
 						enrichedArguments[param.name] = intValue
-						print("Added default value for \(param.name): \(intValue) (type: Int)")
 					}
 				case "Double", "Float":
 					if let doubleValue = Double(defaultValue) {
 						enrichedArguments[param.name] = doubleValue
-						print("Added default value for \(param.name): \(doubleValue) (type: \(param.type))")
 					}
 				case "Bool":
 					if let boolValue = Bool(defaultValue) {
 						enrichedArguments[param.name] = boolValue
-						print("Added default value for \(param.name): \(boolValue) (type: Bool)")
 					}
 				default:
 					// For string and other types, use the default value as is
 					enrichedArguments[param.name] = defaultValue
-					print("Added default value for \(param.name): \(defaultValue) (type: String)")
 				}
 			}
 		}
