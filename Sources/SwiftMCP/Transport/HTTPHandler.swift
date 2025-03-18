@@ -200,6 +200,12 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
         } else {
             components.scheme = "http"
         }
+		
+		if let forwardedPort = head.headers["X-Forwarded-Port"].first {
+			components.port = Int(forwardedPort)
+		} else {
+			components.port = transport.port
+		}
         
         components.path = "/messages/\(clientId)"
         
@@ -271,12 +277,12 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
 				let sseMessage = SSEMessage(data: errorResponse)
 				transport.sendSSE(sseMessage, to: clientId)
 				
-				// Send HTTP response
-				var headers = HTTPHeaders()
-				headers.add(name: "Access-Control-Allow-Origin", value: "*")
-				headers.add(name: "Content-Type", value: "application/json")
-				sendResponse(context: context, status: .unauthorized, headers: headers)
-				return
+//				// Send HTTP response
+//				var headers = HTTPHeaders()
+//				headers.add(name: "Access-Control-Allow-Origin", value: "*")
+//				headers.add(name: "Content-Type", value: "application/json")
+//				sendResponse(context: context, status: .unauthorized, headers: headers)
+//				return
 		}
 		
         guard let body = body else {
