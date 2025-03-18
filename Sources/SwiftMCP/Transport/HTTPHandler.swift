@@ -19,13 +19,11 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
     
     func channelInactive(context: ChannelHandlerContext) {
         transport.logger.trace("Channel inactive")
-        transport.removeSSEChannel(id: id)
         context.fireChannelInactive()
     }
     
     func errorCaught(context: ChannelHandlerContext, error: Error) {
         transport.logger.error("Channel error: \(error)")
-        transport.removeSSEChannel(id: id)
         context.close(promise: nil)
     }
     
@@ -231,30 +229,29 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             return
         }
         
-		// Check authorization if handler is set
-		var token: String?
-		
-		// First try to get token from Authorization header
-		if let authHeader = head.headers["Authorization"].first {
-			let parts = authHeader.split(separator: " ")
-			if parts.count == 2 && parts[0].lowercased() == "bearer" {
-				token = String(parts[1])
-			}
-		}
-		
-		// Validate token
-		if case .unauthorized(let message) = transport.authorizationHandler(token) {
-
-			let errorMessage = JSONRPCMessage(error: .init(code: 401, message: "Unauthorized: \(message)"))
-			
-			let data = try! JSONEncoder().encode(errorMessage)
-			let errorResponse = String(data: data, encoding: .utf8)!
-			
-			// Send error via SSE
-			let sseMessage = SSEMessage(data: errorResponse)
-			transport.sendSSE(sseMessage, to: clientId)
-		}
-		
+        // Check authorization if handler is set
+        var token: String?
+        
+        // First try to get token from Authorization header
+        if let authHeader = head.headers["Authorization"].first {
+            let parts = authHeader.split(separator: " ")
+            if parts.count == 2 && parts[0].lowercased() == "bearer" {
+                token = String(parts[1])
+            }
+        }
+        
+        // Validate token
+        if case .unauthorized(let message) = transport.authorizationHandler(token) {
+            let errorMessage = JSONRPCMessage(error: .init(code: 401, message: "Unauthorized: \(message)"))
+            
+            let data = try! JSONEncoder().encode(errorMessage)
+            let errorResponse = String(data: data, encoding: .utf8)!
+            
+            // Send error via SSE
+            let sseMessage = SSEMessage(data: errorResponse)
+            transport.sendSSE(sseMessage, to: clientId)
+        }
+        
         guard let body = body else {
             sendResponse(context: context, status: .badRequest)
             return
@@ -265,7 +262,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             let request = try decoder.decode(JSONRPCRequest.self, from: body)
             
             // Verify that this client has an active SSE connection
-            if !transport.hasActiveSSEConnection(for: clientId) {
+            if await !transport.hasActiveSSEConnection(for: clientId) {
                 transport.logger.warning("Rejected POST request from client \(clientId) without active SSE connection")
                 
                 // Create error response
@@ -295,7 +292,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             sendResponse(context: context, status: .accepted)
             
             // Handle the response with client ID
-			transport.handleJSONRPCRequest(request, from: clientId)
+            transport.handleJSONRPCRequest(request, from: clientId)
             
         } catch {
             sendResponse(context: context, status: .badRequest)

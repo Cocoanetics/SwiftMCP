@@ -336,14 +336,14 @@ public struct MCPToolMacro: PeerMacro {
 		if returnTypeForBlock == "Void" {
 			wrapperMethod += """
 			
-				\(isAsync ? "await " : "")\(isThrowing ? "try " : "")\(functionName)(\(parameterList))
+				\(isThrowing ? "try " : "")\(isAsync ? "await " : "")\(functionName)(\(parameterList))
 				return "Function executed successfully"
 			}
 			"""
 		} else {
 			wrapperMethod += """
 			
-				return \(isAsync ? "await " : "")\(isThrowing ? "try " : "")\(functionName)(\(parameterList))
+				return \(isThrowing ? "try " : "")\(isAsync ? "await " : "")\(functionName)(\(parameterList))
 			}
 			"""
 		}

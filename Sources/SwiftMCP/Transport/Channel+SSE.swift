@@ -8,19 +8,16 @@ extension Channel {
     /// - Returns: An EventLoopFuture that completes when the message has been written and flushed
 	func sendSSE(_ message: LosslessStringConvertible) {
 		
-		self.eventLoop.execute {
-			
-			guard self.isActive else {
-				return
-			}
-			
-			let messageText = message.description
-			var buffer = self.allocator.buffer(capacity: messageText.utf8.count)
-			buffer.writeString(message.description)
-			
-			let part = HTTPServerResponsePart.body(.byteBuffer(buffer))
-			self.write(part, promise: nil)
-			self.flush()
+		guard self.isActive else {
+			return
 		}
+		
+		let messageText = message.description
+		var buffer = self.allocator.buffer(capacity: messageText.utf8.count)
+		buffer.writeString(message.description)
+		
+		let part = HTTPServerResponsePart.body(.byteBuffer(buffer))
+		self.write(part, promise: nil)
+		self.flush()
     }
 } 
