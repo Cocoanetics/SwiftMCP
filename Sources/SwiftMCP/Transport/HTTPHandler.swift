@@ -456,11 +456,10 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
 				// Convert result to JSON data
 				let jsonData = try JSONEncoder().encode(result)
 				
-			
-					var buffer = allocator.buffer(capacity: jsonData.count)
-					buffer.writeBytes(jsonData)
-					
-					self.sendResponse(context: context, status: .ok, body: buffer)
+				var buffer = allocator.buffer(capacity: jsonData.count)
+				buffer.writeBytes(jsonData)
+				
+				self.sendResponse(context: context, status: .ok, body: buffer)
 				
 			} catch {
 				let errorDict = ["error": error.localizedDescription] as [String : String]
