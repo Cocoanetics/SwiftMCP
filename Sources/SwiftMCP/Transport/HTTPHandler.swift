@@ -73,7 +73,14 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
                 } else if head.uri == "/openapi.json" {
                     handleOpenAPISpec(context: context, head: head)
                 } else {
-                    sendResponse(context: context, status: .notFound)
+                    // Check if this is a tool endpoint
+                    let toolPath = "/\(transport.server.serverName.lowercased())"
+                    if head.uri.hasPrefix(toolPath) {
+                        let toolName = String(head.uri.dropFirst(toolPath.count + 1)) // +1 for the trailing slash
+                        handleToolCall(context: context, head: head, toolName: toolName, body: nil)
+                    } else {
+                        sendResponse(context: context, status: .notFound)
+                    }
                 }
                 
             case .body(let head, let buffer):
@@ -86,7 +93,14 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
                 } else if head.uri == "/openapi.json" {
                     handleOpenAPISpec(context: context, head: head)
                 } else {
-                    sendResponse(context: context, status: .notFound)
+                    // Check if this is a tool endpoint
+                    let toolPath = "/" + transport.server.serverName.asModelName
+                    if head.uri.hasPrefix(toolPath) {
+                        let toolName = String(head.uri.dropFirst(toolPath.count + 1)) // +1 for the trailing slash
+                        handleToolCall(context: context, head: head, toolName: toolName, body: buffer)
+                    } else {
+                        sendResponse(context: context, status: .notFound)
+                    }
                 }
                 
             case .idle:
@@ -390,6 +404,82 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
         } catch {
             transport.logger.error("Failed to encode OpenAPI spec: \(error)")
             sendResponse(context: context, status: .internalServerError)
+        }
+    }
+    
+    private func handleToolCall(context: ChannelHandlerContext, head: HTTPRequestHead, toolName: String, body: ByteBuffer?) {
+        // Handle CORS preflight
+        if head.method == .OPTIONS {
+            var headers = HTTPHeaders()
+            headers.add(name: "Access-Control-Allow-Origin", value: "*")
+            headers.add(name: "Access-Control-Allow-Methods", value: "POST, OPTIONS")
+            headers.add(name: "Access-Control-Allow-Headers", value: "*")
+            headers.add(name: "Access-Control-Allow-Headers", value: "Content-Type, Authorization")
+            
+            sendResponse(context: context, status: .ok, headers: headers)
+            return
+        }
+        
+        // Only allow POST method
+        guard head.method == .POST else {
+            sendResponse(context: context, status: .methodNotAllowed)
+            return
+        }
+        
+        // Verify tool exists
+        guard let tool = transport.server.mcpTools.first(where: { $0.name == toolName }) else {
+            sendResponse(context: context, status: .notFound)
+            return
+        }
+        
+        // Must have a body
+        guard let body = body else {
+            sendResponse(context: context, status: .badRequest)
+            return
+        }
+        
+        do {
+            // Get Data from ByteBuffer
+            let bodyData = Data(buffer: body)
+            
+            // Parse request body as JSON dictionary
+            guard let arguments = try JSONSerialization.jsonObject(with: bodyData) as? [String: Any] else
+			{
+				throw MCPToolError.callFailed(name: "Error calling tool \(tool.name)", reason: "Arguments must be a JSON dictionary")
+			}
+            
+            // Call the tool
+            let result = try transport.server.callTool(toolName, arguments: arguments)
+            
+            // Convert result to JSON data
+            let jsonData = try JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys])
+            
+            var buffer = context.channel.allocator.buffer(capacity: jsonData.count)
+            buffer.writeBytes(jsonData)
+            
+            var headers = HTTPHeaders()
+            headers.add(name: "Content-Type", value: "application/json")
+            headers.add(name: "Access-Control-Allow-Origin", value: "*")
+            
+            sendResponse(context: context, status: .ok, headers: headers, body: buffer)
+            
+        } catch {
+            transport.logger.error("Tool call error: \(error)")
+            
+            // Create error response
+            let errorResponse = """
+            {
+                "error": "\(error.localizedDescription)"
+            }
+            """
+            var buffer = context.channel.allocator.buffer(capacity: errorResponse.utf8.count)
+            buffer.writeString(errorResponse)
+            
+            var headers = HTTPHeaders()
+            headers.add(name: "Content-Type", value: "application/json")
+            headers.add(name: "Access-Control-Allow-Origin", value: "*")
+            
+            sendResponse(context: context, status: .badRequest, headers: headers, body: buffer)
         }
     }
 } 

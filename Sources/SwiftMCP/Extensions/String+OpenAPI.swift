@@ -6,7 +6,7 @@ import Foundation
     /// - Replaces spaces with underscores
     /// - Removes any characters that aren't alphanumeric or underscores
     var asModelName: String {
-        self.lowercased()
+        self.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: " ", with: "_")
             .replacingOccurrences(of: "[^a-z0-9_]", with: "", options: .regularExpression)
     }

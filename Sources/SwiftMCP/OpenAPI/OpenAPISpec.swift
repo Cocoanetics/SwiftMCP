@@ -74,7 +74,7 @@ public struct OpenAPISpec: Codable {
         // Create paths from server tools
         var paths: [String: PathItem] = [:]
 		
-		let rootPath = server.name.lowercased().components(separatedBy: .whitespacesAndNewlines).joined(separator: "_")
+		let rootPath = server.name.asModelName
         
         for tool in server.mcpTools {
             let pathKey = "/\(rootPath)/\(tool.name)"
