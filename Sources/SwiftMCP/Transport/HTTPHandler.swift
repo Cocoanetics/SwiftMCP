@@ -30,23 +30,26 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
     }
     
     private func sendResponse(context: ChannelHandlerContext, status: HTTPResponseStatus, headers: HTTPHeaders? = nil, body: ByteBuffer? = nil) {
-        var responseHeaders = headers ?? HTTPHeaders()
-        if body != nil {
-            responseHeaders.add(name: "Content-Type", value: "application/json")
-        }
-        
-        let head = HTTPResponseHead(version: .http1_1, status: status, headers: responseHeaders)
-        context.write(self.wrapOutboundOut(.head(head)), promise: nil)
-        
-        if let body = body {
-            context.write(self.wrapOutboundOut(.body(.byteBuffer(body))), promise: nil)
-        }
-        
-        context.write(self.wrapOutboundOut(.end(nil)), promise: nil)
-        context.flush()
+		
+		context.eventLoop.execute {
+			var responseHeaders = headers ?? HTTPHeaders()
+			if body != nil {
+				responseHeaders.add(name: "Content-Type", value: "application/json")
+			}
+			
+			let head = HTTPResponseHead(version: .http1_1, status: status, headers: responseHeaders)
+			context.write(self.wrapOutboundOut(.head(head)), promise: nil)
+			
+			if let body = body {
+				context.write(self.wrapOutboundOut(.body(.byteBuffer(body))), promise: nil)
+			}
+			
+			context.write(self.wrapOutboundOut(.end(nil)), promise: nil)
+			context.flush()
+		}
     }
     
-    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+	func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         let reqPart = unwrapInboundIn(data)
         
         switch reqPart {
@@ -67,7 +70,9 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
                 if head.uri.hasPrefix("/sse") {
                     handleSSE(context: context, head: head, body: nil)
                 } else if head.uri.hasPrefix("/messages") {
-                    handleMessages(context: context, head: head, body: nil)
+					Task {
+						await handleMessages(context: context, head: head, body: nil)
+					}
                 } else if head.uri == "/.well-known/ai-plugin.json" {
                     if transport.serveOpenAPI {
                         handleAIPluginManifest(context: context, head: head)
@@ -86,7 +91,9 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
                     if head.uri.hasPrefix(toolPath) {
                         if transport.serveOpenAPI {
                             let toolName = String(head.uri.dropFirst(toolPath.count + 1)) // +1 for the trailing slash
-                            handleToolCall(context: context, head: head, toolName: toolName, body: nil)
+							Task {
+								await handleToolCall(context: context, head: head, toolName: toolName, body: nil)
+							}
                         } else {
                             sendResponse(context: context, status: .notFound)
                         }
@@ -99,7 +106,9 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
                 if head.uri.hasPrefix("/sse") {
                     handleSSE(context: context, head: head, body: buffer)
                 } else if head.uri.hasPrefix("/messages") {
-                    handleMessages(context: context, head: head, body: buffer)
+					Task {
+						await handleMessages(context: context, head: head, body: buffer)
+					}
                 } else if head.uri == "/.well-known/ai-plugin.json" {
                     if transport.serveOpenAPI {
                         handleAIPluginManifest(context: context, head: head)
@@ -117,8 +126,10 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
                     let toolPath = "/" + transport.server.serverName.asModelName
                     if head.uri.hasPrefix(toolPath) {
                         if transport.serveOpenAPI {
-                            let toolName = String(head.uri.dropFirst(toolPath.count + 1)) // +1 for the trailing slash
-                            handleToolCall(context: context, head: head, toolName: toolName, body: buffer)
+							Task {
+								let toolName = String(head.uri.dropFirst(toolPath.count + 1)) // +1 for the trailing slash
+								await handleToolCall(context: context, head: head, toolName: toolName, body: buffer)
+							}
                         } else {
                             sendResponse(context: context, status: .notFound)
                         }
@@ -196,7 +207,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
         context.channel.sendSSE(message)
     }
     
-    private func handleMessages(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?) {
+	private func handleMessages(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?) async {
         if head.method == .OPTIONS {
             var headers = HTTPHeaders()
             headers.add(name: "Access-Control-Allow-Origin", value: "*")
@@ -292,7 +303,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             sendResponse(context: context, status: .accepted, headers: headers)
             
             // Handle the response with client ID
-            transport.handleJSONRPCRequest(request, from: clientId)
+			await transport.handleJSONRPCRequest(request, from: clientId)
             
         } catch {
             sendResponse(context: context, status: .badRequest)
@@ -398,7 +409,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
         }
     }
     
-    private func handleToolCall(context: ChannelHandlerContext, head: HTTPRequestHead, toolName: String, body: ByteBuffer?) {
+    private func handleToolCall(context: ChannelHandlerContext, head: HTTPRequestHead, toolName: String, body: ByteBuffer?) async {
         // Handle CORS preflight
         if head.method == .OPTIONS {
             var headers = HTTPHeaders()
@@ -459,7 +470,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
 			}
             
             // Call the tool
-            let result = try transport.server.callTool(toolName, arguments: arguments)
+			let result = try await transport.server.callTool(toolName, arguments: arguments)
             
             // Convert result to JSON data
 			let jsonData = try JSONEncoder().encode(result)

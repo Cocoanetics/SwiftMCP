@@ -19,7 +19,7 @@ public protocol MCPServer: AnyObject {
     ///   - arguments: A dictionary of arguments to pass to the tool
     /// - Returns: The result of the tool call
     /// - Throws: MCPToolError if the tool doesn't exist or cannot be called
-    func callTool(_ name: String, arguments: [String: Any]) throws -> Codable
+    func callTool(_ name: String, arguments: [String: Any]) async throws -> Codable
     
     /// Gets a resource by URI
     /// - Parameter uri: The URI of the resource to get
@@ -30,7 +30,7 @@ public protocol MCPServer: AnyObject {
     /// Handles a JSON-RPC request
     /// - Parameter request: The JSON-RPC request to handle
     /// - Returns: The response as a string, or nil if no response should be sent
-    func handleRequest(_ request: JSONRPCRequest) -> Codable?
+    func handleRequest(_ request: JSONRPCRequest) async -> Codable?
 }
 
 public enum MCPResourceKind
@@ -45,7 +45,7 @@ public extension MCPServer {
     /// Handles a JSON-RPC request with default implementation
     /// - Parameter request: The JSON-RPC request to handle
     /// - Returns: A JSON-RPC reesponse, or `nil` if no response is necessary
-    func handleRequest(_ request: JSONRPCRequest) -> Codable? {
+    func handleRequest(_ request: JSONRPCRequest) async -> Codable? {
         // Prepare the response based on the method
         switch request.method {
             case "initialize":
@@ -71,7 +71,7 @@ public extension MCPServer {
                 return createResourcesReadResponse(id: request.id ?? 0, request: request)
                 
             case "tools/call":
-                return handleToolCall(request)
+                return await handleToolCall(request)
                 
             default:
                 return nil
@@ -133,7 +133,7 @@ public extension MCPServer {
     /// Handles a tool call request
     /// - Parameter request: The JSON-RPC request for a tool call
     /// - Returns: The response as a string, or nil if no response should be sent
-    private func handleToolCall(_ request: JSONRPCRequest) -> Codable? {
+    private func handleToolCall(_ request: JSONRPCRequest) async -> Codable? {
         guard let params = request.params,
               let toolName = params["name"]?.value as? String else {
             // Invalid request: missing tool name
@@ -149,7 +149,7 @@ public extension MCPServer {
         
         // Call the appropriate wrapper method based on the tool name
         do {
-            let result = try self.callTool(toolName, arguments: arguments)
+            let result = try await self.callTool(toolName, arguments: arguments)
             responseText = "\(result)"
         } catch let error as MCPToolError {
             responseText = error.localizedDescription

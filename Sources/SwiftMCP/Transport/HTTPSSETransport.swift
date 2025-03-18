@@ -195,10 +195,10 @@ public final class HTTPSSETransport {
 	// MARK: - Request Handling
 	/// Handle a JSON-RPC request and send the response through the SSE channels
 	/// - Parameter request: The JSON-RPC request
-	func handleJSONRPCRequest(_ request: JSONRPCRequest, from clientId: String) {
+	func handleJSONRPCRequest(_ request: JSONRPCRequest, from clientId: String) async {
 		
 		// Let the server process the request
-		guard let response = server.handleRequest(request) else {
+		guard let response = await server.handleRequest(request) else {
 			// If no response is needed (e.g. for notifications), just return
 			return
 		}

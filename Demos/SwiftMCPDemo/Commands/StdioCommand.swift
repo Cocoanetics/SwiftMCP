@@ -39,7 +39,7 @@ struct StdioCommand: ParsableCommand {
 """
     )
     
-    func run() throws {
+	func run() async throws {
 #if canImport(OSLog)
         LoggingSystem.bootstrapWithOSLog()
 #endif
@@ -51,7 +51,7 @@ struct StdioCommand: ParsableCommand {
             fputs("MCP Server \(calculator.serverName) (\(calculator.serverVersion)) started with Stdio transport\n", stderr)
             
             let transport = StdioTransport(server: calculator)
-            try transport.run()
+			try await transport.run()
         }
         catch let error as IOError {
             // Handle specific IO errors with more detail

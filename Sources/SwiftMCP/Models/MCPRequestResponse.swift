@@ -117,14 +117,3 @@ public struct MCPErrorResponse: Codable {
         self.error = error
     }
 }
-
-/// Process MCP requests and generate appropriate responses
-/// - Parameter request: The MCPRequest to handle
-/// - Returns: An optional MCPResponse if the request can be handled
-public func handleRequest(_ request: MCPRequest) -> MCPResponse? {
-    if request.method == "hello" {
-        let name = request.params?["name"] ?? "World"
-        return MCPResponse(id: request.id, result: ["message": "Hello, \(name)!"])
-    }
-    return nil
-} 
