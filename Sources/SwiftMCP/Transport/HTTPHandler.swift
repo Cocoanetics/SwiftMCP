@@ -186,36 +186,13 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
         transport.registerSSEChannel(context.channel, id: id, clientId: clientId)
         
         // Then send endpoint event with client ID in URL
-        var components = URLComponents()
-        
-        // Use forwarded headers if present, otherwise use transport defaults
-        if let forwardedHost = head.headers["X-Forwarded-Host"].first {
-            components.host = forwardedHost
-        } else {
-            components.host = transport.host
-        }
-        
-        if let forwardedProto = head.headers["X-Forwarded-Proto"].first {
-            components.scheme = forwardedProto
-        } else {
-            components.scheme = "http"
-        }
-		
-		if let forwardedPort = head.headers["X-Forwarded-Port"].first {
-			components.port = Int(forwardedPort)
-		} else {
-			components.port = transport.port
-		}
-        
-        components.path = "/messages/\(clientId)"
-        
-        guard let endpointUrl = components.string else {
+		guard let endpointUrl = self.endpointUrl(from: head, clientId: clientId) else {
             transport.logger.error("Failed to construct endpoint URL")
             context.close(promise: nil)
             return
         }
         
-        let message = SSEMessage(name: "endpoint", data: endpointUrl)
+		let message = SSEMessage(name: "endpoint", data: endpointUrl.absoluteString)
         context.channel.sendSSE(message)
     }
     
@@ -488,4 +465,42 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             sendResponse(context: context, status: .badRequest, headers: headers, body: buffer)
         }
     }
-} 
+	
+	// MARK: - Helpers
+	
+	fileprivate func endpointUrl(from head: HTTPRequestHead, clientId: String) -> URL? {
+		
+		var components = URLComponents()
+		
+		// Use forwarded headers if present, otherwise use transport defaults
+		if let forwardedHost = head.headers["X-Forwarded-Host"].first {
+			components.host = forwardedHost
+		} else {
+			components.host = transport.host
+		}
+		
+		if let forwardedProto = head.headers["X-Forwarded-Proto"].first {
+			components.scheme = forwardedProto
+		} else {
+			components.scheme = "http"
+		}
+		
+		if let forwardedPort = head.headers["X-Forwarded-Port"].first {
+			components.port = Int(forwardedPort)
+		} else {
+			components.port = transport.port
+		}
+		
+		components.path = "/messages/\(clientId)"
+		
+		// remove port if implied by scheme
+		if components.port == 80, components.scheme == "http" {
+			components.port = nil
+		}
+		else if components.port == 443, components.scheme == "https" {
+			components.port = nil
+		}
+		
+		return components.url
+	}
+}
