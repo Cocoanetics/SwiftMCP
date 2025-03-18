@@ -79,8 +79,13 @@ public struct OpenAPISpec: Codable {
         for tool in server.mcpTools {
             let pathKey = "/\(rootPath)/\(tool.name)"
             
+            // Get the metadata for this tool using reflection
+            let metadataKey = "__mcpMetadata_\(tool.name)"
+            let mirror = Mirror(reflecting: server)
+            let metadata = mirror.children.first(where: { $0.label == metadataKey })?.value as? MCPToolMetadata
+            
             // Create response schema (default to string since we don't have return type info)
-            let responseSchema = JSONSchema.string(description: "Tool response")
+            let responseSchema = JSONSchema.string(description: metadata?.returnTypeDescription ?? "Tool response")
             
             // Create the path item
             let pathItem = PathItem(
@@ -96,7 +101,7 @@ public struct OpenAPISpec: Codable {
                     ),
                     responses: [
                         "200": Response(
-                            description: "Successful response",
+                            description: metadata?.returnTypeDescription ?? "Successful response",
                             content: [
                                 "application/json": Content(schema: responseSchema)
                             ]
