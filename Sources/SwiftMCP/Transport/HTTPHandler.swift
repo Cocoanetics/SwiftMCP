@@ -82,7 +82,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
                     }
                 } else {
                     // Check if this is a tool endpoint
-                    let toolPath = "/\(transport.server.serverName.lowercased())"
+					let toolPath = "/\(transport.server.serverName.asModelName)"
                     if head.uri.hasPrefix(toolPath) {
                         if transport.serveOpenAPI {
                             let toolName = String(head.uri.dropFirst(toolPath.count + 1)) // +1 for the trailing slash
@@ -417,6 +417,31 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             return
         }
         
+        // Check authorization if handler is set
+        var token: String?
+        
+        // First try to get token from Authorization header
+        if let authHeader = head.headers["Authorization"].first {
+            let parts = authHeader.split(separator: " ")
+            if parts.count == 2 && parts[0].lowercased() == "bearer" {
+                token = String(parts[1])
+            }
+        }
+        
+        // Validate token
+        if case .unauthorized(let message) = transport.authorizationHandler(token) {
+            let errorDict = ["error": "Unauthorized: \(message)"] as [String: String]
+            let data = try! JSONEncoder().encode(errorDict)
+            var buffer = context.channel.allocator.buffer(capacity: data.count)
+            buffer.writeBytes(data)
+            
+            var headers = HTTPHeaders()
+            headers.add(name: "Access-Control-Allow-Origin", value: "*")
+            
+            sendResponse(context: context, status: .unauthorized, headers: headers, body: buffer)
+            return
+        }
+        
         // Must have a body
         guard let body = body else {
             sendResponse(context: context, status: .badRequest)
@@ -443,7 +468,6 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             buffer.writeBytes(jsonData)
             
             var headers = HTTPHeaders()
-            headers.add(name: "Content-Type", value: "application/json")
             headers.add(name: "Access-Control-Allow-Origin", value: "*")
             
             sendResponse(context: context, status: .ok, headers: headers, body: buffer)
@@ -459,7 +483,6 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             buffer.writeString(string)
             
             var headers = HTTPHeaders()
-            headers.add(name: "Content-Type", value: "application/json")
             headers.add(name: "Access-Control-Allow-Origin", value: "*")
             
             sendResponse(context: context, status: .badRequest, headers: headers, body: buffer)

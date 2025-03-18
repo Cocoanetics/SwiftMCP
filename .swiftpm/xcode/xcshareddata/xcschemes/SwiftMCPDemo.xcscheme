@@ -56,6 +56,10 @@
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
+            argument = "--openapi"
+            isEnabled = "YES">
+         </CommandLineArgument>
+         <CommandLineArgument
             argument = "--transport httpsse"
             isEnabled = "NO">
          </CommandLineArgument>
@@ -64,7 +68,7 @@
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "--token Secret"
+            argument = "--token secret"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>
