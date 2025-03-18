@@ -85,7 +85,36 @@ public struct OpenAPISpec: Codable {
             let metadata = mirror.children.first(where: { $0.label == metadataKey })?.value as? MCPToolMetadata
             
             // Create response schema (default to string since we don't have return type info)
-            let responseSchema = JSONSchema.string(description: metadata?.returnTypeDescription ?? "Tool response")
+            let responseSchema = JSONSchema.string()
+            
+            // Create error response schema to match {"error": "error message"}
+            let errorSchema = JSONSchema.object(
+                properties: [
+                    "error": .string()  // No description needed as it will contain error.localizedDescription
+                ],
+                required: ["error"],
+                description: "Error response containing the error message"
+            )
+            
+            // Create responses dictionary with success and error cases
+            var responses: [String: Response] = [
+                "200": Response(
+                    description: metadata?.returnTypeDescription ?? "Successful response",
+                    content: [
+                        "application/json": Content(schema: responseSchema)
+                    ]
+                )
+            ]
+            
+            // Add error response if the function can throw
+            if metadata?.isThrowing ?? false {
+                responses["400"] = Response(
+                    description: "The function threw an error",
+                    content: [
+                        "application/json": Content(schema: errorSchema)
+                    ]
+                )
+            }
             
             // Create the path item
             let pathItem = PathItem(
@@ -99,14 +128,7 @@ public struct OpenAPISpec: Codable {
                             "application/json": Content(schema: tool.inputSchema)
                         ]
                     ),
-                    responses: [
-                        "200": Response(
-                            description: metadata?.returnTypeDescription ?? "Successful response",
-                            content: [
-                                "application/json": Content(schema: responseSchema)
-                            ]
-                        )
-                    ]
+                    responses: responses
                 )
             )
             

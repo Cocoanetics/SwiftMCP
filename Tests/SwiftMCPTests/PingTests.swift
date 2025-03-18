@@ -4,7 +4,7 @@ import SwiftMCP
 import AnyCodable
 
 @Test("Ping Request")
-func testPingRequest() throws {
+func testPingRequest() async throws {
     // Create a calculator instance
     let calculator = Calculator()
     
@@ -17,7 +17,7 @@ func testPingRequest() throws {
     )
     
     // Handle the request
-    let response = unwrap(calculator.handleRequest(pingRequest) as? JSONRPC.Response)
+    let response = unwrap(await calculator.handleRequest(pingRequest) as? JSONRPC.Response)
     
     // Verify the response format
     #expect(response.jsonrpc == "2.0", "jsonrpc should be 2.0")
@@ -38,7 +38,7 @@ func testPingRequest() throws {
         params: nil
     )
     
-    let response2 = unwrap(calculator.handleRequest(pingRequest2) as? JSONRPC.Response)
+    let response2 = unwrap(await calculator.handleRequest(pingRequest2) as? JSONRPC.Response)
     
     #expect(response2.jsonrpc == "2.0", "jsonrpc should be 2.0")
     #expect(response2.id == .number(123), "id should match the request id")

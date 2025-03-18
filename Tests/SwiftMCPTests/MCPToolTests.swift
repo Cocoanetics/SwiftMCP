@@ -42,9 +42,10 @@ class TripleSlashDocumentation {
     func complexTypes(
         array: [Int],
         dictionary: [String: Any],
-        closure: (Int) -> String
-    ) {
+        closure: (Int)
+    ) -> String {
         // Implementation not important for the test
+		return "Complex types handled"
     }
     
     /// Function with explicit description override
@@ -58,8 +59,9 @@ class TripleSlashDocumentation {
     /// - Parameter required: A required parameter
     /// - Parameter optional: An optional parameter
     @MCPTool
-    func optionalParameter(required: String, optional: Int? = nil) {
+    func optionalParameter(required: String, optional: Int? = nil) -> String {
         // Implementation not important for the test
+		return "Foo"
     }
 }
 
@@ -85,8 +87,9 @@ class MultiLineDocumentation {
                       how parameter descriptions are extracted
      */
     @MCPTool
-    func longDescription(text: String) {
+    func longDescription(text: String) -> String {
         // Implementation not important for the test
+		return "Test"
     }
 }
 
@@ -95,15 +98,15 @@ class MultiLineDocumentation {
 class MixedDocumentationStyles {
     /// Triple-slash documentation
     @MCPTool
-    func tripleSlash() {}
+    func tripleSlash() -> Int { 0 }
     
     /** Multi-line documentation */
     @MCPTool
-    func multiLine() {}
+	func multiLine() -> Int { 0 }
     
     // Regular comment (should not be extracted)
     @MCPTool(description: "Explicit description needed")
-    func regularComment() {}
+	func regularComment() -> Int { 0 }
 }
 
 // MARK: - Tests
