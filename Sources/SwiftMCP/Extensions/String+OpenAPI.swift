@@ -1,13 +1,15 @@
 import Foundation
 
- extension String {
+extension String {
     /// Formats a string to be used as a model name:
     /// - Converts to lowercase
-    /// - Replaces spaces with underscores
-    /// - Removes any characters that aren't alphanumeric or underscores
+    /// - Splits on non-alphanumeric characters
+    /// - Joins with underscores
     var asModelName: String {
-        self.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: " ", with: "_")
-            .replacingOccurrences(of: "[^a-z0-9_]", with: "", options: .regularExpression)
+        self.lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: "_")
     }
 } 
