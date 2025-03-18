@@ -149,20 +149,20 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
   ///   - arguments: A dictionary of arguments to pass to the tool
   /// - Returns: The result of the tool call
   /// - Throws: MCPToolError if the tool doesn't exist or cannot be called
-  func callTool(_ name: String, arguments: [String: Any]) throws -> Codable {
-   // Find the tool by name
-   guard let tool = mcpTools.first(where: { $0.name == name }) else {
-      throw MCPToolError.unknownTool(name: name)
-   }
+  public func callTool(_ name: String, arguments: [String: Any]) throws -> Codable {
+     // Find the tool by name
+     guard let tool = mcpTools.first(where: { $0.name == name }) else {
+        throw MCPToolError.unknownTool(name: name)
+     }
    
-   // Enrich arguments with default values
-   let enrichedArguments = try tool.enrichArguments(arguments, forObject: self)
+     // Enrich arguments with default values
+     let enrichedArguments = try tool.enrichArguments(arguments, forObject: self)
    
-   // Call the appropriate wrapper method based on the tool name
-   switch name {
-   \(switchCases.joined(separator: "\n"))
-   default: throw MCPToolError.unknownTool(name: name)
-   }
+     // Call the appropriate wrapper method based on the tool name
+     switch name {
+        \(switchCases.joined(separator: "\n"))
+        default: throw MCPToolError.unknownTool(name: name)
+     }
   }
   """
 		
