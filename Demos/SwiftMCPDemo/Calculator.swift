@@ -58,7 +58,9 @@ class Calculator {
     /// - Parameter name: Name of the person to greet
     /// - Returns: The greeting message
     @MCPTool(description: "Shows a greeting message")
-    func greet(name: String) -> String {
+    func greet(name: String) async throws -> String {
+		
+		throw MCPToolError.unknownTool(name: "LOL")
         return "Hello, \(name)!"
     }
 	

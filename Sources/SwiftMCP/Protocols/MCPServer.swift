@@ -151,7 +151,7 @@ public extension MCPServer {
         do {
             let result = try await self.callTool(toolName, arguments: arguments)
             responseText = "\(result)"
-        } catch let error as MCPToolError {
+        } catch let error as LocalizedError {
             responseText = error.localizedDescription
             isError = true
         } catch {

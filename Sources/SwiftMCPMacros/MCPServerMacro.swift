@@ -137,8 +137,8 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
 		var switchCases: [String] = []
 		for funcName in mcpTools {
 			switchCases.append("""
-   case "\(funcName)":
-      return try __mcpCall_\(funcName)(enrichedArguments)
+       case "\(funcName)":
+            return try await __mcpCall_\(funcName)(enrichedArguments)
    """)
 		}
 		
