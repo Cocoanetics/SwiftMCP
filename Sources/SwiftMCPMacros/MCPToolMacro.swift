@@ -285,7 +285,7 @@ public struct MCPToolMacro: PeerMacro {
 					} else if let stringValue = params["\(paramName)"] as? String, let parsedValue = \(paramType)(stringValue) {
 						\(paramName) = parsedValue
 					} else {
-						throw MCPToolError.invalidArgumentType(name: "\(functionName)", parameterName: "\(paramName)", expectedType: "\(paramType)", actualValue: params["\(paramName)"] ?? "nil")
+						throw MCPToolError.invalidArgumentType(parameterName: "\(paramName)", expectedType: "\(paramType)", actualValue: params["\(paramName)"] ?? "nil")
 					}
 					"""
 				} else if param.type == "Int" {
@@ -299,14 +299,14 @@ public struct MCPToolMacro: PeerMacro {
 					} else if let stringValue = params["\(paramName)"] as? String, let parsedValue = \(paramType)(stringValue) {
 						\(paramName) = parsedValue
 					} else {
-						throw MCPToolError.invalidArgumentType(name: "\(functionName)", parameterName: "\(paramName)", expectedType: "\(paramType)", actualValue: params["\(paramName)"] ?? "nil")
+						throw MCPToolError.invalidArgumentType(parameterName: "\(paramName)", expectedType: "\(paramType)", actualValue: params["\(paramName)"] ?? "nil")
 					}
 					"""
 				} else {
 					wrapperMethod += """
 					
 					guard let \(paramName) = params["\(paramName)"] as? \(paramType) else {
-						throw MCPToolError.invalidArgumentType(name: "\(functionName)", parameterName: "\(paramName)", expectedType: "\(paramType)", actualValue: params["\(paramName)"] ?? "nil")
+						throw MCPToolError.invalidArgumentType(parameterName: "\(paramName)", expectedType: "\(paramType)", actualValue: params["\(paramName)"] ?? "nil")
 					}
 					"""
 				}

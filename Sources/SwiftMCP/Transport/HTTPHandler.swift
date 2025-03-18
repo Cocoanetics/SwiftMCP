@@ -426,12 +426,6 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             return
         }
         
-        // Verify tool exists
-        guard let tool = transport.server.mcpTools.first(where: { $0.name == toolName }) else {
-            sendResponse(context: context, status: .notFound)
-            return
-        }
-        
         // Must have a body
         guard let body = body else {
             sendResponse(context: context, status: .badRequest)
@@ -445,7 +439,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             // Parse request body as JSON dictionary
             guard let arguments = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any] else
 			{
-				throw MCPToolError.invalidJSONDictionary(reason: "Arguments must be a JSON dictionary")
+				throw MCPToolError.invalidJSONDictionary
 			}
             
             // Call the tool
@@ -466,14 +460,12 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
         } catch {
             transport.logger.error("Tool call error: \(error)")
             
-            // Create error response
-            let errorResponse = """
-            {
-                "error": "\(error.localizedDescription)"
-            }
-            """
-            var buffer = context.channel.allocator.buffer(capacity: errorResponse.utf8.count)
-            buffer.writeString(errorResponse)
+			let errorDict = ["error": error.localizedDescription] as [String : String]
+			let data = try! JSONEncoder().encode(errorDict)
+			let string = String(data: data, encoding: .utf8)!
+			
+            var buffer = context.channel.allocator.buffer(capacity: string.utf8.count)
+            buffer.writeString(string)
             
             var headers = HTTPHeaders()
             headers.add(name: "Content-Type", value: "application/json")

@@ -51,8 +51,7 @@ func testInvalidArgumentType() throws {
         _ = try calculator.callTool("add", arguments: ["a": "not_a_number", "b": 3])
         #expect(Bool(false), "Should throw an error for invalid argument type")
     } catch let error as MCPToolError {
-        if case .invalidArgumentType(let name, let parameterName, let expectedType, _) = error {
-            #expect(name == "add")
+        if case .invalidArgumentType(let parameterName, let expectedType, _) = error {
             #expect(parameterName == "a")
             #expect(expectedType == "Int")
         } else {

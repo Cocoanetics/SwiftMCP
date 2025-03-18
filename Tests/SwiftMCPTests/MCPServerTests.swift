@@ -92,10 +92,15 @@ func testToolCallRequestWithError() throws {
 	// Handle the request
 	let response = unwrap(calculator.handleRequest(request) as? ToolCallResponse)
 
+	print(response)
+	
 	#expect(response.jsonrpc == "2.0")
     #expect(response.id == 4)
     #expect(response.result.status == "error")
-    #expect(response.result.content.first?.text.contains("Unknown tool") ?? false)
+    #expect(response.result.content.first?.text.contains("not found on the server") ?? false)
+	
+	
+	
 }
 
 @Test
@@ -119,10 +124,12 @@ func testToolCallRequestWithInvalidArgument() throws {
 	// Handle the request
 	let response = unwrap(calculator.handleRequest(request) as? ToolCallResponse)
 	
+	print(response)
+	
     #expect(response.jsonrpc == "2.0")
     #expect(response.id == 5)
     #expect(response.result.status == "error")
-    #expect(response.result.content.first?.text.contains("Parameter 'a' expected type 'Int'") ?? false)
+    #expect(response.result.content.first?.text.contains("expected type Int") ?? false)
 }
 
 @Test("Custom Name and Version")
