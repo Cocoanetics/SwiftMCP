@@ -14,8 +14,34 @@ import SwiftSyntaxMacros
 /**
  Implementation of the MCPTool macro.
  
- This macro extracts metadata from a function declaration and generates
- a peer declaration that registers the function with the MCP system.
+ This macro transforms a function into an MCP tool by generating metadata and wrapper
+ functions for parameter handling and type safety.
+ 
+ Example usage:
+ ```swift
+ /// Adds two numbers together
+ /// - Parameters:
+ ///   - a: First number to add
+ ///   - b: Second number to add
+ /// - Returns: The sum of the two numbers
+ @MCPTool
+ func add(_ a: Double, _ b: Double = 0) -> Double {
+     return a + b
+ }
+ ```
+ 
+ - Parameters:
+   - description: Optional override for the function's documentation description.
+ 
+ - Note: The macro extracts documentation from the function's comments for:
+   * Function description
+   * Parameter descriptions
+   * Return value description
+ 
+ - Attention: The macro will emit diagnostics for:
+   * Missing function descriptions
+   * Invalid default value types
+   * Non-function declarations
  */
 public struct MCPToolMacro: PeerMacro {
 	/**

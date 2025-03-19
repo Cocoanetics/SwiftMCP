@@ -14,18 +14,38 @@ import SwiftDiagnostics
 /**
  Implementation of the MCPServer macro.
  
- This macro adds a `mcpTools` computed property to a class or struct,
- which returns an array of all MCP tools defined in that type.
- It also automatically adds the MCPServer protocol conformance.
+ This macro adds MCPServer protocol conformance to a class and generates the necessary
+ infrastructure for handling MCP tools.
+ 
+ Example usage:
+ ```swift
+ /// A server that provides calculator functionality
+ @MCPServer(
+     name: "calculator",
+     version: "1.0"
+ )
+ class CalculatorServer {
+     // MCP tool functions go here
+ }
+ ```
+ 
+ - Note: The server description is automatically extracted from the class's documentation comment.
+ 
+ - Parameters:
+   - name: The name of the server. Defaults to the class name.
+   - version: The version of the server. Defaults to "1.0".
+ 
+ - Attention: This macro can only be applied to classes. Using it on a struct or actor
+             will result in a diagnostic with a fix-it to convert to a class.
  */
 public struct MCPServerMacro: MemberMacro, ExtensionMacro {
 	/**
 	 Expands the macro to provide additional members for the declaration.
 	 
 	 - Parameters:
-	 - node: The attribute syntax node
-	 - declaration: The declaration syntax
-	 - context: The macro expansion context
+	   node: The attribute syntax node
+	   declaration: The declaration syntax
+	   context: The macro expansion context
 	 
 	 - Returns: An array of member declaration syntax nodes
 	 */
