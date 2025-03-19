@@ -19,16 +19,16 @@ class MissingDescriptions {
     // Has documentation but no description line
     /// - Parameter a: A parameter
     @MCPTool
-    func missingDescription(a: Int) -> Int { return 1 }
+    func missingDescription(a: Int) {}
     
     // Has description parameter
     @MCPTool(description: "This function has a description parameter")
-    func hasDescriptionParameter() -> String { return "bla" }
+    func hasDescriptionParameter() {}
     
     // Has documentation comment with description
     /// This function has a documentation comment
     @MCPTool
-    func hasDocumentationComment() -> Bool { return true }
+    func hasDocumentationComment() {}
 }
 
 // MARK: - Tests

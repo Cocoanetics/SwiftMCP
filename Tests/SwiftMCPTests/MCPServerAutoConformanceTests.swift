@@ -15,7 +15,7 @@ class AutoConformingCalculator {
 }
 
 @Test("Auto Protocol Conformance")
-func testAutoProtocolConformance() async {
+func testAutoProtocolConformance() {
     // Create an instance of the class
     let calculator = AutoConformingCalculator()
     
@@ -24,7 +24,7 @@ func testAutoProtocolConformance() async {
     
     // Verify that we can call a tool through the MCPServer protocol method
     do {
-        let result = try await calculator.callTool("add", arguments: ["a": 2, "b": 3])
+        let result = try calculator.callTool("add", arguments: ["a": 2, "b": 3])
         #expect(result as? Int == 5)
     } catch {
         #expect(Bool(false), "Should not throw an error: \(error)")

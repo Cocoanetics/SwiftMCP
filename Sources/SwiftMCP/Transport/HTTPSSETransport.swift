@@ -175,6 +175,7 @@ public final class HTTPSSETransport {
         Task {
             // Let the server process the request
             guard let response = await server.handleRequest(request) else {
+                // If no response is needed (e.g. for notifications), just return
                 return
             }
             
