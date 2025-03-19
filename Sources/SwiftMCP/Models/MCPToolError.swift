@@ -5,9 +5,6 @@ public enum MCPToolError: Error {
 	/// The tool with the given name doesn't exist
 	case unknownTool(name: String)
 
-	/// The tool call failed
-	case callFailed(name: String, reason: String)
-
 	/// An argument couldn't be cast to the correct type
 	case invalidArgumentType(parameterName: String, expectedType: String, actualValue: Any)
 
@@ -23,8 +20,6 @@ extension MCPToolError: LocalizedError {
 		switch self {
 			case .unknownTool(let name):
 				return "The tool '\(name)' was not found on the server"
-			case .callFailed(let name, let reason):
-				return "The tool '\(name)' failed to execute: \(reason)"
 			case .invalidArgumentType(let parameterName, let expectedType, let actualValue):
 				return "Parameter '\(parameterName)' expected type \(expectedType) but received \(type(of: actualValue)) with value '\(actualValue)'"
 			case .invalidJSONDictionary:

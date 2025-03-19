@@ -12,7 +12,6 @@ public final class HTTPLogger: ChannelDuplexHandler {
 	public typealias OutboundOut = HTTPServerResponsePart
 
 	private let httpLogger = Logger(label: "com.cocoanetics.SwiftMCP.HTTP")
-	private let sseLogger = Logger(label: "com.cocoanetics.SwiftMCP.SSE")
 	private let lock = NIOLock()
 	
 	// Track current request/response state
@@ -65,12 +64,7 @@ public final class HTTPLogger: ChannelDuplexHandler {
 			case .body(let body):
 				if case .byteBuffer(let buffer) = body {
 					if let str = buffer.getString(at: buffer.readerIndex, length: buffer.readableBytes) {
-						// Check if this is an SSE response
-						if isSSEResponse {
-							logSSEMessage(str)
-						} else {
-							currentResponseBody += str
-						}
+						currentResponseBody += str
 					}
 				}
 				
@@ -88,15 +82,8 @@ public final class HTTPLogger: ChannelDuplexHandler {
 		context.flush()
 	}
 	
-	private var isSSEResponse: Bool {
-		currentResponseHead?.headers.first(name: "Content-Type") == "text/event-stream"
-	}
-	
 	private func logCurrentRequest() {
 		guard let head = currentRequestHead else { return }
-		
-		// Determine if this is an SSE request
-		let isSSE = head.uri.hasPrefix("/sse")
 		
 		var log = "\(head.method) \(head.uri) HTTP/\(head.version.major).\(head.version.minor)\n"
 		head.headers.forEach { log += "\($0.name): \($0.value)\n" }
@@ -106,20 +93,11 @@ public final class HTTPLogger: ChannelDuplexHandler {
 			log += currentRequestBody + "\n"
 		}
 		
-		if isSSE {
-			sseLogger.trace("\(log)")
-		} else {
-			httpLogger.trace("\(log)")
-		}
+		httpLogger.trace("\(log)")
 	}
 	
 	private func logCurrentResponse() {
 		guard let head = currentResponseHead else { return }
-		
-		// Skip logging SSE responses as they are handled separately
-		if isSSEResponse {
-			return
-		}
 		
 		var log = "HTTP/\(head.version.major).\(head.version.minor) \(head.status.code) \(head.status.reasonPhrase)\n"
 		head.headers.forEach { log += "\($0.name): \($0.value)\n" }
@@ -130,10 +108,6 @@ public final class HTTPLogger: ChannelDuplexHandler {
 		}
 		
 		httpLogger.trace("\(log)")
-	}
-	
-	private func logSSEMessage(_ message: String) {
-		sseLogger.trace("\(message)")
 	}
 	
 	public func handlerAdded(context: ChannelHandlerContext) {

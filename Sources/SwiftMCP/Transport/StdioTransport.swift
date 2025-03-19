@@ -13,7 +13,7 @@ public final class StdioTransport {
 	}
 	
 	/// Start reading from stdin and writing to stdout
-	public func run() throws {
+	public func run() async throws {
 		while true {
 			if let input = readLine(),
 			   !input.isEmpty,
@@ -24,7 +24,7 @@ public final class StdioTransport {
 				let request = try JSONDecoder().decode(JSONRPCRequest.self, from: data)
 				
 				// Handle the request
-				if let response = server.handleRequest(request) {
+				if let response = await server.handleRequest(request) {
 					let data = try JSONEncoder().encode(response)
 					guard let json = String(data: data, encoding: .utf8) else {
 						logger.error("Failed to encode response as UTF-8")
@@ -38,7 +38,7 @@ public final class StdioTransport {
 				}
 			} else {
 				// If no input is available, sleep briefly and try again
-				Thread.sleep(forTimeInterval: 0.1)
+				try await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds in nanoseconds
 			}
 		}
 	}

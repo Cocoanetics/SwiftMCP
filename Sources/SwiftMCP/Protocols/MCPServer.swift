@@ -19,7 +19,7 @@ public protocol MCPServer: AnyObject {
     ///   - arguments: A dictionary of arguments to pass to the tool
     /// - Returns: The result of the tool call
     /// - Throws: MCPToolError if the tool doesn't exist or cannot be called
-    func callTool(_ name: String, arguments: [String: Any]) throws -> Codable
+    func callTool(_ name: String, arguments: [String: Any]) async throws -> Codable
     
     /// Gets a resource by URI
     /// - Parameter uri: The URI of the resource to get
@@ -30,7 +30,7 @@ public protocol MCPServer: AnyObject {
     /// Handles a JSON-RPC request
     /// - Parameter request: The JSON-RPC request to handle
     /// - Returns: The response as a string, or nil if no response should be sent
-    func handleRequest(_ request: JSONRPCRequest) -> Codable?
+    func handleRequest(_ request: JSONRPCRequest) async -> Codable?
 }
 
 public enum MCPResourceKind
@@ -45,7 +45,7 @@ public extension MCPServer {
     /// Handles a JSON-RPC request with default implementation
     /// - Parameter request: The JSON-RPC request to handle
     /// - Returns: A JSON-RPC reesponse, or `nil` if no response is necessary
-    func handleRequest(_ request: JSONRPCRequest) -> Codable? {
+    func handleRequest(_ request: JSONRPCRequest) async -> Codable? {
         // Prepare the response based on the method
         switch request.method {
             case "initialize":
@@ -71,7 +71,7 @@ public extension MCPServer {
                 return createResourcesReadResponse(id: request.id ?? 0, request: request)
                 
             case "tools/call":
-                return handleToolCall(request)
+                return await handleToolCall(request)
                 
             default:
                 return nil
@@ -133,34 +133,34 @@ public extension MCPServer {
     /// Handles a tool call request
     /// - Parameter request: The JSON-RPC request for a tool call
     /// - Returns: The response as a string, or nil if no response should be sent
-    private func handleToolCall(_ request: JSONRPCRequest) -> Codable? {
+    private func handleToolCall(_ request: JSONRPCRequest) async -> Codable? {
         guard let params = request.params,
               let toolName = params["name"]?.value as? String else {
             // Invalid request: missing tool name
             return nil
         }
         
-        // Get the arguments and prepare response text
-        var responseText = ""
-        var isError = false
-        
         // Extract arguments from the request
         let arguments = (params["arguments"]?.value as? [String: Any]) ?? [:]
         
         // Call the appropriate wrapper method based on the tool name
         do {
-            let result = try self.callTool(toolName, arguments: arguments)
-            responseText = "\(result)"
-        } catch let error as MCPToolError {
-            responseText = error.localizedDescription
-            isError = true
+            let result = try await self.callTool(toolName, arguments: arguments)
+            let responseText: String
+            
+            // Use Mirror to check if the result is Void
+            let mirror = Mirror(reflecting: result)
+            if mirror.displayStyle == .tuple && mirror.children.isEmpty {
+                responseText = ""  // Convert Void to empty string
+            } else {
+                responseText = "\(result)"
+            }
+            
+            return ToolCallResponse(id: request.id ?? 0, result: responseText)
+            
         } catch {
-            responseText = "Error: \(error)"
-            isError = true
+            return ToolCallResponse(id: request.id ?? 0, error: error)
         }
-        
-        // Create and encode the response
-        return ToolCallResponse(id: request.id ?? 0, text: responseText, isError: isError)
     }
     
     /// Function to log a message to stderr
@@ -332,4 +332,26 @@ public extension MCPServer {
         }
         return nil
     }
+
+	/// Function to provide the metadata for all functions annotated with @MCPTool
+	var mcpToolMetadata: [MCPToolMetadata]  {
+		
+		var metadataArray: [MCPToolMetadata] = []
+		
+		let mirror = Mirror(reflecting: self)
+		
+		for child in mirror.children {
+			if let metadata = child.value as? MCPToolMetadata,
+			   child.label?.hasPrefix("__mcpMetadata_") == true {
+				metadataArray.append(metadata)
+			}
+		}
+		
+		return metadataArray
+	}
+	
+	/// Returns an array of all MCP tools defined in this type
+	var mcpTools: [MCPTool] {
+	   return mcpToolMetadata.convertedToTools()
+	}
 }

@@ -57,15 +57,32 @@ class Calculator {
     /// Returns a greeting message with the provided name
     /// - Parameter name: Name of the person to greet
     /// - Returns: The greeting message
-    @MCPTool(description: "Shows a greeting message")
-    func greet(name: String) -> String {
-        return "Hello, \(name)!"
-    }
+	@MCPTool(description: "Shows a greeting message")
+	func greet(name: String) async throws -> String {
+		// Validate name length
+		if name.count < 2 {
+			throw DemoError.nameTooShort(name: name)
+		}
+		
+		// Validate name contains only letters and spaces
+		if !name.allSatisfy({ $0.isLetter || $0.isWhitespace }) {
+			throw DemoError.invalidName(name: name)
+		}
+		
+		return "Hello, \(name)!"
+	}
+
 	
     /** A simple ping function that returns 'pong' */
 	@MCPTool
 	func ping() -> String {
 		return "pong"
+	}
+	
+	/** A function to test doing nothing, not returning anything*/
+	@MCPTool
+	func noop() {
+		
 	}
     
     /// Returns an array of all MCP resources defined in this type

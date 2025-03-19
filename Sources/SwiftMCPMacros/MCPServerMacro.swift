@@ -109,36 +109,12 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
 			}
 		}
 		
-		// Create a computed property that returns an array of MCPTool objects
-		let mcpToolsProperty = """
-   /// Returns an array of all MCP tools defined in this type
-   public var mcpTools: [MCPTool] {
-   let mirror = Mirror(reflecting: self)
-   var metadataArray: [MCPToolMetadata] = []
-   
-   for child in mirror.children {
-      if let metadata = child.value as? MCPToolMetadata,
-      child.label?.hasPrefix("__mcpMetadata_") == true {
-      metadataArray.append(metadata)
-      }
-   }
-   
-   return metadataArray.convertedToTools()
-  }
-  """
-		
-		// Create a dictionary property that maps function names to their wrapper methods
-		var handlersInitLines: [String] = []
-		for funcName in mcpTools {
-			handlersInitLines.append("            handlers[\"\(funcName)\"] = self.__mcpCall_\(funcName)")
-		}
-		
 		// Create a callTool method that uses a switch statement to call the appropriate wrapper function
 		var switchCases: [String] = []
 		for funcName in mcpTools {
 			switchCases.append("""
-   case "\(funcName)":
-      return try __mcpCall_\(funcName)(enrichedArguments)
+       case "\(funcName)":
+            return try await __mcpCall_\(funcName)(enrichedArguments)
    """)
 		}
 		
@@ -149,7 +125,7 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
   ///   - arguments: A dictionary of arguments to pass to the tool
   /// - Returns: The result of the tool call
   /// - Throws: MCPToolError if the tool doesn't exist or cannot be called
-  public func callTool(_ name: String, arguments: [String: Any]) throws -> Codable {
+  public func callTool(_ name: String, arguments: [String: Any]) async throws -> Codable {
      // Find the tool by name
      guard let tool = mcpTools.first(where: { $0.name == name }) else {
         throw MCPToolError.unknownTool(name: name)
@@ -170,7 +146,6 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
 			DeclSyntax(stringLiteral: nameProperty),
 			DeclSyntax(stringLiteral: versionProperty),
 			DeclSyntax(stringLiteral: descriptionProperty),
-			DeclSyntax(stringLiteral: mcpToolsProperty),
 			DeclSyntax(stringLiteral: callToolMethod)
 		]
 	}

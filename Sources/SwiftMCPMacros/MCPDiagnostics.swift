@@ -26,9 +26,6 @@ enum MCPToolDiagnostic: DiagnosticMessage {
     
     /// Error when a parameter has an unsupported default value type
     case invalidDefaultValueType(paramName: String, typeName: String)
-    
-    /// Error when a function has a void return type
-    case voidReturnType(functionName: String)
 
     var message: String {
         switch self {
@@ -38,14 +35,12 @@ enum MCPToolDiagnostic: DiagnosticMessage {
             return "Function '\(functionName)' is missing a description. Add a documentation comment or provide a description parameter."
         case .invalidDefaultValueType(let paramName, let typeName):
             return "Parameter '\(paramName)' has an unsupported default value type '\(typeName)'. Only numbers, booleans, and strings are supported."
-        case .voidReturnType(_):
-            return "A return type conforming to Codable is required"
         }
     }
 
     var severity: DiagnosticSeverity {
         switch self {
-        case .onlyFunctions, .invalidDefaultValueType, .voidReturnType:
+        case .onlyFunctions, .invalidDefaultValueType:
             return .error
         case .missingDescription:
             return .warning
@@ -60,8 +55,6 @@ enum MCPToolDiagnostic: DiagnosticMessage {
             return MessageID(domain: "SwiftMCP", id: "missingDescription")
         case .invalidDefaultValueType:
             return MessageID(domain: "SwiftMCP", id: "invalidDefaultValueType")
-        case .voidReturnType:
-            return MessageID(domain: "SwiftMCP", id: "voidReturnType")
         }
     }
 } 

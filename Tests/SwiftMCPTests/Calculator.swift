@@ -77,4 +77,10 @@ class Calculator {
 	func ping() -> String {
 		return "pong"
 	}
+	
+	/** A function to test doing nothing, not returning anything*/
+	@MCPTool
+	func noop() {
+		
+	}
 }

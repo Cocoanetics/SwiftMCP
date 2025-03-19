@@ -19,34 +19,39 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
     
     func channelInactive(context: ChannelHandlerContext) {
         transport.logger.trace("Channel inactive")
-        transport.removeSSEChannel(id: id)
         context.fireChannelInactive()
     }
     
     func errorCaught(context: ChannelHandlerContext, error: Error) {
         transport.logger.error("Channel error: \(error)")
-        transport.removeSSEChannel(id: id)
         context.close(promise: nil)
     }
     
     private func sendResponse(context: ChannelHandlerContext, status: HTTPResponseStatus, headers: HTTPHeaders? = nil, body: ByteBuffer? = nil) {
-        var responseHeaders = headers ?? HTTPHeaders()
-        if body != nil {
-            responseHeaders.add(name: "Content-Type", value: "application/json")
-        }
-        
-        let head = HTTPResponseHead(version: .http1_1, status: status, headers: responseHeaders)
-        context.write(self.wrapOutboundOut(.head(head)), promise: nil)
-        
-        if let body = body {
-            context.write(self.wrapOutboundOut(.body(.byteBuffer(body))), promise: nil)
-        }
-        
-        context.write(self.wrapOutboundOut(.end(nil)), promise: nil)
-        context.flush()
+		
+		context.eventLoop.execute {
+			
+			var responseHeaders = headers ?? HTTPHeaders()
+			
+			if body != nil {
+				responseHeaders.add(name: "Content-Type", value: "application/json")
+			}
+			
+			responseHeaders.add(name: "Access-Control-Allow-Origin", value: "*")
+			
+			let head = HTTPResponseHead(version: .http1_1, status: status, headers: responseHeaders)
+			context.write(self.wrapOutboundOut(.head(head)), promise: nil)
+			
+			if let body = body {
+				context.write(self.wrapOutboundOut(.body(.byteBuffer(body))), promise: nil)
+			}
+			
+			context.write(self.wrapOutboundOut(.end(nil)), promise: nil)
+			context.flush()
+		}
     }
     
-    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+	func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         let reqPart = unwrapInboundIn(data)
         
         switch reqPart {
@@ -67,7 +72,9 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
                 if head.uri.hasPrefix("/sse") {
                     handleSSE(context: context, head: head, body: nil)
                 } else if head.uri.hasPrefix("/messages") {
-                    handleMessages(context: context, head: head, body: nil)
+					Task {
+						await handleMessages(context: context, head: head, body: nil)
+					}
                 } else if head.uri == "/.well-known/ai-plugin.json" {
                     if transport.serveOpenAPI {
                         handleAIPluginManifest(context: context, head: head)
@@ -86,7 +93,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
                     if head.uri.hasPrefix(toolPath) {
                         if transport.serveOpenAPI {
                             let toolName = String(head.uri.dropFirst(toolPath.count + 1)) // +1 for the trailing slash
-                            handleToolCall(context: context, head: head, toolName: toolName, body: nil)
+							handleToolCall(context: context, head: head, toolName: toolName, body: nil)
                         } else {
                             sendResponse(context: context, status: .notFound)
                         }
@@ -99,7 +106,9 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
                 if head.uri.hasPrefix("/sse") {
                     handleSSE(context: context, head: head, body: buffer)
                 } else if head.uri.hasPrefix("/messages") {
-                    handleMessages(context: context, head: head, body: buffer)
+					Task {
+						await handleMessages(context: context, head: head, body: buffer)
+					}
                 } else if head.uri == "/.well-known/ai-plugin.json" {
                     if transport.serveOpenAPI {
                         handleAIPluginManifest(context: context, head: head)
@@ -117,8 +126,8 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
                     let toolPath = "/" + transport.server.serverName.asModelName
                     if head.uri.hasPrefix(toolPath) {
                         if transport.serveOpenAPI {
-                            let toolName = String(head.uri.dropFirst(toolPath.count + 1)) // +1 for the trailing slash
-                            handleToolCall(context: context, head: head, toolName: toolName, body: buffer)
+							let toolName = String(head.uri.dropFirst(toolPath.count + 1)) // +1 for the trailing slash
+							handleToolCall(context: context, head: head, toolName: toolName, body: buffer)
                         } else {
                             sendResponse(context: context, status: .notFound)
                         }
@@ -140,14 +149,21 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
     
     private func handleSSE(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?) {
         guard head.method == .GET else {
+            transport.logger.warning("Rejected non-GET SSE request")
             sendResponse(context: context, status: .methodNotAllowed)
             return
         }
         
         // Validate SSE headers
         let acceptHeader = head.headers["accept"].first ?? ""
-		
-		guard "text/event-stream".matchesAcceptHeader(acceptHeader) else {
+        
+        transport.logger.info("""
+            SSE connection attempt:
+            - Accept: \(acceptHeader)
+            - Headers: \(head.headers)
+            """)
+        
+        guard "text/event-stream".matchesAcceptHeader(acceptHeader) else {
             transport.logger.warning("Rejected non-SSE request (Accept: \(acceptHeader))")
             sendResponse(context: context, status: .badRequest)
             return
@@ -168,38 +184,43 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             - Accept: \(acceptHeader)
             """)
         
+        // Register the channel with client ID
+        transport.logger.info("Registering SSE channel for client \(clientId)")
+        transport.registerSSEChannel(context.channel, id: UUID(uuidString: clientId)!)
+        
+        // Then send endpoint event with client ID in URL
+        guard let endpointUrl = self.endpointUrl(from: head, clientId: clientId) else {
+            transport.logger.error("Failed to construct endpoint URL")
+            context.close(promise: nil)
+            return
+        }
+        
+        // Set up SSE response headers
         var headers = HTTPHeaders()
         headers.add(name: "Content-Type", value: "text/event-stream")
         headers.add(name: "Cache-Control", value: "no-cache")
         headers.add(name: "Connection", value: "keep-alive")
-        headers.add(name: "Access-Control-Allow-Origin", value: "*")
         headers.add(name: "Access-Control-Allow-Methods", value: "GET")
         headers.add(name: "Access-Control-Allow-Headers", value: "*")
         
         let response = HTTPResponseHead(version: head.version,
                                      status: .ok,
                                      headers: headers)
+        
+        transport.logger.info("Sending SSE response headers")
         context.write(wrapOutboundOut(.head(response)), promise: nil)
         context.flush()
         
-        // Register the channel with client ID first
-        transport.registerSSEChannel(context.channel, id: id, clientId: clientId)
-        
-        // Then send endpoint event with client ID in URL
-		guard let endpointUrl = self.endpointUrl(from: head, clientId: clientId) else {
-            transport.logger.error("Failed to construct endpoint URL")
-            context.close(promise: nil)
-            return
-        }
-        
-		let message = SSEMessage(name: "endpoint", data: endpointUrl.absoluteString)
+        transport.logger.info("Sending endpoint event with URL: \(endpointUrl)")
+        let message = SSEMessage(name: "endpoint", data: endpointUrl.absoluteString)
         context.channel.sendSSE(message)
+        
+        transport.logger.info("SSE connection setup complete for client \(clientId)")
     }
     
-    private func handleMessages(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?) {
+	private func handleMessages(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?) async {
         if head.method == .OPTIONS {
             var headers = HTTPHeaders()
-            headers.add(name: "Access-Control-Allow-Origin", value: "*")
             headers.add(name: "Access-Control-Allow-Methods", value: "POST, OPTIONS")
             headers.add(name: "Access-Control-Allow-Headers", value: "*")
             headers.add(name: "Access-Control-Allow-Headers", value: "Content-Type, Authorization")
@@ -222,30 +243,29 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             return
         }
         
-		// Check authorization if handler is set
-		var token: String?
-		
-		// First try to get token from Authorization header
-		if let authHeader = head.headers["Authorization"].first {
-			let parts = authHeader.split(separator: " ")
-			if parts.count == 2 && parts[0].lowercased() == "bearer" {
-				token = String(parts[1])
-			}
-		}
-		
-		// Validate token
-		if case .unauthorized(let message) = transport.authorizationHandler(token) {
-
-			let errorMessage = JSONRPCMessage(error: .init(code: 401, message: "Unauthorized: \(message)"))
-			
-			let data = try! JSONEncoder().encode(errorMessage)
-			let errorResponse = String(data: data, encoding: .utf8)!
-			
-			// Send error via SSE
-			let sseMessage = SSEMessage(data: errorResponse)
-			transport.sendSSE(sseMessage, to: clientId)
-		}
-		
+        // Check authorization if handler is set
+        var token: String?
+        
+        // First try to get token from Authorization header
+        if let authHeader = head.headers["Authorization"].first {
+            let parts = authHeader.split(separator: " ")
+            if parts.count == 2 && parts[0].lowercased() == "bearer" {
+                token = String(parts[1])
+            }
+        }
+        
+        // Validate token
+        if case .unauthorized(let message) = transport.authorizationHandler(token) {
+            let errorMessage = JSONRPCMessage(error: .init(code: 401, message: "Unauthorized: \(message)"))
+            
+            let data = try! JSONEncoder().encode(errorMessage)
+            let errorResponse = String(data: data, encoding: .utf8)!
+            
+            // Send error via SSE
+            let sseMessage = SSEMessage(data: errorResponse)
+            transport.sendSSE(sseMessage, to: clientId)
+        }
+        
         guard let body = body else {
             sendResponse(context: context, status: .badRequest)
             return
@@ -255,30 +275,27 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
         do {
             let request = try decoder.decode(JSONRPCRequest.self, from: body)
             
-            // Verify that this client has an active SSE connection
-            if !transport.hasActiveSSEConnection(for: clientId) {
-                transport.logger.warning("Rejected POST request from client \(clientId) without active SSE connection")
-                var headers = HTTPHeaders()
-                headers.add(name: "Access-Control-Allow-Origin", value: "*")
-                headers.add(name: "Content-Type", value: "application/json")
-                
-                // Create error response
-                let errorResponse = """
-                {
-                    "jsonrpc": "2.0",
-                    "error": {
-                        "code": -32600,
-                        "message": "No active SSE connection found for this client ID. Please establish an SSE connection first."
-                    },
-                    "id": \(request.id ?? 0)
-                }
-                """
-                var buffer = context.channel.allocator.buffer(capacity: errorResponse.utf8.count)
-                buffer.writeString(errorResponse)
-                
-                sendResponse(context: context, status: .forbidden, headers: headers, body: buffer)
-                return
-            }
+//            // Verify that this client has an active SSE connection
+//            if await !transport.hasActiveSSEConnection(for: clientId) {
+//                transport.logger.warning("Rejected POST request from client \(clientId) without active SSE connection")
+//                
+//                // Create error response
+//                let errorResponse = """
+//                {
+//                    "jsonrpc": "2.0",
+//                    "error": {
+//                        "code": -32600,
+//                        "message": "No active SSE connection found for this client ID. Please establish an SSE connection first."
+//                    },
+//                    "id": \(request.id ?? 0)
+//                }
+//                """
+//                var buffer = context.channel.allocator.buffer(capacity: errorResponse.utf8.count)
+//                buffer.writeString(errorResponse)
+//                
+//                sendResponse(context: context, status: .forbidden, body: buffer)
+//                return
+//            }
             
             if request.method == nil {
                 sendResponse(context: context, status: .ok, headers: nil)
@@ -286,10 +303,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             }
             
             // Send Accepted first
-            var headers = HTTPHeaders()
-            headers.add(name: "Access-Control-Allow-Origin", value: "*")
-            headers.add(name: "Content-Type", value: "application/json")
-            sendResponse(context: context, status: .accepted, headers: headers)
+            sendResponse(context: context, status: .accepted)
             
             // Handle the response with client ID
             transport.handleJSONRPCRequest(request, from: clientId)
@@ -341,11 +355,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             var buffer = context.channel.allocator.buffer(capacity: jsonData.count)
             buffer.writeBytes(jsonData)
             
-            var headers = HTTPHeaders()
-            headers.add(name: "Content-Type", value: "application/json")
-            headers.add(name: "Access-Control-Allow-Origin", value: "*")
-            
-            sendResponse(context: context, status: .ok, headers: headers, body: buffer)
+            sendResponse(context: context, status: .ok, body: buffer)
         } catch {
             transport.logger.error("Failed to encode AI plugin manifest: \(error)")
             sendResponse(context: context, status: .internalServerError)
@@ -387,11 +397,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             var buffer = context.channel.allocator.buffer(capacity: jsonData.count)
             buffer.writeBytes(jsonData)
             
-            var headers = HTTPHeaders()
-            headers.add(name: "Content-Type", value: "application/json")
-            headers.add(name: "Access-Control-Allow-Origin", value: "*")
-            
-            sendResponse(context: context, status: .ok, headers: headers, body: buffer)
+            sendResponse(context: context, status: .ok, body: buffer)
         } catch {
             transport.logger.error("Failed to encode OpenAPI spec: \(error)")
             sendResponse(context: context, status: .internalServerError)
@@ -402,7 +408,6 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
         // Handle CORS preflight
         if head.method == .OPTIONS {
             var headers = HTTPHeaders()
-            headers.add(name: "Access-Control-Allow-Origin", value: "*")
             headers.add(name: "Access-Control-Allow-Methods", value: "POST, OPTIONS")
             headers.add(name: "Access-Control-Allow-Headers", value: "*")
             headers.add(name: "Access-Control-Allow-Headers", value: "Content-Type, Authorization")
@@ -435,10 +440,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             var buffer = context.channel.allocator.buffer(capacity: data.count)
             buffer.writeBytes(data)
             
-            var headers = HTTPHeaders()
-            headers.add(name: "Access-Control-Allow-Origin", value: "*")
-            
-            sendResponse(context: context, status: .unauthorized, headers: headers, body: buffer)
+             sendResponse(context: context, status: .unauthorized, body: buffer)
             return
         }
         
@@ -448,68 +450,79 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             return
         }
         
-        do {
-            // Get Data from ByteBuffer
-            let bodyData = Data(buffer: body)
-            
-            // Parse request body as JSON dictionary
-            guard let arguments = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any] else
-			{
-				throw MCPToolError.invalidJSONDictionary
-			}
-            
-            // Call the tool
-            let result = try transport.server.callTool(toolName, arguments: arguments)
-            
-            // Convert result to JSON data
-			let jsonData = try JSONEncoder().encode(result)
-            
-            var buffer = context.channel.allocator.buffer(capacity: jsonData.count)
-            buffer.writeBytes(jsonData)
-            
-            var headers = HTTPHeaders()
-            headers.add(name: "Access-Control-Allow-Origin", value: "*")
-            
-            sendResponse(context: context, status: .ok, headers: headers, body: buffer)
-            
-        } catch {
-            transport.logger.error("Tool call error: \(error)")
-            
-			let errorDict = ["error": error.localizedDescription] as [String : String]
-			let data = try! JSONEncoder().encode(errorDict)
-			let string = String(data: data, encoding: .utf8)!
+
+		// Get Data from ByteBuffer
+		let bodyData = Data(buffer: body)
+		let allocator = context.channel.allocator
+		
+		Task {
 			
-            var buffer = context.channel.allocator.buffer(capacity: string.utf8.count)
-            buffer.writeString(string)
-            
-            var headers = HTTPHeaders()
-            headers.add(name: "Access-Control-Allow-Origin", value: "*")
-            
-            sendResponse(context: context, status: .badRequest, headers: headers, body: buffer)
-        }
-    }
+			do {
+				// Parse request body as JSON dictionary
+				guard let arguments = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any] else
+				{
+					throw MCPToolError.invalidJSONDictionary
+				}
+				
+				// Call the tool
+				let result = try await transport.server.callTool(toolName, arguments: arguments)
+				
+				// Convert result to JSON data
+				let jsonData = try JSONEncoder().encode(result)
+				
+				var buffer = allocator.buffer(capacity: jsonData.count)
+				buffer.writeBytes(jsonData)
+				
+				self.sendResponse(context: context, status: .ok, body: buffer)
+				
+			} catch {
+				let errorDict = ["error": error.localizedDescription] as [String : String]
+				let data = try! JSONEncoder().encode(errorDict)
+				let string = String(data: data, encoding: .utf8)!
+				
+				var status = HTTPResponseStatus.badRequest
+				
+				if let mcpError = error as? MCPToolError, case .unknownTool(_) = mcpError {
+					status = .notFound
+				}
+				
+				var buffer = allocator.buffer(capacity: string.utf8.count)
+				buffer.writeString(string)
+				
+				self.sendResponse(context: context, status: status, body: buffer)
+			}
+		}
+	}
 	
 	// MARK: - Helpers
 	
 	fileprivate func endpointUrl(from head: HTTPRequestHead, clientId: String) -> URL? {
-		
 		var components = URLComponents()
 		
-		// Use forwarded headers if present, otherwise use transport defaults
-		if let forwardedHost = head.headers["X-Forwarded-Host"].first {
-			components.host = forwardedHost
+		// Get the host from the request headers or connection
+		if let host = head.headers["Host"].first {
+			components.host = host
+		} else if let remoteAddress = head.headers["X-Forwarded-Host"].first {
+			components.host = remoteAddress
 		} else {
 			components.host = transport.host
 		}
 		
-		if let forwardedProto = head.headers["X-Forwarded-Proto"].first {
-			components.scheme = forwardedProto
+		// Get the scheme from the request headers or connection
+		if let proto = head.headers["X-Forwarded-Proto"].first {
+			components.scheme = proto
 		} else {
 			components.scheme = "http"
 		}
 		
-		if let forwardedPort = head.headers["X-Forwarded-Port"].first {
-			components.port = Int(forwardedPort)
+		// Get the port from the request headers or connection
+		if let port = head.headers["X-Forwarded-Port"].first {
+			components.port = Int(port)
+		} else if let host = components.host, host.contains(":") {
+			// Extract port from host if present
+			let parts = host.split(separator: ":")
+			components.host = String(parts[0])
+			components.port = Int(parts[1])
 		} else {
 			components.port = transport.port
 		}
@@ -524,6 +537,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
 			components.port = nil
 		}
 		
+		transport.logger.info("Generated endpoint URL: \(components.url?.absoluteString ?? "nil")")
 		return components.url
 	}
 }

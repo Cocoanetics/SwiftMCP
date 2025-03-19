@@ -76,6 +76,21 @@ struct HTTPSSECommand: ParsableCommand {
 #endif
         
         let calculator = Calculator()
+		
+		
+		let mirror = Mirror(reflecting: calculator)
+		var metadataArray: [MCPToolMetadata] = []
+		
+		for child in mirror.children {
+		   if let metadata = child.value as? MCPToolMetadata,
+		   child.label?.hasPrefix("__mcpMetadata_") == true {
+		   metadataArray.append(metadata)
+		   }
+		}
+		
+		print(metadataArray.description)
+
+		
         let host = String.localHostname
         print("MCP Server \(calculator.serverName) (\(calculator.serverVersion)) started with HTTP+SSE transport on http://\(host):\(port)/sse")
         
