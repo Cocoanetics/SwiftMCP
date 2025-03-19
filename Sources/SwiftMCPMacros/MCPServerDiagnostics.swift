@@ -12,26 +12,26 @@ import SwiftSyntaxMacros
  */
 enum MCPServerDiagnostic: DiagnosticMessage {
 	/// Error when the macro is applied to a non-class declaration
-	case requiresClass(typeName: String, actualType: String)
+	case requiresReferenceType(typeName: String)
 	
 	var message: String {
 		switch self {
-			case .requiresClass(let typeName, let actualType):
-				return "MCPServer can only be applied to classes, but '\(typeName)' is a \(actualType)"
+			case .requiresReferenceType(let typeName):
+				return "'\(typeName)' must be a reference type (class or actor)"
 		}
 	}
 	
 	var severity: DiagnosticSeverity {
 		switch self {
-			case .requiresClass:
+			case .requiresReferenceType:
 				return .error
 		}
 	}
 	
 	var diagnosticID: MessageID {
 		switch self {
-			case .requiresClass:
-				return MessageID(domain: "SwiftMCP", id: "requiresClass")
+			case .requiresReferenceType:
+				return MessageID(domain: "SwiftMCPMacros", id: "RequiresReferenceType")
 		}
 	}
 }
@@ -43,14 +43,14 @@ enum MCPServerFixItMessage: FixItMessage {
 	var message: String {
 		switch self {
 			case .replaceWithClass(let keyword):
-				return "Replace '\(keyword)' with 'class'"
+				return "Change '\(keyword)' to 'class'"
 		}
 	}
 	
 	var fixItID: MessageID {
 		switch self {
 			case .replaceWithClass:
-				return MessageID(domain: "SwiftMCP", id: "replaceWithClass")
+				return MessageID(domain: "SwiftMCPMacros", id: "ReplaceWithClass")
 		}
 	}
 } 

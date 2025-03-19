@@ -14,7 +14,7 @@ import SwiftDiagnostics
 /**
  Implementation of the MCPServer macro.
  
- This macro adds MCPServer protocol conformance to a class and generates the necessary
+ This macro adds MCPServer protocol conformance and generates the necessary
  infrastructure for handling MCP tools.
  
  Example usage:
@@ -29,14 +29,28 @@ import SwiftDiagnostics
  }
  ```
  
- - Note: The server description is automatically extracted from the class's documentation comment.
+ Or with an actor:
+ ```swift
+ /// A server that provides calculator functionality
+ @MCPServer(
+     name: "calculator",
+     version: "1.0"
+ )
+ actor CalculatorServer {
+     // MCP tool functions go here
+ }
+ ```
+ 
+ - Note: The server description is automatically extracted from the documentation comment.
  
  - Parameters:
-   - name: The name of the server. Defaults to the class name.
+   - name: The name of the server. Defaults to the declaration name.
    - version: The version of the server. Defaults to "1.0".
  
- - Attention: This macro can only be applied to classes. Using it on a struct or actor
-             will result in a diagnostic with a fix-it to convert to a class.
+ - Throws: MCPToolError if a tool cannot be found or called
+ 
+ - Attention: This macro can only be applied to reference types (classes or actors).
+             Using it on a struct will result in a diagnostic with a fix-it to convert to a class.
  */
 public struct MCPServerMacro: MemberMacro, ExtensionMacro {
 	/**
@@ -54,44 +68,24 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
 		providingMembersOf declaration: some DeclGroupSyntax,
 		in context: some MacroExpansionContext
 	) throws -> [DeclSyntax] {
-		// Check if the declaration is a class
-		guard declaration.is(ClassDeclSyntax.self) else {
-			// If it's a struct or actor, emit a diagnostic with a fix-it
-			if let structDecl = declaration.as(StructDeclSyntax.self) {
-				let diagnostic = SwiftDiagnostics.Diagnostic(
-					node: Syntax(structDecl.structKeyword),
-					message: MCPServerDiagnostic.requiresClass(typeName: structDecl.name.text, actualType: "struct"),
-					fixIts: [
-						FixIt(
-							message: MCPServerFixItMessage.replaceWithClass(keyword: "struct"),
-							changes: [
-								.replace(
-									oldNode: Syntax(structDecl.structKeyword),
-									newNode: Syntax(TokenSyntax.keyword(.class))
-								)
-							]
-						)
-					]
-				)
-				context.diagnose(diagnostic)
-			} else if let actorDecl = declaration.as(ActorDeclSyntax.self) {
-				let diagnostic = SwiftDiagnostics.Diagnostic(
-					node: Syntax(actorDecl.actorKeyword),
-					message: MCPServerDiagnostic.requiresClass(typeName: actorDecl.name.text, actualType: "actor"),
-					fixIts: [
-						FixIt(
-							message: MCPServerFixItMessage.replaceWithClass(keyword: "actor"),
-							changes: [
-								.replace(
-									oldNode: Syntax(actorDecl.actorKeyword),
-									newNode: Syntax(TokenSyntax.keyword(.class))
-								)
-							]
-						)
-					]
-				)
-				context.diagnose(diagnostic)
-			}
+		// Check if the declaration is a class or actor
+		if let structDecl = declaration.as(StructDeclSyntax.self) {
+			let diagnostic = SwiftDiagnostics.Diagnostic(
+				node: Syntax(structDecl.structKeyword),
+				message: MCPServerDiagnostic.requiresReferenceType(typeName: structDecl.name.text),
+				fixIts: [
+					FixIt(
+						message: MCPServerFixItMessage.replaceWithClass(keyword: "struct"),
+						changes: [
+							.replace(
+								oldNode: Syntax(structDecl.structKeyword),
+								newNode: Syntax(TokenSyntax.keyword(.class))
+							)
+						]
+					)
+				]
+			)
+			context.diagnose(diagnostic)
 			return []
 		}
 		

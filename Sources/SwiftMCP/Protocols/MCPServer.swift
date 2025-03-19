@@ -7,10 +7,10 @@ public protocol MCPServer: AnyObject {
     var mcpTools: [MCPTool] { get }
     
     /// Returns an array of all MCP resources defined in this type
-    var mcpResources: [MCPResource] { get }
+    var mcpResources: [MCPResource] { get async }
 	
 	/// Returns an array of all MCP resource templates defined in this type
-	var mcpResourceTemplates: [MCPResourceTemplate] { get }
+	var mcpResourceTemplates: [MCPResourceTemplate] { get async }
 
     
     /// Calls a tool by name with the provided arguments
@@ -25,7 +25,7 @@ public protocol MCPServer: AnyObject {
     /// - Parameter uri: The URI of the resource to get
     /// - Returns: The resource content, or nil if the resource doesn't exist
     /// - Throws: MCPResourceError if there's an error getting the resource
-    func getResource(uri: URL) throws -> MCPResourceContent?
+    func getResource(uri: URL) async throws -> MCPResourceContent?
     
     /// Handles a JSON-RPC request
     /// - Parameter request: The JSON-RPC request to handle
@@ -62,13 +62,13 @@ public extension MCPServer {
                 return createToolsResponse(id: request.id ?? 0)
                 
             case "resources/list":
-                return createResourcesListResponse(id: request.id ?? 0)
+                return await createResourcesListResponse(id: request.id ?? 0)
                 
             case "resources/templates/list":
-                return createResourceTemplatesListResponse(id: request.id ?? 0)
+                return await createResourceTemplatesListResponse(id: request.id ?? 0)
                 
             case "resources/read":
-                return createResourcesReadResponse(id: request.id ?? 0, request: request)
+                return await createResourcesReadResponse(id: request.id ?? 0, request: request)
                 
             case "tools/call":
                 return await handleToolCall(request)
@@ -101,9 +101,9 @@ public extension MCPServer {
     /// Creates a resources list response
     /// - Parameter id: The request ID
     /// - Returns: The resources list response
-    func createResourcesListResponse(id: Int) -> JSONRPC.Response {
+    func createResourcesListResponse(id: Int) async -> JSONRPC.Response {
         // Convert MCPResource objects to dictionaries
-        let resourceDicts = mcpResources.map { resource -> [String: Any] in
+        let resourceDicts = await mcpResources.map { resource -> [String: Any] in
             return [
                 "uri": resource.uri.absoluteString,
                 "name": resource.name,
@@ -194,7 +194,7 @@ public extension MCPServer {
     ///   - id: The request ID
     ///   - request: The original JSON-RPC request
     /// - Returns: The resources read response
-    func createResourcesReadResponse(id: Int, request: JSONRPCRequest) -> JSONRPC.Response {
+    func createResourcesReadResponse(id: Int, request: JSONRPCRequest) async -> JSONRPC.Response {
         // Extract the URI from the request params
         guard let uriString = request.params?["uri"]?.value as? String,
               let uri = URL(string: uriString) else {
@@ -207,7 +207,7 @@ public extension MCPServer {
         
         do {
             // Try to get the resource content
-            if let resourceContent = try getResource(uri: uri) {
+            if let resourceContent = try await getResource(uri: uri) {
                 // Convert MCPResourceContent to dictionary
                 var contentDict: [String: Any] = [
                     "uri": resourceContent.uri.absoluteString
@@ -252,9 +252,9 @@ public extension MCPServer {
     /// Creates a resource templates list response
     /// - Parameter id: The request ID
     /// - Returns: The resource templates list response
-    func createResourceTemplatesListResponse(id: Int) -> JSONRPC.Response {
+    func createResourceTemplatesListResponse(id: Int) async -> JSONRPC.Response {
         // Convert MCPResourceTemplate objects to dictionaries
-        let templateDicts = mcpResourceTemplates.map { template -> [String: Any] in
+        let templateDicts = await mcpResourceTemplates.map { template -> [String: Any] in
             return [
                 "uriTemplate": template.uriTemplate.absoluteString,
                 "name": template.name,
@@ -296,7 +296,7 @@ public extension MCPServer {
 	}
 
 	/// Default implementation
-	func getResource(uri: URL) throws -> MCPResourceContent? {
+	func getResource(uri: URL) async throws -> MCPResourceContent? {
 		return nil
 	}
     
