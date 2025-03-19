@@ -332,4 +332,26 @@ public extension MCPServer {
         }
         return nil
     }
+
+	/// Function to provide the metadata for all functions annotated with @MCPTool
+	var mcpToolMetadata: [MCPToolMetadata]  {
+		
+		var metadataArray: [MCPToolMetadata] = []
+		
+		let mirror = Mirror(reflecting: self)
+		
+		for child in mirror.children {
+			if let metadata = child.value as? MCPToolMetadata,
+			   child.label?.hasPrefix("__mcpMetadata_") == true {
+				metadataArray.append(metadata)
+			}
+		}
+		
+		return metadataArray
+	}
+	
+	/// Returns an array of all MCP tools defined in this type
+	var mcpTools: [MCPTool] {
+	   return mcpToolMetadata.convertedToTools()
+	}
 }

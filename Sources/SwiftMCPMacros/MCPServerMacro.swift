@@ -109,30 +109,6 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
 			}
 		}
 		
-		// Create a computed property that returns an array of MCPTool objects
-		let mcpToolsProperty = """
-   /// Returns an array of all MCP tools defined in this type
-   public var mcpTools: [MCPTool] {
-   let mirror = Mirror(reflecting: self)
-   var metadataArray: [MCPToolMetadata] = []
-   
-   for child in mirror.children {
-      if let metadata = child.value as? MCPToolMetadata,
-      child.label?.hasPrefix("__mcpMetadata_") == true {
-      metadataArray.append(metadata)
-      }
-   }
-   
-   return metadataArray.convertedToTools()
-  }
-  """
-		
-		// Create a dictionary property that maps function names to their wrapper methods
-		var handlersInitLines: [String] = []
-		for funcName in mcpTools {
-			handlersInitLines.append("            handlers[\"\(funcName)\"] = self.__mcpCall_\(funcName)")
-		}
-		
 		// Create a callTool method that uses a switch statement to call the appropriate wrapper function
 		var switchCases: [String] = []
 		for funcName in mcpTools {
@@ -170,7 +146,6 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
 			DeclSyntax(stringLiteral: nameProperty),
 			DeclSyntax(stringLiteral: versionProperty),
 			DeclSyntax(stringLiteral: descriptionProperty),
-			DeclSyntax(stringLiteral: mcpToolsProperty),
 			DeclSyntax(stringLiteral: callToolMethod)
 		]
 	}

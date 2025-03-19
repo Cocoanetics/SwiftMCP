@@ -72,34 +72,28 @@ public struct OpenAPISpec: Codable {
         ]
         
         // Create paths from server tools
+        let rootPath = server.name.asModelName
         var paths: [String: PathItem] = [:]
-		
-		let rootPath = server.name.asModelName
         
-        for tool in server.mcpTools {
-            let pathKey = "/\(rootPath)/\(tool.name)"
-            
-            // Get the metadata for this tool using reflection
-            let metadataKey = "__mcpMetadata_\(tool.name)"
-            let mirror = Mirror(reflecting: server)
-            let metadata = mirror.children.first(where: { $0.label == metadataKey })?.value as? MCPToolMetadata
+        for metadata in server.mcpToolMetadata {
+            let pathKey = "/\(rootPath)/\(metadata.name)"
             
             // Create response schema based on return type
             let responseSchema: JSONSchema
             let responseDescription: String
             let voidDescription = "Empty string (void function)"
             
-            if metadata?.returnType == nil || metadata?.returnType == "Void" {
+            if metadata.returnType == nil || metadata.returnType == "Void" {
                 responseSchema = .string(description: voidDescription)
-                responseDescription = metadata?.returnTypeDescription ?? "A void function that performs an action"
+                responseDescription = metadata.returnTypeDescription ?? "A void function that performs an action"
             } else {
                 // Convert Swift type to JSON Schema type
-                let returnType = metadata?.returnType ?? "String"
+                let returnType = metadata.returnType ?? "String"
                 switch returnType.JSONSchemaType {
                     case "number":
-                        responseSchema = .number(description: metadata?.returnTypeDescription)
+                        responseSchema = .number(description: metadata.returnTypeDescription)
                     case "boolean":
-                        responseSchema = .boolean(description: metadata?.returnTypeDescription)
+                        responseSchema = .boolean(description: metadata.returnTypeDescription)
                     case "array":
                         if let elementType = returnType.arrayElementType {
                             let itemSchema: JSONSchema
@@ -111,14 +105,14 @@ public struct OpenAPISpec: Codable {
                                 default:
                                     itemSchema = .string()
                             }
-                            responseSchema = .array(items: itemSchema, description: metadata?.returnTypeDescription)
+                            responseSchema = .array(items: itemSchema, description: metadata.returnTypeDescription)
                         } else {
-                            responseSchema = .array(items: .string(), description: metadata?.returnTypeDescription)
+                            responseSchema = .array(items: .string(), description: metadata.returnTypeDescription)
                         }
                     default:
-                        responseSchema = .string(description: metadata?.returnTypeDescription)
+                        responseSchema = .string(description: metadata.returnTypeDescription)
                 }
-                responseDescription = metadata?.returnTypeDescription ?? "The returned value of the tool"
+                responseDescription = metadata.returnTypeDescription ?? "The returned value of the tool"
             }
             
             // Create error response schema to match {"error": "error message"}
@@ -141,7 +135,7 @@ public struct OpenAPISpec: Codable {
             ]
             
             // Add error response if the function can throw
-            if metadata?.isThrowing ?? false {
+            if metadata.isThrowing {
                 responses["400"] = Response(
                     description: "The function threw an error",
                     content: [
@@ -150,19 +144,51 @@ public struct OpenAPISpec: Codable {
                 )
             }
             
+            // Create input schema from parameters
+            let inputSchema = JSONSchema.object(
+                properties: metadata.parameters.reduce(into: [:]) { dict, param in
+                    let paramType = param.type.JSONSchemaType
+                    switch paramType {
+                        case "number":
+                            dict[param.name] = .number(description: param.description)
+                        case "boolean":
+                            dict[param.name] = .boolean(description: param.description)
+                        case "array":
+                            if let elementType = param.type.arrayElementType {
+                                let itemSchema: JSONSchema
+                                switch elementType.JSONSchemaType {
+                                    case "number":
+                                        itemSchema = .number()
+                                    case "boolean":
+                                        itemSchema = .boolean()
+                                    default:
+                                        itemSchema = .string()
+                                }
+                                dict[param.name] = .array(items: itemSchema, description: param.description)
+                            } else {
+                                dict[param.name] = .array(items: .string(), description: param.description)
+                            }
+                        default:
+                            dict[param.name] = .string(description: param.description)
+                    }
+                },
+                required: metadata.parameters.filter { $0.defaultValue == nil }.map { $0.name },
+                description: metadata.description ?? "No description available"
+            )
+            
             // Create the path item
             let pathItem = PathItem(
                 post: Operation(
-                    summary: tool.name,
-                    operationId: tool.name,
-                    description: tool.description ?? "No description available",
+                    summary: metadata.name,
+                    operationId: metadata.name,
+                    description: metadata.description ?? "No description available",
                     requestBody: RequestBody(
-                        required: true, // If it's a tool, the request body is always required
+                        required: true,
                         content: [
-                            "application/json": Content(schema: tool.inputSchema)
+                            "application/json": Content(schema: inputSchema)
                         ]
                     ),
-                    responses: responses  // Use our responses dictionary that includes both success and error cases
+                    responses: responses
                 )
             )
             
