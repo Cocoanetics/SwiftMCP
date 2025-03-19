@@ -4,6 +4,7 @@ import Testing
 import NIOCore
 import NIOHTTP1
 import AnyCodable
+import Logging
 
 /// Helper class to manage SSE message reading
 actor SSEReader {
@@ -14,6 +15,8 @@ actor SSEReader {
     
     init(stream: URLSession.AsyncBytes) {
         self.stream = stream
+		
+		
     }
     
     /// Await the next SSE message with a timeout
@@ -75,9 +78,13 @@ actor SSEReader {
 
 @Test
 func testHTTPSSETransport() async throws {
-    // Create a calculator server
+
+	// Bootstrap the logging system to use the no-op log handler.
+	LoggingSystem.bootstrap { _ in NoOpLogHandler() }
+
+	// Create a calculator server
     let calculator = Calculator()
-    let port = 8091  // Use a different port than the demo to avoid conflicts
+	let port = Int.random(in: 8000..<10000)
     
     // Create and start the transport in the background
     let transport = HTTPSSETransport(server: calculator, port: port)

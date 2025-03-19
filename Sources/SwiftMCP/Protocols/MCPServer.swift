@@ -13,7 +13,7 @@ import AnyCodable
  - JSON-RPC message handling
  - Server metadata
  */
-public protocol MCPServer: Sendable {
+public protocol MCPServer {
     /**
      The tools available on this server.
      
@@ -43,14 +43,14 @@ public protocol MCPServer: Sendable {
      
      This name is used to identify the server in communications and logging.
      */
-    var name: String { get }
+    var serverName: String { get }
     
     /**
      The version of the server.
      
      This version string helps clients understand the server's capabilities and compatibility.
      */
-    var version: String { get }
+    var serverVersion: String { get }
     
     /**
      The description of the server.

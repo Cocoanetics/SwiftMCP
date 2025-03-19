@@ -40,7 +40,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
      
      Used to track server lifecycle, connections, and error conditions.
      */
-    public let logger = Logger(label: "com.cocoanetics.SwiftMCP.HTTPSSETransport")
+    public var logger = Logger(label: "com.cocoanetics.SwiftMCP.HTTPSSETransport")
     
     private let group: EventLoopGroup
     private var channel: Channel?

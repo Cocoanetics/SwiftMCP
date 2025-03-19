@@ -11,8 +11,8 @@
 		typealias OutboundIn = HTTPServerResponsePart
 		typealias OutboundOut = HTTPServerResponsePart
 
-		private let httpLogger = Logger(label: "com.cocoanetics.SwiftMCP.HTTP")
-		private let sseLogger = Logger(label: "com.cocoanetics.SwiftMCP.SSE")
+		private lazy var httpLogger = Logger(label: "com.cocoanetics.SwiftMCP.HTTP")
+		private lazy var sseLogger = Logger(label: "com.cocoanetics.SwiftMCP.SSE")
 		private let lock = NIOLock()
 		
 		// Track current request/response state

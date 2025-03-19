@@ -281,7 +281,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             scheme = "http"
         }
 
-		let description = transport.server.description ?? "MCP Server providing tools for automation and integration"
+		let description = transport.server.serverDescription ?? "MCP Server providing tools for automation and integration"
 		
 		let manifest = AIPluginManifest(
             nameForHuman: transport.server.serverName,

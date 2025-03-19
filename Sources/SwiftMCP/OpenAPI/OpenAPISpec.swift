@@ -82,9 +82,9 @@ struct OpenAPISpec: Codable {
     init(server: MCPServer, scheme: String, host: String) {
         self.openapi = "3.1.0"
         self.info = Info(
-            title: "\(server.name)",
-            version: server.version,
-            description: server.description ?? "API for \(server.name) providing various tools."
+            title: "\(server.serverName)",
+            version: server.serverVersion,
+            description: server.serverDescription ?? "API for \(server.serverName) providing various tools."
         )
         
         self.servers = [
@@ -95,7 +95,7 @@ struct OpenAPISpec: Codable {
         ]
         
         // Create paths from server tools
-        let rootPath = server.name.asModelName
+        let rootPath = server.serverName.asModelName
         var paths: [String: PathItem] = [:]
         
         for metadata in server.mcpToolMetadata {
