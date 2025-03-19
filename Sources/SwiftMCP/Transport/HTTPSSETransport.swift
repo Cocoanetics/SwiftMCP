@@ -5,11 +5,41 @@ import NIOPosix
 import NIOFoundationCompat
 import Logging
 
-/// A transport that exposes an HTTP server with SSE and JSON-RPC endpoints
+/**
+ A transport that exposes an HTTP server with Server-Sent Events (SSE) and JSON-RPC endpoints.
+ 
+ This transport is built on top of SwiftNIO and allows clients to connect via HTTP to interact
+ with the MCPServer. It provides:
+ 
+ - Server-Sent Events (SSE) for real-time updates
+ - JSON-RPC over HTTP for command processing
+ - Optional OpenAPI endpoints for API documentation
+ - Configurable authorization
+ - Keep-alive mechanisms
+ */
 public final class HTTPSSETransport: Transport, @unchecked Sendable {
+    /**
+     The MCP server instance that this transport exposes.
+     
+     This server handles the actual business logic while the transport handles HTTP communication.
+     */
     public let server: MCPServer
+    
+    /**
+     The hostname or IP address on which the HTTP server listens.
+     */
     public let host: String
+    
+    /**
+     The port number on which the HTTP server listens.
+     */
     public let port: Int
+    
+    /**
+     Logger for logging transport events and errors.
+     
+     Used to track server lifecycle, connections, and error conditions.
+     */
     public let logger = Logger(label: "com.cocoanetics.SwiftMCP.HTTPSSETransport")
     
     private let group: EventLoopGroup
@@ -17,27 +47,62 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     private let channelManager = SSEChannelManager()
     private var keepAliveTimer: DispatchSourceTimer?
     
-    /// Whether to serve OpenAPI endpoints (manifest, spec, and tool calls)
+    /**
+     Flag to determine whether to serve OpenAPI endpoints.
+     
+     When enabled, the server will expose:
+     - /.well-known/ai-plugin.json
+     - /openapi.json
+     - Tool endpoints based on the server name
+     */
     public var serveOpenAPI: Bool = false
     
-    /// Result of authorization check
+    /**
+     Result of an authorization check.
+     
+     - authorized: The request is authorized
+     - unauthorized: The request is not authorized, with an error message
+     */
     public enum AuthorizationResult: Sendable {
         case authorized
-        case unauthorized(String) // String is the error message
+        case unauthorized(String)
     }
     
-    /// Authorization handler type
+    /**
+     A function type that handles authorization of requests.
+     
+     - Parameter token: The bearer token to validate, if present
+     - Returns: An AuthorizationResult indicating whether the request is authorized
+     */
     public typealias AuthorizationHandler = @Sendable (String?) -> AuthorizationResult
     
-    /// authorization handler for bearer tokens, accepts all by default
+    /**
+     Authorization handler for bearer tokens.
+     
+     By default, accepts all tokens (returns authorized). Can be replaced with a custom
+     implementation to enforce authentication.
+     */
     public var authorizationHandler: AuthorizationHandler = { _ in return .authorized }
     
+    /**
+     Defines the available keep-alive modes for maintaining connections.
+     
+     - none: No keep-alive messages are sent
+     - sse: Sends SSE-specific keep-alive comments
+     - ping: Sends JSON-RPC ping messages
+     */
     public enum KeepAliveMode: Sendable {
         case none
         case sse
         case ping
     }
     
+    /**
+     The current keep-alive mode for the transport.
+     
+     Changes to this property will automatically start or stop the keep-alive timer
+     as appropriate.
+     */
     public var keepAliveMode: KeepAliveMode = .ping {
         didSet {
             if oldValue != keepAliveMode {
@@ -50,21 +115,26 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         }
     }
     
-    // Number used as identifier for outputbound JSONRPCRequests, e.g. ping
+    // Number used as identifier for output-bound JSONRPCRequests, e.g. ping
     fileprivate var sequenceNumber = 1
     
-    /// The number of active SSE channels
+    /**
+     The number of active SSE channels currently connected to the server.
+     */
     var sseChannelCount: Int {
         get async { await channelManager.channelCount }
     }
     
     // MARK: - Initialization
     
-    /// Initialize a new HTTP SSE transport
-    /// - Parameters:
-    ///   - server: The MCP server to expose
-    ///   - host: The host to bind to (default: localhost)
-    ///   - port: The port to bind to (default: 8080)
+    /**
+     Initializes a new HTTP SSE transport with the specified server and network settings.
+     
+     - Parameters:
+       - server: The MCP server to expose
+       - host: The host to bind to (defaults to the local hostname)
+       - port: The port to bind to (defaults to 8080)
+     */
     public init(server: MCPServer, host: String = String.localHostname, port: Int = 8080) {
         self.server = server
         self.host = host
@@ -72,15 +142,30 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         self.group = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
     }
     
-    /// Initialize with just a server (Transport protocol conformance)
+    /**
+     Convenience initializer that creates an HTTP SSE transport with default network settings.
+     
+     This initializer uses the local hostname and port 8080.
+     
+     - Parameter server: The MCP server to expose
+     */
     public convenience init(server: MCPServer) {
         self.init(server: server, host: String.localHostname, port: 8080)
     }
     
     // MARK: - Server Lifecycle
     
-    /// Start the HTTP server in the background
-    /// This method initializes the server and begins accepting connections
+    /**
+     Starts the HTTP server in the background.
+     
+     This method:
+     - Initializes the NIO server bootstrap
+     - Configures the HTTP pipeline
+     - Starts accepting connections
+     - Initializes the keep-alive timer
+     
+     - Throws: An error if the server fails to start
+     */
     public func start() async throws {
         let bootstrap = ServerBootstrap(group: group)
             .serverChannelOption(ChannelOptions.backlog, value: 256)
@@ -119,23 +204,36 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         }
     }
     
-    /// Run the HTTP server and block until stopped
+    /**
+     Runs the HTTP server and blocks until the server is stopped.
+     
+     This method:
+     1. Starts the server
+     2. Waits for the server channel to close
+     
+     - Throws: An error if the server fails to start or encounters an error while running
+     */
     public func run() async throws {
-        // Start the server
         try await start()
-        
-        // Wait for the channel to close
         try await channel?.closeFuture.get()
     }
     
-    /// Stop the HTTP server
+    /**
+     Stops the HTTP server.
+     
+     This method:
+     1. Stops the keep-alive timer
+     2. Closes all SSE channels
+     3. Shuts down the event loop group
+     
+     - Throws: An error if the server fails to stop cleanly
+     */
     public func stop() async throws {
         logger.info("Stopping server...")
         stopKeepAliveTimer()
         
         await channelManager.stopAllChannels()
         
-        // Use async shutdown instead of sync
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             group.shutdownGracefully { error in
                 if let error = error {
