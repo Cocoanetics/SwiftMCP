@@ -67,14 +67,14 @@ extension MCPTool: Codable {
  */
 extension MCPTool {
 	/**
-	 Enriches the provided arguments dictionary with default values for missing parameters.
+	 Enriches a dictionary of arguments with default values for any missing parameters.
 	 
 	 - Parameters:
 	   - arguments: The original arguments dictionary
 	   - object: The object containing the function metadata
-	   - functionName: The name of the function to get default values for
 	 
 	 - Returns: A new dictionary with default values added for missing parameters
+	 - Throws: MCPToolError if required parameters are missing or if parameter conversion fails
 	 */
 	public func enrichArguments(_ arguments: [String: Any], forObject object: Any) throws -> [String: Any] {
 		// Use the provided function name or fall back to the tool's name
@@ -130,16 +130,26 @@ extension MCPTool {
  Extension to make JSONSchema conform to Codable
  */
 extension JSONSchema: Codable {
-	// MARK: - Codable Implementation
-	
+	/// Coding keys for JSONSchema encoding and decoding
 	private enum CodingKeys: String, CodingKey {
+		/// The type of the schema (string, number, boolean, array, or object)
 		case type
+		/// The properties of an object schema
 		case properties
+		/// The required properties of an object schema
 		case required
+		/// A description of the schema
 		case description
+		/// The schema for array items
 		case items
 	}
 	
+	/**
+	 Creates a new JSONSchema instance by decoding from the given decoder.
+	 
+	 - Parameter decoder: The decoder to read data from
+	 - Throws: DecodingError if the data is corrupted or if an unsupported schema type is encountered
+	 */
 	public init(from decoder: Decoder) throws {
 		let container = try decoder.container(keyedBy: CodingKeys.self)
 		let type = try container.decode(String.self, forKey: .type)
@@ -173,6 +183,12 @@ extension JSONSchema: Codable {
 		}
 	}
 	
+	/**
+	 Encodes this JSONSchema instance into the given encoder.
+	 
+	 - Parameter encoder: The encoder to write data to
+	 - Throws: EncodingError if the data cannot be encoded
+	 */
 	public func encode(to encoder: Encoder) throws {
 		var container = encoder.container(keyedBy: CodingKeys.self)
 		
@@ -209,16 +225,31 @@ extension JSONSchema: Codable {
 
 /**
  A coding key that can be initialized with any string value.
+ Used for encoding and decoding dynamic property names in JSON schemas.
  */
 private struct AnyCodingKey: CodingKey {
+	/// The string value of the coding key
 	var stringValue: String
+	/// The integer value of the coding key, if any
 	var intValue: Int?
 	
+	/**
+	 Creates a coding key from a string value.
+	 
+	 - Parameter stringValue: The string value for the key
+	 - Returns: A coding key, or nil if the string value is invalid
+	 */
 	init?(stringValue: String) {
 		self.stringValue = stringValue
 		self.intValue = nil
 	}
 	
+	/**
+	 Creates a coding key from an integer value.
+	 
+	 - Parameter intValue: The integer value for the key
+	 - Returns: A coding key, or nil if the integer value is invalid
+	 */
 	init?(intValue: Int) {
 		self.stringValue = String(intValue)
 		self.intValue = intValue

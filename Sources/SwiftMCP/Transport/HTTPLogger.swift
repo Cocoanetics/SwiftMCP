@@ -5,11 +5,11 @@ import NIOHTTP1
 import NIOConcurrencyHelpers
 
 /// A channel handler that logs both incoming and outgoing HTTP messages
-public final class HTTPLogger: ChannelDuplexHandler {
-	public typealias InboundIn = HTTPServerRequestPart
-	public typealias InboundOut = HTTPServerRequestPart
-	public typealias OutboundIn = HTTPServerResponsePart
-	public typealias OutboundOut = HTTPServerResponsePart
+final class HTTPLogger: ChannelDuplexHandler {
+	typealias InboundIn = HTTPServerRequestPart
+	typealias InboundOut = HTTPServerRequestPart
+	typealias OutboundIn = HTTPServerResponsePart
+	typealias OutboundOut = HTTPServerResponsePart
 
 	private let httpLogger = Logger(label: "com.cocoanetics.SwiftMCP.HTTP")
 	private let lock = NIOLock()
@@ -21,7 +21,7 @@ public final class HTTPLogger: ChannelDuplexHandler {
 	private var currentResponseBody = ""
 	
 	/// Log incoming requests and forward them to the next handler
-	public func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+	func channelRead(context: ChannelHandlerContext, data: NIOAny) {
 		let reqPart = unwrapInboundIn(data)
 		
 		lock.withLock {
@@ -49,7 +49,7 @@ public final class HTTPLogger: ChannelDuplexHandler {
 	}
 	
 	/// Log outgoing responses and forward them to the next handler
-	public func write(context: ChannelHandlerContext, data: NIOAny, promise: EventLoopPromise<Void>?) {
+	func write(context: ChannelHandlerContext, data: NIOAny, promise: EventLoopPromise<Void>?) {
 		let resPart = unwrapOutboundIn(data)
 		
 		lock.withLock {
@@ -78,7 +78,7 @@ public final class HTTPLogger: ChannelDuplexHandler {
 		context.write(data, promise: promise)
 	}
 	
-	public func flush(context: ChannelHandlerContext) {
+	func flush(context: ChannelHandlerContext) {
 		context.flush()
 	}
 	
@@ -110,7 +110,7 @@ public final class HTTPLogger: ChannelDuplexHandler {
 		httpLogger.trace("\(log)")
 	}
 	
-	public func handlerAdded(context: ChannelHandlerContext) {
+	func handlerAdded(context: ChannelHandlerContext) {
 		lock.withLock {
 			currentRequestHead = nil
 			currentRequestBody = ""
@@ -119,7 +119,7 @@ public final class HTTPLogger: ChannelDuplexHandler {
 		}
 	}
 	
-	public func handlerRemoved(context: ChannelHandlerContext) {
+	func handlerRemoved(context: ChannelHandlerContext) {
 		lock.withLock {
 			// Log any pending messages
 			logCurrentRequest()

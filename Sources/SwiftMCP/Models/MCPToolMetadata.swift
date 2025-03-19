@@ -17,27 +17,30 @@ public struct MCPToolMetadata: Sendable {
     
     /// The return type of the function, if any
     public let returnType: String?
-	
-	// an optional description of the returned value
-	public let returnTypeDescription: String?
-	
-	// If the tool is async
-	public let isAsync: Bool
-	
-	// If the tool throws
-	public let isThrowing: Bool
     
-    /// An optional description of the function
+    /// A description of what the function returns
+    public let returnTypeDescription: String?
+    
+    /// Whether the function is asynchronous
+    public let isAsync: Bool
+    
+    /// Whether the function can throw errors
+    public let isThrowing: Bool
+    
+    /// A description of the function's purpose
     public let description: String?
     
     /**
-     Creates a new tool metadata with the specified name, parameters, return type, and description.
+     Creates a new MCPToolMetadata instance.
      
      - Parameters:
        - name: The name of the function
+       - description: A description of the function's purpose
        - parameters: The parameters of the function
        - returnType: The return type of the function, if any
-       - description: An optional description of the function's purpose
+       - returnTypeDescription: A description of what the function returns
+       - isAsync: Whether the function is asynchronous
+       - isThrowing: Whether the function can throw errors
      */
     public init(name: String, description: String? = nil, parameters: [MCPToolParameterInfo], returnType: String? = nil, returnTypeDescription: String? = nil, isAsync: Bool = false, isThrowing: Bool = false) {
         self.name = name
