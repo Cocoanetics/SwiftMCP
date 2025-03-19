@@ -82,7 +82,7 @@ struct OpenAPISpec: Codable {
     init(server: MCPServer, scheme: String, host: String) {
         self.openapi = "3.1.0"
         self.info = Info(
-            title: "\(server.name) API",
+            title: "\(server.name)",
             version: server.version,
             description: server.description ?? "API for \(server.name) providing various tools."
         )
