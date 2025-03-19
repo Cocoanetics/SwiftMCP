@@ -9,7 +9,7 @@ extension Channel {
     /// - Returns: An EventLoopFuture that completes when the message has been written and flushed
     func sendSSE(_ message: LosslessStringConvertible) {
         guard self.isActive else {
-            Logger(label: "com.cocoanetics.SwiftMCP.Transport").warning("Attempted to send SSE message on inactive channel")
+            
             return
         }
         
@@ -19,23 +19,8 @@ extension Channel {
         
         let part = HTTPServerResponsePart.body(.byteBuffer(buffer))
         
-        // Create a promise to track the write operation
-        let promise = self.eventLoop.makePromise(of: Void.self)
-        
-        // Set up promise completion handler
-        promise.futureResult.whenComplete { result in
-            switch result {
-            case .success:
-                Logger(label: "com.cocoanetics.SwiftMCP.Transport").debug("SSE message sent successfully")
-            case .failure(let error):
-                Logger(label: "com.cocoanetics.SwiftMCP.Transport").error("Failed to send SSE message: \(error)")
-                // Close the channel on write failure
-                self.close(promise: nil)
-            }
-        }
-        
         // Write with promise
-        self.write(part, promise: promise)
+        self.write(part, promise: nil)
         self.flush()
     }
 } 
