@@ -4,7 +4,7 @@ import SwiftMCP
 import AnyCodable
 
 @Test
-func testInitializeRequest() throws {
+func testInitializeRequest() async throws {
     let calculator = Calculator()
     
     // Create a request
@@ -16,14 +16,14 @@ func testInitializeRequest() throws {
     )
     
     // Handle the request
-	let response = unwrap(calculator.handleRequest(request) as? JSONRPC.Response)
+	let response = unwrap(await calculator.handleRequest(request) as? JSONRPC.Response)
     
     #expect(response.jsonrpc == "2.0")
     #expect(response.id == .number(1))
 }
 
 @Test
-func testToolsListRequest() throws {
+func testToolsListRequest() async throws {
     let calculator = Calculator()
     
     // Create a request
@@ -35,7 +35,7 @@ func testToolsListRequest() throws {
     )
     
 	// Handle the request
-	let response = unwrap(calculator.handleRequest(request) as? ToolsResponse)
+	let response = unwrap(await calculator.handleRequest(request) as? ToolsResponse)
 	
     #expect(response.jsonrpc == "2.0")
     #expect(response.id == 2)
@@ -48,7 +48,7 @@ func testToolsListRequest() throws {
 }
 
 @Test
-func testToolCallRequest() throws {
+func testToolCallRequest() async throws {
     let calculator = Calculator()
     
     // Create a request
@@ -66,16 +66,16 @@ func testToolCallRequest() throws {
     )
     
 	// Handle the request
-	let response = unwrap(calculator.handleRequest(request) as? ToolCallResponse)
+	let response = unwrap(await calculator.handleRequest(request) as? ToolCallResponse)
     
     #expect(response.jsonrpc == "2.0")
     #expect(response.id == 3)
-    #expect(response.result.status == "success")
+    #expect(!response.result.isError)
     #expect(response.result.content.first?.text == "5")
 }
 
 @Test
-func testToolCallRequestWithError() throws {
+func testToolCallRequestWithError() async throws {
     let calculator = Calculator()
     
     // Create a request with an unknown tool
@@ -90,21 +90,18 @@ func testToolCallRequestWithError() throws {
     )
     
 	// Handle the request
-	let response = unwrap(calculator.handleRequest(request) as? ToolCallResponse)
+	let response = unwrap(await calculator.handleRequest(request) as? ToolCallResponse)
 
 	print(response)
 	
 	#expect(response.jsonrpc == "2.0")
     #expect(response.id == 4)
-    #expect(response.result.status == "error")
+	#expect(response.result.isError)
     #expect(response.result.content.first?.text.contains("not found on the server") ?? false)
-	
-	
-	
 }
 
 @Test
-func testToolCallRequestWithInvalidArgument() throws {
+func testToolCallRequestWithInvalidArgument() async throws {
     let calculator = Calculator()
     
     // Create a request with an invalid argument type
@@ -122,18 +119,16 @@ func testToolCallRequestWithInvalidArgument() throws {
     )
 
 	// Handle the request
-	let response = unwrap(calculator.handleRequest(request) as? ToolCallResponse)
-	
-	print(response)
+	let response = unwrap(await calculator.handleRequest(request) as? ToolCallResponse)
 	
     #expect(response.jsonrpc == "2.0")
     #expect(response.id == 5)
-    #expect(response.result.status == "error")
+	#expect(response.result.isError)
     #expect(response.result.content.first?.text.contains("expected type Int") ?? false)
 }
 
 @Test("Custom Name and Version")
-func testCustomNameAndVersion() throws {
+func testCustomNameAndVersion() async throws {
     // Create an instance of CustomNameCalculator
     let calculator = CustomNameCalculator()
     
@@ -153,7 +148,7 @@ func testCustomNameAndVersion() throws {
 }
 
 @Test("Default Name and Version")
-func testDefaultNameAndVersion() throws {
+func testDefaultNameAndVersion() async throws {
     // Create an instance of DefaultNameCalculator
     let calculator = DefaultNameCalculator()
     

@@ -116,17 +116,6 @@ public struct MCPToolMacro: PeerMacro {
 			returnTypeForBlock = "Void"
 		}
 		
-		// Validate that the return type is not Void
-		if returnTypeForBlock == "Void" {
-			let diagnostic = Diagnostic(node: funcDecl.name, message: MCPToolDiagnostic.voidReturnType(functionName: functionName))
-			context.diagnose(diagnostic)
-			return []
-		}
-		
-		// We'll keep the return type from the syntax tree
-		// The returns section from documentation is not used for the return type
-		// as per the user's request
-		
 		for param in funcDecl.signature.parameterClause.parameters {
 			let paramName = param.firstName.text
 			let paramType = param.type.description.trimmingCharacters(in: .whitespacesAndNewlines)
