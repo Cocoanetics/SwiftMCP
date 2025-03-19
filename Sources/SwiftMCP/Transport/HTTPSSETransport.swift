@@ -6,13 +6,13 @@ import NIOFoundationCompat
 import Logging
 
 /// A transport that exposes an HTTP server with SSE and JSON-RPC endpoints
-public final class HTTPSSETransport {
+// We manage our own thread safety
+public final class HTTPSSETransport: Transport, @unchecked Sendable {
     public let server: MCPServer
     public let host: String
     public let port: Int
-
-	private let logger = Logger(label: "com.cocoanetics.SwiftMCP.HTTPSSETransport")
-	
+    public let logger = Logger(label: "com.cocoanetics.SwiftMCP.HTTPSSETransport")
+    
     private let group: EventLoopGroup
     private var channel: Channel?
     private let channelManager = SSEChannelManager()
@@ -22,18 +22,18 @@ public final class HTTPSSETransport {
     public var serveOpenAPI: Bool = false
     
     /// Result of authorization check
-    public enum AuthorizationResult {
+    public enum AuthorizationResult: Sendable {
         case authorized
         case unauthorized(String) // String is the error message
     }
     
     /// Authorization handler type
-    public typealias AuthorizationHandler = (String?) -> AuthorizationResult
+    public typealias AuthorizationHandler = @Sendable (String?) -> AuthorizationResult
     
     /// authorization handler for bearer tokens, accepts all by default
     public var authorizationHandler: AuthorizationHandler = { _ in return .authorized }
     
-    public enum KeepAliveMode {
+    public enum KeepAliveMode: Sendable {
         case none
         case sse
         case ping
@@ -73,14 +73,20 @@ public final class HTTPSSETransport {
         self.group = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
     }
     
+    /// Initialize with just a server (Transport protocol conformance)
+    public convenience init(server: MCPServer) {
+        self.init(server: server, host: String.localHostname, port: 8080)
+    }
+    
     // MARK: - Server Lifecycle
     
-    /// Run the HTTP server and block until stopped
-    public func run() throws {
+    /// Start the HTTP server in the background
+    /// - Returns: A future that completes when the server has started
+    public func start() async throws {
         let bootstrap = ServerBootstrap(group: group)
             .serverChannelOption(ChannelOptions.backlog, value: 256)
             .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
-            .childChannelInitializer { channel in
+            .childChannelInitializer { [self] channel in
                 channel.pipeline.configureHTTPServerPipeline().flatMap {
                     channel.pipeline.addHandler(HTTPLogger())
                 }.flatMap {
@@ -92,41 +98,52 @@ public final class HTTPSSETransport {
             .childChannelOption(ChannelOptions.allowRemoteHalfClosure, value: true)
         
         do {
-            self.channel = try bootstrap.bind(host: host, port: port).wait()
+            self.channel = try await bootstrap.bind(host: host, port: port).get()
             logger.info("Server started and listening on \(host):\(port)")
             startKeepAliveTimer()
             
             // Set up handler for channel closure
-            self.channel?.closeFuture.whenComplete { [weak self] result in
-                guard let self = self else { return }
-                
+            self.channel?.closeFuture.whenComplete { [logger] result in
                 switch result {
                 case .success:
-                    self.logger.info("Server channel closed normally")
+                    logger.info("Server channel closed normally")
                 case .failure(let error):
-                    self.logger.error("Server channel closed with error: \(error)")
+                    logger.error("Server channel closed with error: \(error)")
                 }
             }
-            
-            // Wait for the channel to close
-            try self.channel?.closeFuture.wait()
-            
         } catch {
             logger.error("Server error: \(error)")
             throw error
         }
     }
     
+    /// Run the HTTP server and block until stopped
+    public func run() async throws {
+        // Start the server
+        try await start()
+        
+        // Wait for the channel to close
+        try await channel?.closeFuture.get()
+    }
+    
     /// Stop the HTTP server
-    public func stop() throws {
+    public func stop() async throws {
         logger.info("Stopping server...")
         stopKeepAliveTimer()
         
-        Task {
-            await channelManager.stopAllChannels()
+        await channelManager.stopAllChannels()
+        
+        // Use async shutdown instead of sync
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            group.shutdownGracefully { error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume()
+                }
+            }
         }
         
-        try group.syncShutdownGracefully()
         logger.info("Server stopped")
     }
     
@@ -150,22 +167,24 @@ public final class HTTPSSETransport {
     
     /// Send a keep-alive message to all connected SSE clients
     private func sendKeepAlive() {
-        Task {
-            switch keepAliveMode {
+        Task { [weak self] in
+            guard let self = self else { return }
+            
+            switch self.keepAliveMode {
             case .none:
                 return
                 
             case .sse:
-                await channelManager.broadcastSSE(SSEMessage(data: ": keep-alive"))
+                await self.channelManager.broadcastSSE(SSEMessage(data: ": keep-alive"))
                 
             case .ping:
-                let ping = JSONRPCMessage(jsonrpc: "2.0", id: sequenceNumber, method: "ping")
+                let ping = JSONRPCMessage(jsonrpc: "2.0", id: self.sequenceNumber, method: "ping")
                 let encoder = JSONEncoder()
                 let data = try! encoder.encode(ping)
                 let string = String(data: data, encoding: .utf8)!
                 let message = SSEMessage(data: string)
-                await channelManager.broadcastSSE(message)
-                sequenceNumber += 1
+                await self.channelManager.broadcastSSE(message)
+                self.sequenceNumber += 1
             }
         }
     }

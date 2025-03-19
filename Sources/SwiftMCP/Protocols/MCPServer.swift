@@ -2,7 +2,7 @@ import Foundation
 import AnyCodable
 
 /// Protocol defining the interface for an MCP server
-public protocol MCPServer {
+public protocol MCPServer: Sendable {
     /// The tools available on this server
     var mcpTools: [MCPTool] { get }
     

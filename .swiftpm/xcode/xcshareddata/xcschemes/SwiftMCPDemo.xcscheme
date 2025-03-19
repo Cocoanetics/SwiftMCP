@@ -60,10 +60,6 @@
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "--transport httpsse"
-            isEnabled = "NO">
-         </CommandLineArgument>
-         <CommandLineArgument
             argument = "--port 8090"
             isEnabled = "YES">
          </CommandLineArgument>

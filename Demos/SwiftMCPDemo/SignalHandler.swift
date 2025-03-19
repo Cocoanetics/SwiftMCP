@@ -4,6 +4,7 @@ import SwiftMCP
 
 // Keep a reference to the signal source so it isn't deallocated
 fileprivate var sigintSource: DispatchSourceSignal?
+fileprivate var isShuttingDown = false
 
 /// Sets up a modern Swift signal handler for SIGINT.
 func setupSignalHandler(transport: HTTPSSETransport) {
@@ -17,9 +18,27 @@ func setupSignalHandler(transport: HTTPSSETransport) {
 
 	// Specify what to do when the signal is received.
 	sigintSource?.setEventHandler {
+		// Prevent multiple shutdown attempts
+		guard !isShuttingDown else { return }
+		isShuttingDown = true
+		
 		print("\nShutting down...")
 
-		try? transport.stop()
+		// Create a semaphore to wait for shutdown
+		let semaphore = DispatchSemaphore(value: 0)
+		
+		Task {
+			do {
+				try await transport.stop()
+				semaphore.signal()
+			} catch {
+				print("Error during shutdown: \(error)")
+				semaphore.signal()
+			}
+		}
+		
+		// Wait for shutdown to complete with timeout
+		_ = semaphore.wait(timeout: .now() + .seconds(5))
 		Foundation.exit(0)
 	}
 

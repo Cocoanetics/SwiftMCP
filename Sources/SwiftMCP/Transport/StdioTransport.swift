@@ -2,9 +2,11 @@ import Foundation
 import Logging
 
 /// A transport that exposes an MCP server over standard input/output
-public final class StdioTransport {
-	private let server: MCPServer
-	private let logger = Logger(label: "com.cocoanetics.SwiftMCP.StdioTransport")
+public final class StdioTransport: Transport {
+	public let server: MCPServer
+	public let logger = Logger(label: "com.cocoanetics.SwiftMCP.StdioTransport")
+	
+	private var isRunning = false
 	
 	/// Initialize a new stdio transport
 	/// - Parameter server: The MCP server to expose
@@ -12,9 +14,29 @@ public final class StdioTransport {
 		self.server = server
 	}
 	
-	/// Start reading from stdin and writing to stdout
+	/// Start reading from stdin in a non-blocking way
+	public func start() async throws {
+		isRunning = true
+		// Start processing in a background task
+		Task {
+			try await self.processInput()
+		}
+	}
+	
+	/// Run and block until stopped
 	public func run() async throws {
-		while true {
+		isRunning = true
+		try await processInput()
+	}
+	
+	/// Stop the transport
+	public func stop() async throws {
+		isRunning = false
+	}
+	
+	/// Process input from stdin
+	private func processInput() async throws {
+		while isRunning {
 			if let input = readLine(),
 			   !input.isEmpty,
 			   let data = input.data(using: .utf8) {

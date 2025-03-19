@@ -21,7 +21,7 @@ import OSLog
  - Testing and debugging MCP functions
  - Scripting and automation
  */
-struct StdioCommand: ParsableCommand {
+struct StdioCommand: AsyncParsableCommand {
     static var configuration = CommandConfiguration(
         commandName: "stdio",
         abstract: "Read JSON-RPC requests from stdin and write responses to stdout",

@@ -36,7 +36,7 @@ import OSLog
  ```
  */
 @main
-struct MCPCommand: ParsableCommand {
+struct MCPCommand: AsyncParsableCommand {
     static var configuration = CommandConfiguration(
         commandName: "SwiftMCPDemo",
         abstract: "A utility for testing SwiftMCP functions",

@@ -36,7 +36,7 @@ import OSLog
     - AI plugin manifest at `/.well-known/ai-plugin.json`
     - Compatible with AI plugin standards
  */
-struct HTTPSSECommand: ParsableCommand {
+struct HTTPSSECommand: AsyncParsableCommand {
     static var configuration = CommandConfiguration(
         commandName: "httpsse",
         abstract: "Start an HTTP server with Server-Sent Events (SSE) support",
@@ -70,7 +70,7 @@ struct HTTPSSECommand: ParsableCommand {
     @Flag(name: .long, help: "Enable OpenAPI endpoints")
     var openapi: Bool = false
     
-    func run() throws {
+	func run() async throws {
 #if canImport(OSLog)
         LoggingSystem.bootstrapWithOSLog()
 #endif
@@ -104,6 +104,6 @@ struct HTTPSSECommand: ParsableCommand {
         setupSignalHandler(transport: transport)
         
         // Run the server (blocking)
-        try transport.run()
+        try await transport.run()
     }
 } 
