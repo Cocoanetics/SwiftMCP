@@ -78,6 +78,12 @@ class Calculator {
 	func ping() -> String {
 		return "pong"
 	}
+	
+	/** A function to test doing nothing, not returning anything*/
+	@MCPTool
+	func noop() {
+		
+	}
     
     /// Returns an array of all MCP resources defined in this type
     var mcpResources: [MCPResource] {

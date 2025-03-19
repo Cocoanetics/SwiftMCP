@@ -84,12 +84,41 @@ public struct OpenAPISpec: Codable {
             let mirror = Mirror(reflecting: server)
             let metadata = mirror.children.first(where: { $0.label == metadataKey })?.value as? MCPToolMetadata
             
-            // Create response schema (default to string since we don't have return type info)
+            // Create response schema based on return type
             let responseSchema: JSONSchema
-            if metadata?.returnType == "Void" {
-                responseSchema = .string(description: "Empty string (void function)")
+            let responseDescription: String
+            let voidDescription = "Empty string (void function)"
+            
+            if metadata?.returnType == nil || metadata?.returnType == "Void" {
+                responseSchema = .string(description: voidDescription)
+                responseDescription = metadata?.returnTypeDescription ?? "A void function that performs an action"
             } else {
-                responseSchema = .string(description: metadata?.returnTypeDescription ?? "Tool response")
+                // Convert Swift type to JSON Schema type
+                let returnType = metadata?.returnType ?? "String"
+                switch returnType.JSONSchemaType {
+                    case "number":
+                        responseSchema = .number(description: metadata?.returnTypeDescription)
+                    case "boolean":
+                        responseSchema = .boolean(description: metadata?.returnTypeDescription)
+                    case "array":
+                        if let elementType = returnType.arrayElementType {
+                            let itemSchema: JSONSchema
+                            switch elementType.JSONSchemaType {
+                                case "number":
+                                    itemSchema = .number()
+                                case "boolean":
+                                    itemSchema = .boolean()
+                                default:
+                                    itemSchema = .string()
+                            }
+                            responseSchema = .array(items: itemSchema, description: metadata?.returnTypeDescription)
+                        } else {
+                            responseSchema = .array(items: .string(), description: metadata?.returnTypeDescription)
+                        }
+                    default:
+                        responseSchema = .string(description: metadata?.returnTypeDescription)
+                }
+                responseDescription = metadata?.returnTypeDescription ?? "The returned value of the tool"
             }
             
             // Create error response schema to match {"error": "error message"}
@@ -104,7 +133,7 @@ public struct OpenAPISpec: Codable {
             // Create responses dictionary with success and error cases
             var responses: [String: Response] = [
                 "200": Response(
-                    description: metadata?.returnTypeDescription ?? "Successful response",
+                    description: responseDescription,
                     content: [
                         "application/json": Content(schema: responseSchema)
                     ]
