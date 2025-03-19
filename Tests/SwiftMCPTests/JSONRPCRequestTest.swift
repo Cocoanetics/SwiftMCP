@@ -1,7 +1,7 @@
 import Foundation
 import Testing
-import AnyCodable
 @testable import SwiftMCP
+import AnyCodable
 
 @Test
 func testDecodeJSONRPCRequest() throws {
@@ -11,11 +11,12 @@ func testDecodeJSONRPCRequest() throws {
 	
 	let jsonData = jsonString.data(using: .utf8)!
 	
-	let request = try JSONDecoder().decode(JSONRPCRequest.self, from: jsonData)
+	let request = try JSONDecoder().decode(JSONRPCMessage.self, from: jsonData)
 	#expect(request.jsonrpc == "2.0")
 	#expect(request.id == 0)
 	#expect(request.method == "initialize")
 	#expect(request.params != nil)
+	#expect(request.result == nil)
 	
 	// Access the params dictionary directly
 	guard let params = request.params else {
@@ -49,4 +50,81 @@ func testDecodeJSONRPCRequest() throws {
 	
 	#expect(clientInfo["name"] as? String == "cursor-vscode")
 	#expect(clientInfo["version"] as? String == "1.0.0")
+}
+
+@Test
+func testDecodeJSONRPCResponse() throws {
+	let jsonString = """
+	{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2024-11-05","capabilities":{"experimental":{},"resources":{"listChanged":false},"tools":{"listChanged":false}},"serverInfo":{"name":"TestServer","version":"1.0"}}}
+	"""
+	
+	let jsonData = jsonString.data(using: .utf8)!
+	
+	let response = try JSONDecoder().decode(JSONRPCMessage.self, from: jsonData)
+	#expect(response.jsonrpc == "2.0")
+	#expect(response.id == 1)
+	#expect(response.method == nil)
+	#expect(response.params == nil)
+	#expect(response.result != nil)
+	#expect(response.error == nil)
+	
+	guard let result = response.result else {
+		throw TestError("result is nil")
+	}
+	
+	// Check protocolVersion
+	#expect(result["protocolVersion"]?.value as? String == "2024-11-05")
+	
+	// Check capabilities
+	guard let capabilities = result["capabilities"]?.value as? [String: Any] else {
+		throw TestError("capabilities not found or not a dictionary")
+	}
+	
+	// Check experimental is empty dictionary
+	guard let experimental = capabilities["experimental"] as? [String: Any] else {
+		throw TestError("experimental not found or not a dictionary")
+	}
+	#expect(experimental.isEmpty)
+	
+	guard let resources = capabilities["resources"] as? [String: Bool] else {
+		throw TestError("resources not found or not a dictionary")
+	}
+	#expect(resources["listChanged"] == false)
+	
+	guard let tools = capabilities["tools"] as? [String: Bool] else {
+		throw TestError("tools not found or not a dictionary")
+	}
+	#expect(tools["listChanged"] == false)
+	
+	// Check serverInfo
+	guard let serverInfo = result["serverInfo"]?.value as? [String: String] else {
+		throw TestError("serverInfo not found or not a dictionary")
+	}
+	
+	#expect(serverInfo["name"] == "TestServer")
+	#expect(serverInfo["version"] == "1.0")
+}
+
+@Test
+func testDecodeJSONRPCError() throws {
+	let jsonString = """
+	{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"An error occurred"}}
+	"""
+	
+	let jsonData = jsonString.data(using: .utf8)!
+	
+	let response = try JSONDecoder().decode(JSONRPCMessage.self, from: jsonData)
+	#expect(response.jsonrpc == "2.0")
+	#expect(response.id == 1)
+	#expect(response.method == nil)
+	#expect(response.params == nil)
+	#expect(response.result == nil)
+	#expect(response.error != nil)
+	
+	guard let error = response.error else {
+		throw TestError("error is nil")
+	}
+	
+	#expect(error.code == -32000)
+	#expect(error.message == "An error occurred")
 }

@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-import SwiftMCP
+@testable import SwiftMCP
 import AnyCodable
 
 @Test
@@ -8,7 +8,7 @@ func testInitializeRequest() async throws {
     let calculator = Calculator()
     
     // Create a request
-    let request = SwiftMCP.JSONRPCRequest(
+    let request = JSONRPCMessage(
         jsonrpc: "2.0",
         id: 1,
         method: "initialize",
@@ -16,10 +16,41 @@ func testInitializeRequest() async throws {
     )
     
     // Handle the request
-	let response = unwrap(await calculator.handleRequest(request) as? JSONRPC.Response)
+    let response = unwrap(await calculator.handleRequest(request))
     
     #expect(response.jsonrpc == "2.0")
-    #expect(response.id == .number(1))
+    #expect(response.id == 1)
+    #expect(response.result != nil)
+    #expect(response.params == nil)
+    
+    // Check result contents
+    guard let result = response.result else {
+        throw TestError("Result is missing")
+    }
+    
+    #expect(result["protocolVersion"]?.value as? String == "2024-11-05")
+    
+    guard let capabilities = result["capabilities"]?.value as? [String: Any] else {
+        throw TestError("Capabilities not found or not a dictionary")
+    }
+    
+    #expect(capabilities["experimental"] as? [String: String] == [:])
+    
+    guard let resources = capabilities["resources"] as? [String: Bool] else {
+        throw TestError("Resources not found or not a dictionary")
+    }
+    #expect(resources["listChanged"] == false)
+    
+    guard let tools = capabilities["tools"] as? [String: Bool] else {
+        throw TestError("Tools not found or not a dictionary")
+    }
+    #expect(tools["listChanged"] == false)
+    
+    guard let serverInfo = result["serverInfo"]?.value as? [String: String] else {
+        throw TestError("ServerInfo not found or not a dictionary")
+    }
+    #expect(serverInfo["name"] != nil)
+    #expect(serverInfo["version"] != nil)
 }
 
 @Test
@@ -27,22 +58,33 @@ func testToolsListRequest() async throws {
     let calculator = Calculator()
     
     // Create a request
-    let request = SwiftMCP.JSONRPCRequest(
+    let request = JSONRPCMessage(
         jsonrpc: "2.0",
         id: 2,
         method: "tools/list",
         params: [:]
     )
     
-	// Handle the request
-	let response = unwrap(await calculator.handleRequest(request) as? ToolsResponse)
-	
+    // Handle the request
+    let response = unwrap(await calculator.handleRequest(request))
+    
     #expect(response.jsonrpc == "2.0")
     #expect(response.id == 2)
-    #expect(!response.result.tools.isEmpty)
+    #expect(response.result != nil)
+    #expect(response.params == nil)
+    
+    guard let result = response.result else {
+        throw TestError("Result is missing")
+    }
+    
+    guard let tools = result["tools"]?.value as? [MCPTool] else {
+        throw TestError("Tools not found or not an array")
+    }
+    
+    #expect(!tools.isEmpty)
     
     // Check that the tools include the expected functions
-    let toolNames = response.result.tools.map { $0.name }
+    let toolNames = tools.map { $0.name }
     #expect(toolNames.contains("add"))
     #expect(toolNames.contains("testArray"))
 }
@@ -52,7 +94,7 @@ func testToolCallRequest() async throws {
     let calculator = Calculator()
     
     // Create a request
-    let request = SwiftMCP.JSONRPCRequest(
+    let request = JSONRPCMessage(
         jsonrpc: "2.0",
         id: 3,
         method: "tools/call",
@@ -65,13 +107,25 @@ func testToolCallRequest() async throws {
         ]
     )
     
-	// Handle the request
-	let response = unwrap(await calculator.handleRequest(request) as? ToolCallResponse)
+    // Handle the request
+    let response = unwrap(await calculator.handleRequest(request))
     
     #expect(response.jsonrpc == "2.0")
     #expect(response.id == 3)
-    #expect(!response.result.isError)
-    #expect(response.result.content.first?.text == "5")
+    #expect(response.result != nil)
+    #expect(response.params == nil)
+    
+    guard let result = response.result else {
+        throw TestError("Result is missing")
+    }
+    
+    guard let content = result["content"]?.value as? [[String: String]] else {
+        throw TestError("Content not found or not an array")
+    }
+    
+    #expect(!content.isEmpty)
+    #expect(content[0]["type"] == "text")
+    #expect(content[0]["text"] == "5")
 }
 
 @Test
@@ -79,7 +133,7 @@ func testToolCallRequestWithError() async throws {
     let calculator = Calculator()
     
     // Create a request with an unknown tool
-    let request = SwiftMCP.JSONRPCRequest(
+    let request = JSONRPCMessage(
         jsonrpc: "2.0",
         id: 4,
         method: "tools/call",
@@ -89,13 +143,21 @@ func testToolCallRequestWithError() async throws {
         ]
     )
     
-	// Handle the request
-	let response = unwrap(await calculator.handleRequest(request) as? ToolCallResponse)
-
-	#expect(response.jsonrpc == "2.0")
+    // Handle the request
+    let response = unwrap(await calculator.handleRequest(request))
+    
+    #expect(response.jsonrpc == "2.0")
     #expect(response.id == 4)
-	#expect(response.result.isError)
-    #expect(response.result.content.first?.text.contains("not found on the server") ?? false)
+    #expect(response.error != nil)
+    #expect(response.result == nil)
+    #expect(response.params == nil)
+    
+    guard let error = response.error else {
+        throw TestError("Error is missing")
+    }
+    
+    #expect(error.code == -32000)
+    #expect(error.message.contains("not found on the server"))
 }
 
 @Test
@@ -103,7 +165,7 @@ func testToolCallRequestWithInvalidArgument() async throws {
     let calculator = Calculator()
     
     // Create a request with an invalid argument type
-    let request = SwiftMCP.JSONRPCRequest(
+    let request = JSONRPCMessage(
         jsonrpc: "2.0",
         id: 5,
         method: "tools/call",
@@ -115,14 +177,22 @@ func testToolCallRequestWithInvalidArgument() async throws {
             ])
         ]
     )
-
-	// Handle the request
-	let response = unwrap(await calculator.handleRequest(request) as? ToolCallResponse)
-	
+    
+    // Handle the request
+    let response = unwrap(await calculator.handleRequest(request))
+    
     #expect(response.jsonrpc == "2.0")
     #expect(response.id == 5)
-	#expect(response.result.isError)
-    #expect(response.result.content.first?.text.contains("expected type Int") ?? false)
+    #expect(response.error != nil)
+    #expect(response.result == nil)
+    #expect(response.params == nil)
+    
+    guard let error = response.error else {
+        throw TestError("Error is missing")
+    }
+    
+    #expect(error.code == -32000)
+    #expect(error.message.contains("expected type Int"))
 }
 
 @Test("Custom Name and Version")
@@ -134,10 +204,10 @@ func testCustomNameAndVersion() async throws {
     let response = calculator.createInitializeResponse(id: 1)
     
     // Extract server info from the response using dictionary access
-    guard let resultDict = response.result?.value as? [String: Any],
-          let serverInfoDict = resultDict["serverInfo"] as? [String: Any],
-          let name = serverInfoDict["name"] as? String,
-          let version = serverInfoDict["version"] as? String else {
+    guard let result = response.result,
+          let serverInfo = result["serverInfo"]?.value as? [String: String],
+          let name = serverInfo["name"],
+          let version = serverInfo["version"] else {
         throw TestError("Failed to extract server info from response")
     }
     
@@ -154,10 +224,10 @@ func testDefaultNameAndVersion() async throws {
     let response = calculator.createInitializeResponse(id: 1)
     
     // Extract server info from the response using dictionary access
-    guard let resultDict = response.result?.value as? [String: Any],
-          let serverInfoDict = resultDict["serverInfo"] as? [String: Any],
-          let name = serverInfoDict["name"] as? String,
-          let version = serverInfoDict["version"] as? String else {
+    guard let result = response.result,
+          let serverInfo = result["serverInfo"]?.value as? [String: String],
+          let name = serverInfo["name"],
+          let version = serverInfo["version"] else {
         throw TestError("Failed to extract server info from response")
     }
     

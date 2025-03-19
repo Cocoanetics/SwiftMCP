@@ -275,7 +275,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
         
         let decoder = JSONDecoder()
         do {
-            let request = try decoder.decode(JSONRPCRequest.self, from: body)
+            let request = try decoder.decode(JSONRPCMessage.self, from: body)
             
             if request.method == nil {
                 sendResponse(context: context, status: .ok, headers: nil)

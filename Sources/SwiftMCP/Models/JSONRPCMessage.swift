@@ -9,9 +9,9 @@ import Foundation
 import AnyCodable
 
 /// JSON-RPC Request structure used for communication with the MCP server
-public struct JSONRPCMessage: Encodable {
+public struct JSONRPCMessage: Codable {
 	
-	public struct Error: Encodable {
+	public struct Error: Codable {
 		public var code: Int
 		public var message: String
 	}
@@ -20,5 +20,7 @@ public struct JSONRPCMessage: Encodable {
 	public var id: Int?
 	public var method: String?
 	public var params: [String: AnyCodable]?
+	public var result: [String: AnyCodable]?
+
 	public var error: Error?
 }

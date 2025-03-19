@@ -159,7 +159,7 @@ public final class HTTPSSETransport {
                 await channelManager.broadcastSSE(SSEMessage(data: ": keep-alive"))
                 
             case .ping:
-                let ping = JSONRPCRequest(jsonrpc: "2.0", id: sequenceNumber, method: "ping")
+                let ping = JSONRPCMessage(jsonrpc: "2.0", id: sequenceNumber, method: "ping")
                 let encoder = JSONEncoder()
                 let data = try! encoder.encode(ping)
                 let string = String(data: data, encoding: .utf8)!
@@ -173,7 +173,7 @@ public final class HTTPSSETransport {
     // MARK: - Request Handling
     /// Handle a JSON-RPC request and send the response through the SSE channels
     /// - Parameter request: The JSON-RPC request
-    func handleJSONRPCRequest(_ request: JSONRPCRequest, from clientId: String) {
+    func handleJSONRPCRequest(_ request: JSONRPCMessage, from clientId: String) {
         Task {
             // Let the server process the request
             guard let response = await server.handleRequest(request) else {

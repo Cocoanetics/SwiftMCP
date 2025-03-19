@@ -21,7 +21,7 @@ public final class StdioTransport {
 				
 				logger.trace("Received input: \(input)")
 				
-				let request = try JSONDecoder().decode(JSONRPCRequest.self, from: data)
+				let request = try JSONDecoder().decode(JSONRPCMessage.self, from: data)
 				
 				// Handle the request
 				if let response = await server.handleRequest(request) {
