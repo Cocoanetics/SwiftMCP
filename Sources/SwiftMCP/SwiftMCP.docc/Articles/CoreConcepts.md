@@ -26,10 +26,6 @@ SwiftMCP follows Swift's standard documentation comment syntax, which uses Markd
   ```swift
   - Returns: Description of return value
   ```
-- Throws documentation for error cases:
-  ```swift
-  - Throws: Description of error conditions
-  ```
 
 You can also use other documentation extensions like:
 - `- Note:`
@@ -90,21 +86,18 @@ The macro extracts:
 - The method's main comment as the tool description
 - Parameter documentation for each argument
 - Return value documentation
-- Any throws documentation if present
 
 ## Custom Descriptions
 
-You can customize descriptions using the macro parameters:
+You can override a tool's description using the `description` parameter of the `@MCPTool` macro:
 
 ```swift
-@MCPTool(description: "Custom tool description")
+/// This description will be overridden
+@MCPTool(description: "Custom description for the tool")
 func customTool() { }
-
-@MCPTool(parameterDescriptions: [
-    "x": "Custom description for parameter x"
-])
-func paramTool(x: Int) { }
 ```
+
+The custom description will take precedence over any documentation comments.
 
 ## Importance for AI Integration
 
@@ -112,13 +105,13 @@ Documentation comments are crucial because:
 1. They provide context to AI assistants about your server's purpose
 2. They explain what each tool does and how to use it
 3. They describe what parameters mean and what values are expected
-4. They help AIs understand error conditions and return values
+4. They help AIs understand return values
 
 Without proper documentation:
 - AIs won't understand your server's purpose
 - Tools may be used incorrectly
 - Parameters may receive invalid values
-- Error conditions may be handled improperly
+- Return values may be misinterpreted
 
 ## Best Practices
 
@@ -131,7 +124,6 @@ Without proper documentation:
    - Clear description of functionality
    - Parameter descriptions
    - Return value explanation
-   - Error conditions if applicable
 
 3. Use markdown formatting in comments for better readability
 
