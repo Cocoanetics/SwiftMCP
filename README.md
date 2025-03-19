@@ -59,14 +59,15 @@ The `--openapi` option enables OpenAPI endpoints for AI plugin integration. When
 
 To implement your own MCP server:
 
-1. Create a class conforming to `MCPServer`
+1. Attach the `@MCPServer` macro to a reference type like class or actor
 2. Define your tools using `@MCPTool` attribute
 3. Choose and configure a transport
 
 Example:
 
 ```swift
-class MyServer: MCPServer {
+@MCPServer
+class MyServer {
     @MCPTool
     func add(a: Int, b: Int) -> Int {
         return a + b
