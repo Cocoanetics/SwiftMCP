@@ -14,18 +14,3 @@ public protocol MCPResource: Codable {
     /// The MIME type of the resource
     var mimeType: String { get }
 }
-
-
-/// Errors that can occur when working with MCPResources
-public enum MCPResourceError: Error, CustomStringConvertible {
-    /// The URI string is invalid
-    case invalidURI(String)
-    
-    /// A description of the error
-    public var description: String {
-        switch self {
-        case .invalidURI(let uriString):
-            return "Invalid URI: \(uriString)"
-        }
-    }
-} 

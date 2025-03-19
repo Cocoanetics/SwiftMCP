@@ -1,75 +1,75 @@
 import Foundation
 
 /// Represents an OpenAPI 3.1.0 specification
-public struct OpenAPISpec: Codable {
+struct OpenAPISpec: Codable {
     /// Basic information about the API
-    public struct Info: Codable {
+    struct Info: Codable {
         /// The title of the API
-        public let title: String
+        let title: String
         /// The version of the API
-        public let version: String
+        let version: String
         /// A description of the API
-        public let description: String
+        let description: String
     }
     
     /// Server information
-    public struct Server: Codable {
+    struct Server: Codable {
         /// The server URL
-        public let url: String
+        let url: String
         /// A description of the server
-        public let description: String
+        let description: String
     }
     
     /// Request or response content
-    public struct Content: Codable {
+    struct Content: Codable {
         /// The schema defining the content structure
-        public let schema: JSONSchema
+        let schema: JSONSchema
     }
     
     /// Request body specification
-    public struct RequestBody: Codable {
+    struct RequestBody: Codable {
         /// Whether the request body is required
-        public let required: Bool
+        let required: Bool
         /// The content types and their schemas
-        public let content: [String: Content]
+        let content: [String: Content]
     }
     
     /// Response specification
-    public struct Response: Codable {
+    struct Response: Codable {
         /// A description of the response
-        public let description: String
+        let description: String
         /// The content types and their schemas, if any
-        public let content: [String: Content]?
+        let content: [String: Content]?
     }
     
     /// Operation (e.g., POST) specification
-    public struct Operation: Codable {
+    struct Operation: Codable {
         /// A brief summary of what the operation does
-        public let summary: String
+        let summary: String
         /// Unique identifier for the operation
-        public let operationId: String
+        let operationId: String
         /// A detailed description of the operation
-        public let description: String
+        let description: String
         /// The request body specification, if any
-        public let requestBody: RequestBody?
+        let requestBody: RequestBody?
         /// The possible responses keyed by status code
-        public let responses: [String: Response]
+        let responses: [String: Response]
     }
     
     /// Path item specification
-    public struct PathItem: Codable {
+    struct PathItem: Codable {
         /// The POST operation specification, if any
-        public let post: Operation?
+        let post: Operation?
     }
     
     /// The OpenAPI specification version
-    public let openapi: String
+    let openapi: String
     /// Basic information about the API
-    public let info: Info
+    let info: Info
     /// The servers where the API is available
-    public let servers: [Server]
+    let servers: [Server]
     /// The available paths and their operations
-    public let paths: [String: PathItem]
+    let paths: [String: PathItem]
     
     /**
      Creates an OpenAPI specification for an MCP server
@@ -79,7 +79,7 @@ public struct OpenAPISpec: Codable {
        - scheme: The URL scheme to use (e.g., "http" or "https")
        - host: The host where the server is running
      */
-    public init(server: MCPServer, scheme: String, host: String) {
+    init(server: MCPServer, scheme: String, host: String) {
         self.openapi = "3.1.0"
         self.info = Info(
             title: "\(server.name) API",

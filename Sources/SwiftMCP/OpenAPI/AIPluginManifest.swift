@@ -1,7 +1,7 @@
 import Foundation
 
 /// Represents the AI plugin manifest structure
-public struct AIPluginManifest: Codable {
+struct AIPluginManifest: Codable {
     /// The schema version of the manifest
     let schemaVersion: String = "v1"
     
@@ -24,7 +24,7 @@ public struct AIPluginManifest: Codable {
     let api: API
     
     /// Coding keys for JSON serialization
-    private enum CodingKeys: String, CodingKey {
+    enum CodingKeys: String, CodingKey {
         case schemaVersion = "schema_version"
         case nameForHuman = "name_for_human"
         case nameForModel = "name_for_model"
@@ -35,7 +35,7 @@ public struct AIPluginManifest: Codable {
     }
     
     /// Authentication configuration
-    public struct Auth: Codable {
+    struct Auth: Codable {
         /// The type of authentication
         let type: AuthType
         
@@ -45,7 +45,7 @@ public struct AIPluginManifest: Codable {
         /// Instructions for authentication (only for user_http)
         let instructions: String?
         
-        private enum CodingKeys: String, CodingKey {
+        enum CodingKeys: String, CodingKey {
             case type
             case authorizationType = "authorization_type"
             case instructions
@@ -67,13 +67,13 @@ public struct AIPluginManifest: Codable {
     }
     
     /// Authentication types supported by the manifest
-    public enum AuthType: String, Codable {
+    enum AuthType: String, Codable {
         case none
         case userHttp = "user_http"
     }
     
     /// API configuration
-    public struct API: Codable {
+    struct API: Codable {
         /// The type of API
         let type: String
         

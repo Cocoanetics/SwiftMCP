@@ -10,10 +10,12 @@ public final class HTTPSSETransport {
     public let server: MCPServer
     public let host: String
     public let port: Int
+
+	private let logger = Logger(label: "com.cocoanetics.SwiftMCP.HTTPSSETransport")
+	
     private let group: EventLoopGroup
     private var channel: Channel?
     private let channelManager = SSEChannelManager()
-    let logger = Logger(label: "com.cocoanetics.SwiftMCP.Transport")
     private var keepAliveTimer: DispatchSourceTimer?
     
     /// Whether to serve OpenAPI endpoints (manifest, spec, and tool calls)
@@ -240,15 +242,5 @@ public final class HTTPSSETransport {
         Task {
             await channelManager.sendSSE(message, to: clientId)
         }
-    }
-    
-    /// Check if a client has an active SSE connection
-    /// - Parameter clientId: The client identifier to check
-    /// - Returns: true if the client has an active SSE connection
-    public func hasActiveSSEConnection(for clientId: String) async -> Bool {
-        if let channel = await channelManager.getChannel(for: clientId) {
-            return channel.isActive
-        }
-        return false
     }
 }

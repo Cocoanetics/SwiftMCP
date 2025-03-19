@@ -4,7 +4,7 @@ import AnyCodable
 // MARK: - Response Models
 
 /// Response structure for the tools/list method
-public struct ToolsResponse: Codable {
+public struct ToolsListResponse: Codable {
     public let jsonrpc: String
     public let id: Int
     public let result: ToolsResult

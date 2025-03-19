@@ -12,18 +12,20 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
     private let transport: HTTPSSETransport
     let id = UUID()
     private var clientId: String?
+	
+	private let logger = Logger(label: "com.cocoanetics.SwiftMCP.HTTPHandler")
     
     init(transport: HTTPSSETransport) {
         self.transport = transport
     }
     
     func channelInactive(context: ChannelHandlerContext) {
-        transport.logger.trace("Channel inactive")
+        logger.trace("Channel inactive")
         context.fireChannelInactive()
     }
     
     func errorCaught(context: ChannelHandlerContext, error: Error) {
-        transport.logger.error("Channel error: \(error)")
+        logger.error("Channel error: \(error)")
         context.close(promise: nil)
     }
     
@@ -149,7 +151,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
     
     private func handleSSE(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?) {
         guard head.method == .GET else {
-            transport.logger.warning("Rejected non-GET SSE request")
+            logger.warning("Rejected non-GET SSE request")
             sendResponse(context: context, status: .methodNotAllowed)
             return
         }
@@ -157,14 +159,14 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
         // Validate SSE headers
         let acceptHeader = head.headers["accept"].first ?? ""
         
-        transport.logger.info("""
+        logger.info("""
             SSE connection attempt:
             - Accept: \(acceptHeader)
             - Headers: \(head.headers)
             """)
         
         guard "text/event-stream".matchesAcceptHeader(acceptHeader) else {
-            transport.logger.warning("Rejected non-SSE request (Accept: \(acceptHeader))")
+            logger.warning("Rejected non-SSE request (Accept: \(acceptHeader))")
             sendResponse(context: context, status: .badRequest)
             return
         }
@@ -176,7 +178,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
         let clientId = UUID().uuidString
         self.clientId = clientId
         
-        transport.logger.info("""
+        logger.info("""
             SSE connection attempt:
             - Client ID: \(clientId)
             - Remote: \(remoteAddress)
@@ -185,12 +187,12 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             """)
         
         // Register the channel with client ID
-        transport.logger.info("Registering SSE channel for client \(clientId)")
+        logger.info("Registering SSE channel for client \(clientId)")
         transport.registerSSEChannel(context.channel, id: UUID(uuidString: clientId)!)
         
         // Then send endpoint event with client ID in URL
         guard let endpointUrl = self.endpointUrl(from: head, clientId: clientId) else {
-            transport.logger.error("Failed to construct endpoint URL")
+            logger.error("Failed to construct endpoint URL")
             context.close(promise: nil)
             return
         }
@@ -207,15 +209,15 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
                                      status: .ok,
                                      headers: headers)
         
-        transport.logger.info("Sending SSE response headers")
+        logger.info("Sending SSE response headers")
         context.write(wrapOutboundOut(.head(response)), promise: nil)
         context.flush()
         
-        transport.logger.info("Sending endpoint event with URL: \(endpointUrl)")
+        logger.info("Sending endpoint event with URL: \(endpointUrl)")
         let message = SSEMessage(name: "endpoint", data: endpointUrl.absoluteString)
         context.channel.sendSSE(message)
         
-        transport.logger.info("SSE connection setup complete for client \(clientId)")
+        logger.info("SSE connection setup complete for client \(clientId)")
     }
     
 	private func handleMessages(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?) async {
@@ -238,7 +240,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
         guard let components = URLComponents(string: head.uri),
               let clientId = components.path.components(separatedBy: "/").last,
               components.path.hasPrefix("/messages/") else {
-            transport.logger.warning("Invalid message endpoint URL format: \(head.uri)")
+            logger.warning("Invalid message endpoint URL format: \(head.uri)")
             sendResponse(context: context, status: .badRequest)
             return
         }
@@ -274,28 +276,6 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
         let decoder = JSONDecoder()
         do {
             let request = try decoder.decode(JSONRPCRequest.self, from: body)
-            
-//            // Verify that this client has an active SSE connection
-//            if await !transport.hasActiveSSEConnection(for: clientId) {
-//                transport.logger.warning("Rejected POST request from client \(clientId) without active SSE connection")
-//                
-//                // Create error response
-//                let errorResponse = """
-//                {
-//                    "jsonrpc": "2.0",
-//                    "error": {
-//                        "code": -32600,
-//                        "message": "No active SSE connection found for this client ID. Please establish an SSE connection first."
-//                    },
-//                    "id": \(request.id ?? 0)
-//                }
-//                """
-//                var buffer = context.channel.allocator.buffer(capacity: errorResponse.utf8.count)
-//                buffer.writeString(errorResponse)
-//                
-//                sendResponse(context: context, status: .forbidden, body: buffer)
-//                return
-//            }
             
             if request.method == nil {
                 sendResponse(context: context, status: .ok, headers: nil)
@@ -357,7 +337,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             
             sendResponse(context: context, status: .ok, body: buffer)
         } catch {
-            transport.logger.error("Failed to encode AI plugin manifest: \(error)")
+            logger.error("Failed to encode AI plugin manifest: \(error)")
             sendResponse(context: context, status: .internalServerError)
         }
     }
@@ -399,7 +379,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             
             sendResponse(context: context, status: .ok, body: buffer)
         } catch {
-            transport.logger.error("Failed to encode OpenAPI spec: \(error)")
+            logger.error("Failed to encode OpenAPI spec: \(error)")
             sendResponse(context: context, status: .internalServerError)
         }
     }
@@ -537,7 +517,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
 			components.port = nil
 		}
 		
-		transport.logger.info("Generated endpoint URL: \(components.url?.absoluteString ?? "nil")")
+		logger.info("Generated endpoint URL: \(components.url?.absoluteString ?? "nil")")
 		return components.url
 	}
 }

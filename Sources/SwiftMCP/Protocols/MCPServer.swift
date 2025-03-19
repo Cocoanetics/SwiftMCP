@@ -122,8 +122,8 @@ public extension MCPServer {
     /// Creates a tools response
     /// - Parameter id: The request ID
     /// - Returns: The tools response
-    private func createToolsResponse(id: Int) -> ToolsResponse {
-        return ToolsResponse(
+    private func createToolsResponse(id: Int) -> ToolsListResponse {
+        return ToolsListResponse(
             jsonrpc: "2.0",
             id: id,
             result: .init(tools: mcpTools)

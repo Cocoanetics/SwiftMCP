@@ -44,11 +44,11 @@ public struct MCPToolMetadata: Sendable {
      */
     public init(name: String, description: String? = nil, parameters: [MCPToolParameterInfo], returnType: String? = nil, returnTypeDescription: String? = nil, isAsync: Bool = false, isThrowing: Bool = false) {
         self.name = name
-		self.description = description
+        self.description = description
         self.parameters = parameters
         self.returnType = returnType
-		self.returnTypeDescription = returnTypeDescription
-		self.isAsync = isAsync
-		self.isThrowing = isThrowing
+        self.returnTypeDescription = returnTypeDescription
+        self.isAsync = isAsync
+        self.isThrowing = isThrowing
     }
 } 
