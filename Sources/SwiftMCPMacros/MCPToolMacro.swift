@@ -43,6 +43,9 @@ public struct MCPToolMacro: PeerMacro {
 		// Extract function name
 		let functionName = funcDecl.name.text
 		
+		// Extract parameter descriptions from documentation
+		let documentation = Documentation(from: funcDecl.leadingTrivia.description)
+		
 		// Extract description from the attribute if provided
 		var descriptionArg = "nil"
 		var hasExplicitDescription = false
@@ -101,9 +104,6 @@ public struct MCPToolMacro: PeerMacro {
 		// Extract parameter information
 		var parameterString = ""
 		var parameterInfos: [(name: String, type: String, defaultValue: String?)] = []
-		
-		// Extract parameter descriptions from documentation
-		let documentation = Documentation(from: funcDecl.leadingTrivia.description)
 		
 		// Extract return type information from the syntax tree
 		let returnTypeString: String
@@ -214,7 +214,7 @@ public struct MCPToolMacro: PeerMacro {
 			description: \(descriptionArg),
 			parameters: [\(parameterString)],
 			returnType: \(returnTypeString),
-			returnTypeDescription: \(extractReturnTypeDescription(from: funcDecl)),
+			returnTypeDescription: \(documentation.returns.map { "\"\($0.replacingOccurrences(of: "\"", with: "\\\"").replacingOccurrences(of: "\t", with: " "))\"" } ?? "nil"),
 			isAsync: \(funcDecl.signature.effectSpecifiers?.asyncSpecifier != nil),
 			isThrowing: \(funcDecl.signature.effectSpecifiers?.throwsClause?.throwsSpecifier != nil)
 		)
@@ -341,28 +341,5 @@ public struct MCPToolMacro: PeerMacro {
 			DeclSyntax(stringLiteral: registrationDecl),
 			DeclSyntax(stringLiteral: wrapperMethod)
 		]
-	}
-	
-	/**
-	 Extracts the return type description from a function's documentation.
-	 
-	 - Parameter funcDecl: The function declaration to extract from
-	 - Returns: The return type description as a string literal, or nil if not found
-	 */
-	private static func extractReturnTypeDescription(from funcDecl: FunctionDeclSyntax) -> String {
-		// Get the leading trivia (documentation)
-		let leadingTrivia = funcDecl.leadingTrivia.description
-		
-		// Look for a "- Returns:" line in the documentation
-		let lines = leadingTrivia.split(separator: "\n")
-		for line in lines {
-			if line.trimmingCharacters(in: .whitespaces).hasPrefix("- Returns:") {
-				let description = line.replacingOccurrences(of: "- Returns:", with: "")
-					.trimmingCharacters(in: .whitespaces)
-				return "\"\(description.replacingOccurrences(of: "\"", with: "\\\""))\""
-			}
-		}
-		
-		return "nil"
 	}
 }

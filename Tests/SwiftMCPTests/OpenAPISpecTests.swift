@@ -1,4 +1,5 @@
 import Testing
+import Foundation
 @testable import SwiftMCP
 
 @MCPServer(name: "test_server")
@@ -113,8 +114,29 @@ func testThrowingFunctionSpec() {
         #expect(Bool(false), "JSON content not found in request body")
         return
     }
-	
-	print(content)
+    
+    // Verify request body schema
+    if case let .object(properties: properties, required: required, description: description) = content.schema {
+        #expect(description == "A function that takes parameters and can throw")
+        #expect(required.contains("name"))
+        #expect(required.contains("count"))
+        
+        // Check name parameter
+        guard case let .string(description: nameDesc) = properties["name"] else {
+            #expect(Bool(false), "name parameter should be a string")
+            return
+        }
+        #expect(nameDesc == "The name to greet")
+        
+        // Check count parameter
+        guard case let .number(description: countDesc) = properties["count"] else {
+            #expect(Bool(false), "count parameter should be a number")
+            return
+        }
+        #expect(countDesc == "Number of times to repeat")
+    } else {
+        #expect(Bool(false), "Request body should be an object")
+    }
     
     // Check responses
     #expect(operation.responses["200"] != nil, "200 response should exist")
@@ -160,7 +182,6 @@ func testVoidFunctionSpec() {
     // Check response
     let response = operation?.responses["200"]
     #expect(response != nil)
-    print("Response description: \(response?.description ?? "nil")")
     #expect(response?.description == "A void function that performs an action")
     
     // Check response schema

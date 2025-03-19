@@ -92,8 +92,6 @@ func testToolCallRequestWithError() async throws {
 	// Handle the request
 	let response = unwrap(await calculator.handleRequest(request) as? ToolCallResponse)
 
-	print(response)
-	
 	#expect(response.jsonrpc == "2.0")
     #expect(response.id == 4)
 	#expect(response.result.isError)
