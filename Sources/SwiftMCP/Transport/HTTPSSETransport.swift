@@ -6,7 +6,6 @@ import NIOFoundationCompat
 import Logging
 
 /// A transport that exposes an HTTP server with SSE and JSON-RPC endpoints
-// We manage our own thread safety
 public final class HTTPSSETransport: Transport, @unchecked Sendable {
     public let server: MCPServer
     public let host: String
@@ -86,8 +85,11 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         let bootstrap = ServerBootstrap(group: group)
             .serverChannelOption(ChannelOptions.backlog, value: 256)
             .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
-            .childChannelInitializer { [self] channel in
-                channel.pipeline.configureHTTPServerPipeline().flatMap {
+            .childChannelInitializer { [weak self] channel in
+                guard let self = self else {
+                    return channel.eventLoop.makeFailedFuture(CancellationError())
+                }
+                return channel.pipeline.configureHTTPServerPipeline().flatMap {
                     channel.pipeline.addHandler(HTTPLogger())
                 }.flatMap {
                     channel.pipeline.addHandler(HTTPHandler(transport: self))
