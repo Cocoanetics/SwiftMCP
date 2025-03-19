@@ -1,10 +1,62 @@
 # ``SwiftMCP``
 
-A Swift framework for building Model Control Protocol (MCP) servers.
+A framework for building AI-powered tools and plugins.
 
 ## Overview
 
-SwiftMCP provides a simple and type-safe way to build MCP servers in Swift. Using Swift's macro system, it automatically handles JSON-RPC communication, parameter validation, and OpenAPI specification generation.
+SwiftMCP (Machine Control Protocol) is a framework that helps you expose Swift functions as tools that can be called by AI assistants. It provides:
+
+- Documentation-driven tool definitions
+- Multiple transport options (HTTP+SSE, stdio)
+- OpenAPI specification generation
+- AI plugin manifest generation
+
+## Getting Started
+
+To start using SwiftMCP, first create a server that exposes your tools:
+
+```swift
+@MCPServer
+class Calculator {
+    @MCPTool
+    func add(a: Int, b: Int) -> Int {
+        a + b
+    }
+}
+```
+
+Then choose a transport to expose your server:
+
+```swift
+let calculator = Calculator()
+let transport = HTTPSSETransport(server: calculator)
+try await transport.run()
+```
+
+## Topics
+
+### Essentials
+
+- <doc:GettingStarted>
+- <doc:CoreConcepts>
+- <doc:SwiftMCPTutorials>
+
+### Macros
+
+- ``MCPServer``
+- ``MCPTool``
+
+### Core Types
+
+- ``MCPToolMetadata``
+- ``MCPToolParameterInfo``
+- ``MCPToolError``
+
+### Server Components
+
+- ``Transport``
+- ``HTTPSSETransport``
+- ``StdioTransport``
 
 ```swift
 @MCPServer(version: "1.0.0")

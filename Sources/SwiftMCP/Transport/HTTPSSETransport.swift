@@ -80,7 +80,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     // MARK: - Server Lifecycle
     
     /// Start the HTTP server in the background
-    /// - Returns: A future that completes when the server has started
+    /// This method initializes the server and begins accepting connections
     public func start() async throws {
         let bootstrap = ServerBootstrap(group: group)
             .serverChannelOption(ChannelOptions.backlog, value: 256)
