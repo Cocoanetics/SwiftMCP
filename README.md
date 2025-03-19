@@ -30,13 +30,19 @@ The included demo application shows how to use SwiftMCP with different transport
 
 ```bash
 # Using stdio transport
-SwiftMCPDemo --transport stdio
+SwiftMCPDemo stdio
 
 # Using HTTP+SSE transport
-SwiftMCPDemo --transport httpsse --port 8080
+SwiftMCPDemo httpsse --port 8080
 
 # Using HTTP+SSE with authorization
-SwiftMCPDemo --transport httpsse --port 8080 --token your-secret-token
+SwiftMCPDemo httpsse --port 8080 --token your-secret-token
+
+# Using HTTP+SSE with OpenAPI support
+SwiftMCPDemo httpsse --port 8080 --openapi
+
+# Using HTTP+SSE with authorization and OpenAPI support
+SwiftMCPDemo httpsse --port 8080 --token your-secret-token --openapi
 ```
 
 When using HTTP+SSE transport with the `--token` option, clients must include an Authorization header with their requests:
@@ -44,6 +50,10 @@ When using HTTP+SSE transport with the `--token` option, clients must include an
 ```bash
 Authorization: Bearer your-secret-token
 ```
+
+## OpenAPI support
+
+The `--openapi` option enables OpenAPI endpoints for AI plugin integration. When this option is used, the server will provide an OpenAPI specification at `/openapi.json` and an AI plugin manifest at `/.well-known/ai-plugin.json`. This allows for easy integration with AI models and other tools that support OpenAPI.
 
 ## Custom Server Implementation
 
@@ -77,6 +87,19 @@ transport.authorizationHandler = { token in
 
 try transport.run()
 ```
+
+## Documentation Extraction
+
+The `@MCPServer` and `@MCPTool` macros extract documentation comments to describe class, parameters and return value.
+
+## Macros Functionality
+
+The macros in this repository provide functionality for defining and exposing tools and servers in the SwiftMCP framework. Here are the main functionalities of the macros:
+
+* `@MCPServer`: This macro is used to define a class or actor as an MCP server. It extracts documentation comments to describe the class, parameters, and return values. An example of its usage can be seen in the `Demos/SwiftMCPDemo/Calculator.swift` file, where the `Calculator` actor is annotated with `@MCPServer(name: "SwiftMCP Demo")`.
+* `@MCPTool`: This macro is used to define functions within an MCP server that can be called as tools. It also extracts documentation comments to describe the function, parameters, and return values. Examples of its usage can be seen in the `Demos/SwiftMCPDemo/Calculator.swift` file, where various functions such as `add`, `subtract`, `testArray`, `multiply`, `divide`, `greet`, `ping`, and `noop` are annotated with `@MCPTool`.
+
+These macros help in automatically generating the necessary metadata and documentation for the MCP server and its tools, making it easier to expose them for JSON-RPC communication and integration with AI models.
 
 ## License
 
