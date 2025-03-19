@@ -1,33 +1,39 @@
 import Foundation
 import AnyCodable
 
-/// Protocol defining the requirements for an MCP server
-public protocol MCPServer: AnyObject {
-    /// Returns an array of all MCP tools defined in this type
+/// Protocol defining the interface for an MCP server
+public protocol MCPServer {
+    /// The tools available on this server
     var mcpTools: [MCPTool] { get }
     
-    /// Returns an array of all MCP resources defined in this type
+    /// The resources available on this server
     var mcpResources: [MCPResource] { get async }
-	
-	/// Returns an array of all MCP resource templates defined in this type
-	var mcpResourceTemplates: [MCPResourceTemplate] { get async }
-
     
-    /// Calls a tool by name with the provided arguments
-    /// - Parameters:
-    ///   - name: The name of the tool to call
-    ///   - arguments: A dictionary of arguments to pass to the tool
-    /// - Returns: The result of the tool call
-    /// - Throws: MCPToolError if the tool doesn't exist or cannot be called
-    func callTool(_ name: String, arguments: [String: Any]) async throws -> Codable
+    /// The resource templates available on this server
+    var mcpResourceTemplates: [MCPResourceTemplate] { get async }
     
-    /// Gets a resource by URI
+    /// The name of the server
+    var name: String { get }
+    
+    /// The version of the server
+    var version: String { get }
+    
+    /// The description of the server
+    var serverDescription: String? { get }
+    
+    /// Get a resource by its URI
     /// - Parameter uri: The URI of the resource to get
-    /// - Returns: The resource content, or nil if the resource doesn't exist
-    /// - Throws: MCPResourceError if there's an error getting the resource
+    /// - Returns: The resource content, or nil if not found
     func getResource(uri: URL) async throws -> MCPResourceContent?
     
-    /// Handles a JSON-RPC request
+    /// Call a tool by name with arguments
+    /// - Parameters:
+    ///   - name: The name of the tool to call
+    ///   - arguments: The arguments to pass to the tool
+    /// - Returns: The result of the tool call
+    func callTool(_ name: String, arguments: [String: Any]) async throws -> Codable
+    
+    /// Handle a JSON-RPC request
     /// - Parameter request: The JSON-RPC request to handle
     /// - Returns: The response as a string, or nil if no response should be sent
     func handleRequest(_ request: JSONRPCMessage) async -> JSONRPCMessage?
@@ -134,45 +140,53 @@ public extension MCPServer {
     /// Handles a tool call request
     /// - Parameter request: The JSON-RPC request for a tool call
     /// - Returns: The response as a string, or nil if no response should be sent
-    private func handleToolCall(_ request: JSONRPCMessage) async -> JSONRPCMessage? {
-        guard let params = request.params,
-              let toolName = params["name"]?.value as? String else {
-            // Invalid request: missing tool name
-            return nil
-        }
-        
-        // Extract arguments from the request
-        let arguments = (params["arguments"]?.value as? [String: Any]) ?? [:]
-        
-        // Call the appropriate wrapper method based on the tool name
-        do {
-            let result = try await self.callTool(toolName, arguments: arguments)
-            let responseText: String
-            
-            // Use Mirror to check if the result is Void
-            let mirror = Mirror(reflecting: result)
-            if mirror.displayStyle == .tuple && mirror.children.isEmpty {
-                responseText = ""  // Convert Void to empty string
-            } else {
-                responseText = "\(result)"
-            }
-            
-            var response = JSONRPCMessage()
-            response.id = request.id
-            response.result = [
-                "content": AnyCodable([
-                    ["type": "text", "text": responseText]
-                ])
-            ]
-            return response
-            
-        } catch {
-            var response = JSONRPCMessage()
-            response.id = request.id
-            response.error = .init(code: -32000, message: error.localizedDescription)
-            return response
-        }
-    }
+	private func handleToolCall(_ request: JSONRPCMessage) async -> JSONRPCMessage? {
+		guard let params = request.params,
+			  let toolName = params["name"]?.value as? String else {
+			// Invalid request: missing tool name
+			return nil
+		}
+		
+		// Extract arguments from the request
+		let arguments = (params["arguments"]?.value as? [String: Any]) ?? [:]
+		
+		// Call the appropriate wrapper method based on the tool name
+		do {
+			let result = try await self.callTool(toolName, arguments: arguments)
+			let responseText: String
+			
+			// Use Mirror to check if the result is Void
+			let mirror = Mirror(reflecting: result)
+			if mirror.displayStyle == .tuple && mirror.children.isEmpty {
+				responseText = ""  // Convert Void to empty string
+			} else {
+				responseText = "\(result)"
+			}
+			
+			var response = JSONRPCMessage()
+			response.jsonrpc = "2.0"
+			response.id = request.id
+			response.result = [
+				"content": AnyCodable([
+					["type": "text", "text": responseText]
+				]),
+				"isError": AnyCodable(false)
+			]
+			return response
+			
+		} catch {
+			var response = JSONRPCMessage()
+			response.jsonrpc = "2.0"
+			response.id = request.id
+			response.result = [
+				"content": AnyCodable([
+					["type": "text", "text": error.localizedDescription]
+				]),
+				"isError": AnyCodable(true)
+			]
+			return response
+		}
+	}
     
     /// Function to log a message to stderr
     func logToStderr(_ message: String) {

@@ -114,6 +114,7 @@ func testToolCallRequest() async throws {
     #expect(response.id == 3)
     #expect(response.result != nil)
     #expect(response.params == nil)
+    #expect(response.error == nil)
     
     guard let result = response.result else {
         throw TestError("Result is missing")
@@ -123,7 +124,7 @@ func testToolCallRequest() async throws {
         throw TestError("Content not found or not an array")
     }
     
-    #expect(!content.isEmpty)
+    #expect(content.count == 1)
     #expect(content[0]["type"] == "text")
     #expect(content[0]["text"] == "5")
 }
@@ -148,16 +149,29 @@ func testToolCallRequestWithError() async throws {
     
     #expect(response.jsonrpc == "2.0")
     #expect(response.id == 4)
-    #expect(response.error != nil)
-    #expect(response.result == nil)
+    #expect(response.result != nil)
     #expect(response.params == nil)
+    #expect(response.error == nil)
     
-    guard let error = response.error else {
-        throw TestError("Error is missing")
+    guard let result = response.result else {
+        throw TestError("Result is missing")
     }
     
-    #expect(error.code == -32000)
-    #expect(error.message.contains("not found on the server"))
+    guard let content = result["content"]?.value as? [[String: String]] else {
+        throw TestError("Content not found or not an array")
+    }
+    
+    #expect(content.count == 1)
+    #expect(content[0]["type"] == "text")
+    guard let text = content[0]["text"] else {
+        throw TestError("Text field missing in content")
+    }
+    #expect(text.contains("not found on the server"))
+    
+    guard let isError = result["isError"]?.value as? Bool else {
+        throw TestError("isError flag not found")
+    }
+    #expect(isError)
 }
 
 @Test
@@ -183,16 +197,29 @@ func testToolCallRequestWithInvalidArgument() async throws {
     
     #expect(response.jsonrpc == "2.0")
     #expect(response.id == 5)
-    #expect(response.error != nil)
-    #expect(response.result == nil)
+    #expect(response.result != nil)
     #expect(response.params == nil)
+    #expect(response.error == nil)
     
-    guard let error = response.error else {
-        throw TestError("Error is missing")
+    guard let result = response.result else {
+        throw TestError("Result is missing")
     }
     
-    #expect(error.code == -32000)
-    #expect(error.message.contains("expected type Int"))
+    guard let content = result["content"]?.value as? [[String: String]] else {
+        throw TestError("Content not found or not an array")
+    }
+    
+    #expect(content.count == 1)
+    #expect(content[0]["type"] == "text")
+    guard let text = content[0]["text"] else {
+        throw TestError("Text field missing in content")
+    }
+    #expect(text.contains("expected type Int"))
+    
+    guard let isError = result["isError"]?.value as? Bool else {
+        throw TestError("isError flag not found")
+    }
+    #expect(isError)
 }
 
 @Test("Custom Name and Version")
