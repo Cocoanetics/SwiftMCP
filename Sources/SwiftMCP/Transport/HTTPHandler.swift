@@ -15,9 +15,13 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
 	
 	private let logger = Logger(label: "com.cocoanetics.SwiftMCP.HTTPHandler")
     
+	// MARK: - Initialization
+	
     init(transport: HTTPSSETransport) {
         self.transport = transport
     }
+	
+	// MARK: - Channel Handler
     
     func channelInactive(context: ChannelHandlerContext) {
         logger.trace("Channel inactive")
@@ -29,122 +33,88 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
         context.close(promise: nil)
     }
     
-    private func sendResponse(context: ChannelHandlerContext, status: HTTPResponseStatus, headers: HTTPHeaders? = nil, body: ByteBuffer? = nil) {
-		
-		context.eventLoop.execute {
-			
-			var responseHeaders = headers ?? HTTPHeaders()
-			
-			if body != nil {
-				responseHeaders.add(name: "Content-Type", value: "application/json")
-			}
-			
-			responseHeaders.add(name: "Access-Control-Allow-Origin", value: "*")
-			
-			let head = HTTPResponseHead(version: .http1_1, status: status, headers: responseHeaders)
-			context.write(self.wrapOutboundOut(.head(head)), promise: nil)
-			
-			if let body = body {
-				context.write(self.wrapOutboundOut(.body(.byteBuffer(body))), promise: nil)
-			}
-			
-			context.write(self.wrapOutboundOut(.end(nil)), promise: nil)
-			context.flush()
-		}
-    }
-    
 	func channelRead(context: ChannelHandlerContext, data: NIOAny) {
-        let reqPart = unwrapInboundIn(data)
-        
-        switch reqPart {
-        case .head(let head):
-            requestState = .head(head)
-            
-        case .body(let buffer):
-            switch requestState {
-            case .head(let head):
-                requestState = .body(head: head, data: buffer)
-            default:
-                break
-            }
-            
-        case .end:
-            switch requestState {
-            case .head(let head):
-                if head.uri.hasPrefix("/sse") {
-                    handleSSE(context: context, head: head, body: nil)
-                } else if head.uri.hasPrefix("/messages") {
-					Task {
-						await handleMessages(context: context, head: head, body: nil)
-					}
-                } else if head.uri == "/.well-known/ai-plugin.json" {
-                    if transport.serveOpenAPI {
-                        handleAIPluginManifest(context: context, head: head)
-                    } else {
-                        sendResponse(context: context, status: .notFound)
-                    }
-                } else if head.uri == "/openapi.json" {
-                    if transport.serveOpenAPI {
-                        handleOpenAPISpec(context: context, head: head)
-                    } else {
-                        sendResponse(context: context, status: .notFound)
-                    }
-                } else {
-                    // Check if this is a tool endpoint
-					let toolPath = "/\(transport.server.serverName.asModelName)"
-                    if head.uri.hasPrefix(toolPath) {
-                        if transport.serveOpenAPI {
-                            let toolName = String(head.uri.dropFirst(toolPath.count + 1)) // +1 for the trailing slash
-							handleToolCall(context: context, head: head, toolName: toolName, body: nil)
-                        } else {
-                            sendResponse(context: context, status: .notFound)
-                        }
-                    } else {
-                        sendResponse(context: context, status: .notFound)
-                    }
-                }
-                
-            case .body(let head, let buffer):
-                if head.uri.hasPrefix("/sse") {
-                    handleSSE(context: context, head: head, body: buffer)
-                } else if head.uri.hasPrefix("/messages") {
-					Task {
-						await handleMessages(context: context, head: head, body: buffer)
-					}
-                } else if head.uri == "/.well-known/ai-plugin.json" {
-                    if transport.serveOpenAPI {
-                        handleAIPluginManifest(context: context, head: head)
-                    } else {
-                        sendResponse(context: context, status: .notFound)
-                    }
-                } else if head.uri == "/openapi.json" {
-                    if transport.serveOpenAPI {
-                        handleOpenAPISpec(context: context, head: head)
-                    } else {
-                        sendResponse(context: context, status: .notFound)
-                    }
-                } else {
-                    // Check if this is a tool endpoint
-                    let toolPath = "/" + transport.server.serverName.asModelName
-                    if head.uri.hasPrefix(toolPath) {
-                        if transport.serveOpenAPI {
-							let toolName = String(head.uri.dropFirst(toolPath.count + 1)) // +1 for the trailing slash
-							handleToolCall(context: context, head: head, toolName: toolName, body: buffer)
-                        } else {
-                            sendResponse(context: context, status: .notFound)
-                        }
-                    } else {
-                        sendResponse(context: context, status: .notFound)
-                    }
-                }
-                
-            case .idle:
-                break
-            }
-            requestState = .idle
-        }
-    }
-    
+		
+		let requestPart = unwrapInboundIn(data)
+		
+		switch (requestPart, requestState) {
+				
+			// Initial HEAD Received
+			case (.head(let head), _):
+				requestState = .head(head)
+				
+			// BODY Received after HEAD
+			case (.body(let buffer), .head(let head)):
+				requestState = .body(head: head, data: buffer)
+				
+			// BODY Received in an unexpected state
+			case (.body, _):
+				logger.warning("Received unexpected body without a valid head")
+				
+			// END Received without prior state
+			case (.end, .idle):
+				logger.warning("Received end without prior request state")
+				
+			// END Received after HEAD (no body)
+			case (.end, .head(let head)):
+				defer { requestState = .idle }
+				handleRequest(context: context, head: head, body: nil)
+				
+			// END Received after BODY
+			case (.end, .body(let head, let buffer)):
+				defer { requestState = .idle }
+				handleRequest(context: context, head: head, body: buffer)
+		}
+	}
+	
+	private func handleRequest(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?) {
+		
+		let method = head.method
+		let uri = head.uri
+		let toolPath = "/\(transport.server.serverName.asModelName)"
+		
+		switch (method, uri) {
+				
+			// SSE Endpoint
+			case (.GET, let path) where path.hasPrefix("/sse"):
+				handleSSE(context: context, head: head, body: body)
+				
+			// Messages POST
+			case (.POST, let path) where path.hasPrefix("/messages"):
+				Task {
+					await handleMessages(context: context, head: head, body: body)
+				}
+				
+			// Messages OPTIONS (CORS Preflight)
+			case (.OPTIONS, let path) where path.hasPrefix("/messages"):
+				handleOPTIONS(context: context, head: head)
+				
+			// AI Plugin Manifest (OpenAPI)
+			case (.GET, "/.well-known/ai-plugin.json"):
+				handleAIPluginManifest(context: context, head: head)
+				
+			// OpenAPI Spec
+			case (.GET, "/openapi.json"):
+				handleOpenAPISpec(context: context, head: head)
+				
+			// Tool Endpoint POST
+			case (.POST, let path) where path.hasPrefix(toolPath):
+				handleToolCall(context: context, head: head, body: body)
+				
+			// Tool Endpoint OPTIONS (CORS Preflight)
+			case (.OPTIONS, let path) where path.hasPrefix(toolPath):
+				handleOPTIONS(context: context, head: head)
+				
+			// OPTIONS General Fallback (CORS Preflight)
+			case (.OPTIONS, _):
+				handleOPTIONS(context: context, head: head)
+				
+			// MARK: - Fallback Not Found
+			default:
+				sendResponse(context: context, status: .notFound)
+		}
+	}
+	
     func channelReadComplete(context: ChannelHandlerContext) {
         context.flush()
     }
@@ -221,15 +191,6 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
     }
     
 	private func handleMessages(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?) async {
-        if head.method == .OPTIONS {
-            var headers = HTTPHeaders()
-            headers.add(name: "Access-Control-Allow-Methods", value: "POST, OPTIONS")
-            headers.add(name: "Access-Control-Allow-Headers", value: "*")
-            headers.add(name: "Access-Control-Allow-Headers", value: "Content-Type, Authorization")
-            
-            sendResponse(context: context, status: .ok, headers: headers)
-            return
-        }
         
         guard head.method == .POST else {
             sendResponse(context: context, status: .methodNotAllowed)
@@ -292,12 +253,20 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
             sendResponse(context: context, status: .badRequest)
         }
     }
+	
+	// MARK: - OpenAPI Handlers
     
     private func handleAIPluginManifest(context: ChannelHandlerContext, head: HTTPRequestHead) {
+		
         guard head.method == .GET else {
             sendResponse(context: context, status: .methodNotAllowed)
             return
         }
+		
+		guard transport.serveOpenAPI else {
+			sendResponse(context: context, status: .notFound)
+			return
+		}
 
         // Use forwarded headers if present, otherwise use transport defaults
         let host: String
@@ -343,10 +312,17 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
     }
     
     private func handleOpenAPISpec(context: ChannelHandlerContext, head: HTTPRequestHead) {
+		
         guard head.method == .GET else {
             sendResponse(context: context, status: .methodNotAllowed)
             return
         }
+		
+		guard transport.serveOpenAPI else {
+			sendResponse(context: context, status: .notFound)
+			return
+		}
+
 
         // Use forwarded headers if present, otherwise use transport defaults
         let host: String
@@ -384,23 +360,31 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
         }
     }
     
-    private func handleToolCall(context: ChannelHandlerContext, head: HTTPRequestHead, toolName: String, body: ByteBuffer?) {
-        // Handle CORS preflight
-        if head.method == .OPTIONS {
-            var headers = HTTPHeaders()
-            headers.add(name: "Access-Control-Allow-Methods", value: "POST, OPTIONS")
-            headers.add(name: "Access-Control-Allow-Headers", value: "*")
-            headers.add(name: "Access-Control-Allow-Headers", value: "Content-Type, Authorization")
-            
-            sendResponse(context: context, status: .ok, headers: headers)
-            return
-        }
-        
-        // Only allow POST method
-        guard head.method == .POST else {
-            sendResponse(context: context, status: .methodNotAllowed)
-            return
-        }
+	private func handleToolCall(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?) {
+
+		// Only allow POST method
+		guard head.method == .POST else {
+			sendResponse(context: context, status: .methodNotAllowed)
+			return
+		}
+
+		guard transport.serveOpenAPI else {
+			sendResponse(context: context, status: .notFound)
+			return
+		}
+
+		// Split the URI into components and validate the necessary parts
+		let pathComponents = head.uri.split(separator: "/").map(String.init)
+
+		guard
+			pathComponents.count == 2,
+			let serverComponent = pathComponents.first,
+			let toolName = pathComponents.dropFirst().first,
+			serverComponent == transport.server.serverName.asModelName
+		else {
+			sendResponse(context: context, status: .notFound)
+			return
+		}
         
         // Check authorization if handler is set
         var token: String?
@@ -519,5 +503,37 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
 		
 		logger.info("Generated endpoint URL: \(components.url?.absoluteString ?? "nil")")
 		return components.url
+	}
+    
+    private func handleOPTIONS(context: ChannelHandlerContext, head: HTTPRequestHead) {
+        logger.info("Handling OPTIONS request for URI: \(head.uri)")
+        var headers = HTTPHeaders()
+        headers.add(name: "Access-Control-Allow-Methods", value: "GET, POST, OPTIONS")
+        headers.add(name: "Access-Control-Allow-Headers", value: "Content-Type, Authorization")
+        sendResponse(context: context, status: .ok, headers: headers)
+    }
+	
+	private func sendResponse(context: ChannelHandlerContext, status: HTTPResponseStatus, headers: HTTPHeaders? = nil, body: ByteBuffer? = nil) {
+		
+		context.eventLoop.execute {
+			
+			var responseHeaders = headers ?? HTTPHeaders()
+			
+			if body != nil {
+				responseHeaders.add(name: "Content-Type", value: "application/json")
+			}
+			
+			responseHeaders.add(name: "Access-Control-Allow-Origin", value: "*")
+			
+			let head = HTTPResponseHead(version: .http1_1, status: status, headers: responseHeaders)
+			context.write(self.wrapOutboundOut(.head(head)), promise: nil)
+			
+			if let body = body {
+				context.write(self.wrapOutboundOut(.body(.byteBuffer(body))), promise: nil)
+			}
+			
+			context.write(self.wrapOutboundOut(.end(nil)), promise: nil)
+			context.flush()
+		}
 	}
 }
