@@ -1,0 +1,93 @@
+@Tutorial(time: 30) {
+    @Intro(title: "Building an MCP Server") {
+        Learn how to build a full-featured MCP server that can interact with AI models.
+        
+        You'll learn how to create a simple calculator server and add documentation that integrates with the OpenAPI schema generation.
+        
+        @Image(source: "placeholder", alt: "Illustration showing the basic structure of an MCP server")
+    }
+    
+    @Section(title: "Creating Your First MCP Server") {
+        @ContentAndMedia {
+            Learn how to transform a regular Swift class into an MCP server by adding documentation and macros.
+            
+            @Image(source: "placeholder", alt: "Illustration showing the transformation of a regular class into an MCP server")
+        }
+        
+        @Steps {
+            @Step {
+                Start with a basic calculator class that has proper documentation.
+                
+                @Code(name: "Calculator.swift", file: "01-calculator-base")
+            }
+            
+            @Step {
+                Import SwiftMCP and add the MCPServer macro with version information.
+                
+                @Code(name: "Calculator.swift", file: "02-calculator-server")
+            }
+            
+            @Step {
+                Add the MCPTool macro to expose the add function.
+                
+                @Code(name: "Calculator.swift", file: "03-calculator-tool")
+            }
+            
+            @Step {
+                Give your server a custom name using the MCPServer macro.
+                
+                @Code(name: "Calculator.swift", file: "04-calculator-named")
+            }
+            
+            @Step {
+                Add a custom description to the MCPTool macro.
+                
+                @Code(name: "Calculator.swift", file: "05-calculator-description")
+            }
+            
+            @Step {
+                Notice how the documentation comments are used to generate the OpenAPI schema.
+                
+                @Code(name: "Calculator.swift", file: "06-calculator-schema")
+            }
+        }
+    }
+    
+    @Section(title: "Adding Error Handling") {
+        @ContentAndMedia {
+            Learn how to handle errors and validate input in your MCP server.
+            
+            @Image(source: "placeholder", alt: "Illustration showing error handling in an MCP server")
+        }
+        
+        @Steps {
+            @Step {
+                Create a custom error type for input validation.
+                
+                @Code(name: "GreetingError.swift", file: "04-greeting-error")
+            }
+            
+            @Step {
+                Add a throwing function that validates input.
+                
+                @Code(name: "Calculator.swift", file: "05-calculator-throwing")
+            }
+        }
+    }
+    
+    @Section(title: "Adding Async Support") {
+        @ContentAndMedia {
+            Learn how to add asynchronous operations to your MCP server.
+            
+            @Image(source: "placeholder", alt: "Illustration showing async operations in an MCP server")
+        }
+        
+        @Steps {
+            @Step {
+                Add an async function that simulates a network delay.
+                
+                @Code(name: "Calculator.swift", file: "06-calculator-async")
+            }
+        }
+    }
+} 

@@ -1,7 +1,7 @@
 import Foundation
 
 /// Response structure for tool calls
-struct ToolCallResponse: Codable {
+public struct ToolCallResponse: Codable {
 	var jsonrpc: String = "2.0"
 	let id: Int
 	let result: Result
@@ -28,7 +28,7 @@ struct ToolCallResponse: Codable {
 }
 
 extension ToolCallResponse {
-	init(id: Int, error: Error)
+	public init(id: Int, error: Error)
 	{
 		self.id = id
 		self.result = Result(
@@ -37,7 +37,7 @@ extension ToolCallResponse {
 		)
 	}
 	
-	init(id: Int, result: String)
+	public init(id: Int, result: String)
 	{
 		self.id = id
 		self.result = Result(

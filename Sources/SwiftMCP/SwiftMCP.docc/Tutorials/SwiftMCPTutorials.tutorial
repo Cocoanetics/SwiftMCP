@@ -1,0 +1,18 @@
+@Tutorials(name: "SwiftMCP Tutorials") {
+    @Intro(title: "Building MCP Servers") {
+        Learn how to build powerful Model Control Protocol (MCP) servers using SwiftMCP.
+        
+        These tutorials will guide you through creating MCP servers that can interact with AI models,
+        handle errors gracefully, and perform asynchronous operations.
+        
+        @Image(source: "placeholder.png", alt: "Illustration showing the SwiftMCP framework architecture")
+    }
+    
+    @Chapter(name: "Getting Started with SwiftMCP") {
+        Learn the fundamentals of building MCP servers with SwiftMCP.
+        
+        @Image(source: "placeholder.png", alt: "Illustration showing a basic MCP server structure")
+        
+        @TutorialReference(tutorial: "doc:BuildingAnMCPServer")
+    }
+} 
