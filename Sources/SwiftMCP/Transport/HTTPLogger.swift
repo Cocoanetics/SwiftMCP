@@ -80,7 +80,7 @@
 						if let str = buffer.getString(at: buffer.readerIndex, length: buffer.readableBytes) {
 							if isSSEConnection {
 								// For SSE, log each message immediately
-								sseLogger.trace("Message: \(str)")
+								sseLogger.trace("\(str)")
 							} else {
 								currentResponseBody += str
 							}
