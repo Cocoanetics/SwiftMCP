@@ -67,73 +67,80 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
 		}
 	}
 	
+	func channelReadComplete(context: ChannelHandlerContext) {
+		context.flush()
+	}
+	
+	// MARK: - Handler
+	
 	private func handleRequest(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?) {
 		
-		let method = head.method
-		let uri = head.uri
-		let toolPath = "/\(transport.server.serverName.asModelName)"
+		let serverPath = "/\(transport.server.serverName.asModelName)"
 		
-		switch (method, uri) {
+		switch (head.method, head.uri) {
+				
+			// Handle all OPTIONS requests in one case
+			case (.OPTIONS, _):
+				handleOPTIONS(context: context, head: head)
 				
 			// SSE Endpoint
+				
 			case (.GET, let path) where path.hasPrefix("/sse"):
 				handleSSE(context: context, head: head, body: body)
 				
-			// Messages POST
+			case (_, let path) where path.hasPrefix("/sse"):
+				sendResponse(context: context, status: .methodNotAllowed)
+				
+			// Messages
+				
 			case (.POST, let path) where path.hasPrefix("/messages"):
 				Task {
 					await handleMessages(context: context, head: head, body: body)
 				}
 				
-			// Messages OPTIONS (CORS Preflight)
-			case (.OPTIONS, let path) where path.hasPrefix("/messages"):
-				handleOPTIONS(context: context, head: head)
+			case (_, let path) where path.hasPrefix("/messages"):
+				sendResponse(context: context, status: .methodNotAllowed)
+				
+			// if OpenAPI is disabled: everything else is NOT FOUND
+				
+			case (_, _) where !transport.serveOpenAPI:
+				sendResponse(context: context, status: .notFound)
 				
 			// AI Plugin Manifest (OpenAPI)
+				
 			case (.GET, "/.well-known/ai-plugin.json"):
 				handleAIPluginManifest(context: context, head: head)
 				
+			case (_, "/.well-known/ai-plugin.json"):
+				sendResponse(context: context, status: .methodNotAllowed)
+				
 			// OpenAPI Spec
+				
 			case (.GET, "/openapi.json"):
 				handleOpenAPISpec(context: context, head: head)
 				
-			// Tool Endpoint POST
-			case (.POST, let path) where path.hasPrefix(toolPath):
+			case (_, "/openapi.json"):
+				sendResponse(context: context, status: .methodNotAllowed)
+				
+			// Tool Endpoint
+			case (.POST, let path) where path.hasPrefix(serverPath):
 				handleToolCall(context: context, head: head, body: body)
 				
-			// Tool Endpoint OPTIONS (CORS Preflight)
-			case (.OPTIONS, let path) where path.hasPrefix(toolPath):
-				handleOPTIONS(context: context, head: head)
+			case (_, let path) where path.hasPrefix(serverPath):
+				sendResponse(context: context, status: .methodNotAllowed)
 				
-			// OPTIONS General Fallback (CORS Preflight)
-			case (.OPTIONS, _):
-				handleOPTIONS(context: context, head: head)
-				
-			// MARK: - Fallback Not Found
+				// Fallback for unknown endpoints
 			default:
 				sendResponse(context: context, status: .notFound)
 		}
 	}
 	
-    func channelReadComplete(context: ChannelHandlerContext) {
-        context.flush()
-    }
-    
     private func handleSSE(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?) {
-        guard head.method == .GET else {
-            logger.warning("Rejected non-GET SSE request")
-            sendResponse(context: context, status: .methodNotAllowed)
-            return
-        }
         
+		precondition(head.method == .GET)
+		
         // Validate SSE headers
         let acceptHeader = head.headers["accept"].first ?? ""
-        
-        logger.info("""
-            SSE connection attempt:
-            - Accept: \(acceptHeader)
-            - Headers: \(head.headers)
-            """)
         
         guard "text/event-stream".matchesAcceptHeader(acceptHeader) else {
             logger.warning("Rejected non-SSE request (Accept: \(acceptHeader))")
@@ -192,11 +199,8 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
     
 	private func handleMessages(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?) async {
         
-        guard head.method == .POST else {
-            sendResponse(context: context, status: .methodNotAllowed)
-            return
-        }
-        
+		precondition(head.method == .POST)
+		
         // Extract client ID from URL path using URLComponents
         guard let components = URLComponents(string: head.uri),
               let clientId = components.path.components(separatedBy: "/").last,
@@ -258,15 +262,8 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
     
     private func handleAIPluginManifest(context: ChannelHandlerContext, head: HTTPRequestHead) {
 		
-        guard head.method == .GET else {
-            sendResponse(context: context, status: .methodNotAllowed)
-            return
-        }
-		
-		guard transport.serveOpenAPI else {
-			sendResponse(context: context, status: .notFound)
-			return
-		}
+		precondition(head.method == .GET)
+		precondition(transport.serveOpenAPI)
 
         // Use forwarded headers if present, otherwise use transport defaults
         let host: String
@@ -313,16 +310,8 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
     
     private func handleOpenAPISpec(context: ChannelHandlerContext, head: HTTPRequestHead) {
 		
-        guard head.method == .GET else {
-            sendResponse(context: context, status: .methodNotAllowed)
-            return
-        }
-		
-		guard transport.serveOpenAPI else {
-			sendResponse(context: context, status: .notFound)
-			return
-		}
-
+		precondition(head.method == .GET)
+		precondition(transport.serveOpenAPI)
 
         // Use forwarded headers if present, otherwise use transport defaults
         let host: String
@@ -362,16 +351,8 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable {
     
 	private func handleToolCall(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?) {
 
-		// Only allow POST method
-		guard head.method == .POST else {
-			sendResponse(context: context, status: .methodNotAllowed)
-			return
-		}
-
-		guard transport.serveOpenAPI else {
-			sendResponse(context: context, status: .notFound)
-			return
-		}
+		precondition(head.method == .POST)
+		precondition(transport.serveOpenAPI)
 
 		// Split the URI into components and validate the necessary parts
 		let pathComponents = head.uri.split(separator: "/").map(String.init)
