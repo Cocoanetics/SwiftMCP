@@ -29,6 +29,7 @@ let package = Package(
 		.package(url: "https://github.com/Flight-School/AnyCodable", from: "0.6.0"),
 		.package(url: "https://github.com/apple/swift-argument-parser", from: "1.2.0"),
 		.package(url: "https://github.com/apple/swift-nio.git", from: "2.0.0"),
+		.package(url: "https://github.com/apple/swift-docc-plugin.git", from: "1.0.0")
 	],
 	targets: [
 		// Library that exposes a macro as part of its API, which is used in client programs.
