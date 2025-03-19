@@ -146,13 +146,20 @@ public extension MCPServer {
         // Call the appropriate wrapper method based on the tool name
         do {
             let result = try await self.callTool(toolName, arguments: arguments)
-			let responseText = "\(result)"
-			
-			return ToolCallResponse(id: request.id ?? 0, result: responseText)
-			
-		} catch {
-			
-			return ToolCallResponse(id: request.id ?? 0, error: error)
+            let responseText: String
+            
+            // Use Mirror to check if the result is Void
+            let mirror = Mirror(reflecting: result)
+            if mirror.displayStyle == .tuple && mirror.children.isEmpty {
+                responseText = ""  // Convert Void to empty string
+            } else {
+                responseText = "\(result)"
+            }
+            
+            return ToolCallResponse(id: request.id ?? 0, result: responseText)
+            
+        } catch {
+            return ToolCallResponse(id: request.id ?? 0, error: error)
         }
     }
     

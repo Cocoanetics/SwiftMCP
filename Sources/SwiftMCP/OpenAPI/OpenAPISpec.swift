@@ -85,7 +85,12 @@ public struct OpenAPISpec: Codable {
             let metadata = mirror.children.first(where: { $0.label == metadataKey })?.value as? MCPToolMetadata
             
             // Create response schema (default to string since we don't have return type info)
-            let responseSchema = JSONSchema.string()
+            // For Void return type, we still use string schema but indicate it returns empty string
+            let responseSchema = if metadata?.returnType == "Void" {
+                JSONSchema.string(description: "Empty string (void function)")
+            } else {
+                JSONSchema.string()
+            }
             
             // Create error response schema to match {"error": "error message"}
             let errorSchema = JSONSchema.object(
