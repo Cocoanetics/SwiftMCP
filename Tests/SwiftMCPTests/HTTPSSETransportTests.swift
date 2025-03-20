@@ -11,37 +11,6 @@ fileprivate let _initializeLogging: Void = {
 	LoggingSystem.bootstrap { _ in NoOpLogHandler() }
 }()
 
-/// Check if a port is available by attempting to create a server socket
-fileprivate func isPortAvailable(_ port: Int) -> Bool {
-	let socket = socket(AF_INET, SOCK_STREAM, 0)
-	if socket == -1 { return false }
-	defer { Darwin.close(socket) }
-	
-	var addr = sockaddr_in()
-	addr.sin_family = sa_family_t(AF_INET)
-	addr.sin_port = UInt16(port).bigEndian
-	addr.sin_addr.s_addr = inet_addr("127.0.0.1")
-	addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
-	let bind_result = withUnsafePointer(to: &addr) { ptr in
-		ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { ptr in
-			Darwin.bind(socket, ptr, socklen_t(MemoryLayout<sockaddr_in>.size))
-		}
-	}
-	return bind_result == 0
-}
-
-/// Wait for a port to become available with timeout
-fileprivate func waitForPort(_ port: Int, timeout: TimeInterval = 5) async -> Bool {
-	let start = Date()
-	while Date().timeIntervalSince(start) < timeout {
-		if isPortAvailable(port) {
-			return true
-		}
-		try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
-	}
-	return false
-}
-
 fileprivate func createTransport() async throws -> (HTTPSSETransport, MCPClient) {
 	// Ensure logging is initialized
 	_ = _initializeLogging
@@ -50,11 +19,6 @@ fileprivate func createTransport() async throws -> (HTTPSSETransport, MCPClient)
 	for _ in 1...3 {
 		// Create random port
 		let port = Int.random(in: 49152...65535)
-		
-		// Check if port is available
-		guard await waitForPort(port, timeout: 1) else {
-			continue
-		}
 		
 		// Create and configure transport
 		let calculator = Calculator()
