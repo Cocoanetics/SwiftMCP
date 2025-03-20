@@ -20,7 +20,7 @@ class TestAPIServer {
     @MCPTool
     func throwingFunction(name: String, count: Int) throws -> String {
         if count < 0 {
-            throw MCPToolError.invalidArgumentType(parameterName: "count", expectedType: "positive Int", actualValue: "\(count)")
+            throw MCPToolError.invalidArgumentType(parameterName: "count", expectedType: "positive Int", actualType: "foo")
         }
         return String(repeating: "Hello \(name)! ", count: count)
     }
@@ -50,7 +50,7 @@ class TestAPIServer {
     @MCPTool
     func complexFunction(input: String, count: Int, flag: Bool = false) async throws -> String {
         if count < 0 {
-            throw MCPToolError.invalidArgumentType(parameterName: "count", expectedType: "positive Int", actualValue: "\(count)")
+            throw MCPToolError.invalidArgumentType(parameterName: "count", expectedType: "positive Int", actualType: "foo")
         }
         return "Processed"
     }

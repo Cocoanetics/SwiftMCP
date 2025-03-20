@@ -20,7 +20,7 @@ func testEnrichArguments() throws {
     }
     
     // Test enriching arguments
-    let arguments: [String: Any] = ["a": 2, "b": 3]
+    let arguments: [String: Sendable] = ["a": 2, "b": 3]
     let enrichedArguments = try tool.enrichArguments(arguments, forObject: calculator as Any)
     
     // Check that the arguments were not changed
@@ -39,7 +39,7 @@ func testEnrichArgumentsWithExplicitFunctionName() throws {
     }
     
     // Test enriching arguments with explicit function name
-    let arguments: [String: Any] = ["a": 2, "b": 3]
+    let arguments: [String: Sendable] = ["a": 2, "b": 3]
     let enrichedArguments = try tool.enrichArguments(arguments, forObject: calculator as Any)
     
     // Check that the arguments were not changed
@@ -58,7 +58,7 @@ func testEnrichArgumentsWithNoDefaults() throws {
     }
     
     // Test enriching arguments with no default values
-    let arguments: [String: Any] = ["a": 2, "b": 3]
+    let arguments: [String: Sendable] = ["a": 2, "b": 3]
     let enrichedArguments = try tool.enrichArguments(arguments, forObject: calculator as Any)
     
     // Check that the arguments were not changed
@@ -92,7 +92,7 @@ func testEnrichArgumentsWithTypeConversion() throws {
     }
     
     // Test enriching arguments with string values that need to be converted
-    let arguments: [String: Any] = ["a": "2", "b": "3"]
+    let arguments: [String: Sendable] = ["a": "2", "b": "3"]
     let enrichedArguments = try tool.enrichArguments(arguments, forObject: calculator as Any)
     
     // Check that the arguments were not changed (enrichArguments doesn't do type conversion)

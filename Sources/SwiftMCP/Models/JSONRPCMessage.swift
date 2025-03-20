@@ -6,12 +6,12 @@
 //
 
 import Foundation
-import AnyCodable
+@preconcurrency import AnyCodable
 
 /// JSON-RPC Request structure used for communication with the MCP server
-public struct JSONRPCMessage: Codable {
+public struct JSONRPCMessage: Codable, Sendable {
 	
-	public struct Error: Codable {
+	public struct Error: Codable, Sendable {
 		public var code: Int
 		public var message: String
 	}

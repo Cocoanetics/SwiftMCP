@@ -2,7 +2,6 @@ import Foundation
 import ArgumentParser
 import SwiftMCP
 import Logging
-import AnyCodable
 import NIOCore
 import Dispatch
 #if canImport(Darwin)
@@ -37,7 +36,7 @@ import OSLog
  */
 @main
 struct MCPCommand: AsyncParsableCommand {
-    static var configuration = CommandConfiguration(
+    static let configuration = CommandConfiguration(
         commandName: "SwiftMCPDemo",
         abstract: "A utility for testing SwiftMCP functions",
         discussion: """

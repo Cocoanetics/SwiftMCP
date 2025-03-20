@@ -36,8 +36,8 @@ import OSLog
     - AI plugin manifest at `/.well-known/ai-plugin.json`
     - Compatible with AI plugin standards
  */
-struct HTTPSSECommand: AsyncParsableCommand {
-    static var configuration = CommandConfiguration(
+final class HTTPSSECommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
         commandName: "httpsse",
         abstract: "Start an HTTP server with Server-Sent Events (SSE) support",
         discussion: """
@@ -70,7 +70,26 @@ struct HTTPSSECommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Enable OpenAPI endpoints")
     var openapi: Bool = false
     
-	func run() async throws {
+    // Make this a computed property instead of stored property
+    private var signalHandler: SignalHandler? = nil
+    
+    required init() {}
+    
+    // Add manual Decodable conformance
+    required init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.port = try container.decode(Int.self, forKey: .port)
+        self.token = try container.decodeIfPresent(String.self, forKey: .token)
+        self.openapi = try container.decode(Bool.self, forKey: .openapi)
+    }
+    
+    private enum CodingKeys: String, CodingKey {
+        case port
+        case token
+        case openapi
+    }
+    
+    func run() async throws {
 #if canImport(OSLog)
         LoggingSystem.bootstrapWithOSLog()
 #endif
@@ -101,7 +120,8 @@ struct HTTPSSECommand: AsyncParsableCommand {
         transport.serveOpenAPI = openapi
         
         // Set up signal handling to shut down the transport on Ctrl+C
-        setupSignalHandler(transport: transport)
+        signalHandler = SignalHandler(transport: transport)
+        await signalHandler?.setup()
         
         // Run the server (blocking)
         try await transport.run()

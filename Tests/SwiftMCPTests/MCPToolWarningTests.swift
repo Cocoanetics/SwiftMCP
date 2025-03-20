@@ -14,7 +14,7 @@ import Testing
 
 // Test class with functions missing descriptions
 @MCPServer
-class MissingDescriptions {
+final class MissingDescriptions {
     
     // Has documentation but no description line
     /// - Parameter a: A parameter

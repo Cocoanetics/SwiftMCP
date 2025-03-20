@@ -17,7 +17,7 @@ import Testing
 
 // Test class with functions that have parameters with default values
 @MCPServer
-class DefaultValueFunctions {
+final class DefaultValueFunctions {
     /// Function with integer default value
     /// - Parameter a: First number
     /// - Parameter b: Second number with default value
