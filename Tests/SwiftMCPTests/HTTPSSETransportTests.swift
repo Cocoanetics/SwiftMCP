@@ -6,178 +6,419 @@ import NIOHTTP1
 import AnyCodable
 import Logging
 
-/// Helper class to manage SSE message reading
-actor SSEReader {
-    private var buffer = ""
-    private let stream: URLSession.AsyncBytes
-    private var continuation: CheckedContinuation<SSEMessage, Error>?
-    private var timeoutTask: Task<Void, Never>?
-    
-    init(stream: URLSession.AsyncBytes) {
-        self.stream = stream
-		
-		
-    }
-    
-    /// Await the next SSE message with a timeout
-    /// - Parameter timeout: Timeout in seconds (default: 5)
-    /// - Returns: The next SSE message
-    func nextMessage(timeout: TimeInterval = 5) async throws -> SSEMessage {
-        try await withCheckedThrowingContinuation { continuation in
-            self.continuation = continuation
-            
-            // Set up timeout
-            self.timeoutTask = Task {
-                try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-                await self.handleTimeout()
-            }
-            
-            // Start reading if not already reading
-            if self.timeoutTask?.isCancelled == false {
-                Task {
-                    await self.readMessages()
-                }
-            }
-        }
-    }
-    
-    private func handleTimeout() async {
-        if let continuation = self.continuation {
-            self.continuation = nil
-            self.timeoutTask = nil
-            continuation.resume(throwing: NSError(domain: "SSETest", 
-                                               code: -1, 
-                                               userInfo: [NSLocalizedDescriptionKey: "Timeout waiting for SSE message"]))
-        }
-    }
-    
-    private func readMessages() async {
-        do {
-            for try await line in stream.lines {
-                buffer += line + "\n"
-                
-                if let message = SSEMessage(buffer) {
-                    buffer = ""
-                    if let continuation = self.continuation {
-                        self.continuation = nil
-                        self.timeoutTask?.cancel()
-                        self.timeoutTask = nil
-                        continuation.resume(returning: message)
-                        return
-                    }
-                }
-            }
-        } catch {
-            continuation?.resume(throwing: error)
-            continuation = nil
-            timeoutTask?.cancel()
-            timeoutTask = nil
-        }
-    }
+// Initialize logging once for all tests
+fileprivate let _initializeLogging: Void = {
+	LoggingSystem.bootstrap { _ in NoOpLogHandler() }
+}()
+
+fileprivate func createTransport() async throws -> (HTTPSSETransport, MCPClient) {
+	// Ensure logging is initialized
+	_ = _initializeLogging
+	
+	// Create random port
+	let port = Int.random(in: 8000..<10000)
+	let endpointURL = URL(string: "http://localhost:\(port)")!
+	
+	// Create and configure transport
+	let calculator = Calculator()
+	let transport = HTTPSSETransport(server: calculator, port: port)
+	transport.serveOpenAPI = true
+	
+	// Start transport
+	try await transport.start()
+	
+	// Create and connect client
+	let client = MCPClient(endpointURL: endpointURL.appendingPathComponent("sse"))
+	try await client.connect()
+	
+	// Wait a bit for the server to be fully ready
+	try await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+	
+	return (transport, client)
 }
 
-@Test
-func testHTTPSSETransport() async throws {
+@Test("Calls the add function")
+func testAddViaClient() async throws {
+	let (transport, client) = try await createTransport()
+	
+	let toolRequest = JSONRPCMessage(
+		id: 1,
+		method: "tools/call",
+		params: [
+			"name": "add",
+			"arguments": [
+				"a": 2,
+				"b": 3
+			]
+		]
+	)
+	
+	let jsonResponse = try await client.send(toolRequest)
+	
+	#expect(jsonResponse.id == 1)
+	#expect(jsonResponse.error == nil)
+	#expect(jsonResponse.method == nil)
+	#expect(jsonResponse.params == nil)
+	
+	let result = unwrap(jsonResponse.result)
+	
+	let isError = unwrap(result["isError"]?.value as? Bool)
+	#expect(isError == false)
+	
+	let content = unwrap(result["content"]?.value as? [[String: String]])
+	let firstContent = unwrap(content.first)
+	let type = unwrap(firstContent["type"])
+	let text = unwrap(firstContent["text"])
+	
+	#expect(type == "text")
+	#expect(text == "5")  // 2 + 3 = 5
+	
+	try await transport.stop()
+}
 
-	// Bootstrap the logging system to use the no-op log handler.
-	LoggingSystem.bootstrap { _ in NoOpLogHandler() }
-
-	// Create a calculator server
-    let calculator = Calculator()
+@Test("Tests if the OpenAPI spec is being served")
+func testOPENAPI() async throws {
+	// Create transport without client for OpenAPI test
 	let port = Int.random(in: 8000..<10000)
-    
-    // Create and start the transport in the background
-    let transport = HTTPSSETransport(server: calculator, port: port)
-    transport.serveOpenAPI = true  // Enable OpenAPI endpoints
-    
-    // Start the server
-    try await transport.start()
-    
-    // Test 1: Connect to SSE endpoint and make JSONRPC requests
-    let url = URL(string: "http://localhost:\(port)/sse")!
-    var request = URLRequest(url: url)
-    request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
-    
-    let (stream, _) = try await URLSession.shared.bytes(for: request)
-    let reader = SSEReader(stream: stream)
-    
-    // Wait for client ID message
-    let initialMessage = try await reader.nextMessage()
-    guard let endpointURL = URL(string: initialMessage.data), endpointURL.path.contains("/messages/") else {
-        throw NSError(domain: "SSETest", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid client ID message"])
-    }
-    let clientId = endpointURL.lastPathComponent
-    #expect(clientId.isEmpty == false, "Should receive a valid client ID")
-    
-    // Test 2: Make a JSONRPC request
-    var jsonrpcRequest = URLRequest(url: endpointURL)
-    jsonrpcRequest.httpMethod = "POST"
-    jsonrpcRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    
-    let toolRequest = JSONRPCMessage(
-        id: 1,
-        method: "tools/call",
-        params: [
-            "name": AnyCodable("add"),
-            "arguments": AnyCodable([
-                "a": 2,
-                "b": 3
-            ])
-        ]
-    )
-    
-    let encoder = JSONEncoder()
-    jsonrpcRequest.httpBody = try encoder.encode(toolRequest)
-    
-    // Send request and wait for response via SSE
-    let (data, response) = try await URLSession.shared.data(for: jsonrpcRequest)
-    #expect(data.isEmpty)
-    
-    let httpResponse = unwrap(response as? HTTPURLResponse)
-    #expect(httpResponse.statusCode == 202)
-    
-    // Wait for SSE response
-    let responseMessage = try await reader.nextMessage()
-    let jsonData = responseMessage.data.data(using: .utf8)!
-    let jsonResponse = try JSONDecoder().decode(JSONRPCMessage.self, from: jsonData)
-    
-    // Verify response structure
-    #expect(jsonResponse.id == 1)
-    #expect(jsonResponse.error == nil)
-    #expect(jsonResponse.method == nil)
-    #expect(jsonResponse.params == nil)
-    
-    // Verify result dictionary
-    let result = unwrap(jsonResponse.result)
-    
-    // Check isError is false
-    let isError = unwrap(result["isError"]?.value as? Bool)
-    #expect(isError == false)
-    
-    // Check content structure
-    let content = unwrap(result["content"]?.value as? [[String: String]])
-    let firstContent = unwrap(content.first)
-    let type = unwrap(firstContent["type"])
-    let text = unwrap(firstContent["text"])
-    
-    #expect(type == "text")
-    #expect(text == "5")  // 2 + 3 = 5
-    
-    // Test 3: Check OpenAPI endpoints
-    let openAPIURL = URL(string: "http://localhost:\(port)/openapi.json")!
-    let (openAPIData, openAPIResponse) = try await URLSession.shared.data(from: openAPIURL)
-    let openAPIHTTPResponse = unwrap(openAPIResponse as? HTTPURLResponse)
-    #expect(openAPIHTTPResponse.statusCode == 200)
-    
-    // Decode OpenAPI spec
-    let decoder = JSONDecoder()
-    let openAPISpec = try decoder.decode(OpenAPISpec.self, from: openAPIData)
-    
-    // Verify OpenAPI spec
-    #expect(openAPISpec.openapi.hasPrefix("3."))  // Should be OpenAPI 3.x
-    #expect(openAPISpec.info.title == calculator.serverName)
-    #expect(openAPISpec.paths.isEmpty == false)
-    
-    // Clean up
-    try await transport.stop()
+	let endpointURL = URL(string: "http://localhost:\(port)")!
+	
+	let calculator = Calculator()
+	let transport = HTTPSSETransport(server: calculator, port: port)
+	transport.serveOpenAPI = true
+	
+	try await transport.start()
+	
+	let openAPIURL = endpointURL.appending(component: "openapi.json")
+	let (openAPIData, openAPIResponse) = try await URLSession.shared.data(from: openAPIURL)
+	let openAPIHTTPResponse = unwrap(openAPIResponse as? HTTPURLResponse)
+	#expect(openAPIHTTPResponse.statusCode == 200)
+	
+	let decoder = JSONDecoder()
+	let openAPISpec = try decoder.decode(OpenAPISpec.self, from: openAPIData)
+	
+	#expect(openAPISpec.openapi.hasPrefix("3."))  // Should be OpenAPI 3.x
+	#expect(openAPISpec.info.title == "Calculator")  // Default server name
+	#expect(openAPISpec.paths.isEmpty == false)
+	
+	try await transport.stop()
+}
+
+@Test("Tests the greet function with valid input")
+func testGreetViaClient() async throws {
+	let (transport, client) = try await createTransport()
+	
+	let toolRequest = JSONRPCMessage(
+		id: 1,
+		method: "tools/call",
+		params: [
+			"name": "greet",
+			"arguments": [
+				"name": "Oliver"
+			]
+		]
+	)
+	
+	let jsonResponse = try await client.send(toolRequest)
+	
+	#expect(jsonResponse.id == 1)
+	#expect(jsonResponse.error == nil)
+	#expect(jsonResponse.method == nil)
+	#expect(jsonResponse.params == nil)
+	
+	let result = unwrap(jsonResponse.result)
+	
+	let isError = unwrap(result["isError"]?.value as? Bool)
+	#expect(isError == false)
+	
+	let content = unwrap(result["content"]?.value as? [[String: String]])
+	let firstContent = unwrap(content.first)
+	let type = unwrap(firstContent["type"])
+	let text = unwrap(firstContent["text"])
+	
+	#expect(type == "text")
+	#expect(text == "Hello, Oliver!")
+	
+	try await transport.stop()
+}
+
+@Test("Tests the greet function with invalid input (too short)")
+func testGreetErrorViaClient() async throws {
+	let (transport, client) = try await createTransport()
+	
+	let toolRequest = JSONRPCMessage(
+		id: 1,
+		method: "tools/call",
+		params: [
+			"name": "greet",
+			"arguments": [
+				"name": "a"
+			]
+		]
+	)
+	
+	let jsonResponse = try await client.send(toolRequest)
+	
+	#expect(jsonResponse.id == 1)
+	#expect(jsonResponse.error == nil)
+	#expect(jsonResponse.method == nil)
+	#expect(jsonResponse.params == nil)
+	
+	let result = unwrap(jsonResponse.result)
+	
+	let isError = unwrap(result["isError"]?.value as? Bool)
+	#expect(isError == true)
+	
+	let content = unwrap(result["content"]?.value as? [[String: String]])
+	let firstContent = unwrap(content.first)
+	let type = unwrap(firstContent["type"])
+	let text = unwrap(firstContent["text"])
+	
+	#expect(type == "text")
+	#expect(text == "Name 'a' is too short. Names must be at least 2 characters long.")
+	
+	try await transport.stop()
+}
+
+@Test("Tests the subtract function")
+func testSubtractViaClient() async throws {
+	let (transport, client) = try await createTransport()
+	
+	let toolRequest = JSONRPCMessage(
+		id: 1,
+		method: "tools/call",
+		params: [
+			"name": "subtract",
+			"arguments": [
+				"a": 5,
+				"b": 3
+			]
+		]
+	)
+	
+	let jsonResponse = try await client.send(toolRequest)
+	
+	#expect(jsonResponse.id == 1)
+	#expect(jsonResponse.error == nil)
+	
+	let result = unwrap(jsonResponse.result)
+	let isError = unwrap(result["isError"]?.value as? Bool)
+	#expect(isError == false)
+	
+	let content = unwrap(result["content"]?.value as? [[String: String]])
+	let firstContent = unwrap(content.first)
+	let type = unwrap(firstContent["type"])
+	let text = unwrap(firstContent["text"])
+	
+	#expect(type == "text")
+	#expect(text == "2")  // 5 - 3 = 2
+	
+	try await transport.stop()
+}
+
+@Test("Tests the multiply function")
+func testMultiplyViaClient() async throws {
+	let (transport, client) = try await createTransport()
+	
+	let toolRequest = JSONRPCMessage(
+		id: 1,
+		method: "tools/call",
+		params: [
+			"name": "multiply",
+			"arguments": [
+				"a": 4,
+				"b": 3
+			]
+		]
+	)
+	
+	let jsonResponse = try await client.send(toolRequest)
+	
+	#expect(jsonResponse.id == 1)
+	#expect(jsonResponse.error == nil)
+	
+	let result = unwrap(jsonResponse.result)
+	let isError = unwrap(result["isError"]?.value as? Bool)
+	#expect(isError == false)
+	
+	let content = unwrap(result["content"]?.value as? [[String: String]])
+	let firstContent = unwrap(content.first)
+	let type = unwrap(firstContent["type"])
+	let text = unwrap(firstContent["text"])
+	
+	#expect(type == "text")
+	#expect(text == "12")  // 4 * 3 = 12
+	
+	try await transport.stop()
+}
+
+@Test("Tests the divide function")
+func testDivideViaClient() async throws {
+	let (transport, client) = try await createTransport()
+	
+	let toolRequest = JSONRPCMessage(
+		id: 1,
+		method: "tools/call",
+		params: [
+			"name": "divide",
+			"arguments": [
+				"numerator": 10,
+				"denominator": 2
+			]
+		]
+	)
+	
+	let jsonResponse = try await client.send(toolRequest)
+	
+	#expect(jsonResponse.id == 1)
+	#expect(jsonResponse.error == nil)
+	
+	let result = unwrap(jsonResponse.result)
+	let isError = unwrap(result["isError"]?.value as? Bool)
+	#expect(isError == false)
+	
+	let content = unwrap(result["content"]?.value as? [[String: String]])
+	let firstContent = unwrap(content.first)
+	let type = unwrap(firstContent["type"])
+	let text = unwrap(firstContent["text"])
+	
+	#expect(type == "text")
+	#expect(text == "5.0")  // 10 / 2 = 5.0
+	
+	try await transport.stop()
+}
+
+@Test("Tests the divide function with default denominator")
+func testDivideDefaultViaClient() async throws {
+	let (transport, client) = try await createTransport()
+	
+	let toolRequest = JSONRPCMessage(
+		id: 1,
+		method: "tools/call",
+		params: [
+			"name": "divide",
+			"arguments": [
+				"numerator": 10
+			]
+		]
+	)
+	
+	let jsonResponse = try await client.send(toolRequest)
+	
+	#expect(jsonResponse.id == 1)
+	#expect(jsonResponse.error == nil)
+	
+	let result = unwrap(jsonResponse.result)
+	let isError = unwrap(result["isError"]?.value as? Bool)
+	#expect(isError == false)
+	
+	let content = unwrap(result["content"]?.value as? [[String: String]])
+	let firstContent = unwrap(content.first)
+	let type = unwrap(firstContent["type"])
+	let text = unwrap(firstContent["text"])
+	
+	#expect(type == "text")
+	#expect(text == "10.0")  // 10 / 1 = 10.0 (default denominator is 1.0)
+	
+	try await transport.stop()
+}
+
+@Test("Tests the array processing function")
+func testArrayViaClient() async throws {
+	let (transport, client) = try await createTransport()
+	
+	let toolRequest = JSONRPCMessage(
+		id: 1,
+		method: "tools/call",
+		params: [
+			"name": "testArray",
+			"arguments": [
+				"a": [1, 2, 3, 4, 5]
+			]
+		]
+	)
+	
+	let jsonResponse = try await client.send(toolRequest)
+	
+	#expect(jsonResponse.id == 1)
+	#expect(jsonResponse.error == nil)
+	
+	let result = unwrap(jsonResponse.result)
+	let isError = unwrap(result["isError"]?.value as? Bool)
+	#expect(isError == false)
+	
+	let content = unwrap(result["content"]?.value as? [[String: String]])
+	let firstContent = unwrap(content.first)
+	let type = unwrap(firstContent["type"])
+	let text = unwrap(firstContent["text"])
+	
+	#expect(type == "text")
+	#expect(text == "1, 2, 3, 4, 5")  // Array is returned as comma-separated values
+	
+	try await transport.stop()
+}
+
+@Test("Tests the ping function")
+func testPingViaClient() async throws {
+	let (transport, client) = try await createTransport()
+	
+	let toolRequest = JSONRPCMessage(
+		id: 1,
+		method: "tools/call",
+		params: [
+			"name": "ping",
+			"arguments": [:]
+		]
+	)
+	
+	let jsonResponse = try await client.send(toolRequest)
+	
+	#expect(jsonResponse.id == 1)
+	#expect(jsonResponse.error == nil)
+	
+	let result = unwrap(jsonResponse.result)
+	let isError = unwrap(result["isError"]?.value as? Bool)
+	#expect(isError == false)
+	
+	let content = unwrap(result["content"]?.value as? [[String: String]])
+	let firstContent = unwrap(content.first)
+	let type = unwrap(firstContent["type"])
+	let text = unwrap(firstContent["text"])
+	
+	#expect(type == "text")
+	#expect(text == "pong")
+	
+	try await transport.stop()
+}
+
+@Test("Tests the noop function")
+func testNoopViaClient() async throws {
+	let (transport, client) = try await createTransport()
+	
+	let toolRequest = JSONRPCMessage(
+		id: 1,
+		method: "tools/call",
+		params: [
+			"name": "noop",
+			"arguments": [:]
+		]
+	)
+	
+	let jsonResponse = try await client.send(toolRequest)
+	
+	#expect(jsonResponse.id == 1)
+	#expect(jsonResponse.error == nil)
+	
+	let result = unwrap(jsonResponse.result)
+	let isError = unwrap(result["isError"]?.value as? Bool)
+	#expect(isError == false)
+	
+	let content = unwrap(result["content"]?.value as? [[String: String]])
+	let firstContent = unwrap(content.first)
+	let type = unwrap(firstContent["type"])
+	let text = unwrap(firstContent["text"])
+	
+	#expect(type == "text")
+	#expect(text == "")  // noop returns empty string
+	
+	try await transport.stop()
 }
