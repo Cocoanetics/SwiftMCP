@@ -76,7 +76,7 @@ extension MCPTool {
 	 - Returns: A new dictionary with default values added for missing parameters
 	 - Throws: MCPToolError if required parameters are missing or if parameter conversion fails
 	 */
-	public func enrichArguments(_ arguments: [String: Any], forObject object: Any) throws -> [String: Any] {
+	public func enrichArguments(_ arguments: [String: Sendable], forObject object: Any) throws -> [String: Any] {
 		// Use the provided function name or fall back to the tool's name
 		let metadataKey = "__mcpMetadata_\(name)"
 		

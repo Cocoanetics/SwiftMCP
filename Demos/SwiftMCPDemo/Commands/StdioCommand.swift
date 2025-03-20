@@ -22,7 +22,7 @@ import OSLog
  - Scripting and automation
  */
 struct StdioCommand: AsyncParsableCommand {
-    static var configuration = CommandConfiguration(
+    static let configuration = CommandConfiguration(
         commandName: "stdio",
         abstract: "Read JSON-RPC requests from stdin and write responses to stdout",
         discussion: """

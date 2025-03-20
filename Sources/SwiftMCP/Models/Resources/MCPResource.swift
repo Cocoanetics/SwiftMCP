@@ -1,7 +1,7 @@
 import Foundation
 
 /// Protocol defining the requirements for an MCP resource
-public protocol MCPResource: Codable {
+public protocol MCPResource: Codable, Sendable {
     /// The URI of the resource
     var uri: URL { get }
     
