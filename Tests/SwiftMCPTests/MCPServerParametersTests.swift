@@ -12,7 +12,7 @@ func unwrap<T>(_ optional: T?, message: Comment = "Unexpected nil") -> T {
 
 
 @MCPServer(name: "CustomCalculator", version: "2.0")
-class CustomNameCalculator: MCPServer {
+final class CustomNameCalculator: MCPServer {
     @MCPTool(description: "Simple addition")
     func add(a: Int, b: Int) -> Int {
         return a + b
@@ -20,7 +20,7 @@ class CustomNameCalculator: MCPServer {
 }
 
 @MCPServer
-class DefaultNameCalculator: MCPServer {
+final class DefaultNameCalculator: MCPServer {
     @MCPTool(description: "Simple addition")
     func add(a: Int, b: Int) -> Int {
         return a + b

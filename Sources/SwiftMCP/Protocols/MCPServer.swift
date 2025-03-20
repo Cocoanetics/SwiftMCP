@@ -13,7 +13,7 @@ import AnyCodable
  - JSON-RPC message handling
  - Server metadata
  */
-public protocol MCPServer: Sendable {
+public protocol MCPServer {
     /**
      The tools available on this server.
      

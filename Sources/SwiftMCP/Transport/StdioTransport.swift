@@ -8,7 +8,7 @@ import Logging
 ///
 /// This transport allows communication with an MCP server through standard input and output streams,
 /// making it suitable for command-line interfaces and pipe-based communication.
-public final class StdioTransport: Transport {
+public final class StdioTransport: Transport, @unchecked Sendable {
 	/// The MCP server instance that this transport exposes.
 	///
 	/// This server handles the actual business logic while the transport handles I/O.

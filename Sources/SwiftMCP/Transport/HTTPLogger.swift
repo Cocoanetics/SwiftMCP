@@ -5,246 +5,157 @@ import NIOHTTP1
 import NIOConcurrencyHelpers
 
 /// A channel handler that logs both incoming and outgoing HTTP messages
-final class HTTPLogger: ChannelDuplexHandler, Sendable {
+/// It's unchecked Sendable because we use NIOLock for sequential access to request/response state
+final class HTTPLogger: ChannelDuplexHandler, @unchecked Sendable {
 	typealias InboundIn = HTTPServerRequestPart
 	typealias InboundOut = HTTPServerRequestPart
 	typealias OutboundIn = HTTPServerResponsePart
 	typealias OutboundOut = HTTPServerResponsePart
+
+	private lazy var httpLogger = Logger(label: "com.cocoanetics.SwiftMCP.HTTP")
+	private lazy var sseLogger = Logger(label: "com.cocoanetics.SwiftMCP.SSE")
+	private let lock = NIOLock()
 	
-	private let httpLogger = Logger(label: "com.cocoanetics.SwiftMCP.HTTP")
-	private let sseLogger = Logger(label: "com.cocoanetics.SwiftMCP.SSE")
-	
-	private actor State {
-		// Track current request/response state
-		var currentRequestHead: HTTPRequestHead?
-		var currentRequestBody = ""
-		var currentResponseHead: HTTPResponseHead?
-		var currentResponseBody = ""
-		var isSSEConnection = false
-		
-		func reset() {
-			currentRequestHead = nil
-			currentRequestBody = ""
-			currentResponseHead = nil
-			currentResponseBody = ""
-			isSSEConnection = false
-		}
-		
-		func setSSEConnection(_ isSSE: Bool) {
-			isSSEConnection = isSSE
-		}
-		
-		func isSSE() -> Bool {
-			isSSEConnection
-		}
-		
-		func setRequestHead(_ head: HTTPRequestHead) {
-			currentRequestHead = head
-			currentRequestBody = ""
-		}
-		
-		func appendRequestBody(_ str: String) {
-			currentRequestBody += str
-		}
-		
-		func clearRequest() {
-			currentRequestHead = nil
-			currentRequestBody = ""
-		}
-		
-		func setResponseHead(_ head: HTTPResponseHead) {
-			currentResponseHead = head
-			currentResponseBody = ""
-		}
-		
-		func appendResponseBody(_ str: String) {
-			currentResponseBody += str
-		}
-		
-		func clearResponse() {
-			currentResponseHead = nil
-			currentResponseBody = ""
-		}
-		
-		func getCurrentRequestState() -> (head: HTTPRequestHead?, body: String) {
-			(currentRequestHead, currentRequestBody)
-		}
-		
-		func getCurrentResponseState() -> (head: HTTPResponseHead?, body: String) {
-			(currentResponseHead, currentResponseBody)
-		}
-	}
-	
-	private let state = State()
+	// Track current request/response state
+	private var currentRequestHead: HTTPRequestHead?
+	private var currentRequestBody = ""
+	private var currentResponseHead: HTTPResponseHead?
+	private var currentResponseBody = ""
+	private var isSSEConnection = false
 	
 	/// Log incoming requests and forward them to the next handler
 	func channelRead(context: ChannelHandlerContext, data: NIOAny) {
 		let reqPart = unwrapInboundIn(data)
-		let promise = context.eventLoop.makePromise(of: Void.self)
 		
-		promise.completeWithTask { [self] in
+		lock.withLock {
 			switch reqPart {
 			case .head(let head):
 				// Check if this is an SSE connection
 				if head.uri.hasPrefix("/sse") {
-					await state.setSSEConnection(true)
+					isSSEConnection = true
 				}
 				
 				// Log previous request if exists
-				let (currentHead, currentBody) = await state.getCurrentRequestState()
-				if let currentHead = currentHead {
-					var log = "\(currentHead.method) \(currentHead.uri) HTTP/\(currentHead.version.major).\(currentHead.version.minor)\n"
-					currentHead.headers.forEach { log += "\($0.name): \($0.value)\n" }
-					log += "\n"  // Empty line after headers
-					
-					if !currentBody.isEmpty {
-						log += currentBody + "\n"
-					}
-					
-					httpLogger.info("\(log)")
-				}
+				logCurrentRequest()
 				
-				await state.setRequestHead(head)
+				currentRequestHead = head
+				currentRequestBody = ""
 				
 			case .body(let buffer):
 				if let str = buffer.getString(at: buffer.readerIndex, length: buffer.readableBytes) {
-					await state.appendRequestBody(str)
+					currentRequestBody += str
 				}
 				
 			case .end:
-				let (head, body) = await state.getCurrentRequestState()
-				if let head = head {
-					var log = "\(head.method) \(head.uri) HTTP/\(head.version.major).\(head.version.minor)\n"
-					head.headers.forEach { log += "\($0.name): \($0.value)\n" }
-					log += "\n"  // Empty line after headers
-					
-					if !body.isEmpty {
-						log += body + "\n"
-					}
-					
-					httpLogger.info("\(log)")
-				}
-				await state.clearRequest()
+				logCurrentRequest()
+				currentRequestHead = nil
+				currentRequestBody = ""
 			}
 		}
 		
-		promise.futureResult.whenComplete { _ in
-			context.fireChannelRead(data)
-		}
+		context.fireChannelRead(data)
 	}
 	
 	/// Log outgoing responses and forward them to the next handler
 	func write(context: ChannelHandlerContext, data: NIOAny, promise: EventLoopPromise<Void>?) {
 		let resPart = unwrapOutboundIn(data)
-		let writePromise = context.eventLoop.makePromise(of: Void.self)
 		
-		writePromise.completeWithTask { [self] in
+		lock.withLock {
 			switch resPart {
 			case .head(let head):
 				// For SSE connections, only log the initial response headers
-				if await state.isSSE() {
+				if isSSEConnection {
 					var log = "HTTP/\(head.version.major).\(head.version.minor) \(head.status.code) \(head.status.reasonPhrase)\n"
 					head.headers.forEach { log += "\($0.name): \($0.value)\n" }
 					log += "\n"
 					sseLogger.info("Connection Established:\n\(log)")
 				} else {
 					// Log previous response if exists
-					let (currentHead, currentBody) = await state.getCurrentResponseState()
-					if let currentHead = currentHead {
-						var log = "HTTP/\(currentHead.version.major).\(currentHead.version.minor) \(currentHead.status.code) \(currentHead.status.reasonPhrase)\n"
-						currentHead.headers.forEach { log += "\($0.name): \($0.value)\n" }
-						log += "\n"  // Empty line after headers
-						
-						if !currentBody.isEmpty {
-							log += currentBody + "\n"
-						}
-						
-						httpLogger.info("\(log)")
-					}
-					await state.setResponseHead(head)
+					logCurrentResponse()
+					currentResponseHead = head
+					currentResponseBody = ""
 				}
 				
 			case .body(let body):
 				if case .byteBuffer(let buffer) = body {
 					if let str = buffer.getString(at: buffer.readerIndex, length: buffer.readableBytes) {
-						if await state.isSSE() {
+						if isSSEConnection {
 							// For SSE, log each message immediately
 							sseLogger.trace("\(str)")
 						} else {
-							await state.appendResponseBody(str)
+							currentResponseBody += str
 						}
 					}
 				}
 				
 			case .end:
-				if !(await state.isSSE()) {
-					let (head, body) = await state.getCurrentResponseState()
-					if let head = head {
-						var log = "HTTP/\(head.version.major).\(head.version.minor) \(head.status.code) \(head.status.reasonPhrase)\n"
-						head.headers.forEach { log += "\($0.name): \($0.value)\n" }
-						log += "\n"  // Empty line after headers
-						
-						if !body.isEmpty {
-							log += body + "\n"
-						}
-						
-						httpLogger.info("\(log)")
-					}
-					await state.clearResponse()
+				if !isSSEConnection {
+					logCurrentResponse()
+					currentResponseHead = nil
+					currentResponseBody = ""
 				}
 			}
 		}
 		
-		writePromise.futureResult.whenComplete { _ in
-			context.write(data, promise: promise)
-		}
+		context.write(data, promise: promise)
 	}
 	
 	func flush(context: ChannelHandlerContext) {
 		context.flush()
 	}
 	
+	private func logCurrentRequest() {
+		guard let head = currentRequestHead else { return }
+		
+		var log = "\(head.method) \(head.uri) HTTP/\(head.version.major).\(head.version.minor)\n"
+		head.headers.forEach { log += "\($0.name): \($0.value)\n" }
+		log += "\n"  // Empty line after headers
+		
+		if !currentRequestBody.isEmpty {
+			log += currentRequestBody + "\n"
+		}
+		
+		httpLogger.info("\(log)")
+	}
+	
+	private func logCurrentResponse() {
+		guard let head = currentResponseHead else { return }
+		
+		var log = "HTTP/\(head.version.major).\(head.version.minor) \(head.status.code) \(head.status.reasonPhrase)\n"
+		head.headers.forEach { log += "\($0.name): \($0.value)\n" }
+		log += "\n"  // Empty line after headers
+		
+		if !currentResponseBody.isEmpty {
+			log += currentResponseBody + "\n"
+		}
+		
+		httpLogger.info("\(log)")
+	}
+	
 	func handlerAdded(context: ChannelHandlerContext) {
-		let promise = context.eventLoop.makePromise(of: Void.self)
-		promise.completeWithTask { [self] in
-			await state.reset()
+		lock.withLock {
+			currentRequestHead = nil
+			currentRequestBody = ""
+			currentResponseHead = nil
+			currentResponseBody = ""
+			isSSEConnection = false
 		}
 	}
 	
 	func handlerRemoved(context: ChannelHandlerContext) {
-		let promise = context.eventLoop.makePromise(of: Void.self)
-		promise.completeWithTask { [self] in
+		lock.withLock {
 			// Log any pending messages
-			let (reqHead, reqBody) = await state.getCurrentRequestState()
-			if let head = reqHead {
-				var log = "\(head.method) \(head.uri) HTTP/\(head.version.major).\(head.version.minor)\n"
-				head.headers.forEach { log += "\($0.name): \($0.value)\n" }
-				log += "\n"  // Empty line after headers
-				
-				if !reqBody.isEmpty {
-					log += reqBody + "\n"
-				}
-				
-				httpLogger.info("\(log)")
-			}
-			
-			if !(await state.isSSE()) {
-				let (resHead, resBody) = await state.getCurrentResponseState()
-				if let head = resHead {
-					var log = "HTTP/\(head.version.major).\(head.version.minor) \(head.status.code) \(head.status.reasonPhrase)\n"
-					head.headers.forEach { log += "\($0.name): \($0.value)\n" }
-					log += "\n"  // Empty line after headers
-					
-					if !resBody.isEmpty {
-						log += resBody + "\n"
-					}
-					
-					httpLogger.info("\(log)")
-				}
+			logCurrentRequest()
+			if !isSSEConnection {
+				logCurrentResponse()
 			}
 			
 			// Clear state
-			await state.reset()
+			currentRequestHead = nil
+			currentRequestBody = ""
+			currentResponseHead = nil
+			currentResponseBody = ""
+			isSSEConnection = false
 		}
 	}
 }
