@@ -10,3 +10,4 @@ DerivedData/
 .env
 .env.*
 !.env.example
+Package.resolved
