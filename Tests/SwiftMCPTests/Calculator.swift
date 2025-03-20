@@ -1,19 +1,9 @@
-//
-//  Calculator.swift
-//  SwiftMCP
-//
-//  Created by Oliver Drobnik on 10.03.25.
-//
-
 import Foundation
 import SwiftMCP
 
 /**
-  A simple MCP Server
- 
- - Version: 1.0
+ A Calculator for simple math doing additionals, subtractions etc.
  */
-
 @MCPServer
 class Calculator {
 	/// Adds two integers and returns their sum
@@ -68,9 +58,20 @@ class Calculator {
 	/// - Parameter name: Name of the person to greet
 	/// - Returns: The greeting message
 	@MCPTool(description: "Shows a greeting message")
-	func greet(name: String) -> String {
+	func greet(name: String) async throws -> String {
+		// Validate name length
+		if name.count < 2 {
+			throw DemoError.nameTooShort(name: name)
+		}
+		
+		// Validate name contains only letters and spaces
+		if !name.allSatisfy({ $0.isLetter || $0.isWhitespace }) {
+			throw DemoError.invalidName(name: name)
+		}
+		
 		return "Hello, \(name)!"
 	}
+
 	
 	/** A simple ping function that returns 'pong' */
 	@MCPTool
