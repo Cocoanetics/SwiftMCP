@@ -115,7 +115,8 @@ func testOPENAPI() async throws {
 	try await transport.start()
 	
 	let openAPIURL = endpointURL.appending(component: "openapi.json")
-	let (openAPIData, openAPIResponse) = try await URLSession.shared.data(from: openAPIURL)
+	let session = URLSession(configuration: .default)
+	let (openAPIData, openAPIResponse) = try await session.data(from: openAPIURL)
 	let openAPIHTTPResponse = unwrap(openAPIResponse as? HTTPURLResponse)
 	#expect(openAPIHTTPResponse.statusCode == 200)
 	

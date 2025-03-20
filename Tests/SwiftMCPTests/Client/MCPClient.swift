@@ -9,11 +9,13 @@ public actor MCPClient {
     private var messageStream: AsyncStream<SSEMessage>?
     private var streamTask: Task<Void, Never>?
     private let endpointURL: URL
+    private let session: URLSession
     
     /// Initialize a new MCP client with the SSE endpoint URL
     /// - Parameter endpointURL: The URL of the SSE endpoint (e.g. http://localhost:8080/sse)
     public init(endpointURL: URL) {
         self.endpointURL = endpointURL
+        self.session = URLSession(configuration: .default)
     }
     
     /// Connect to the SSE endpoint and establish a connection
@@ -71,7 +73,7 @@ public actor MCPClient {
         request.httpBody = try encoder.encode(message)
         
         // Send the request
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (_, response) = try await session.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 202 else {
