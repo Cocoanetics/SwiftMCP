@@ -97,10 +97,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
 		let bootstrap = ServerBootstrap(group: group)
 			.serverChannelOption(ChannelOptions.backlog, value: 256)
 			.serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
-			.childChannelInitializer { [weak self] channel in
-				guard let self = self else {
-					return channel.eventLoop.makeFailedFuture(CancellationError())
-				}
+			.childChannelInitializer {  channel in
 				return channel.pipeline.configureHTTPServerPipeline().flatMap {
 					channel.pipeline.addHandler(HTTPLogger())
 				}.flatMap {

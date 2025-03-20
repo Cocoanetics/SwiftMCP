@@ -42,7 +42,6 @@ public final class SignalHandler {
 			guard let transport = transport else {
 				print("Transport no longer available")
 				Foundation.exit(1)
-				return
 			}
 			
 			do {
