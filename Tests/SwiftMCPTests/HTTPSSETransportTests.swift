@@ -11,30 +11,92 @@ fileprivate let _initializeLogging: Void = {
 	LoggingSystem.bootstrap { _ in NoOpLogHandler() }
 }()
 
+/// Check if a port is available by attempting to create a server socket
+fileprivate func isPortAvailable(_ port: Int) -> Bool {
+	let socket = socket(AF_INET, SOCK_STREAM, 0)
+	if socket == -1 { return false }
+	defer { Darwin.close(socket) }
+	
+	var addr = sockaddr_in()
+	addr.sin_family = sa_family_t(AF_INET)
+	addr.sin_port = UInt16(port).bigEndian
+	addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+	addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+	let bind_result = withUnsafePointer(to: &addr) { ptr in
+		ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { ptr in
+			Darwin.bind(socket, ptr, socklen_t(MemoryLayout<sockaddr_in>.size))
+		}
+	}
+	return bind_result == 0
+}
+
+/// Wait for a port to become available with timeout
+fileprivate func waitForPort(_ port: Int, timeout: TimeInterval = 5) async -> Bool {
+	let start = Date()
+	while Date().timeIntervalSince(start) < timeout {
+		if isPortAvailable(port) {
+			return true
+		}
+		try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+	}
+	return false
+}
+
 fileprivate func createTransport() async throws -> (HTTPSSETransport, MCPClient) {
 	// Ensure logging is initialized
 	_ = _initializeLogging
 	
-	// Create random port
-	let port = Int.random(in: 8000..<10000)
-	let endpointURL = URL(string: "http://localhost:\(port)")!
+	// Try up to 3 different ports
+	for _ in 1...3 {
+		// Create random port
+		let port = Int.random(in: 49152...65535)
+		
+		// Check if port is available
+		guard await waitForPort(port, timeout: 1) else {
+			continue
+		}
+		
+		// Create and configure transport
+		let calculator = Calculator()
+		let transport = HTTPSSETransport(server: calculator, port: port)
+		transport.serveOpenAPI = true
+		
+		do {
+			// Start transport
+			try await transport.start()
+			
+			// Wait for server to be ready with exponential backoff
+			for i in 0..<4 {
+				let delay = UInt64(pow(2.0, Double(i))) * 250_000_000 // 250ms, 500ms, 1s, 2s
+				try await Task.sleep(nanoseconds: delay)
+				
+				// Create client
+				let endpointURL = URL(string: "http://localhost:\(port)")!
+				let client = MCPClient(endpointURL: endpointURL.appendingPathComponent("sse"))
+				
+				do {
+					try await client.connect()
+					return (transport, client)
+				} catch {
+					// If this isn't our last retry, continue to next attempt
+					if i < 3 { continue }
+					// On last retry, throw the error
+					try await transport.stop()
+					throw error
+				}
+			}
+			
+			// If we get here, all retries failed
+			try await transport.stop()
+			continue
+			
+		} catch {
+			// If transport start fails, try next port
+			continue
+		}
+	}
 	
-	// Create and configure transport
-	let calculator = Calculator()
-	let transport = HTTPSSETransport(server: calculator, port: port)
-	transport.serveOpenAPI = true
-	
-	// Start transport
-	try await transport.start()
-	
-	// Create and connect client
-	let client = MCPClient(endpointURL: endpointURL.appendingPathComponent("sse"))
-	try await client.connect()
-	
-	// Wait a bit for the server to be fully ready
-	try await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
-	
-	return (transport, client)
+	throw MCPError.notConnected
 }
 
 @Test("Calls the add function")
@@ -108,7 +170,7 @@ func testGreetViaClient() async throws {
 	let (transport, client) = try await createTransport()
 	
 	let toolRequest = JSONRPCMessage(
-		id: 1,
+		id: 2,
 		method: "tools/call",
 		params: [
 			"name": "greet",
@@ -120,7 +182,7 @@ func testGreetViaClient() async throws {
 	
 	let jsonResponse = try await client.send(toolRequest)
 	
-	#expect(jsonResponse.id == 1)
+	#expect(jsonResponse.id == 2)
 	#expect(jsonResponse.error == nil)
 	#expect(jsonResponse.method == nil)
 	#expect(jsonResponse.params == nil)
@@ -146,7 +208,7 @@ func testGreetErrorViaClient() async throws {
 	let (transport, client) = try await createTransport()
 	
 	let toolRequest = JSONRPCMessage(
-		id: 1,
+		id: 3,
 		method: "tools/call",
 		params: [
 			"name": "greet",
@@ -158,7 +220,7 @@ func testGreetErrorViaClient() async throws {
 	
 	let jsonResponse = try await client.send(toolRequest)
 	
-	#expect(jsonResponse.id == 1)
+	#expect(jsonResponse.id == 3)
 	#expect(jsonResponse.error == nil)
 	#expect(jsonResponse.method == nil)
 	#expect(jsonResponse.params == nil)
@@ -184,7 +246,7 @@ func testSubtractViaClient() async throws {
 	let (transport, client) = try await createTransport()
 	
 	let toolRequest = JSONRPCMessage(
-		id: 1,
+		id: 4,
 		method: "tools/call",
 		params: [
 			"name": "subtract",
@@ -197,7 +259,7 @@ func testSubtractViaClient() async throws {
 	
 	let jsonResponse = try await client.send(toolRequest)
 	
-	#expect(jsonResponse.id == 1)
+	#expect(jsonResponse.id == 4)
 	#expect(jsonResponse.error == nil)
 	
 	let result = unwrap(jsonResponse.result)
@@ -220,7 +282,7 @@ func testMultiplyViaClient() async throws {
 	let (transport, client) = try await createTransport()
 	
 	let toolRequest = JSONRPCMessage(
-		id: 1,
+		id: 5,
 		method: "tools/call",
 		params: [
 			"name": "multiply",
@@ -233,7 +295,7 @@ func testMultiplyViaClient() async throws {
 	
 	let jsonResponse = try await client.send(toolRequest)
 	
-	#expect(jsonResponse.id == 1)
+	#expect(jsonResponse.id == 5)
 	#expect(jsonResponse.error == nil)
 	
 	let result = unwrap(jsonResponse.result)
@@ -256,7 +318,7 @@ func testDivideViaClient() async throws {
 	let (transport, client) = try await createTransport()
 	
 	let toolRequest = JSONRPCMessage(
-		id: 1,
+		id: 6,
 		method: "tools/call",
 		params: [
 			"name": "divide",
@@ -269,7 +331,7 @@ func testDivideViaClient() async throws {
 	
 	let jsonResponse = try await client.send(toolRequest)
 	
-	#expect(jsonResponse.id == 1)
+	#expect(jsonResponse.id == 6)
 	#expect(jsonResponse.error == nil)
 	
 	let result = unwrap(jsonResponse.result)
@@ -292,7 +354,7 @@ func testDivideDefaultViaClient() async throws {
 	let (transport, client) = try await createTransport()
 	
 	let toolRequest = JSONRPCMessage(
-		id: 1,
+		id: 7,
 		method: "tools/call",
 		params: [
 			"name": "divide",
@@ -304,7 +366,7 @@ func testDivideDefaultViaClient() async throws {
 	
 	let jsonResponse = try await client.send(toolRequest)
 	
-	#expect(jsonResponse.id == 1)
+	#expect(jsonResponse.id == 7)
 	#expect(jsonResponse.error == nil)
 	
 	let result = unwrap(jsonResponse.result)
@@ -327,7 +389,7 @@ func testArrayViaClient() async throws {
 	let (transport, client) = try await createTransport()
 	
 	let toolRequest = JSONRPCMessage(
-		id: 1,
+		id: 8,
 		method: "tools/call",
 		params: [
 			"name": "testArray",
@@ -339,7 +401,7 @@ func testArrayViaClient() async throws {
 	
 	let jsonResponse = try await client.send(toolRequest)
 	
-	#expect(jsonResponse.id == 1)
+	#expect(jsonResponse.id == 8)
 	#expect(jsonResponse.error == nil)
 	
 	let result = unwrap(jsonResponse.result)
@@ -362,7 +424,7 @@ func testPingViaClient() async throws {
 	let (transport, client) = try await createTransport()
 	
 	let toolRequest = JSONRPCMessage(
-		id: 1,
+		id: 9,
 		method: "tools/call",
 		params: [
 			"name": "ping",
@@ -372,7 +434,7 @@ func testPingViaClient() async throws {
 	
 	let jsonResponse = try await client.send(toolRequest)
 	
-	#expect(jsonResponse.id == 1)
+	#expect(jsonResponse.id == 9)
 	#expect(jsonResponse.error == nil)
 	
 	let result = unwrap(jsonResponse.result)
@@ -395,7 +457,7 @@ func testNoopViaClient() async throws {
 	let (transport, client) = try await createTransport()
 	
 	let toolRequest = JSONRPCMessage(
-		id: 1,
+		id: 10,
 		method: "tools/call",
 		params: [
 			"name": "noop",
@@ -405,7 +467,7 @@ func testNoopViaClient() async throws {
 	
 	let jsonResponse = try await client.send(toolRequest)
 	
-	#expect(jsonResponse.id == 1)
+	#expect(jsonResponse.id == 10)
 	#expect(jsonResponse.error == nil)
 	
 	let result = unwrap(jsonResponse.result)
