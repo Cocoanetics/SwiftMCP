@@ -39,7 +39,7 @@ import Logging
  }
  ```
  */
-public protocol Transport {
+public protocol Transport: Sendable {
     /**
      The MCP server instance being exposed by this transport.
      
