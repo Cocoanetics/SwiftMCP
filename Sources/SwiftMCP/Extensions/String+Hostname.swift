@@ -1,13 +1,14 @@
 // String+Hostname.swift
 // Hostname and IP-related extensions for String
 
-import Foundation
-
 #if canImport(Darwin)
 import Darwin
 #else
 import Glibc
 #endif
+
+import Foundation
+
 
 extension String {
     /**

@@ -1,9 +1,9 @@
-import Foundation
-import Logging
-
 #if canImport(Glibc)
 @preconcurrency import Glibc
 #endif
+
+import Foundation
+import Logging
 
 /// A transport that exposes an MCP server over standard input/output.
 ///

@@ -1,8 +1,8 @@
-import Foundation
-
 #if canImport(Glibc)
 @preconcurrency import Glibc
 #endif
+
+import Foundation
 
 /// Actor to handle stdout access safely.
 actor StdoutActor {

@@ -4,11 +4,6 @@ import SwiftMCP
 import Logging
 import NIOCore
 import Dispatch
-#if canImport(Darwin)
-import Darwin
-#elseif canImport(Glibc)
-import Glibc
-#endif
 
 #if canImport(OSLog)
 import OSLog
