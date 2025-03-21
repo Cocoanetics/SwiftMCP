@@ -74,8 +74,10 @@ public final class StdioTransport: Transport, @unchecked Sendable {
 								logger.error("Failed to encode response as UTF-8")
 								continue
 							}
+							
+							guard let data = (json + "\n").data(using: .utf8) else { return }
+							try FileHandle.standardOutput.write(contentsOf: data)
 
-							try await AsyncOutput.shared.writeToStdout(json)
 							logger.trace("Sent response: \(json)")
 						}
 					} else {
@@ -115,8 +117,10 @@ public final class StdioTransport: Transport, @unchecked Sendable {
 						continue
 					}
 
-					// Print the response and flush immediately using the StdoutActor.
-					try await AsyncOutput.shared.writeToStdout(json)
+					// Print the response and flush immediately
+					guard let data = (json + "\n").data(using: .utf8) else { return }
+					try FileHandle.standardOutput.write(contentsOf: data)
+					
 					logger.trace("Sent response: \(json)")
 				}
 			} else {

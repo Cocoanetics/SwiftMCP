@@ -89,9 +89,7 @@ actor Calculator {
     var mcpResources: [MCPResource] {
         // Get the Downloads folder URL
         guard let downloadsURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first else {
-            Task {
-                await logToStderr("Could not get Downloads folder URL")
-            }
+			logToStderr("Could not get Downloads folder URL")
             return []
         }
         
@@ -136,9 +134,8 @@ actor Calculator {
                 )
             }
         } catch {
-            Task {
-				await logToStderr("Error listing files in Downloads folder: \(error.localizedDescription)")
-            }
+
+			logToStderr("Error listing files in Downloads folder: \(error.localizedDescription)")
             return []
         }
     }
@@ -155,10 +152,5 @@ actor Calculator {
         
         // Get the resource content
         return try FileResourceContent.from(fileURL: uri)
-    }
-    
-    /// Function to log a message to stderr
-    private func logToStderr(_ message: String) async {
-        try? await AsyncOutput.shared.writeToStderr(message)
     }
 }

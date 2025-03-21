@@ -48,8 +48,8 @@ struct StdioCommand: AsyncParsableCommand {
         
         do {
             // need to output to stderror or else npx complains
-            try await AsyncOutput.shared.writeToStderr("MCP Server \(calculator.serverName) (\(calculator.serverVersion)) started with Stdio transport")
-            
+			logToStderr("MCP Server \(calculator.serverName) (\(calculator.serverVersion)) started with Stdio transport")
+			
             let transport = StdioTransport(server: calculator)
             try await transport.run()
         }
@@ -58,18 +58,25 @@ struct StdioCommand: AsyncParsableCommand {
             let errorMessage = """
                 Transport Error: \(error.localizedDescription)
                 """
-            try await AsyncOutput.shared.writeToStderr(errorMessage)
+			logToStderr(errorMessage)
             Foundation.exit(1)
         }
         catch let error as ChannelError {
             // Handle specific channel errors
-            try await AsyncOutput.shared.writeToStderr("Channel Error: \(error)")
+			logToStderr("Channel Error: \(error)")
             Foundation.exit(1)
         }
         catch {
             // Handle any other errors
-            try await AsyncOutput.shared.writeToStderr("Error: \(error)")
+			logToStderr("Error: \(error)")
             Foundation.exit(1)
         }
     }
 } 
+
+/// Function to log a message to stderr
+func logToStderr(_ message: String) {
+	guard let data = (message + "\n").data(using: .utf8) else { return }
+	try? FileHandle.standardError.write(contentsOf: data)
+}
+
