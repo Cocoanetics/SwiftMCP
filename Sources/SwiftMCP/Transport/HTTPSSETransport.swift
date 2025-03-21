@@ -115,15 +115,29 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
 			
 			self.channel?.closeFuture.whenComplete { [logger] result in
 				switch result {
-				case .success:
-					logger.info("Server channel closed normally")
-				case .failure(let error):
-					logger.error("Server channel closed with error: \(error)")
+					case .success:
+						logger.info("Server channel closed normally")
+					case .failure(let error):
+						logger.error("Server channel closed with error: \(error)")
 				}
 			}
+		} catch let error as IOError {
+			let errorMessage: String
+			switch error.errnoCode {
+				case EADDRINUSE:
+					errorMessage = "Port \(port) is already in use. Please choose a different port or ensure no other service is using this port."
+				case EACCES:
+					errorMessage = "Permission denied to bind to port \(port). This port may require elevated privileges."
+				case EADDRNOTAVAIL:
+					errorMessage = "The address \(host) is not available for binding."
+				default:
+					errorMessage = "Failed to bind to \(host):\(port). Error: \(error.localizedDescription)"
+			}
+			logger.error("\(errorMessage)")
+			throw TransportError.bindingFailed(errorMessage)
 		} catch {
 			logger.error("Server error: \(error)")
-			throw error
+			throw TransportError.bindingFailed(error.localizedDescription)
 		}
 	}
 	
