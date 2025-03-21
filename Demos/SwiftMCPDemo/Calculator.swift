@@ -155,6 +155,6 @@ actor Calculator {
     
     /// Function to log a message to stderr
     private func logToStderr(_ message: String) async {
-        await StderrActor.shared.print(message)
+        try? await AsyncOutput.shared.writeToStderr(message)
     }
 }
