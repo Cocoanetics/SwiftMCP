@@ -1,6 +1,10 @@
 import Foundation
 import AnyCodable
 
+#if canImport(Glibc)
+@preconcurrency import Glibc
+#endif
+
 /**
  Protocol defining the interface for an MCP server.
  

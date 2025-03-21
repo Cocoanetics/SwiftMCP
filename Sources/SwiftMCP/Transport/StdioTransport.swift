@@ -1,6 +1,10 @@
 import Foundation
 import Logging
 
+#if canImport(Glibc)
+@preconcurrency import Glibc
+#endif
+
 // If needed, mark MCPServer as unchecked Sendable too:
 // extension MCPServer: @unchecked Sendable {}
 
