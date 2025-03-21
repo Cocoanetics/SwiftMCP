@@ -295,9 +295,8 @@ public extension MCPServer {
      
      - Parameter response: The response string to send
      */
-    func sendResponse(_ response: String) {
-        fputs(response + "\n", stdout)
-        fflush(stdout) // Ensure the output is flushed immediately
+    func sendResponse(_ response: String) async {
+        await StdoutActor.shared.printAndFlush(response)
     }
     
     /**

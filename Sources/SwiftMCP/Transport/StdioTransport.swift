@@ -5,9 +5,6 @@ import Logging
 @preconcurrency import Glibc
 #endif
 
-// If needed, mark MCPServer as unchecked Sendable too:
-// extension MCPServer: @unchecked Sendable {}
-
 /// A transport that exposes an MCP server over standard input/output.
 ///
 /// This transport allows communication with an MCP server through standard input and output streams,
@@ -78,9 +75,8 @@ public final class StdioTransport: Transport, @unchecked Sendable {
 								continue
 							}
 
-							// Print the response and flush immediately.
-							print(json)
-							fflush(stdout)
+							// Print the response and flush immediately using the StdoutActor.
+							await StdoutActor.shared.printAndFlush(json)
 							logger.trace("Sent response: \(json)")
 						}
 					} else {
@@ -120,9 +116,8 @@ public final class StdioTransport: Transport, @unchecked Sendable {
 						continue
 					}
 
-					// Print the response and flush immediately.
-					print(json)
-					fflush(stdout)
+					// Print the response and flush immediately using the StdoutActor.
+					await StdoutActor.shared.printAndFlush(json)
 					logger.trace("Sent response: \(json)")
 				}
 			} else {
@@ -141,4 +136,3 @@ public final class StdioTransport: Transport, @unchecked Sendable {
 		await state.stop()
 	}
 }
-
