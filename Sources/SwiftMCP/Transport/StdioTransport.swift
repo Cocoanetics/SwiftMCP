@@ -75,8 +75,7 @@ public final class StdioTransport: Transport, @unchecked Sendable {
 								continue
 							}
 
-							// Print the response and flush immediately using the StdoutActor.
-							await StdoutActor.shared.printAndFlush(json)
+							try await AsyncOutput.shared.writeToStdout(json)
 							logger.trace("Sent response: \(json)")
 						}
 					} else {
@@ -117,7 +116,7 @@ public final class StdioTransport: Transport, @unchecked Sendable {
 					}
 
 					// Print the response and flush immediately using the StdoutActor.
-					await StdoutActor.shared.printAndFlush(json)
+					try await AsyncOutput.shared.writeToStdout(json)
 					logger.trace("Sent response: \(json)")
 				}
 			} else {

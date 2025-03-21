@@ -283,21 +283,21 @@ public extension MCPServer {
      
      - Parameter message: The message to log
      */
-    func logToStderr(_ message: String) {
-        let stderr = FileHandle.standardError
-        if let data = (message + "\n").data(using: .utf8) {
-            stderr.write(data)
-        }
-    }
+//    func logToStderr(_ message: String) {
+//        let stderr = FileHandle.standardError
+//        if let data = (message + "\n").data(using: .utf8) {
+//            stderr.write(data)
+//        }
+//    }
     
     /**
      Sends a response to standard output.
      
      - Parameter response: The response string to send
      */
-    func sendResponse(_ response: String) async {
-        await StdoutActor.shared.printAndFlush(response)
-    }
+//    func sendResponse(_ response: String) async throws {
+//       try await AsyncOutput.shared.writeToStdout(response)
+//    }
     
     /**
      The server's name, derived from the `@MCPServer` macro.
