@@ -10,7 +10,7 @@ import Logging
 
 #if canImport(OSLog)
 
-import OSLog
+@preconcurrency import OSLog
 
 // Custom LogHandler that bridges Swift Logging to OSLog
 struct OSLogHandler: LogHandler {
