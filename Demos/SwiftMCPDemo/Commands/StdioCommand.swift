@@ -48,28 +48,28 @@ struct StdioCommand: AsyncParsableCommand {
         
         do {
             // need to output to stderror or else npx complains
-            fputs("MCP Server \(calculator.serverName) (\(calculator.serverVersion)) started with Stdio transport\n", stderr)
+            await StderrActor.shared.print("MCP Server \(calculator.serverName) (\(calculator.serverVersion)) started with Stdio transport")
             
             let transport = StdioTransport(server: calculator)
 			try await transport.run()
         }
-        catch let error as IOError {
-            // Handle specific IO errors with more detail
+        catch let error as TransportError {
+            // Handle transport errors
             let errorMessage = """
-                IO Error: \(error)
+                Transport Error: \(error.localizedDescription)
                 Code: \(error.errnoCode)
                 """
-            fputs("\(errorMessage)\n", stderr)
+            await StderrActor.shared.print(errorMessage)
             Foundation.exit(1)
         }
         catch let error as ChannelError {
             // Handle specific channel errors
-            fputs("Channel Error: \(error)\n", stderr)
+            await StderrActor.shared.print("Channel Error: \(error)")
             Foundation.exit(1)
         }
         catch {
             // Handle any other errors
-            fputs("Error: \(error)\n", stderr)
+            await StderrActor.shared.print("Error: \(error)")
             Foundation.exit(1)
         }
     }
