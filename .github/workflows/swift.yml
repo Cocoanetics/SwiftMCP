@@ -59,4 +59,4 @@ jobs:
         run: |
           xcodebuild test \
             -scheme SwiftMCP-Package \
-            -destination 'platform=iOS Simulator,name=iPhone 16e,OS=latest'
+            -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=latest'
