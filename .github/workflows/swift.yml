@@ -7,7 +7,7 @@ on:
     branches: ["main"]
 
 jobs:
-  build:
+  build-macos:
     runs-on: macos-latest
 
     steps:
@@ -21,7 +21,7 @@ jobs:
       - name: Verify Swift version
         run: swift --version
       
-      - name: Build & Test
+      - name: Build & Test (macOS)
         run: swift test
 
   build-linux:
@@ -38,5 +38,23 @@ jobs:
       - name: Verify Swift version
         run: swift --version
       
-      - name: Build & Test
-        run: swift test 
+      - name: Build & Test (Linux)
+        run: swift test
+
+  build-ios:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Verify Xcode version
+        run: xcodebuild -version
+
+      - name: Build & Test (iOS Simulator)
+        run: |
+          xcodebuild test \
+            -scheme SwiftMCP-Package \
+            -destination 'platform=iOS Simulator,name=iPhone 16e,OS=latest'
