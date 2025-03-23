@@ -1,6 +1,6 @@
 # SwiftMCP
 
-A Swift implementation of the MCP (Multiplexed Communication Protocol) for JSON-RPC over various transports.
+A Swift implementation of the MCP (Model Context Protocol) for JSON-RPC over various transports.
 
 ## Features
 

@@ -2,7 +2,7 @@ import Foundation
 import Logging
 
 /**
- Protocol defining the common interface for MCP (Machine Control Protocol) transports.
+ Protocol defining the common interface for MCP (Model Context Protocol) transports.
  
  Transport implementations handle the communication layer between clients and the MCP server.
  Each transport type provides a different way to interact with the server:

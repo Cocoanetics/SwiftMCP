@@ -1,6 +1,6 @@
-# ``SwiftMCP``
+# SwiftMCP
 
-A framework for building AI-powered tools and plugins.
+SwiftMCP (Model Context Protocol) is a framework that helps you expose Swift functions as tools that can be called by AI assistants. It provides:
 
 ## Overview
 

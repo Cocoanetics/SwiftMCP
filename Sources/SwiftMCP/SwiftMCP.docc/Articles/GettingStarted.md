@@ -4,7 +4,7 @@ Create your first MCP server in minutes.
 
 ## Overview
 
-SwiftMCP makes it easy to build Model Control Protocol (MCP) servers that can interact with AI models. This guide will help you get started with the basics.
+SwiftMCP makes it easy to build Model Context Protocol (MCP) servers that can interact with AI models. This guide will help you get started with the basics.
 
 ## Installation
 

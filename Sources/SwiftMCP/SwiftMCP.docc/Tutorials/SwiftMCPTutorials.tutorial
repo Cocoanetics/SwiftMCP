@@ -1,6 +1,6 @@
 @Tutorials(name: "SwiftMCP Tutorials") {
     @Intro(title: "Building MCP Servers") {
-        Learn how to build powerful Model Control Protocol (MCP) servers using SwiftMCP.
+        Learn how to build powerful Model Context Protocol (MCP) servers using SwiftMCP.
         
         These tutorials will guide you through creating MCP servers that can interact with AI models,
         handle errors gracefully, and perform asynchronous operations.
