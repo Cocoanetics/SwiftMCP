@@ -1,4 +1,9 @@
 import Testing
+
+#if !os(iOS)
+
+// Note: on iOS the Documentation class from SwiftMCPMacros isn't available
+
 @testable import SwiftMCPMacros
 
 @Test("Parses triple-slash documentation comments")
@@ -221,3 +226,5 @@ func testEmptyLinesBetweenFields() {
     #expect(doc.parameters["x"] == "X parameter")
     #expect(doc.returns == "Return value")
 } 
+
+#endif
