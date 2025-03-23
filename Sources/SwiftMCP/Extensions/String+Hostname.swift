@@ -25,15 +25,9 @@ extension String {
         // Use system call on Linux and other platforms
 		var hostname = [CChar](repeating: 0, count: 256) // Linux typically uses 256 as max hostname length.
 		if gethostname(&hostname, hostname.count) == 0 {
-			// Find the index of the null terminator.
-			if let terminatorIndex = hostname.firstIndex(of: 0) {
-				let hostnameSlice = hostname[..<terminatorIndex]
-				// Convert the CChar slice to an array of UInt8.
-				let uint8Hostname = hostnameSlice.map { UInt8(bitPattern: $0) }
-				// Use the new initializer to validate the UTF8 string.
-				if let name = String(validating: uint8Hostname, as: UTF8.self), !name.isEmpty {
-					return name
-				}
+			// Create a string from the C string
+			if let name = String(cString: hostname, encoding: .utf8), !name.isEmpty {
+				return name
 			}
 		}
         #endif
