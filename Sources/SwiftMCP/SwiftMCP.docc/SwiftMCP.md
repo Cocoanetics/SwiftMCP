@@ -1,15 +1,31 @@
-# SwiftMCP
+# ``SwiftMCP``
 
-SwiftMCP (Model Context Protocol) is a framework that helps you expose Swift functions as tools that can be called by AI assistants. It provides:
+A framework for exposing Swift functions as tools that can be called by AI assistants.
 
 ## Overview
 
-SwiftMCP (Machine Control Protocol) is a framework that helps you expose Swift functions as tools that can be called by AI assistants. It provides:
+SwiftMCP provides a powerful way to expose Swift functions as tools that can be called by AI assistants. The framework offers:
 
 - Documentation-driven tool definitions
 - Multiple transport options (HTTP+SSE, stdio)
 - OpenAPI specification generation
 - AI plugin manifest generation
+
+### Documentation-Driven Development
+
+Define your tools using Swift's native documentation comments. SwiftMCP automatically extracts descriptions, parameter info, and return types.
+
+### Multiple Transport Options
+
+Choose between HTTP+SSE for web integration or stdio for command-line tools. Easy to extend with custom transports.
+
+### OpenAPI Compatible
+
+Automatically generate OpenAPI specifications from your tool definitions for easy integration with existing tools.
+
+### AI-Ready Integration
+
+Generate AI plugin manifests and function schemas compatible with leading AI platforms.
 
 ## Getting Started
 
@@ -66,27 +82,4 @@ struct Calculator {
         return a + b
     }
 }
-```
-
-## Topics
-
-### Essentials
-
-- <doc:GettingStarted>
-- <doc:SwiftMCPTutorials>
-
-### Macros
-
-- ``MCPServer``
-- ``MCPTool``
-
-### Core Types
-
-- ``MCPToolMetadata``
-- ``MCPToolParameterInfo``
-- ``MCPToolError``
-
-### Server Components
-
-- ``StdioTransport``
-- ``HTTPSSETransport`` 
+``` 
