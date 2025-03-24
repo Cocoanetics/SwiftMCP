@@ -15,7 +15,7 @@ class Calculator {
      - Parameter b: Second number to add
      - Returns: The sum of a and b
      */
-    @MCPTool
+    @MCPTool(description: "Sends a delayed greeting")
     func add(a: Double, b: Double) -> Double {
         return a + b
     }

@@ -18,37 +18,37 @@
             @Step {
                 Start with a basic calculator class that has proper documentation.
                 
-                @Code(name: "Calculator.swift", file: "01-calculator-base")
+                @Code(name: "Calculator.swift", file: "01-calculator-base.swift")
             }
             
             @Step {
                 Import SwiftMCP and add the MCPServer macro with version information.
                 
-                @Code(name: "Calculator.swift", file: "02-calculator-server")
+                @Code(name: "Calculator.swift", file: "02-calculator-server.swift")
             }
             
             @Step {
                 Add the MCPTool macro to expose the add function.
                 
-                @Code(name: "Calculator.swift", file: "03-calculator-tool")
+                @Code(name: "Calculator.swift", file: "03-calculator-tool.swift")
             }
             
             @Step {
                 Give your server a custom name using the MCPServer macro.
                 
-                @Code(name: "Calculator.swift", file: "04-calculator-named")
+                @Code(name: "Calculator.swift", file: "04-calculator-named.swift")
             }
             
             @Step {
                 Add a custom description to the MCPTool macro.
                 
-                @Code(name: "Calculator.swift", file: "05-calculator-description")
+                @Code(name: "Calculator.swift", file: "05-calculator-description.swift")
             }
             
             @Step {
                 Notice how the documentation comments are used to generate the OpenAPI schema.
                 
-                @Code(name: "Calculator.swift", file: "06-calculator-schema")
+                @Code(name: "Calculator.swift", file: "06-calculator-schema.swift")
             }
         }
     }
@@ -64,13 +64,13 @@
             @Step {
                 Create a custom error type for input validation.
                 
-                @Code(name: "GreetingError.swift", file: "04-greeting-error")
+                @Code(name: "GreetingError.swift", file: "04-greeting-error.swift")
             }
             
             @Step {
                 Add a throwing function that validates input.
                 
-                @Code(name: "Calculator.swift", file: "05-calculator-throwing")
+                @Code(name: "Calculator.swift", file: "05-calculator-throwing.swift")
             }
         }
     }
@@ -86,7 +86,7 @@
             @Step {
                 Add an async function that simulates a network delay.
                 
-                @Code(name: "Calculator.swift", file: "06-calculator-async")
+                @Code(name: "Calculator.swift", file: "06-calculator-async.swift")
             }
         }
     }
