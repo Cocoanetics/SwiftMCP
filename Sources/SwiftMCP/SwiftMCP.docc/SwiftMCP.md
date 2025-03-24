@@ -1,35 +1,10 @@
 # ``SwiftMCP``
 
-A framework for exposing Swift functions as tools that can be called by AI assistants.
+A Swift framework that makes it easy to expose your functions as Model Context Protocol (MCP) tools for AI assistants.
 
 ## Overview
 
-SwiftMCP provides a powerful way to expose Swift functions as tools that can be called by AI assistants. The framework offers:
-
-- Documentation-driven tool definitions
-- Multiple transport options (HTTP+SSE, stdio)
-- OpenAPI specification generation
-- AI plugin manifest generation
-
-### Documentation-Driven Development
-
-Define your tools using Swift's native documentation comments. SwiftMCP automatically extracts descriptions, parameter info, and return types.
-
-### Multiple Transport Options
-
-Choose between HTTP+SSE for web integration or stdio for command-line tools. Easy to extend with custom transports.
-
-### OpenAPI Compatible
-
-Automatically generate OpenAPI specifications from your tool definitions for easy integration with existing tools.
-
-### AI-Ready Integration
-
-Generate AI plugin manifests and function schemas compatible with leading AI platforms.
-
-## Getting Started
-
-To start using SwiftMCP, first create a server that exposes your tools:
+SwiftMCP lets you turn any Swift function into an MCP tool with just a single decorator. It handles all the complexity of JSON-RPC communication, parameter validation, and documentation generation, letting you focus on writing your tool's logic.
 
 ```swift
 @MCPServer
@@ -41,13 +16,22 @@ class Calculator {
 }
 ```
 
-Then choose a transport to expose your server:
+The framework automatically:
+- Extracts documentation from your Swift comments to describe tools
+- Validates and converts parameters to the correct types
+- Generates OpenAPI specifications for AI integration
+- Provides multiple transport options (HTTP+SSE, stdio)
 
-```swift
-let calculator = Calculator()
-let transport = HTTPSSETransport(server: calculator)
-try await transport.run()
-```
+### Key Features
+
+- **Documentation-Driven**: Your standard Swift documentation comments are automatically turned into tool descriptions, parameter info, and return type documentation.
+- **Type-Safe**: All parameters are automatically validated and converted to their correct Swift types.
+- **AI-Ready**: Built-in support for OpenAPI specification generation and AI plugin manifests.
+- **Flexible Transport**: Choose between HTTP+SSE for web applications or stdio for command-line tools.
+
+## Next Steps
+
+Start with <doc:GettingStarted> to create your first MCP server, then explore <doc:CoreConcepts> to understand how SwiftMCP uses documentation to power AI interactions.
 
 ## Topics
 
