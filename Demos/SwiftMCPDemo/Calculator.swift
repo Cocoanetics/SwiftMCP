@@ -6,6 +6,16 @@ import SwiftMCP
  */
 @MCPServer(name: "SwiftMCP Demo")
 actor Calculator {
+	
+	/// Sends an email
+	/// - Parameter subject: The subject of the email
+	/// - Returns Some confirmation
+	@MCPTool
+	func searchEmailSubject(for subject: String) async throws -> String
+	{
+		return "Subject is \(subject)"
+	}
+	
     /// Adds two integers and returns their sum
     /// - Parameter a: First number to add
     /// - Parameter b: Second number to add

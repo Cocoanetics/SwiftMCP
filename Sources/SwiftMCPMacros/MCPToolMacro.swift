@@ -129,7 +129,7 @@ public struct MCPToolMacro: PeerMacro {
 		
 		// Extract parameter information
 		var parameterString = ""
-		var parameterInfos: [(name: String, type: String, defaultValue: String?)] = []
+		var parameterInfos: [(name: String, label: String, type: String, defaultValue: String?)] = []
 		
 		// Extract return type information from the syntax tree
 		let returnTypeString: String
@@ -143,7 +143,9 @@ public struct MCPToolMacro: PeerMacro {
 		}
 		
 		for param in funcDecl.signature.parameterClause.parameters {
-			let paramName = param.firstName.text
+			// Get the parameter name (secondName) and label (firstName)
+			let paramName = param.secondName?.text ?? param.firstName.text
+			let paramLabel = param.firstName.text
 			let paramType = param.type.description.trimmingCharacters(in: .whitespacesAndNewlines)
 			
 			// Store parameter info for wrapper function generation
@@ -225,10 +227,10 @@ public struct MCPToolMacro: PeerMacro {
 				parameterString += ", "
 			}
 			
-			parameterString += "MCPToolParameterInfo(name: \"\(paramName)\", type: \"\(paramType)\", description: \(paramDescription), defaultValue: \(defaultValue))"
+			parameterString += "MCPToolParameterInfo(name: \"\(paramName)\", label: \"\(paramLabel)\", type: \"\(paramType)\", description: \(paramDescription), defaultValue: \(defaultValue))"
 			
 			// Store parameter info for wrapper function generation
-			parameterInfos.append((name: paramName, type: paramType, defaultValue: defaultValueStr))
+			parameterInfos.append((name: paramName, label: paramLabel, type: paramType, defaultValue: defaultValueStr))
 		}
 		
 		// Create a registration statement using string interpolation for simplicity
@@ -256,6 +258,7 @@ public struct MCPToolMacro: PeerMacro {
 		// Add parameter extraction code
 		for param in parameterInfos {
 			let paramName = param.name
+			let paramLabel = param.label
 			let paramType = param.type
 			
 			// If it has a default value, use conditional binding
@@ -322,7 +325,7 @@ public struct MCPToolMacro: PeerMacro {
 						} else {
 							actualType = "nil"
 						}
-						throw MCPToolError.invalidArgumentType(parameterName: "\(paramName)", expectedType: "\(paramType)", actualType: actualType)
+						throw MCPToolError.invalidArgumentType(parameterName: "\(paramLabel) \(paramName)", expectedType: "\(paramType)", actualType: actualType)
 					}
 					"""
 				} else if param.type == "Int" {
@@ -343,7 +346,7 @@ public struct MCPToolMacro: PeerMacro {
 						} else {
 							actualType = "nil"
 						}
-						throw MCPToolError.invalidArgumentType(parameterName: "\(paramName)", expectedType: "\(paramType)", actualType: actualType)
+						throw MCPToolError.invalidArgumentType(parameterName: "\(paramLabel) \(paramName)", expectedType: "\(paramType)", actualType: actualType)
 					}
 					"""
 				} else {
@@ -357,7 +360,7 @@ public struct MCPToolMacro: PeerMacro {
 						} else {
 							actualType = "nil"
 						}
-						throw MCPToolError.invalidArgumentType(parameterName: "\(paramName)", expectedType: "\(paramType)", actualType: actualType)
+						throw MCPToolError.invalidArgumentType(parameterName: "\(paramLabel) \(paramName)", expectedType: "\(paramType)", actualType: actualType)
 					}
 					"""
 				}
@@ -365,7 +368,7 @@ public struct MCPToolMacro: PeerMacro {
 		}
 		
 		// Add the function call
-		let parameterList = parameterInfos.map { "\($0.name): \($0.name)" }.joined(separator: ", ")
+		let parameterList = parameterInfos.map { "\($0.label): \($0.name)" }.joined(separator: ", ")
 		let isThrowing = funcDecl.signature.effectSpecifiers?.throwsClause?.throwsSpecifier != nil
 		let isAsync = funcDecl.signature.effectSpecifiers?.asyncSpecifier != nil
 		
