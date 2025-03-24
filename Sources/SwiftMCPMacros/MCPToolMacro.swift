@@ -258,7 +258,6 @@ public struct MCPToolMacro: PeerMacro {
 		// Add parameter extraction code
 		for param in parameterInfos {
 			let paramName = param.name
-			let paramLabel = param.label
 			let paramType = param.type
 			
 			// If it has a default value, use conditional binding
@@ -325,7 +324,7 @@ public struct MCPToolMacro: PeerMacro {
 						} else {
 							actualType = "nil"
 						}
-						throw MCPToolError.invalidArgumentType(parameterName: "\(paramLabel) \(paramName)", expectedType: "\(paramType)", actualType: actualType)
+						throw MCPToolError.invalidArgumentType(parameterName: "\(paramName)", expectedType: "\(paramType)", actualType: actualType)
 					}
 					"""
 				} else if param.type == "Int" {
@@ -346,7 +345,7 @@ public struct MCPToolMacro: PeerMacro {
 						} else {
 							actualType = "nil"
 						}
-						throw MCPToolError.invalidArgumentType(parameterName: "\(paramLabel) \(paramName)", expectedType: "\(paramType)", actualType: actualType)
+						throw MCPToolError.invalidArgumentType(parameterName: "\(paramName)", expectedType: "\(paramType)", actualType: actualType)
 					}
 					"""
 				} else {
@@ -360,7 +359,7 @@ public struct MCPToolMacro: PeerMacro {
 						} else {
 							actualType = "nil"
 						}
-						throw MCPToolError.invalidArgumentType(parameterName: "\(paramLabel) \(paramName)", expectedType: "\(paramType)", actualType: actualType)
+						throw MCPToolError.invalidArgumentType(parameterName: "\(paramName)", expectedType: "\(paramType)", actualType: actualType)
 					}
 					"""
 				}
