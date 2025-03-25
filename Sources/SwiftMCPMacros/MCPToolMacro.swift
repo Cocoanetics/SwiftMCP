@@ -260,107 +260,44 @@ public struct MCPToolMacro: PeerMacro {
 			let paramName = param.name
 			let paramType = param.type
 			
-			// If it has a default value, use conditional binding
-			if let defaultValue = param.defaultValue {
-				if param.type == "Double" || param.type == "Float" {
-					wrapperMethod += """
-					
-					let \(paramName): \(paramType)
-					if let paramValue = params["\(paramName)"] as? \(paramType) {
-						\(paramName) = paramValue
-					} else if let intValue = params["\(paramName)"] as? Int {
-						\(paramName) = \(paramType)(intValue)
-					} else if let stringValue = params["\(paramName)"] as? String, let parsedValue = \(paramType)(stringValue) {
-						\(paramName) = parsedValue
-					} else {
-						// Use default value from function definition
-						\(paramName) = \(defaultValue)
-					}
-					"""
-				} else if param.type == "Int" {
-					wrapperMethod += """
-					
-					let \(paramName): \(paramType)
-					if let paramValue = params["\(paramName)"] as? \(paramType) {
-						\(paramName) = paramValue
-					} else if let doubleValue = params["\(paramName)"] as? Double {
-						\(paramName) = \(paramType)(doubleValue)
-					} else if let stringValue = params["\(paramName)"] as? String, let parsedValue = \(paramType)(stringValue) {
-						\(paramName) = parsedValue
-					} else {
-						// Use default value from function definition
-						\(paramName) = \(defaultValue)
-					}
-					"""
-				} else {
-					wrapperMethod += """
-					
-					let \(paramName): \(paramType)
-					if let paramValue = params["\(paramName)"] as? \(paramType) {
-						\(paramName) = paramValue
-					} else {
-						// Use default value from function definition
-						\(paramName) = \(defaultValue)
-					}
-					"""
-				}
+			// Use the parameter extraction utility with appropriate type conversions
+			if param.type == "Double" || param.type == "Float" {
+				let typeName = param.type == "Double" ? "Double" : "Float"
+				wrapperMethod += """
+				
+				let \(paramName) = try MCPToolParameterInfo.extract\(typeName)Parameter(named: "\(paramName)", from: params\(param.defaultValue != nil ? ", defaultValue: \(param.defaultValue!)" : ""))
+				"""
+			} else if param.type == "Int" {
+				wrapperMethod += """
+				
+				let \(paramName) = try MCPToolParameterInfo.extractIntParameter(named: "\(paramName)", from: params\(param.defaultValue != nil ? ", defaultValue: \(param.defaultValue!)" : ""))
+				"""
+			} else if param.type == "[Int]" {
+				wrapperMethod += """
+				
+				let \(paramName) = try MCPToolParameterInfo.extractIntArrayParameter(named: "\(paramName)", from: params\(param.defaultValue != nil ? ", defaultValue: \(param.defaultValue!)" : ""))
+				"""
+			} else if param.type == "[Double]" {
+				wrapperMethod += """
+				
+				let \(paramName) = try MCPToolParameterInfo.extractDoubleArrayParameter(named: "\(paramName)", from: params\(param.defaultValue != nil ? ", defaultValue: \(param.defaultValue!)" : ""))
+				"""
+			} else if param.type == "[Float]" {
+				wrapperMethod += """
+				
+				let \(paramName) = try MCPToolParameterInfo.extractFloatArrayParameter(named: "\(paramName)", from: params\(param.defaultValue != nil ? ", defaultValue: \(param.defaultValue!)" : ""))
+				"""
 			} else {
-				// For required parameters, use guard with type conversion
-				if param.type == "Double" || param.type == "Float" {
+				// For other types, use a generic parameter extraction
+				if param.defaultValue != nil {
 					wrapperMethod += """
 					
-					let \(paramName): \(paramType)
-					if let paramValue = params["\(paramName)"] as? \(paramType) {
-						\(paramName) = paramValue
-					} else if let intValue = params["\(paramName)"] as? Int {
-						\(paramName) = \(paramType)(intValue)
-					} else if let stringValue = params["\(paramName)"] as? String, let parsedValue = \(paramType)(stringValue) {
-						\(paramName) = parsedValue
-					} else {
-						// Get the actual type name of the parameter value
-						let actualType: String
-						if let value = params["\(paramName)"] {
-							actualType = String(describing: type(of: value))
-						} else {
-							actualType = "nil"
-						}
-						throw MCPToolError.invalidArgumentType(parameterName: "\(paramName)", expectedType: "\(paramType)", actualType: actualType)
-					}
-					"""
-				} else if param.type == "Int" {
-					wrapperMethod += """
-					
-					let \(paramName): \(paramType)
-					if let paramValue = params["\(paramName)"] as? \(paramType) {
-						\(paramName) = paramValue
-					} else if let doubleValue = params["\(paramName)"] as? Double {
-						\(paramName) = \(paramType)(doubleValue)
-					} else if let stringValue = params["\(paramName)"] as? String, let parsedValue = \(paramType)(stringValue) {
-						\(paramName) = parsedValue
-					} else {
-						// Get the actual type name of the parameter value
-						let actualType: String
-						if let value = params["\(paramName)"] {
-							actualType = String(describing: type(of: value))
-						} else {
-							actualType = "nil"
-						}
-						throw MCPToolError.invalidArgumentType(parameterName: "\(paramName)", expectedType: "\(paramType)", actualType: actualType)
-					}
+					let \(paramName): \(paramType) = try MCPToolParameterInfo.extractParameter(named: "\(paramName)", from: params, defaultValue: \(param.defaultValue!))
 					"""
 				} else {
 					wrapperMethod += """
 					
-					guard let \(paramName) = params["\(paramName)"] as? \(paramType) else {
-						// Get the actual type name of the parameter value
-						let actualType: String
-						if let value = params["\(paramName)"] {
-							actualType = String(describing: type(of: value))
-						} else {
-							actualType = "nil"
-						}
-						throw MCPToolError.invalidArgumentType(parameterName: "\(paramName)", expectedType: "\(paramType)", actualType: actualType)
-					}
+					let \(paramName): \(paramType) = try MCPToolParameterInfo.extractParameter(named: "\(paramName)", from: params)
 					"""
 				}
 			}
