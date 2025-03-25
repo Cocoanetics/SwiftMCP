@@ -30,7 +30,7 @@ actor Calculator {
     /// - Parameter b: Number to subtract
     /// - Returns: The difference between a and b
     @MCPTool
-    func subtract(a: Int, b: Int = 3) -> Int {
+    func subtract(a: Int = 5, b: Int = 3) -> Int {
         return a - b
     }
 	

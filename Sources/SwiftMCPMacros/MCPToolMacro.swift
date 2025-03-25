@@ -261,45 +261,42 @@ public struct MCPToolMacro: PeerMacro {
 			let paramType = param.type
 			
 			// Use the parameter extraction utility with appropriate type conversions
-			if param.type == "Double" || param.type == "Float" {
-				let typeName = param.type == "Double" ? "Double" : "Float"
+			if param.type == "Double" {
 				wrapperMethod += """
 				
-				let \(paramName) = try MCPToolParameterInfo.extract\(typeName)Parameter(named: "\(paramName)", from: params\(param.defaultValue != nil ? ", defaultValue: \(param.defaultValue!)" : ""))
+				let \(paramName) = try params.extractDouble(named: "\(paramName)")
+				"""
+			} else if param.type == "Float" {
+				wrapperMethod += """
+				
+				let \(paramName) = try params.extractFloat(named: "\(paramName)")
 				"""
 			} else if param.type == "Int" {
 				wrapperMethod += """
 				
-				let \(paramName) = try MCPToolParameterInfo.extractIntParameter(named: "\(paramName)", from: params\(param.defaultValue != nil ? ", defaultValue: \(param.defaultValue!)" : ""))
+				let \(paramName) = try params.extractInt(named: "\(paramName)")
 				"""
 			} else if param.type == "[Int]" {
 				wrapperMethod += """
 				
-				let \(paramName) = try MCPToolParameterInfo.extractIntArrayParameter(named: "\(paramName)", from: params\(param.defaultValue != nil ? ", defaultValue: \(param.defaultValue!)" : ""))
+				let \(paramName) = try params.extractIntArray(named: "\(paramName)")
 				"""
 			} else if param.type == "[Double]" {
 				wrapperMethod += """
 				
-				let \(paramName) = try MCPToolParameterInfo.extractDoubleArrayParameter(named: "\(paramName)", from: params\(param.defaultValue != nil ? ", defaultValue: \(param.defaultValue!)" : ""))
+				let \(paramName) = try params.extractDoubleArray(named: "\(paramName)")
 				"""
 			} else if param.type == "[Float]" {
 				wrapperMethod += """
 				
-				let \(paramName) = try MCPToolParameterInfo.extractFloatArrayParameter(named: "\(paramName)", from: params\(param.defaultValue != nil ? ", defaultValue: \(param.defaultValue!)" : ""))
+				let \(paramName) = try params.extractFloatArray(named: "\(paramName)")
 				"""
 			} else {
 				// For other types, use a generic parameter extraction
-				if param.defaultValue != nil {
-					wrapperMethod += """
-					
-					let \(paramName): \(paramType) = try MCPToolParameterInfo.extractParameter(named: "\(paramName)", from: params, defaultValue: \(param.defaultValue!))
-					"""
-				} else {
-					wrapperMethod += """
-					
-					let \(paramName): \(paramType) = try MCPToolParameterInfo.extractParameter(named: "\(paramName)", from: params)
-					"""
-				}
+				wrapperMethod += """
+				
+				let \(paramName): \(paramType) = try params.extractParameter(named: "\(paramName)")
+				"""
 			}
 		}
 		
