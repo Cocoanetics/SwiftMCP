@@ -124,37 +124,44 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
 		}
 		
 		// Create a callTool method that uses a switch statement to call the appropriate wrapper function
-		var switchCases: [String] = []
-		for funcName in mcpTools {
-			switchCases.append("""
-       case "\(funcName)":
-            return try await __mcpCall_\(funcName)(enrichedArguments)
-   """)
+		var switchCases = ""
+		for (index, funcName) in mcpTools.enumerated() {
+			switchCases += "      case \"\(funcName)\":\n"
+			switchCases += "         return try await __mcpCall_\(funcName)(enrichedArguments)"
+			if index < mcpTools.count - 1 {
+				switchCases += "\n"
+			}
 		}
 		
-		let callToolMethod = """
-  /// Calls a tool by name with the provided arguments
-  /// - Parameters:
-  ///   - name: The name of the tool to call
-  ///   - arguments: A dictionary of arguments to pass to the tool
-  /// - Returns: The result of the tool call
-  /// - Throws: MCPToolError if the tool doesn't exist or cannot be called
-  public func callTool(_ name: String, arguments: [String: Sendable]) async throws -> (Codable & Sendable) {
-     // Find the tool by name
-     guard let tool = mcpTools.first(where: { $0.name == name }) else {
-        throw MCPToolError.unknownTool(name: name)
-     }
+		let callToolPrefix = """
+/// Calls a tool by name with the provided arguments
+/// - Parameters:
+///   - name: The name of the tool to call
+///   - arguments: A dictionary of arguments to pass to the tool
+/// - Returns: The result of the tool call
+/// - Throws: MCPToolError if the tool doesn't exist or cannot be called
+public func callTool(_ name: String, arguments: [String: Sendable]) async throws -> (Codable & Sendable) {
+   // Find the tool by name
+   guard let tool = mcpTools.first(where: { $0.name == name }) else {
+      throw MCPToolError.unknownTool(name: name)
+   }
    
-     // Enrich arguments with default values
-     let enrichedArguments = try tool.enrichArguments(arguments, forObject: self)
+   // Enrich arguments with default values
+   let enrichedArguments = try tool.enrichArguments(arguments, forObject: self)
    
-     // Call the appropriate wrapper method based on the tool name
-     switch name {
-        \(switchCases.joined(separator: "\n"))
-        default: throw MCPToolError.unknownTool(name: name)
-     }
-  }
-  """
+   // Call the appropriate wrapper method based on the tool name
+   switch name {
+
+"""
+
+		let callToolSuffix = """
+
+      default:\n         throw MCPToolError.unknownTool(name: name)
+   }
+}
+"""
+		
+		let callToolMethod = callToolPrefix + switchCases + callToolSuffix
 		
 		return [
 			DeclSyntax(stringLiteral: nameProperty),
