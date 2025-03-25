@@ -367,7 +367,12 @@ public struct MCPToolMacro: PeerMacro {
 		}
 		
 		// Add the function call
-		let parameterList = parameterInfos.map { "\($0.label): \($0.name)" }.joined(separator: ", ")
+		let parameterList = parameterInfos.map { param in
+			if param.label == "_" {
+				return param.name
+			}
+			return "\(param.label): \(param.name)"
+		}.joined(separator: ", ")
 		let isThrowing = funcDecl.signature.effectSpecifiers?.throwsClause?.throwsSpecifier != nil
 		let isAsync = funcDecl.signature.effectSpecifiers?.asyncSpecifier != nil
 		
