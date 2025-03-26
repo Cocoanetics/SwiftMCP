@@ -35,11 +35,12 @@ Start with <doc:GettingStarted> to create your first MCP server, then explore <d
 
 ## Topics
 
-### Essentials
+### Getting Started
 
 - <doc:GettingStarted>
 - <doc:CoreConcepts>
 - <doc:SwiftMCPTutorials>
+- <doc:SupportedTypes>
 
 ### Macros
 
