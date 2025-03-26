@@ -170,30 +170,8 @@ struct OpenAPISpec: Codable {
             // Create input schema from parameters
             let inputSchema = JSONSchema.object(
                 properties: metadata.parameters.reduce(into: [:]) { dict, param in
-                    let paramType = param.type.JSONSchemaType
-                    switch paramType {
-                        case "number":
-                            dict[param.name] = .number(description: param.description)
-                        case "boolean":
-                            dict[param.name] = .boolean(description: param.description)
-                        case "array":
-                            if let elementType = param.type.arrayElementType {
-                                let itemSchema: JSONSchema
-                                switch elementType.JSONSchemaType {
-                                    case "number":
-                                        itemSchema = .number()
-                                    case "boolean":
-                                        itemSchema = .boolean()
-                                    default:
-                                        itemSchema = .string()
-                                }
-                                dict[param.name] = .array(items: itemSchema, description: param.description)
-                            } else {
-                                dict[param.name] = .array(items: .string(), description: param.description)
-                            }
-                        default:
-                            dict[param.name] = .string(description: param.description)
-                    }
+                    // Use the parameter's JSONSchema directly
+                    dict[param.name] = param.jsonSchema
                 },
                 required: metadata.parameters.filter { $0.defaultValue == nil }.map { $0.name },
                 description: metadata.description ?? "No description available"
