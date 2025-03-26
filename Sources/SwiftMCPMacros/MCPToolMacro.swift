@@ -148,7 +148,7 @@ public struct MCPToolMacro: PeerMacro {
 			let paramLabel = param.firstName.text
 			let paramType = param.type.description.trimmingCharacters(in: .whitespacesAndNewlines)
 			
-			// Check for closure types
+			// Check for closure types and emit diagnostic
 			if paramType.contains("->") {
 				let diagnostic = Diagnostic(
 					node: param.type,
@@ -161,7 +161,6 @@ public struct MCPToolMacro: PeerMacro {
 			}
 			
 			// Store parameter info for wrapper function generation
-			var defaultValueStr: String? = nil
 			
 			// Special case for the longDescription function's text parameter in tests
 			var paramDescription = "nil"
@@ -181,57 +180,27 @@ public struct MCPToolMacro: PeerMacro {
 			// Extract default value if it exists
 			var defaultValue = "nil"
 			if let defaultExpr = param.defaultValue?.value {
-				// Check for supported default value types
-				var isValidDefaultType = false
-				var typeName = "unknown"
+				// Get the raw expression
+				let rawValue = defaultExpr.description.trimmingCharacters(in: .whitespaces)
 				
-				// For simple literals, we can use their string representation
-				if let intLiteral = defaultExpr.as(IntegerLiteralExprSyntax.self) {
-					defaultValue = "\"\(intLiteral.description)\""
-					defaultValueStr = intLiteral.description
-					isValidDefaultType = true
-				} else if let floatLiteral = defaultExpr.as(FloatLiteralExprSyntax.self) {
-					defaultValue = "\"\(floatLiteral.description)\""
-					defaultValueStr = floatLiteral.description
-					isValidDefaultType = true
-				} else if let boolLiteral = defaultExpr.as(BooleanLiteralExprSyntax.self) {
-					defaultValue = "\"\(boolLiteral.description)\""
-					defaultValueStr = boolLiteral.description
-					isValidDefaultType = true
+				// For member access expressions (like Options.all), string literals, etc.
+				// determine if we need to wrap the value in quotes
+				if rawValue.hasPrefix(".") {
+					// For dot syntax enum cases (like .all), prepend the type name
+					defaultValue = "\(paramType)\(rawValue)"
+				} else if rawValue.contains(".") || // fully qualified enum cases
+				   rawValue == "true" || rawValue == "false" || // booleans
+				   Double(rawValue) != nil || // numbers
+				   rawValue == "nil" || // nil
+				   (rawValue.hasPrefix("[") && rawValue.hasSuffix("]")) // arrays
+				{
+					defaultValue = rawValue
 				} else if let stringLiteral = defaultExpr.as(StringLiteralExprSyntax.self) {
-					// For string literals, we need to wrap them in quotes
-					let stringValue = stringLiteral.segments.description
-						.replacingOccurrences(of: "\"", with: "\\\"")
-					defaultValue = "\"\(stringValue)\""
-					defaultValueStr = "\"\(stringValue)\""
-					isValidDefaultType = true
-				} else if defaultExpr.is(NilLiteralExprSyntax.self) {
-					// For nil literals, we can use nil
-					defaultValue = "nil"
-					defaultValueStr = "nil"
-					isValidDefaultType = true
-				} else if let arrayExpr = defaultExpr.as(ArrayExprSyntax.self) {
-					// For array literals, convert to a string representation
-					defaultValue = "\(arrayExpr.description)"
-					defaultValueStr = arrayExpr.description
-					isValidDefaultType = true
+					// For string literals, extract the exact string value without quotes
+					defaultValue = "\"\(stringLiteral.segments.description)\""
 				} else {
-					// For unsupported types, emit a diagnostic
-					typeName = defaultExpr.description
-					let diagnostic = Diagnostic(
-						node: defaultExpr,
-						message: MCPToolDiagnostic.invalidDefaultValueType(
-							paramName: paramName,
-							typeName: typeName
-						)
-					)
-					context.diagnose(diagnostic)
-				}
-				
-				// If it's not a valid type, don't include the default value
-				if !isValidDefaultType {
-					defaultValue = "nil"
-					defaultValueStr = nil
+					// For other values, wrap in quotes
+					defaultValue = "\"\(rawValue)\""
 				}
 			}
 			
@@ -245,7 +214,7 @@ public struct MCPToolMacro: PeerMacro {
 			parameterString += "MCPToolParameterInfo(name: \"\(paramName)\",    label: \"\(paramLabel)\",    type: \"\(paramType)\",    description: \(paramDescription),    defaultValue: \(defaultValue),    enumValues: \(enumValuesStr))"
 			
 			// Store parameter info for wrapper function generation
-			parameterInfos.append((name: paramName, label: paramLabel, type: paramType, defaultValue: defaultValueStr))
+			parameterInfos.append((name: paramName, label: paramLabel, type: paramType, defaultValue: defaultValue))
 		}
 		
 		// Create a registration statement using string interpolation for simplicity

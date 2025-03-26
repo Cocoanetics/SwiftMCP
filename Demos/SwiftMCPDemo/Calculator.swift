@@ -1,29 +1,30 @@
 import Foundation
 import SwiftMCP
 
-enum Options: CaseIterable {
-	case all
-	case unread
-}
-
 /**
  A Calculator for simple math doing additionals, subtractions etc.
  */
 @MCPServer(name: "SwiftMCP Demo")
 actor Calculator {
 	
+	// must be CaseIterable to 
+	enum Options {
+		case all
+		case unread
+	}
+	
 	/// Sends an email
 	/// - Parameter subject: The subject of the email
 	/// - Returns Some confirmation
 	@MCPTool
-	func searchEmailSubject(for subject: String, option: Options) async throws -> String
+	func searchEmailSubject(for subject: String = "Default", option: Options = .all) async throws -> String
 	{
 		switch option
 		{
 			case .all:
-				return "Search in all emails, for subject \(subject)"
+				return "Search in ALL emails, for subject \(subject)"
 			case .unread:
-				return "Search in unread emails, for subject \(subject)"
+				return "Search in UNREAD emails, for subject \(subject)"
 		}
 	}
 	
