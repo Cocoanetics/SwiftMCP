@@ -22,7 +22,10 @@ public struct MCPToolParameterInfo: Sendable {
     public let description: String?
     
     /// An optional default value for the parameter
-    public let defaultValue: String?
+    public let defaultValue: Sendable?
+    
+    /// The possible values for enum parameters
+    public let enumValues: [String]?
     
     /**
      Creates a new parameter info with the specified name, type, description, and default value.
@@ -33,12 +36,14 @@ public struct MCPToolParameterInfo: Sendable {
        - type: The type of the parameter
        - description: An optional description of the parameter
        - defaultValue: An optional default value for the parameter
+       - enumValues: The possible values if this is an enum parameter
      */
-    public init(name: String, label: String, type: String, description: String? = nil, defaultValue: String? = nil) {
+    public init(name: String, label: String, type: String, description: String? = nil, defaultValue: Sendable? = nil, enumValues: [String]? = nil) {
         self.name = name
         self.label = label
         self.type = type
         self.description = description
         self.defaultValue = defaultValue
+        self.enumValues = enumValues
     }
 } 

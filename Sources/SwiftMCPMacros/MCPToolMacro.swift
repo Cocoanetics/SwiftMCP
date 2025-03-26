@@ -148,6 +148,18 @@ public struct MCPToolMacro: PeerMacro {
 			let paramLabel = param.firstName.text
 			let paramType = param.type.description.trimmingCharacters(in: .whitespacesAndNewlines)
 			
+			// Check for closure types
+			if paramType.contains("->") {
+				let diagnostic = Diagnostic(
+					node: param.type,
+					message: MCPToolDiagnostic.closureTypeNotSupported(
+						paramName: paramName,
+						typeName: paramType
+					)
+				)
+				context.diagnose(diagnostic)
+			}
+			
 			// Store parameter info for wrapper function generation
 			var defaultValueStr: String? = nil
 			
@@ -200,7 +212,7 @@ public struct MCPToolMacro: PeerMacro {
 					isValidDefaultType = true
 				} else if let arrayExpr = defaultExpr.as(ArrayExprSyntax.self) {
 					// For array literals, convert to a string representation
-					defaultValue = "\"\(arrayExpr.description)\""
+					defaultValue = "\(arrayExpr.description)"
 					defaultValueStr = arrayExpr.description
 					isValidDefaultType = true
 				} else {
@@ -227,7 +239,10 @@ public struct MCPToolMacro: PeerMacro {
 				parameterString += ", "
 			}
 			
-			parameterString += "MCPToolParameterInfo(name: \"\(paramName)\", label: \"\(paramLabel)\", type: \"\(paramType)\", description: \(paramDescription), defaultValue: \(defaultValue))"
+			// Use the Any extension to get case labels if available
+			let enumValuesStr = ".init(caseLabelsFrom: \(paramType).self)"
+			
+			parameterString += "MCPToolParameterInfo(name: \"\(paramName)\",    label: \"\(paramLabel)\",    type: \"\(paramType)\",    description: \(paramDescription),    defaultValue: \(defaultValue),    enumValues: \(enumValuesStr))"
 			
 			// Store parameter info for wrapper function generation
 			parameterInfos.append((name: paramName, label: paramLabel, type: paramType, defaultValue: defaultValueStr))
@@ -240,7 +255,9 @@ public struct MCPToolMacro: PeerMacro {
 		let __mcpMetadata_\(functionName) = MCPToolMetadata(
 			name: "\(functionName)",
 			description: \(descriptionArg),
-			parameters: [\(parameterString)],
+			parameters: [
+				\(parameterString.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.joined(separator: ",\n        "))
+			],
 			returnType: \(returnTypeString),
 			returnTypeDescription: \(documentation.returns.map { "\"\($0.replacingOccurrences(of: "\"", with: "\\\"").replacingOccurrences(of: "\t", with: " "))\"" } ?? "nil"),
 			isAsync: \(funcDecl.signature.effectSpecifiers?.asyncSpecifier != nil),

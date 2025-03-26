@@ -10,7 +10,7 @@ import Foundation
 /// A simplified representation of JSON Schema for use in the macros
 public indirect enum JSONSchema: Sendable {
     /// A string schema
-    case string(description: String? = nil)
+    case string(description: String? = nil, enumValues: [String]? = nil)
     
     /// A number schema
     case number(description: String? = nil)
@@ -23,4 +23,7 @@ public indirect enum JSONSchema: Sendable {
     
     /// An object schema
     case object(properties: [String: JSONSchema], required: [String] = [], description: String? = nil)
+    
+    /// An enum schema with possible values
+    case `enum`(values: [String], description: String? = nil)
 } 

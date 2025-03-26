@@ -26,6 +26,9 @@ enum MCPToolDiagnostic: DiagnosticMessage {
     
     /// Error when a parameter has an unsupported default value type
     case invalidDefaultValueType(paramName: String, typeName: String)
+    
+    /// Error when a parameter has an unsupported closure type
+    case closureTypeNotSupported(paramName: String, typeName: String)
 
     var message: String {
         switch self {
@@ -35,12 +38,14 @@ enum MCPToolDiagnostic: DiagnosticMessage {
             return "Function '\(functionName)' is missing a description. Add a documentation comment or provide a description parameter."
         case .invalidDefaultValueType(let paramName, let typeName):
             return "Parameter '\(paramName)' has an unsupported default value type '\(typeName)'. Only numbers, booleans, and strings are supported."
+        case .closureTypeNotSupported(let paramName, let typeName):
+            return "Parameter '\(paramName)' has an unsupported closure type '\(typeName)'. Closures are not supported in MCP tools."
         }
     }
 
     var severity: DiagnosticSeverity {
         switch self {
-        case .onlyFunctions, .invalidDefaultValueType:
+        case .onlyFunctions, .invalidDefaultValueType, .closureTypeNotSupported:
             return .error
         case .missingDescription:
             return .warning
@@ -55,6 +60,8 @@ enum MCPToolDiagnostic: DiagnosticMessage {
             return MessageID(domain: "SwiftMCP", id: "missingDescription")
         case .invalidDefaultValueType:
             return MessageID(domain: "SwiftMCP", id: "invalidDefaultValueType")
+        case .closureTypeNotSupported:
+            return MessageID(domain: "SwiftMCP", id: "closureTypeNotSupported")
         }
     }
 } 
