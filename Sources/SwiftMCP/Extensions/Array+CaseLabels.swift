@@ -50,3 +50,19 @@ extension Array where Element == String {
 		}
 	}
 }
+
+extension CaseIterable
+{
+	static var caseLabels: [String] {
+		return self.allCases.map { caseValue in
+			let description = String(describing: caseValue)
+			
+			// trim off associated value if any
+			if let parenIndex = description.firstIndex(of: "(") {
+				return String(description[..<parenIndex])
+			}
+			
+			return description
+		}
+	}
+}

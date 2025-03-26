@@ -132,7 +132,7 @@ func testBasicFunctionality() {
                 #expect(Bool(false), "Expected number schema for parameter 'a'")
             }
             
-            if case .string(let description) = properties["b"] {
+            if case .string(description: let description, enumValues: _) = properties["b"] {
                 #expect(description == "A string parameter")
             } else {
                 #expect(Bool(false), "Expected string schema for parameter 'b'")
@@ -174,14 +174,14 @@ func testBasicFunctionality() {
         
         // Extract properties from the object schema
         if case .object(let properties, _, _) = optionalParamTool.inputSchema {
-            if case .string(let description) = properties["required"] {
+            if case .string(description: let description, enumValues: _) = properties["required"] {
                 #expect(description == "A required parameter")
             } else {
                 #expect(Bool(false), "Expected string schema for parameter 'required'")
             }
             
             // Optional parameters are represented as strings in the schema
-            if case .string(let description) = properties["optional"] {
+            if case .string(description: let description, enumValues: _) = properties["optional"] {
                 #expect(description == "An optional parameter")
             } else {
                 #expect(Bool(false), "Expected string schema for parameter 'optional'")
@@ -212,7 +212,7 @@ func testMultiLineDoc() throws {
         
         // Extract properties from the object schema
         if case .object(let properties, _, _) = longDescTool.inputSchema {
-            if case .string(let description) = properties["text"] {
+            if case .string(description: let description, enumValues: _) = properties["text"] {
                 #expect(description?.contains("A text parameter with a long description") == true, "Parameter description should mention it's a long description")
                 // The actual output doesn't contain "spans multiple lines" so we'll check for "spans" instead
                 #expect(description?.contains("spans") == true, "Parameter description should mention it spans")

@@ -122,7 +122,7 @@ func testThrowingFunctionSpec() {
         #expect(required.contains("count"))
         
         // Check name parameter
-        guard case let .string(description: nameDesc) = properties["name"] else {
+        guard case let .string(description: nameDesc, enumValues: _) = properties["name"] else {
             #expect(Bool(false), "name parameter should be a string")
             return
         }
@@ -170,7 +170,7 @@ func testVoidFunctionSpec() {
     // Check parameter schema
     if case let .object(properties: properties, required: _, description: _) = content.schema {
         #expect(properties["message"] != nil)
-        if case let .string(description: description) = properties["message"] {
+        if case let .string(description: description, enumValues: _) = properties["message"] {
             #expect(description == "Message to process")
         } else {
             #expect(Bool(false), "Message parameter should be a string")
@@ -187,7 +187,7 @@ func testVoidFunctionSpec() {
     // Check response schema
     let schema = response?.content?["application/json"]?.schema
     #expect(schema != nil)
-    if case let .string(description: description) = schema {
+    if case let .string(description: description, enumValues: _) = schema {
         #expect(description == "Empty string (void function)")
     } else {
         #expect(Bool(false), "Response schema should be a string")

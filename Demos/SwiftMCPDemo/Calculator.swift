@@ -1,9 +1,9 @@
 import Foundation
 import SwiftMCP
 
-enum Options: String, CaseIterable {
-	case all = "ALLE"
-	case unread = "UNSEEN"
+enum Options: CaseIterable {
+	case all
+	case unread
 }
 
 /**
@@ -18,7 +18,13 @@ actor Calculator {
 	@MCPTool
 	func searchEmailSubject(for subject: String, option: Options) async throws -> String
 	{
-		return "Subject is \(subject)"
+		switch option
+		{
+			case .all:
+				return "Search in all emails, for subject \(subject)"
+			case .unread:
+				return "Search in unread emails, for subject \(subject)"
+		}
 	}
 	
     /// Adds two integers and returns their sum

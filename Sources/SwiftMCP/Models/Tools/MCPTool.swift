@@ -126,6 +126,8 @@ extension JSONSchema: Codable {
 		case description
 		/// The schema for array items
 		case items
+		/// The possible values for an enum schema
+		case enumValues = "enum"
 	}
 	
 	/**
@@ -141,7 +143,8 @@ extension JSONSchema: Codable {
 		
 		switch type {
 		case "string":
-			self = .string(description: description)
+			let enumValues = try container.decodeIfPresent([String].self, forKey: .enumValues)
+			self = .string(description: description, enumValues: enumValues)
 		case "number":
 			self = .number(description: description)
 		case "boolean":
@@ -177,9 +180,12 @@ extension JSONSchema: Codable {
 		var container = encoder.container(keyedBy: CodingKeys.self)
 		
 		switch self {
-		case .string(let description):
+		case .string(let description, let enumValues):
 			try container.encode("string", forKey: .type)
 			try container.encodeIfPresent(description, forKey: .description)
+			if let enumValues = enumValues {
+				try container.encode(enumValues, forKey: .enumValues)
+			}
 		case .number(let description):
 			try container.encode("number", forKey: .type)
 			try container.encodeIfPresent(description, forKey: .description)
@@ -203,6 +209,10 @@ extension JSONSchema: Codable {
 			}
 			
 			try container.encodeIfPresent(description, forKey: .description)
+		case .enum(let values, let description):
+			try container.encode("string", forKey: .type)
+			try container.encodeIfPresent(description, forKey: .description)
+			try container.encode(values, forKey: .enumValues)
 		}
 	}
 }

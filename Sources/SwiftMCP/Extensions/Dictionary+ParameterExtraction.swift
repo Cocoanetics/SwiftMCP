@@ -8,13 +8,48 @@ public extension Dictionary where Key == String, Value == Sendable {
     /// - Returns: The extracted value of type T
     /// - Throws: MCPToolError.invalidArgumentType if the parameter cannot be converted to type T
     func extractParameter<T>(named name: String) throws -> T {
-        if let value = self[name] as? T {
+		
+		guard let anyValue = self[name] else
+		{
+			// this can never happen because arguments have already been enriched with default values
+			preconditionFailure("Failed to retrieve value for parameter \(name)")
+		}
+		
+        // try direct type casting
+        if let value = anyValue as? T {
             return value
-        } else {
+        }
+		else if let caseType = T.self as? any CaseIterable.Type
+		{
+			guard let string = anyValue as? String else
+			{
+				throw MCPToolError.invalidArgumentType(
+					parameterName: name,
+					expectedType: "String",
+					actualType: String(describing: Swift.type(of: anyValue))
+				)
+			}
+			
+			let caseLabels = caseType.caseLabels
+			
+			guard let index = caseLabels.firstIndex(of: string) else {
+				
+				throw MCPToolError.invalidEnumValue(parameterName: name, expectedValues: caseLabels, actualValue: string)
+			}
+			
+			guard let allCases = caseType.allCases as? [T] else {
+				// This can never happen because the result of CaseIterable is an array of the enum type
+				preconditionFailure()
+			}
+			
+			// return the actual enum case value that matches the string label
+			return allCases[index]
+		}
+		else {
             throw MCPToolError.invalidArgumentType(
                 parameterName: name,
                 expectedType: String(describing: T.self),
-                actualType: String(describing: Swift.type(of: self[name] ?? "nil"))
+                actualType: String(describing: Swift.type(of: anyValue))
             )
         }
     }
