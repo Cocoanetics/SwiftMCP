@@ -101,24 +101,8 @@ extension MCPTool {
 		// Add default values for parameters that are missing from the arguments dictionary
 		for param in metadata.parameters {
 			if enrichedArguments[param.name] == nil, let defaultValue = param.defaultValue {
-				// Convert the default value to the appropriate type based on the parameter type
-				switch param.type {
-				case "Int":
-					if let intValue = Int(defaultValue) {
-						enrichedArguments[param.name] = intValue
-					}
-				case "Double", "Float":
-					if let doubleValue = Double(defaultValue) {
-						enrichedArguments[param.name] = doubleValue
-					}
-				case "Bool":
-					if let boolValue = Bool(defaultValue) {
-						enrichedArguments[param.name] = boolValue
-					}
-				default:
-					// For string and other types, use the default value as is
-					enrichedArguments[param.name] = defaultValue
-				}
+				
+				enrichedArguments[param.name] = defaultValue
 			}
 		}
 		

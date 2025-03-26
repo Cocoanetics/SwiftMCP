@@ -1,6 +1,11 @@
 import Foundation
 import SwiftMCP
 
+enum Options: String, CaseIterable {
+	case all = "ALLE"
+	case unread = "UNSEEN"
+}
+
 /**
  A Calculator for simple math doing additionals, subtractions etc.
  */
@@ -11,7 +16,7 @@ actor Calculator {
 	/// - Parameter subject: The subject of the email
 	/// - Returns Some confirmation
 	@MCPTool
-	func searchEmailSubject(for subject: String) async throws -> String
+	func searchEmailSubject(for subject: String, option: Options) async throws -> String
 	{
 		return "Subject is \(subject)"
 	}
@@ -40,7 +45,7 @@ actor Calculator {
      - Returns: A string representation of the array
      */
     @MCPTool(description: "Custom description: Tests array processing")
-    func testArray(a: [Int]) -> String {
+    func testArray(a: [Int] = [1,2,3]) -> String {
         return a.map(String.init).joined(separator: ", ")
     }
     

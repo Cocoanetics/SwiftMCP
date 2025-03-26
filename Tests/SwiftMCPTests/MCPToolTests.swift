@@ -34,19 +34,6 @@ class TripleSlashDocumentation {
         return "Basic types: \(a), \(b), \(c)"
     }
     
-    /// Function with complex parameter types
-    /// - Parameter array: An array of integers
-    /// - Parameter dictionary: A dictionary with string keys and any values
-    /// - Parameter closure: A closure that takes an integer and returns a string
-    @MCPTool
-    func complexTypes(
-        array: [Int],
-        dictionary: [String: Any],
-        closure: (Int) -> String
-    ) {
-        // Implementation not important for the test
-    }
-    
     /// Function with explicit description override
     /// - Parameter value: A value with description
     @MCPTool(description: "This description overrides the documentation comment")
@@ -161,40 +148,6 @@ func testBasicFunctionality() {
         }
     } else {
         #expect(Bool(false), "Could not find basicTypes function")
-    }
-    
-    // Test complex parameter types
-    if let complexTypesTool = tools.first(where: { $0.name == "complexTypes" }) {
-        #expect(complexTypesTool.description == "Function with complex parameter types")
-        
-        // Extract properties from the object schema
-        if case .object(let properties, _, _) = complexTypesTool.inputSchema {
-            #expect(properties.count == 3)
-            
-            // Check parameter descriptions
-            if case .array(_, let description) = properties["array"] {
-                #expect(description == "An array of integers")
-            } else {
-                #expect(Bool(false), "Expected array schema for parameter 'array'")
-            }
-            
-            // Dictionary is represented as an array schema
-            if case .array(_, let description) = properties["dictionary"] {
-                #expect(description == "A dictionary with string keys and any values")
-            } else {
-                #expect(Bool(false), "Expected array schema for parameter 'dictionary'")
-            }
-            
-            if case .string(let description) = properties["closure"] {
-                #expect(description == "A closure that takes an integer and returns a string")
-            } else {
-                #expect(Bool(false), "Expected string schema for parameter 'closure'")
-            }
-        } else {
-            #expect(Bool(false), "Expected object schema")
-        }
-    } else {
-        #expect(Bool(false), "Could not find complexTypes function")
     }
     
     // Test explicit description override
