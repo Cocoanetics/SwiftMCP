@@ -252,7 +252,9 @@ public extension MCPServer {
 			}
 			else
 			{
-				let jsonData = try JSONEncoder().encode(result)
+				let encoder = JSONEncoder()
+				encoder.dateEncodingStrategy = .iso8601
+				let jsonData = try encoder.encode(result)
 				responseText = String(data: jsonData, encoding: .utf8) ?? ""
 			}
 			

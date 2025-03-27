@@ -291,7 +291,43 @@ func testNoopViaMockClient() async throws {
     
     #expect(type == "text")
     #expect(text == "")  // noop returns empty string
-} 
+}
+
+@Test("Tests getCurrentDateTime returns ISO formatted date")
+func testGetCurrentDateTimeViaMockClient() async throws {
+    let calculator = Calculator()
+    let client = MockClient(calculator: calculator)
+    
+    let request = JSONRPCMessage(
+        id: 9,
+        method: "tools/call",
+        params: [
+            "name": "getCurrentDateTime",
+            "arguments": [:]
+        ]
+    )
+    
+    let response = try await client.send(request)
+    
+    #expect(response.id == 9)
+    #expect(response.error == nil)
+    
+    let result = unwrap(response.result)
+    let isError = unwrap(result["isError"]?.value as? Bool)
+    #expect(isError == false)
+    
+    let content = unwrap(result["content"]?.value as? [[String: String]])
+    let firstContent = unwrap(content.first)
+    let type = unwrap(firstContent["type"])
+    let text = unwrap(firstContent["text"])
+    
+    #expect(type == "text")
+    
+    // Verify the text is a valid ISO 8601 date string
+    let dateFormatter = ISO8601DateFormatter()
+    let date = dateFormatter.date(from: text.replacingOccurrences(of: "\"", with: ""))
+    #expect(date != nil, "Response should be a valid ISO 8601 date string")
+}
 
 /// Errors that can occur during MCP client operations
 public enum MCPError: LocalizedError {

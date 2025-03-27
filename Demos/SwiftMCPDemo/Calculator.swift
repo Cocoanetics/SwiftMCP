@@ -38,6 +38,30 @@ actor Calculator {
 		}
 	}
 	
+	/**
+	  Gets the current date/time on the server
+	 - Returns: The current time
+	 */
+	@MCPTool
+	func getCurrentDateTime() -> Date {
+		return Date()
+	}
+	
+	/**
+	  Formats a date/time as String
+	  - Parameter date: The Date to format
+	  - Returns: A string with the date formatted
+	 */
+	@MCPTool
+	func formatDateAsString(date: Date) -> String {
+		
+		let dateFormatter = DateFormatter()
+		dateFormatter.dateStyle = .long
+		dateFormatter.timeStyle = .long
+		
+		return dateFormatter.string(from: date)
+	}
+	
     /// Adds two integers and returns their sum
     /// - Parameter a: First number to add
     /// - Parameter b: Second number to add

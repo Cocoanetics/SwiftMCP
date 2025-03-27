@@ -245,8 +245,9 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 			return
 		}
 		
-		let decoder = JSONDecoder()
 		do {
+			let decoder = JSONDecoder()
+			decoder.dateDecodingStrategy = .iso8601
 			let request = try decoder.decode(JSONRPCMessage.self, from: body)
 			
 			if request.method == nil {

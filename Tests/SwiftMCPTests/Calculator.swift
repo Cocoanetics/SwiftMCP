@@ -84,4 +84,13 @@ class Calculator {
 	func noop() {
 		
 	}
+	
+	/**
+	  Gets the current date/time on the server
+	 - Returns: The current time
+	 */
+	@MCPTool
+	func getCurrentDateTime() -> Date {
+		return Date()
+	}
 }

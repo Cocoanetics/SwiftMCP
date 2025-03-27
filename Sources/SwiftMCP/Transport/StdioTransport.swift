@@ -65,7 +65,9 @@ public final class StdioTransport: Transport, @unchecked Sendable {
 
 						logger.trace("Received input: \(input)")
 
-						let request = try JSONDecoder().decode(JSONRPCMessage.self, from: data)
+						let decoder = JSONDecoder()
+						decoder.dateDecodingStrategy = .iso8601
+						let request = try decoder.decode(JSONRPCMessage.self, from: data)
 
 						// Handle the request.
 						if let response = await server.handleRequest(request) {
@@ -107,7 +109,9 @@ public final class StdioTransport: Transport, @unchecked Sendable {
 
 				logger.trace("Received input: \(input)")
 
-				let request = try JSONDecoder().decode(JSONRPCMessage.self, from: data)
+				let decoder = JSONDecoder()
+				decoder.dateDecodingStrategy = .iso8601
+				let request = try decoder.decode(JSONRPCMessage.self, from: data)
 
 				// Handle the request.
 				if let response = await server.handleRequest(request) {

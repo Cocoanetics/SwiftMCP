@@ -45,6 +45,11 @@ public extension Dictionary where Key == String, Value == Sendable {
 			// return the actual enum case value that matches the string label
 			return allCases[index]
 		}
+        else if T.self == Date.self {
+            // Handle Date type using the new extractDate method
+            let date = try extractDate(named: name)
+            return date as! T
+        }
 		else {
             throw MCPToolError.invalidArgumentType(
                 parameterName: name,
@@ -164,5 +169,49 @@ public extension Dictionary where Key == String, Value == Sendable {
                 actualType: String(describing: Swift.type(of: self[name] ?? "nil"))
             )
         }
+    }
+    
+    /// Extracts a Date parameter from the dictionary, attempting multiple parsing strategies
+    /// - Parameter name: The name of the parameter
+    /// - Returns: The extracted Date value
+    /// - Throws: MCPToolError.invalidArgumentType if the parameter cannot be converted to a Date
+    func extractDate(named name: String) throws -> Date {
+        guard let anyValue = self[name] else {
+            preconditionFailure("Failed to retrieve value for parameter \(name)")
+        }
+        
+        // If it's already a Date, return it
+        if let date = anyValue as? Date {
+            return date
+        }
+        
+        // Try parsing as string
+        if let stringValue = anyValue as? String {
+            // Try ISO 8601 date format
+            let isoFormatter = ISO8601DateFormatter()
+            if let date = isoFormatter.date(from: stringValue) {
+                return date
+            }
+            
+            // Try Unix timestamp (both integer and decimal)
+            if let timestampDouble = Double(stringValue) {
+                return Date(timeIntervalSince1970: timestampDouble)
+            }
+        }
+        
+        // Try direct conversion from number
+        if let timestampDouble = anyValue as? Double {
+            return Date(timeIntervalSince1970: timestampDouble)
+        }
+		
+        if let timestampInt = anyValue as? Int {
+            return Date(timeIntervalSince1970: TimeInterval(timestampInt))
+        }
+        
+        throw MCPToolError.invalidArgumentType(
+            parameterName: name,
+            expectedType: "ISO 8601 Date",
+            actualType: String(describing: Swift.type(of: anyValue))
+        )
     }
 } 
