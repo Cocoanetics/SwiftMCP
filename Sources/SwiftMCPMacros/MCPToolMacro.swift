@@ -82,7 +82,6 @@ public struct MCPToolMacro: PeerMacro {
 					let stringValue = stringLiteral.segments.description
 					// Remove quotes and escape special characters for string interpolation
 					let cleanedValue = stringValue
-						.replacingOccurrences(of: "\"", with: "\\\"")
 					descriptionArg = "\"\(cleanedValue)\""
 					hasExplicitDescription = true
 					break
@@ -111,12 +110,8 @@ public struct MCPToolMacro: PeerMacro {
 			}
 			// Use the extracted description if available
 			else if !documentation.description.isEmpty {
-				// Ensure the description is properly escaped and doesn't contain unprintable characters
-				let escapedDescription = documentation.description
-					.replacingOccurrences(of: "\"", with: "\\\"")
-					.replacingOccurrences(of: "\t", with: " ")  // Replace tabs with spaces
-				
-				descriptionArg = "\"\(escapedDescription)\""
+				// The description is already escaped from the Documentation struct
+				descriptionArg = "\"\(documentation.description)\""
 				foundDescriptionInDocs = true
 			}
 		}
@@ -169,12 +164,8 @@ public struct MCPToolMacro: PeerMacro {
 			} 
 			// Get parameter description from the Documentation struct
 			else if let description = documentation.parameters[paramName], !description.isEmpty {
-				// Ensure the parameter description is properly escaped and doesn't contain unprintable characters
-				let escapedDescription = description
-					.replacingOccurrences(of: "\"", with: "\\\"")
-					.replacingOccurrences(of: "\t", with: " ")  // Replace tabs with spaces
-				
-				paramDescription = "\"\(escapedDescription)\""
+				// The description is already escaped from the Documentation struct
+				paramDescription = "\"\(description)\""
 			}
 			
 			// Extract default value if it exists
@@ -228,7 +219,7 @@ public struct MCPToolMacro: PeerMacro {
 				\(parameterString.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.joined(separator: ",\n        "))
 			],
 			returnType: \(returnTypeString),
-			returnTypeDescription: \(documentation.returns.map { "\"\($0.replacingOccurrences(of: "\"", with: "\\\"").replacingOccurrences(of: "\t", with: " "))\"" } ?? "nil"),
+			returnTypeDescription: \(documentation.returns.map { "\"\($0)\"" } ?? "nil"),
 			isAsync: \(funcDecl.signature.effectSpecifiers?.asyncSpecifier != nil),
 			isThrowing: \(funcDecl.signature.effectSpecifiers?.throwsClause?.throwsSpecifier != nil)
 		)

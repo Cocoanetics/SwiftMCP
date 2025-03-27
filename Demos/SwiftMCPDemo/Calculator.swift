@@ -3,12 +3,22 @@ import SwiftMCP
 
 /**
  A Calculator for simple math doing additionals, subtractions etc.
+ 
+ Testing "quoted" stuff. And on multiple lines. 'single quotes'
  */
 @MCPServer(name: "SwiftMCP Demo")
 actor Calculator {
 	
 	// must be CaseIterable to 
-	enum Options {
+	enum Options: CaseIterable, CustomStringConvertible {
+		var description: String
+		{
+			switch self {
+				case .all: return "ALL"
+				case .unread: return "UNREAD"
+			}
+		}
+		
 		case all
 		case unread
 	}

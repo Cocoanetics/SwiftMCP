@@ -225,6 +225,19 @@ func testEmptyLinesBetweenFields() {
     #expect(doc.description == "This is a function description")
     #expect(doc.parameters["x"] == "X parameter")
     #expect(doc.returns == "Return value")
-} 
+}
+
+@Test("Preserves paragraph breaks and escapes quotes in documentation")
+func testParagraphBreaksAndQuotes() {
+    let docText = """
+    /**
+     A Calculator for simple math doing additionals, subtractions etc.
+     
+     Testing "quoted" stuff. And on multiple lines. 'single quotes'
+     */
+    """
+    let doc = Documentation(from: docText)
+    #expect(doc.description == "A Calculator for simple math doing additionals, subtractions etc.\\n\\nTesting \\\"quoted\\\" stuff. And on multiple lines. \\'single quotes\\'")
+}
 
 #endif

@@ -23,6 +23,7 @@ struct Documentation {
 		
 		// Remove comment markers and extra whitespace from each line.
 		var cleanedLines = [String]()
+		var previousLineWasEmpty = false
 		for var line in lines {
 			// Trim whitespace first.
 			line = line.trimmingCharacters(in: .whitespaces)
@@ -51,10 +52,15 @@ struct Documentation {
 			// Remove unprintable ASCII characters
 			line = line.removingUnprintableCharacters
 			
-			// If the line isn't empty after cleaning, keep it.
-			if !line.isEmpty {
+			// If the line is empty and the previous line wasn't empty, keep it to preserve paragraph breaks
+			if line.isEmpty {
+				if !previousLineWasEmpty {
+					cleanedLines.append(line)
+				}
+			} else {
 				cleanedLines.append(line)
 			}
+			previousLineWasEmpty = line.isEmpty
 		}
 		
 		// We'll accumulate the initial description and any parameter descriptions.
@@ -73,7 +79,8 @@ struct Documentation {
 		func flushCurrentParameter() {
 			if let paramName = currentParameterName {
 				let fullDescription = currentParameterLines.joined(separator: " ").trimmingCharacters(in: .whitespaces)
-				parameters[paramName] = fullDescription
+				// Escape the description when storing it
+				parameters[paramName] = fullDescription.escapedForSwiftString
 			}
 			currentParameterName = nil
 			currentParameterLines = []
@@ -209,15 +216,45 @@ struct Documentation {
 		// Flush any parameter still being accumulated.
 		flushCurrentParameter()
 		
-		// Combine initial description lines into a single string.
-		let initialDescription = initialDescriptionLines.joined(separator: " ").trimmingCharacters(in: .whitespaces)
+		// Combine initial description lines into a single string, preserving paragraph breaks
+		var initialDescription = ""
+		previousLineWasEmpty = false  // Reuse the existing variable
+		for line in initialDescriptionLines {
+			if line.isEmpty {
+				if !previousLineWasEmpty {
+					initialDescription += "\n\n"
+				}
+			} else {
+				if !initialDescription.isEmpty && !previousLineWasEmpty {
+					initialDescription += " "
+				}
+				initialDescription += line
+			}
+			previousLineWasEmpty = line.isEmpty
+		}
+		initialDescription = initialDescription.trimmingCharacters(in: .whitespacesAndNewlines)
 		
-		// Combine returns lines into a single string.
-		let returnsDescription = returnsLines.isEmpty ? nil : returnsLines.joined(separator: " ").trimmingCharacters(in: .whitespaces)
+		// Combine returns lines into a single string, preserving paragraph breaks
+		var returnsDescription = ""
+		previousLineWasEmpty = false  // Reuse the existing variable
+		for line in returnsLines {
+			if line.isEmpty {
+				if !previousLineWasEmpty {
+					returnsDescription += "\n\n"
+				}
+			} else {
+				if !returnsDescription.isEmpty && !previousLineWasEmpty {
+					returnsDescription += " "
+				}
+				returnsDescription += line
+			}
+			previousLineWasEmpty = line.isEmpty
+		}
+		returnsDescription = returnsDescription.trimmingCharacters(in: .whitespacesAndNewlines)
 		
-		self.description = initialDescription
+		self.description = initialDescription.escapedForSwiftString
 		self.parameters = parameters
-		self.returns = returnsDescription
+		self.returns = returnsDescription.isEmpty ? nil : returnsDescription.escapedForSwiftString
 	}
 }
 
@@ -238,14 +275,4 @@ fileprivate func parseParameterLine(from line: String) -> (name: String, descrip
 		}
 	}
 	return nil
-}
-
-extension String {
-	var removingUnprintableCharacters: String {
-		// Create a character set of printable ASCII characters (32-126) plus newline, tab, etc.
-		let printableCharacters = CharacterSet(charactersIn: " \t\n\r").union(CharacterSet(charactersIn: UnicodeScalar(32)...UnicodeScalar(126)))
-		
-		// Filter out any characters that are not in the printable set
-		return unicodeScalars.filter { printableCharacters.contains($0) }.map { String($0) }.joined()
-	}
 }

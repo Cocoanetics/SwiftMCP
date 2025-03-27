@@ -100,7 +100,7 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
 		// Extract description from leading documentation
 		let leadingTrivia = declaration.leadingTrivia.description
 		let documentation = Documentation(from: leadingTrivia)
-		let serverDescription = documentation.description.isEmpty ? "nil" : "\"\(documentation.description.replacingOccurrences(of: "\"", with: "\\\""))\""
+		let serverDescription = documentation.description.isEmpty ? "nil" : "\"\(documentation.description)\""
 		
 		let nameProperty = "private let __mcpServerName = \"\(serverName)\""
 		let versionProperty = "private let __mcpServerVersion = \"\(serverVersion)\""
