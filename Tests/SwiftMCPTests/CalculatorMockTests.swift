@@ -192,7 +192,7 @@ func testDivideViaMockClient() async throws {
     let text = unwrap(firstContent["text"])
     
     #expect(type == "text")
-    #expect(text == "5.0")  // 10 / 2 = 5.0
+    #expect(Double(text) == 5)  // 10 / 2 = 5.0
 }
 
 @Test("Tests array processing with mock client")

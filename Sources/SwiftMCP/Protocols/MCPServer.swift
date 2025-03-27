@@ -243,16 +243,19 @@ public extension MCPServer {
         // Call the appropriate wrapper method based on the tool name
         do {
             let result = try await self.callTool(toolName, arguments: arguments)
-            let responseText: String
-            
-            // Use Mirror to check if the result is Void
-            let mirror = Mirror(reflecting: result)
-            if mirror.displayStyle == .tuple && mirror.children.isEmpty {
-                responseText = ""  // Convert Void to empty string
-            } else {
-                responseText = "\(result)"
-            }
-            
+			
+			let responseText: String
+			
+			if let resultString = result as? String {
+				// transfer string directly so we don't get quotes
+				responseText = resultString
+			}
+			else
+			{
+				let jsonData = try JSONEncoder().encode(result)
+				responseText = String(data: jsonData, encoding: .utf8) ?? ""
+			}
+			
             var response = JSONRPCMessage()
             response.jsonrpc = "2.0"
             response.id = request.id
