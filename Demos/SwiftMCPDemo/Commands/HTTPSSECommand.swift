@@ -96,9 +96,6 @@ final class HTTPSSECommand: AsyncParsableCommand {
         
         let calculator = Calculator()
 		
-		print(calculator.mcpToolMetadata)
-		print(calculator.mcpTools)
-
         let host = String.localHostname
         print("MCP Server \(calculator.serverName) (\(calculator.serverVersion)) started with HTTP+SSE transport on http://\(host):\(port)/sse")
         
