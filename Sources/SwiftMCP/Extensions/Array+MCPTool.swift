@@ -12,12 +12,11 @@ extension Array where Element == MCPToolMetadata {
         return self.map { meta in
             // Create properties for the JSON schema
             let properties = Dictionary(uniqueKeysWithValues: meta.parameters.map { param in
-
-				return (param.name, param.jsonSchema)
+                return (param.name, param.jsonSchema)
             })
             
-            // Determine which parameters are required (those without default values)
-            let required = meta.parameters.filter { $0.defaultValue == nil }.map { $0.name }
+            // Determine which parameters are required using the isRequired property
+            let required = meta.parameters.filter { $0.isRequired }.map { $0.name }
             
             // Create the input schema
             let inputSchema = JSONSchema.object(

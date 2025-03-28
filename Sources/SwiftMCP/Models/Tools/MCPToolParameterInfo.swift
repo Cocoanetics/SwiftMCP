@@ -27,6 +27,9 @@ public struct MCPToolParameterInfo: Sendable {
     /// The possible values for enum parameters
     public let enumValues: [String]?
     
+    /// Whether the parameter is required (no default value)
+    public let isRequired: Bool
+    
     /**
      Creates a new parameter info with the specified name, type, description, and default value.
      
@@ -45,5 +48,6 @@ public struct MCPToolParameterInfo: Sendable {
         self.description = description
         self.defaultValue = defaultValue
         self.enumValues = enumValues
+        self.isRequired = defaultValue == nil
     }
 } 

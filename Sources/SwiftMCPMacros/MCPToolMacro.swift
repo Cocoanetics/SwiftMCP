@@ -233,6 +233,7 @@ public struct MCPToolMacro: PeerMacro {
 			// Use the Any extension to get case labels if available
 			let enumValuesStr = ".init(caseLabelsFrom: \(paramType).self)"
 			
+			// Create parameter info with isRequired property
 			parameterString += "MCPToolParameterInfo(name: \"\(paramName)\", label: \"\(paramLabel)\", type: \"\(paramType)\", description: \(paramDescription), defaultValue: \(defaultValue), enumValues: \(enumValuesStr))"
 			
 			// Store parameter info for wrapper function generation
