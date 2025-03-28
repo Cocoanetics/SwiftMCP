@@ -39,6 +39,7 @@ actor Calculator {
 		startDate: String? = nil,
 		endDate: String? = nil,
 		listNames: [String]? = nil,
+		alarms: [Int]? = nil,
 		searchText: String? = nil
 	) {
 		

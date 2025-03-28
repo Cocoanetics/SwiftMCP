@@ -236,7 +236,11 @@ public struct MCPToolMacro: PeerMacro {
 			// Create parameter info with isRequired property
 			let isOptionalType = paramType.hasSuffix("?") || paramType.hasSuffix("!")
 			let isRequired = defaultValue == "nil" && !isOptionalType
-			parameterString += "MCPToolParameterInfo(name: \"\(paramName)\", label: \"\(paramLabel)\", type: \"\(paramType)\", description: \(paramDescription), defaultValue: \(defaultValue), enumValues: \(enumValuesStr), isRequired: \(isRequired))"
+			
+			// Strip optional marker from type for JSON schema
+			let baseType = isOptionalType ? String(paramType.dropLast()) : paramType
+			
+			parameterString += "MCPToolParameterInfo(name: \"\(paramName)\", label: \"\(paramLabel)\", type: \"\(baseType)\", description: \(paramDescription), defaultValue: \(defaultValue), enumValues: \(enumValuesStr), isRequired: \(isRequired))"
 			
 			// Store parameter info for wrapper function generation
 			parameterInfos.append((name: paramName, label: paramLabel, type: paramType, defaultValue: defaultValue))
