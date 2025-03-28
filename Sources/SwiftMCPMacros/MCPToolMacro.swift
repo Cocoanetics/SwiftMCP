@@ -202,7 +202,7 @@ public struct MCPToolMacro: PeerMacro {
 			// Use the Any extension to get case labels if available
 			let enumValuesStr = ".init(caseLabelsFrom: \(paramType).self)"
 			
-			parameterString += "MCPToolParameterInfo(name: \"\(paramName)\",    label: \"\(paramLabel)\",    type: \"\(paramType)\",    description: \(paramDescription),    defaultValue: \(defaultValue),    enumValues: \(enumValuesStr))"
+			parameterString += "MCPToolParameterInfo(name: \"\(paramName)\", label: \"\(paramLabel)\", type: \"\(paramType)\", description: \(paramDescription), defaultValue: \(defaultValue), enumValues: \(enumValuesStr))"
 			
 			// Store parameter info for wrapper function generation
 			parameterInfos.append((name: paramName, label: paramLabel, type: paramType, defaultValue: defaultValue))
@@ -215,9 +215,7 @@ public struct MCPToolMacro: PeerMacro {
 		let __mcpMetadata_\(functionName) = MCPToolMetadata(
 			name: "\(functionName)",
 			description: \(descriptionArg),
-			parameters: [
-				\(parameterString.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.joined(separator: ",\n        "))
-			],
+			parameters: [\(parameterString)],
 			returnType: \(returnTypeString),
 			returnTypeDescription: \(documentation.returns.map { "\"\($0)\"" } ?? "nil"),
 			isAsync: \(funcDecl.signature.effectSpecifiers?.asyncSpecifier != nil),
