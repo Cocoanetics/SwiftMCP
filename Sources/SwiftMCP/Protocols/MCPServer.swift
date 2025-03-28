@@ -81,7 +81,7 @@ public protocol MCPServer {
      - Returns: The result of the tool execution
      - Throws: An error if the tool execution fails
      */
-    func callTool(_ name: String, arguments: [String: Sendable]) async throws -> Sendable & Codable
+    func callTool(_ name: String, arguments: [String: Sendable]) async throws -> Encodable & Sendable 
     
     /**
      Handles a JSON-RPC request and generates an appropriate response.
