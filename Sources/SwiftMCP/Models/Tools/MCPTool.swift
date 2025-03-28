@@ -63,54 +63,6 @@ extension MCPTool: Codable {
 }
 
 /**
- Extension to provide utility methods for working with MCP tools.
- */
-extension MCPTool {
-	/**
-	 Enriches a dictionary of arguments with default values for any missing parameters.
-	 
-	 - Parameters:
-	   - arguments: The original arguments dictionary
-	   - object: The object containing the function metadata
-	 
-	 - Returns: A new dictionary with default values added for missing parameters
-	 - Throws: MCPToolError if required parameters are missing or if parameter conversion fails
-	 */
-	public func enrichArguments(_ arguments: [String: Sendable], forObject object: Any) throws -> [String: Sendable] {
-		// Use the provided function name or fall back to the tool's name
-		let metadataKey = "__mcpMetadata_\(name)"
-		
-		// Create a copy of the arguments dictionary
-		var enrichedArguments = arguments
-		
-		// Find the metadata for the function using reflection
-		let mirror = Mirror(reflecting: object)
-		guard let child = mirror.children.first(where: { $0.label == metadataKey }),
-			  let metadata = child.value as? MCPToolMetadata else {
-			// If no metadata is found, return the original arguments
-			return arguments
-		}
-		
-		// Check for missing required parameters
-		for param in metadata.parameters {
-			if enrichedArguments[param.name] == nil && param.defaultValue == nil {
-				throw MCPToolError.missingRequiredParameter(parameterName: param.name)
-			}
-		}
-		
-		// Add default values for parameters that are missing from the arguments dictionary
-		for param in metadata.parameters {
-			if enrichedArguments[param.name] == nil, let defaultValue = param.defaultValue {
-				
-				enrichedArguments[param.name] = defaultValue
-			}
-		}
-		
-		return enrichedArguments
-	}
-}
-
-/**
  Extension to make JSONSchema conform to Codable
  */
 extension JSONSchema: Codable {

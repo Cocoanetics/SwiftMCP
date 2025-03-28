@@ -141,13 +141,13 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
 /// - Returns: The result of the tool call
 /// - Throws: MCPToolError if the tool doesn't exist or cannot be called
 public func callTool(_ name: String, arguments: [String: Sendable]) async throws -> (Codable & Sendable) {
-   // Find the tool by name
-   guard let tool = mcpTools.first(where: { $0.name == name }) else {
+   // Find the tool metadata by name
+   guard let metadata = mcpToolMetadata(for: name) else {
       throw MCPToolError.unknownTool(name: name)
    }
    
    // Enrich arguments with default values
-   let enrichedArguments = try tool.enrichArguments(arguments, forObject: self)
+   let enrichedArguments = try metadata.enrichArguments(arguments)
    
    // Call the appropriate wrapper method based on the tool name
    switch name {

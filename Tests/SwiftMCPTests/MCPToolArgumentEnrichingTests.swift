@@ -14,14 +14,12 @@ import SwiftMCP
 func testEnrichArguments() throws {
     let calculator = Calculator()
     
-    // Get the add tool from the calculator
-    guard let tool = calculator.mcpTools.first(where: { $0.name == "add" }) else {
-        throw TestError("Could not find add tool")
-    }
+    // Get the add tool metadata from the calculator
+    let metadata = unwrap(calculator.mcpToolMetadata(for: "add"))
     
     // Test enriching arguments
     let arguments: [String: Sendable] = ["a": 2, "b": 3]
-    let enrichedArguments = try tool.enrichArguments(arguments, forObject: calculator as Any)
+    let enrichedArguments = try metadata.enrichArguments(arguments)
     
     // Check that the arguments were not changed
     #expect(enrichedArguments.count == 2)
@@ -33,14 +31,12 @@ func testEnrichArguments() throws {
 func testEnrichArgumentsWithExplicitFunctionName() throws {
     let calculator = Calculator()
     
-    // Get the add tool from the calculator
-    guard let tool = calculator.mcpTools.first(where: { $0.name == "add" }) else {
-        throw TestError("Could not find add tool")
-    }
+    // Get the add tool metadata from the calculator
+    let metadata = unwrap(calculator.mcpToolMetadata(for: "add"))
     
     // Test enriching arguments with explicit function name
     let arguments: [String: Sendable] = ["a": 2, "b": 3]
-    let enrichedArguments = try tool.enrichArguments(arguments, forObject: calculator as Any)
+    let enrichedArguments = try metadata.enrichArguments(arguments)
     
     // Check that the arguments were not changed
     #expect(enrichedArguments.count == 2)
@@ -52,14 +48,12 @@ func testEnrichArgumentsWithExplicitFunctionName() throws {
 func testEnrichArgumentsWithNoDefaults() throws {
     let calculator = Calculator()
     
-    // Get a tool from the calculator
-    guard let tool = calculator.mcpTools.first(where: { $0.name == "add" }) else {
-        throw TestError("Could not find add tool")
-    }
+    // Get the add tool metadata from the calculator
+    let metadata = unwrap(calculator.mcpToolMetadata(for: "add"))
     
     // Test enriching arguments with no default values
     let arguments: [String: Sendable] = ["a": 2, "b": 3]
-    let enrichedArguments = try tool.enrichArguments(arguments, forObject: calculator as Any)
+    let enrichedArguments = try metadata.enrichArguments(arguments)
     
     // Check that the arguments were not changed
     #expect(enrichedArguments.count == 2)
@@ -71,14 +65,12 @@ func testEnrichArgumentsWithNoDefaults() throws {
 func testEnrichArgumentsWithMissingRequiredArgument() throws {
     let calculator = Calculator()
     
-    // Get a tool from the calculator
-    guard let tool = calculator.mcpTools.first(where: { $0.name == "add" }) else {
-        throw TestError("Could not find add tool")
-    }
+    // Get the add tool metadata from the calculator
+    let metadata = unwrap(calculator.mcpToolMetadata(for: "add"))
     
     // Test enriching arguments with a missing required argument
     #expect(throws: MCPToolError.self, "Should notice missing parameter") {
-        try tool.enrichArguments(["a": 2], forObject: calculator)
+        try metadata.enrichArguments(["a": 2])
     }
 }
 
@@ -86,14 +78,12 @@ func testEnrichArgumentsWithMissingRequiredArgument() throws {
 func testEnrichArgumentsWithTypeConversion() throws {
     let calculator = Calculator()
     
-    // Get a tool from the calculator
-    guard let tool = calculator.mcpTools.first(where: { $0.name == "add" }) else {
-        throw TestError("Could not find add tool")
-    }
+    // Get the add tool metadata from the calculator
+    let metadata = unwrap(calculator.mcpToolMetadata(for: "add"))
     
     // Test enriching arguments with string values that need to be converted
     let arguments: [String: Sendable] = ["a": "2", "b": "3"]
-    let enrichedArguments = try tool.enrichArguments(arguments, forObject: calculator as Any)
+    let enrichedArguments = try metadata.enrichArguments(arguments)
     
     // Check that the arguments were not changed (enrichArguments doesn't do type conversion)
     #expect(enrichedArguments.count == 2)
@@ -105,23 +95,21 @@ func testEnrichArgumentsWithTypeConversion() throws {
 func testSubtractArguments() throws {
     let calculator = Calculator()
     
-    // Get a tool from the calculator
-    guard let tool = calculator.mcpTools.first(where: { $0.name == "subtract" }) else {
-        throw TestError("Could not find subtract tool")
-    }
+    // Get the subtract tool metadata from the calculator
+    let metadata = unwrap(calculator.mcpToolMetadata(for: "subtract"))
     
     // Test with no arguments - should throw missing required parameter
     #expect(throws: MCPToolError.self, "Should notice missing parameter") {
-        try tool.enrichArguments([:], forObject: calculator)
+        try metadata.enrichArguments([:])
     }
     
     // Test with partial arguments - should throw missing required parameter
     #expect(throws: MCPToolError.self, "Should notice missing parameter") {
-        try tool.enrichArguments(["b": 5], forObject: calculator)
+        try metadata.enrichArguments(["b": 5])
     }
     
     // Test with all arguments - no defaults should be added
-    let allArgs = try tool.enrichArguments(["a": 20, "b": 5], forObject: calculator)
+    let allArgs = try metadata.enrichArguments(["a": 20, "b": 5])
     #expect(allArgs.count == 2)
     #expect(allArgs["a"] as? Int == 20)
     #expect(allArgs["b"] as? Int == 5)
@@ -131,23 +119,21 @@ func testSubtractArguments() throws {
 func testMultiplyArguments() throws {
     let calculator = Calculator()
     
-    // Get a tool from the calculator
-    guard let tool = calculator.mcpTools.first(where: { $0.name == "multiply" }) else {
-        throw TestError("Could not find multiply tool")
-    }
+    // Get the multiply tool metadata from the calculator
+    let metadata = unwrap(calculator.mcpToolMetadata(for: "multiply"))
     
     // Test with no arguments - should throw missing required parameter
     #expect(throws: MCPToolError.self, "Should notice missing parameter") {
-        try tool.enrichArguments([:], forObject: calculator)
+        try metadata.enrichArguments([:])
     }
     
     // Test with partial arguments - should throw missing required parameter
     #expect(throws: MCPToolError.self, "Should notice missing parameter") {
-        try tool.enrichArguments(["b": 5], forObject: calculator)
+        try metadata.enrichArguments(["b": 5])
     }
     
     // Test with all arguments - no defaults should be added
-    let allArgs = try tool.enrichArguments(["a": 20, "b": 5], forObject: calculator)
+    let allArgs = try metadata.enrichArguments(["a": 20, "b": 5])
     #expect(allArgs.count == 2)
     #expect(allArgs["a"] as? Int == 20)
     #expect(allArgs["b"] as? Int == 5)
