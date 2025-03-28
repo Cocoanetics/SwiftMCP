@@ -41,13 +41,13 @@ public struct MCPToolParameterInfo: Sendable {
        - defaultValue: An optional default value for the parameter
        - enumValues: The possible values if this is an enum parameter
      */
-    public init(name: String, label: String, type: String, description: String? = nil, defaultValue: Sendable? = nil, enumValues: [String]? = nil) {
+    public init(name: String, label: String, type: String, description: String? = nil, defaultValue: Sendable? = nil, enumValues: [String]? = nil, isRequired: Bool) {
         self.name = name
         self.label = label
         self.type = type
         self.description = description
         self.defaultValue = defaultValue
         self.enumValues = enumValues
-        self.isRequired = defaultValue == nil
+        self.isRequired = isRequired
     }
 } 

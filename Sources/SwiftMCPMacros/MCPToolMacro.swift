@@ -234,7 +234,9 @@ public struct MCPToolMacro: PeerMacro {
 			let enumValuesStr = ".init(caseLabelsFrom: \(paramType).self)"
 			
 			// Create parameter info with isRequired property
-			parameterString += "MCPToolParameterInfo(name: \"\(paramName)\", label: \"\(paramLabel)\", type: \"\(paramType)\", description: \(paramDescription), defaultValue: \(defaultValue), enumValues: \(enumValuesStr))"
+			let isOptionalType = paramType.hasSuffix("?") || paramType.hasSuffix("!")
+			let isRequired = defaultValue == "nil" && !isOptionalType
+			parameterString += "MCPToolParameterInfo(name: \"\(paramName)\", label: \"\(paramLabel)\", type: \"\(paramType)\", description: \(paramDescription), defaultValue: \(defaultValue), enumValues: \(enumValuesStr), isRequired: \(isRequired))"
 			
 			// Store parameter info for wrapper function generation
 			parameterInfos.append((name: paramName, label: paramLabel, type: paramType, defaultValue: defaultValue))
