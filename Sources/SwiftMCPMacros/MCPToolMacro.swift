@@ -270,7 +270,12 @@ public struct MCPToolMacro: PeerMacro {
 			let paramType = param.type
 			
 			// Use the parameter extraction utility with appropriate type conversions
-			if param.type == "Double" {
+			if param.type.hasSuffix("?") || param.type.hasSuffix("!") {
+				wrapperMethod += """
+				
+				let \(paramName): \(paramType) = params.extractOptionalParameter(named: "\(paramName)")
+				"""
+			} else if param.type == "Double" {
 				wrapperMethod += """
 				
 				let \(paramName) = try params.extractDouble(named: "\(paramName)")

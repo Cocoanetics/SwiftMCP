@@ -19,7 +19,16 @@ public extension Dictionary where Key == String, Value == Sendable {
         if let value = anyValue as? T {
             return value
         }
-		else if let caseType = T.self as? any CaseIterable.Type
+        else if T.self == Bool.self {
+            let boolValue = try extractBool(named: name)
+            return boolValue as! T
+        }
+		else if T.self == Date.self {
+			// Handle Date type using the new extractDate method
+			let date = try extractDate(named: name)
+			return date as! T
+		}
+        else if let caseType = T.self as? any CaseIterable.Type
 		{
 			guard let string = anyValue as? String else
 			{
@@ -45,11 +54,6 @@ public extension Dictionary where Key == String, Value == Sendable {
 			// return the actual enum case value that matches the string label
 			return allCases[index]
 		}
-        else if T.self == Date.self {
-            // Handle Date type using the new extractDate method
-            let date = try extractDate(named: name)
-            return date as! T
-        }
 		else {
             throw MCPToolError.invalidArgumentType(
                 parameterName: name,
@@ -58,6 +62,19 @@ public extension Dictionary where Key == String, Value == Sendable {
             )
         }
     }
+	
+	/// Extracts a parameter of the specified type from the dictionary, returning nil if the parameter is missing or invalid
+	/// - Parameter name: The name of the parameter
+	/// - Returns: The extracted value of type T, or nil if the parameter is missing or invalid
+	func extractOptionalParameter<T>(named name: String) -> T? {
+		// If the parameter is missing, return nil
+		guard self[name] != nil else {
+			return nil
+		}
+		
+		// Use the throwing version with try? to handle any conversion errors
+		return try? extractParameter(named: name) as T
+	}
     
     /// Extracts an Int parameter from the dictionary
     /// - Parameter name: The name of the parameter
@@ -211,6 +228,43 @@ public extension Dictionary where Key == String, Value == Sendable {
         throw MCPToolError.invalidArgumentType(
             parameterName: name,
             expectedType: "ISO 8601 Date",
+            actualType: String(describing: Swift.type(of: anyValue))
+        )
+    }
+    
+    /// Extracts a Bool parameter from the dictionary, accepting both boolean and string values
+    /// - Parameter name: The name of the parameter
+    /// - Returns: The extracted Bool value
+    /// - Throws: MCPToolError.invalidArgumentType if the parameter cannot be converted to a Bool
+    func extractBool(named name: String) throws -> Bool {
+        guard let anyValue = self[name] else {
+            preconditionFailure("Failed to retrieve value for parameter \(name)")
+        }
+        
+        // If it's already a Bool, return it
+        if let boolValue = anyValue as? Bool {
+            return boolValue
+        }
+        
+        // Try parsing as string
+        if let stringValue = anyValue as? String {
+            switch stringValue.lowercased() {
+            case "true":
+                return true
+            case "false":
+                return false
+            default:
+                throw MCPToolError.invalidArgumentType(
+                    parameterName: name,
+                    expectedType: "Bool",
+                    actualType: "String"
+                )
+            }
+        }
+        
+        throw MCPToolError.invalidArgumentType(
+            parameterName: name,
+            expectedType: "Bool",
             actualType: String(describing: Swift.type(of: anyValue))
         )
     }
