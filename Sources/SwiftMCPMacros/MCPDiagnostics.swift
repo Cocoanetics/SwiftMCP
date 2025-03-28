@@ -29,6 +29,9 @@ enum MCPToolDiagnostic: DiagnosticMessage {
     
     /// Error when a parameter has an unsupported closure type
     case closureTypeNotSupported(paramName: String, typeName: String)
+    
+    /// Error when an optional parameter is missing a default value
+    case optionalParameterNeedsDefault(paramName: String, typeName: String)
 
     var message: String {
         switch self {
@@ -40,18 +43,20 @@ enum MCPToolDiagnostic: DiagnosticMessage {
             return "Parameter '\(paramName)' has an unsupported default value type '\(typeName)'. Only numbers, booleans, and strings are supported."
         case .closureTypeNotSupported(let paramName, let typeName):
             return "Parameter '\(paramName)' has an unsupported closure type '\(typeName)'. Closures are not supported in MCP tools."
+        case .optionalParameterNeedsDefault(let paramName, let typeName):
+            return "Optional parameter '\(paramName)' of type '\(typeName)' requires a default value (e.g. = nil)."
         }
     }
 
     var severity: DiagnosticSeverity {
         switch self {
-        case .onlyFunctions, .invalidDefaultValueType, .closureTypeNotSupported:
+        case .onlyFunctions, .invalidDefaultValueType, .closureTypeNotSupported, .optionalParameterNeedsDefault:
             return .error
         case .missingDescription:
             return .warning
         }
     }
-
+    
     var diagnosticID: MessageID {
         switch self {
         case .onlyFunctions:
@@ -62,6 +67,33 @@ enum MCPToolDiagnostic: DiagnosticMessage {
             return MessageID(domain: "SwiftMCP", id: "invalidDefaultValueType")
         case .closureTypeNotSupported:
             return MessageID(domain: "SwiftMCP", id: "closureTypeNotSupported")
+        case .optionalParameterNeedsDefault:
+            return MessageID(domain: "SwiftMCP", id: "optionalParameterNeedsDefault")
+        }
+    }
+}
+
+enum MCPToolFixItMessage: FixItMessage {
+    case addDefaultValue(paramName: String)
+    
+    var message: String {
+        switch self {
+        case .addDefaultValue(let paramName):
+            return "Add default value '= nil' for parameter '\(paramName)'"
+        }
+    }
+    
+    var diagnosticID: MessageID {
+        switch self {
+        case .addDefaultValue:
+            return MessageID(domain: "SwiftMCP", id: "addDefaultValue")
+        }
+    }
+    
+    var fixItID: MessageID {
+        switch self {
+        case .addDefaultValue:
+            return MessageID(domain: "SwiftMCP", id: "addDefaultValue")
         }
     }
 } 

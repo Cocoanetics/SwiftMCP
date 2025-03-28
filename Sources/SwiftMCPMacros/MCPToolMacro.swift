@@ -155,6 +155,37 @@ public struct MCPToolMacro: PeerMacro {
 				context.diagnose(diagnostic)
 			}
 			
+			// Check for optional parameters without default values
+			let isOptional = param.type.is(OptionalTypeSyntax.self) || 
+							param.type.is(ImplicitlyUnwrappedOptionalTypeSyntax.self) ||
+							paramType.hasSuffix("?") ||
+							paramType.hasSuffix("!")
+			
+			if isOptional && param.defaultValue == nil {
+				let diagnostic = Diagnostic(
+					node: param.type,
+					message: MCPToolDiagnostic.optionalParameterNeedsDefault(
+						paramName: paramName,
+						typeName: paramType
+					),
+					fixIts: [
+						FixIt(
+							message: MCPToolFixItMessage.addDefaultValue(paramName: paramName),
+							changes: [
+								.replace(
+									oldNode: Syntax(param),
+									newNode: Syntax(param.with(\.defaultValue, InitializerClauseSyntax(
+										equal: TokenSyntax.equalToken(leadingTrivia: .spaces(1), trailingTrivia: .spaces(1)),
+										value: ExprSyntax(NilLiteralExprSyntax())
+									)))
+								)
+							]
+						)
+					]
+				)
+				context.diagnose(diagnostic)
+			}
+			
 			// Store parameter info for wrapper function generation
 			
 			// Special case for the longDescription function's text parameter in tests
