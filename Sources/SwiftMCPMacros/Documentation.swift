@@ -78,7 +78,11 @@ struct Documentation {
 		// Helper to flush the current parameter's accumulated lines into our dictionary.
 		func flushCurrentParameter() {
 			if let paramName = currentParameterName {
-				let fullDescription = currentParameterLines.joined(separator: " ").trimmingCharacters(in: .whitespaces)
+				// Join lines with a single space, but preserve existing spaces
+				let fullDescription = currentParameterLines
+					.map { $0.trimmingCharacters(in: .whitespaces) }
+					.filter { !$0.isEmpty }
+					.joined(separator: " ")
 				// Escape the description when storing it
 				parameters[paramName] = fullDescription.escapedForSwiftString
 			}
@@ -200,7 +204,11 @@ struct Documentation {
 			else {
 				if currentParameterName != nil {
 					// If we are in the middle of a parameter, treat the line as a continuation.
-					currentParameterLines.append(line)
+					// Only add non-empty lines and trim whitespace
+					let trimmedLine = line.trimmingCharacters(in: .whitespaces)
+					if !trimmedLine.isEmpty {
+						currentParameterLines.append(trimmedLine)
+					}
 				} else if inReturnsSection && !inOtherSection {
 					// If we're in the returns section, add to returns lines
 					returnsLines.append(line)

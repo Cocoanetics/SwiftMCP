@@ -240,4 +240,29 @@ func testParagraphBreaksAndQuotes() {
     #expect(doc.description == "A Calculator for simple math doing additionals, subtractions etc.\\n\\nTesting \\\"quoted\\\" stuff. And on multiple lines. \\'single quotes\\'")
 }
 
+@Test("Handles parameter descriptions with commas and newlines")
+func testParameterDescriptionsWithCommasAndNewlines() {
+    let docText = """
+    /**
+     Get reminders from the reminders app with flexible filtering options.
+     
+     - Parameters:
+        - completed: If true, fetch completed reminders. If false, fetch incomplete reminders. If not specified, fetch all reminders.
+        - startDate: ISO date string for the start of the date range to fetch reminders from
+        - endDate: ISO date string for the end of the date range to fetch reminders from
+        - listNames: Names of reminder lists to fetch from. If empty or not specified,
+          fetches from all lists.
+        - searchText: Text to search for in reminder titles
+     */
+    """
+    let doc = Documentation(from: docText)
+    #expect(doc.description == "Get reminders from the reminders app with flexible filtering options.")
+    #expect(doc.parameters["completed"] == "If true, fetch completed reminders. If false, fetch incomplete reminders. If not specified, fetch all reminders.")
+    #expect(doc.parameters["startDate"] == "ISO date string for the start of the date range to fetch reminders from")
+    #expect(doc.parameters["endDate"] == "ISO date string for the end of the date range to fetch reminders from")
+    #expect(doc.parameters["listNames"] == "Names of reminder lists to fetch from. If empty or not specified, fetches from all lists.")
+    #expect(doc.parameters["searchText"] == "Text to search for in reminder titles")
+    #expect(doc.returns == nil)
+}
+
 #endif
