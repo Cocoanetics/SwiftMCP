@@ -24,10 +24,15 @@ public extension Dictionary where Key == String, Value == Sendable {
             return boolValue as! T
         }
 		else if T.self == Date.self {
-			// Handle Date type using the new extractDate method
+				// Handle Date type using the new extractDate method
 			let date = try extractDate(named: name)
 			return date as! T
 		}
+        else if T.self == URL.self {
+            // Handle URL type using the new extractURL method
+            let url = try extractURL(named: name)
+            return url as! T
+        }
         else if let caseType = T.self as? any CaseIterable.Type
 		{
 			guard let string = anyValue as? String else
@@ -265,6 +270,34 @@ public extension Dictionary where Key == String, Value == Sendable {
         throw MCPToolError.invalidArgumentType(
             parameterName: name,
             expectedType: "Bool",
+            actualType: String(describing: Swift.type(of: anyValue))
+        )
+    }
+    
+    /// Extracts a URL parameter from the dictionary, accepting both URL objects and strings that can be parsed into URLs
+    /// - Parameter name: The name of the parameter
+    /// - Returns: The extracted URL value
+    /// - Throws: MCPToolError.invalidArgumentType if the parameter cannot be converted to a URL
+    func extractURL(named name: String) throws -> URL {
+        guard let anyValue = self[name] else {
+            preconditionFailure("Failed to retrieve value for parameter \(name)")
+        }
+        
+        // If it's already a URL, return it
+        if let url = anyValue as? URL {
+            return url
+        }
+        
+        // Try parsing as string
+        if let stringValue = anyValue as? String {
+            if let url = URL(string: stringValue) {
+                return url
+            }
+        }
+        
+        throw MCPToolError.invalidArgumentType(
+            parameterName: name,
+            expectedType: "URL",
             actualType: String(describing: Swift.type(of: anyValue))
         )
     }

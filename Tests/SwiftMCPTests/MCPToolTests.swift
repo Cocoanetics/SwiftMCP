@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import SwiftMCP
 
@@ -93,6 +94,18 @@ class MixedDocumentationStyles {
     func regularComment() {}
 }
 
+// Test class with URL parameters
+@MCPServer
+class URLParameterHandling {
+    /// Function that takes a URL parameter
+    /// - Parameter url: The URL to process
+    /// - Returns: The URL's host
+    @MCPTool
+    func processURL(url: URL) -> String {
+        return url.host ?? "no host"
+    }
+}
+
 // MARK: - Tests
 
 @Test
@@ -181,7 +194,7 @@ func testBasicFunctionality() {
             }
             
             // Optional parameters are represented as strings in the schema
-            if case .string(description: let description, enumValues: _) = properties["optional"] {
+            if case .number(description: let description) = properties["optional"] {
                 #expect(description == "An optional parameter")
             } else {
                 #expect(Bool(false), "Expected string schema for parameter 'optional'")
@@ -254,5 +267,45 @@ func testMixedDocumentationStyles() {
         #expect(regularCommentTool.description == "Explicit description needed")
     } else {
         #expect(Bool(false), "Could not find regularComment function")
+    }
+}
+
+@Test("URL parameters should accept both URL objects and valid URL strings")
+func testURLParameters() async throws {
+    let instance = URLParameterHandling()
+    let tools = instance.mcpTools
+    
+    // Test that the URL parameter is represented as a string in the schema
+    if let urlTool = tools.first(where: { $0.name == "processURL" }) {
+        if case .object(let properties, _, _) = urlTool.inputSchema {
+            if case .string(description: let description, enumValues: _) = properties["url"] {
+                #expect(description == "The URL to process")
+            } else {
+                #expect(Bool(false), "URL parameter should be represented as string in schema")
+            }
+        } else {
+            #expect(Bool(false), "Expected object schema")
+        }
+        
+        // Test with valid URL string
+        let validArgs = ["url": "https://example.com"] as [String: Sendable]
+        let validResult = try await instance.callTool("processURL", arguments: validArgs)
+        #expect(validResult as? String == "example.com")
+        
+        // Test with invalid URL string
+        let invalidArgs = ["url": "https://example.com:xyz"] as [String: Sendable]
+        do {
+            _ = try await instance.callTool("processURL", arguments: invalidArgs)
+            #expect(Bool(false), "Should throw error for invalid URL")
+        } catch let error as MCPToolError {
+            if case .invalidArgumentType(let paramName, let expectedType, _) = error {
+                #expect(paramName == "url")
+                #expect(expectedType == "URL")
+            } else {
+                #expect(Bool(false), "Wrong error type")
+            }
+        }
+    } else {
+        #expect(Bool(false), "Could not find processURL function")
     }
 } 
