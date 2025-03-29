@@ -24,33 +24,73 @@ struct Documentation {
 		// Remove comment markers and extra whitespace from each line.
 		var cleanedLines = [String]()
 		var previousLineWasEmpty = false
+		var inDocumentationBlock = false  // Track if we're inside a /** */ block
+		
 		for var line in lines {
 			// Trim whitespace first.
 			line = line.trimmingCharacters(in: .whitespaces)
 			
-			// Remove leading triple-slash markers.
-			if line.hasPrefix("///") {
-				line = line.dropFirst(3).trimmingCharacters(in: .whitespaces)
+			// Skip empty lines outside documentation blocks
+			if line.isEmpty && !inDocumentationBlock {
+				continue
 			}
 			
-			// Remove block comment start/end markers.
+			var shouldProcessLine = false
+			var isDocumentationLine = false
+			
+			// Handle documentation block comments
 			if line.hasPrefix("/**") {
+				inDocumentationBlock = true
 				line = line.replacingOccurrences(of: "/**", with: "")
-			}
-			if line.hasPrefix("/*") {
-				line = line.replacingOccurrences(of: "/*", with: "")
-			}
-			if line.hasSuffix("*/") {
-				line = line.replacingOccurrences(of: "*/", with: "")
+				shouldProcessLine = true
+				isDocumentationLine = true
+				
+				// For single-line blocks, remove trailing */ immediately
+				if line.hasSuffix("*/") {
+					line = String(line.dropLast(2)).trimmingCharacters(in: .whitespaces)
+				}
+			} else if line.hasSuffix("*/") {
+				// For multi-line blocks, remove trailing */ and end block
+				line = String(line.dropLast(2)).trimmingCharacters(in: .whitespaces)
+				shouldProcessLine = inDocumentationBlock
+				isDocumentationLine = inDocumentationBlock
+				inDocumentationBlock = false
+			} else if line.hasPrefix("///") {
+				line = line.dropFirst(3).trimmingCharacters(in: .whitespaces)
+				shouldProcessLine = true
+				isDocumentationLine = true
+			} else {
+				shouldProcessLine = inDocumentationBlock
+				isDocumentationLine = inDocumentationBlock
 			}
 			
-			// Remove any leading asterisks used for formatting.
-			if line.hasPrefix("*") {
+			// Skip non-documentation lines
+			if !shouldProcessLine {
+				continue
+			}
+			
+			// Remove any leading asterisks used for formatting in documentation blocks
+			if inDocumentationBlock && line.hasPrefix("*") {
 				line = line.dropFirst().trimmingCharacters(in: .whitespaces)
 			}
 			
 			// Remove unprintable ASCII characters
 			line = line.removingUnprintableCharacters
+			
+			// For single-line documentation blocks with parameters, split into multiple lines
+			if isDocumentationLine && line.contains(" - Parameter ") {
+				let parts = line.components(separatedBy: " - Parameter ")
+				if parts.count > 1 {
+					// First part is the description
+					cleanedLines.append(parts[0].trimmingCharacters(in: .whitespaces))
+					
+					// Add each parameter as a separate line
+					for paramPart in parts.dropFirst() {
+						cleanedLines.append("- Parameter " + paramPart.trimmingCharacters(in: .whitespaces))
+					}
+					continue
+				}
+			}
 			
 			// If the line is empty and the previous line wasn't empty, keep it to preserve paragraph breaks
 			if line.isEmpty {
@@ -61,6 +101,11 @@ struct Documentation {
 				cleanedLines.append(line)
 			}
 			previousLineWasEmpty = line.isEmpty
+			
+			// Now we can end the documentation block for single-line comments
+			if line.hasSuffix("*/") {
+				inDocumentationBlock = false
+			}
 		}
 		
 		// We'll accumulate the initial description and any parameter descriptions.
@@ -84,7 +129,7 @@ struct Documentation {
 					.filter { !$0.isEmpty }
 					.joined(separator: " ")
 				// Escape the description when storing it
-				parameters[paramName] = fullDescription.escapedForSwiftString
+				parameters[paramName] = fullDescription
 			}
 			currentParameterName = nil
 			currentParameterLines = []
@@ -260,9 +305,9 @@ struct Documentation {
 		}
 		returnsDescription = returnsDescription.trimmingCharacters(in: .whitespacesAndNewlines)
 		
-		self.description = initialDescription.escapedForSwiftString
+		self.description = initialDescription
 		self.parameters = parameters
-		self.returns = returnsDescription.isEmpty ? nil : returnsDescription.escapedForSwiftString
+		self.returns = returnsDescription.isEmpty ? nil : returnsDescription
 	}
 }
 

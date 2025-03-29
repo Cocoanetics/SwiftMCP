@@ -237,7 +237,7 @@ func testParagraphBreaksAndQuotes() {
      */
     """
     let doc = Documentation(from: docText)
-    #expect(doc.description == "A Calculator for simple math doing additionals, subtractions etc.\\n\\nTesting \\\"quoted\\\" stuff. And on multiple lines. \\'single quotes\\'")
+	#expect(doc.description.escapedForSwiftString == "A Calculator for simple math doing additionals, subtractions etc.\\n\\nTesting \\\"quoted\\\" stuff. And on multiple lines. \\'single quotes\\'")
 }
 
 @Test("Handles parameter descriptions with commas and newlines")
@@ -263,6 +263,42 @@ func testParameterDescriptionsWithCommasAndNewlines() {
     #expect(doc.parameters["listNames"] == "Names of reminder lists to fetch from. If empty or not specified, fetches from all lists.")
     #expect(doc.parameters["searchText"] == "Text to search for in reminder titles")
     #expect(doc.returns == nil)
+}
+
+@Test("Ignores MARK comments and correctly parses documentation blocks")
+func testMarkAndDocumentationBlocks() {
+    let docText = """
+    // MARK: - Utilities
+    
+    /**
+       Determines the current user's date/time, language/region and time zone. Use this if that helps clarify this information for subsequent tool calls.
+     */
+    """
+    let doc = Documentation(from: docText)
+    #expect(doc.description == "Determines the current user's date/time, language/region and time zone. Use this if that helps clarify this information for subsequent tool calls.")
+    #expect(doc.parameters.isEmpty)
+    #expect(doc.returns == nil)
+}
+
+@Test("Handles single-line documentation blocks")
+func testSingleLineDocumentationBlocks() {
+    let docText = """
+    /** Single line documentation */
+    """
+    let doc = Documentation(from: docText)
+    #expect(doc.description == "Single line documentation")
+    #expect(doc.parameters.isEmpty)
+    #expect(doc.returns == nil)
+    
+    // Test with parameters
+    let docWithParams = """
+    /** Add two numbers - Parameter x: First number - Parameter y: Second number */
+    """
+    let doc2 = Documentation(from: docWithParams)
+    #expect(doc2.description == "Add two numbers")
+    #expect(doc2.parameters["x"] == "First number")
+    #expect(doc2.parameters["y"] == "Second number")
+    #expect(doc2.returns == nil)
 }
 
 #endif

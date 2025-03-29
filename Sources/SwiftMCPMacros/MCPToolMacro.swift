@@ -111,7 +111,7 @@ public struct MCPToolMacro: PeerMacro {
 			// Use the extracted description if available
 			else if !documentation.description.isEmpty {
 				// The description is already escaped from the Documentation struct
-				descriptionArg = "\"\(documentation.description)\""
+				descriptionArg = "\"\(documentation.description.escapedForSwiftString)\""
 				foundDescriptionInDocs = true
 			}
 		}
@@ -196,7 +196,7 @@ public struct MCPToolMacro: PeerMacro {
 			// Get parameter description from the Documentation struct
 			else if let description = documentation.parameters[paramName], !description.isEmpty {
 				// The description is already escaped from the Documentation struct
-				paramDescription = "\"\(description)\""
+				paramDescription = "\"\(description.escapedForSwiftString)\""
 			}
 			
 			// Extract default value if it exists
@@ -255,7 +255,7 @@ public struct MCPToolMacro: PeerMacro {
 			description: \(descriptionArg),
 			parameters: [\(parameterString)],
 			returnType: \(returnTypeString),
-			returnTypeDescription: \(documentation.returns.map { "\"\($0)\"" } ?? "nil"),
+			returnTypeDescription: \(documentation.returns.map { "\"\($0.escapedForSwiftString)\"" } ?? "nil"),
 			isAsync: \(funcDecl.signature.effectSpecifiers?.asyncSpecifier != nil),
 			isThrowing: \(funcDecl.signature.effectSpecifiers?.throwsClause?.throwsSpecifier != nil)
 		)
