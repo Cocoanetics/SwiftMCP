@@ -230,9 +230,6 @@ public struct MCPToolMacro: PeerMacro {
 				parameterString += ", "
 			}
 			
-			// Use the Any extension to get case labels if available
-			let enumValuesStr = ".init(caseLabelsFrom: \(paramType).self)"
-			
 			// Create parameter info with isRequired property
 			let isOptionalType = paramType.hasSuffix("?") || paramType.hasSuffix("!")
 			let isRequired = defaultValue == "nil" && !isOptionalType
@@ -241,7 +238,7 @@ public struct MCPToolMacro: PeerMacro {
 			let baseType = isOptionalType ? String(paramType.dropLast()) : paramType
 			
 			// Create parameter info with the type directly
-			parameterString += "MCPToolParameterInfo(name: \"\(paramName)\", type: \"\(baseType)\", schemaType: \(baseType).self, description: \(paramDescription), defaultValue: \(defaultValue), enumValues: \(enumValuesStr), isRequired: \(isRequired))"
+			parameterString += "MCPToolParameterInfo(name: \"\(paramName)\", type: \"\(baseType)\", schemaType: \(baseType).self, description: \(paramDescription), defaultValue: \(defaultValue), isRequired: \(isRequired))"
 			
 			// Store parameter info for wrapper function generation
 			parameterInfos.append((name: paramName, label: paramLabel, type: paramType, defaultValue: defaultValue))

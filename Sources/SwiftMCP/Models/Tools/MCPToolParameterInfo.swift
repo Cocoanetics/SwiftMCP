@@ -24,9 +24,6 @@ public struct MCPToolParameterInfo: Sendable {
     /// An optional default value for the parameter
     public let defaultValue: Sendable?
     
-    /// The possible values for enum parameters
-    public let enumValues: [String]?
-    
     /// Whether the parameter is required (no default value)
     public let isRequired: Bool
     
@@ -39,15 +36,13 @@ public struct MCPToolParameterInfo: Sendable {
        - schemaType: The actual type of the parameter (e.g. Address.self)
        - description: An optional description of the parameter
        - defaultValue: An optional default value for the parameter
-       - enumValues: The possible values if this is an enum parameter
      */
-    public init(name: String, type: String, schemaType: Any.Type, description: String? = nil, defaultValue: Sendable? = nil, enumValues: [String]? = nil, isRequired: Bool) {
+    public init(name: String, type: String, schemaType: Any.Type, description: String? = nil, defaultValue: Sendable? = nil, isRequired: Bool) {
         self.name = name
         self.type = type
         self.schemaType = schemaType
         self.description = description
         self.defaultValue = defaultValue
-        self.enumValues = enumValues
         self.isRequired = isRequired
     }
 } 
