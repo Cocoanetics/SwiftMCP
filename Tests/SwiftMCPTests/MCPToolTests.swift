@@ -161,6 +161,13 @@ class EnumArrayTest {
     func processWeekdays(days: [Weekday]) {
         // Implementation not important for the test
     }
+    
+    /// Function that takes an optional array of weekdays
+    /// - Parameter days: Optional array of weekdays
+    @MCPTool
+    func processOptionalWeekdays(days: [Weekday]? = nil) {
+        // Implementation not important for the test
+    }
 }
 
 // Add Weekday enum before the tests
@@ -449,6 +456,47 @@ func testEnumArraySchema() throws {
             #expect(Bool(false), "Could not find days parameter in schema")
             return
         }
+        
+        // Verify it's an array
+        if case .array(let itemsSchema, _) = daysSchema {
+            // Verify the items are strings with enum values
+            if case .string(description: _, enumValues: let enumValues) = itemsSchema {
+                #expect(enumValues != nil, "Array items should have enum values")
+                
+                // Verify the enum values are the Weekday cases
+                let expectedValues = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+                #expect(enumValues?.sorted() == expectedValues.sorted())
+            } else {
+                #expect(Bool(false), "Array items should be strings")
+            }
+        } else {
+            #expect(Bool(false), "Expected array schema")
+        }
+    } else {
+        #expect(Bool(false), "Expected object schema")
+    }
+}
+
+@Test
+func testOptionalEnumArraySchema() throws {
+    let server = EnumArrayTest()
+    let tools = server.mcpTools
+    
+    // Find the processOptionalWeekdays tool
+    guard let tool = tools.first(where: { $0.name == "processOptionalWeekdays" }) else {
+        #expect(Bool(false), "Could not find processOptionalWeekdays tool")
+        return
+    }
+    
+    // Get the schema for the days parameter
+    if case .object(let properties, let required, _) = tool.inputSchema {
+        guard let daysSchema = properties["days"] else {
+            #expect(Bool(false), "Could not find days parameter in schema")
+            return
+        }
+        
+        // Verify it's not in the required array
+        #expect(!required.contains("days"), "Optional parameter should not be required")
         
         // Verify it's an array
         if case .array(let itemsSchema, _) = daysSchema {
