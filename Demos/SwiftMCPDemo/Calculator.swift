@@ -28,23 +28,12 @@ actor Calculator {
 	 
 	 - Parameters:
         - contect: A test contact
-		- completed: If true, fetch completed reminders. If false, fetch incomplete reminders. If not specified, fetch all reminders.
-		- startDate: ISO date string for the start of the date range to fetch reminders from
-		- endDate: ISO date string for the end of the date range to fetch reminders from
-		- listNames: Names of reminder lists to fetch from. If empty or not specified, fetches from all lists.
-		- searchText: Text to search for in reminder titles
 	 */
 	@MCPTool
 	func fetchReminders(
-		contact: ContactInfo,
-		completed: Bool? = nil,
-		startDate: String? = nil,
-		endDate: String? = nil,
-		listNames: [String]? = nil,
-		alarms: [Int]? = nil,
-		searchText: String? = nil
-	) {
-		
+		contact: Address
+	) -> String {
+		return "\(contact)"
 	}
 	
 	/// Sends an email

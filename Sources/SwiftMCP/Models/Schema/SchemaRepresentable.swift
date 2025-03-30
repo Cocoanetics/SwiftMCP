@@ -7,7 +7,7 @@
 
 import Foundation
 
-public protocol SchemaRepresentable {
+public protocol SchemaRepresentable: Codable {
 	static var __schemaMetadata: SchemaMetadata { get }
 	static var schema: JSONSchema { get }
 }

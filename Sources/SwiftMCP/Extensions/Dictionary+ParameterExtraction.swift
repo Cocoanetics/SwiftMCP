@@ -59,6 +59,19 @@ public extension Dictionary where Key == String, Value == Sendable {
 			// return the actual enum case value that matches the string label
 			return allCases[index]
 		}
+        else if let schemaType = T.self as? any SchemaRepresentable.Type {
+            // For SchemaRepresentable types, re-encode the dictionary and decode as the type
+            guard let dict = anyValue as? [String: Any] else {
+                throw MCPToolError.invalidArgumentType(
+                    parameterName: name,
+                    expectedType: "Dictionary",
+                    actualType: String(describing: Swift.type(of: anyValue))
+                )
+            }
+            
+            let data = try JSONSerialization.data(withJSONObject: dict)
+            return try JSONDecoder().decode(schemaType.self, from: data) as! T
+        }
 		else {
             throw MCPToolError.invalidArgumentType(
                 parameterName: name,
