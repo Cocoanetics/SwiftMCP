@@ -1,29 +1,25 @@
 import Foundation
 
-// MARK: - Parameter Extraction Extensions for Dictionaries
-public extension Dictionary where Key == String, Value == Sendable {
-    
-    /// Converts a dictionary or array of dictionaries to a Decodable type
-    /// - Parameters:
-    ///   - value: The dictionary or array of dictionaries to convert
-    ///   - type: The type to convert to
-    /// - Returns: The converted value
-    /// - Throws: MCPToolError.invalidArgumentType if the conversion fails
-    private func convertToDecodable<T: Decodable>(_ value: Any, as type: T.Type) throws -> T {
-        let data: Data
-        if let dict = value as? [String: Any] {
-            data = try JSONSerialization.data(withJSONObject: dict)
-        } else if let array = value as? [[String: Any]] {
-            data = try JSONSerialization.data(withJSONObject: array)
-        } else {
-            throw MCPToolError.invalidArgumentType(
-                parameterName: "value",
-                expectedType: "Dictionary or Array of Dictionaries",
-                actualType: String(describing: Swift.type(of: value))
-            )
-        }
+// MARK: - Dictionary to Decodable Conversion
+extension Dictionary where Key == String, Value == Encodable {
+    func decode<T: Decodable>(_ type: T.Type) throws -> T {
+        let data = try JSONSerialization.data(withJSONObject: self)
         return try JSONDecoder().decode(type, from: data)
     }
+}
+
+// MARK: - Array of Dictionaries to Array of Decodable Conversion
+extension Array where Element == [String: Encodable] {
+    func decode<T: Decodable>(_ type: T.Type) throws -> [T] {
+        return try map { dict in
+            let data = try JSONSerialization.data(withJSONObject: dict)
+            return try JSONDecoder().decode(type, from: data)
+        }
+    }
+}
+
+// MARK: - Parameter Extraction Extensions for Dictionaries
+public extension Dictionary where Key == String, Value == Sendable {
     
     /// Extracts a parameter of the specified type from the dictionary
     /// - Parameter name: The name of the parameter
@@ -78,7 +74,17 @@ public extension Dictionary where Key == String, Value == Sendable {
         }
         else if let schemaType = T.self as? any SchemaRepresentable.Type,
                 let decodableType = schemaType as? Decodable.Type {
-            return try convertToDecodable(anyValue, as: decodableType.self) as! T
+            if let dict = anyValue as? [String: Encodable] {
+                return try dict.decode(decodableType.self) as! T
+            } else if let array = anyValue as? [[String: Encodable]] {
+                return try array.decode(decodableType.self) as! T
+            } else {
+                throw MCPToolError.invalidArgumentType(
+                    parameterName: name,
+                    expectedType: "Dictionary or Array of Dictionaries",
+                    actualType: String(describing: Swift.type(of: anyValue))
+                )
+            }
         }
         else {
             throw MCPToolError.invalidArgumentType(

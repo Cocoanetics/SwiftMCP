@@ -170,6 +170,17 @@ class EnumArrayTest {
     }
 }
 
+// Test class with array of SchemaRepresentable types
+@MCPServer
+class SchemaRepresentableArrayTest {
+    /// Function that takes an array of addresses
+    /// - Parameter addresses: Array of addresses
+    @MCPTool
+    func processAddresses(addresses: [SchemaRepresentableTests.Address]) {
+        // Implementation not important for the test
+    }
+}
+
 // Add Weekday enum before the tests
 enum Weekday: String, CaseIterable {
     case monday
@@ -509,6 +520,57 @@ func testOptionalEnumArraySchema() throws {
                 #expect(enumValues?.sorted() == expectedValues.sorted())
             } else {
                 #expect(Bool(false), "Array items should be strings")
+            }
+        } else {
+            #expect(Bool(false), "Expected array schema")
+        }
+    } else {
+        #expect(Bool(false), "Expected object schema")
+    }
+}
+
+@Test
+func testSchemaRepresentableArraySchema() throws {
+    let server = SchemaRepresentableArrayTest()
+    let tools = server.mcpTools
+    
+    // Find the processAddresses tool
+    guard let tool = tools.first(where: { $0.name == "processAddresses" }) else {
+        #expect(Bool(false), "Could not find processAddresses tool")
+        return
+    }
+    
+    // Get the schema for the addresses parameter
+    if case .object(let properties, let required, _) = tool.inputSchema {
+        guard let addressesSchema = properties["addresses"] else {
+            #expect(Bool(false), "Could not find addresses parameter in schema")
+            return
+        }
+        
+        // Verify it's required
+        #expect(required.contains("addresses"), "Required parameter should be in required array")
+        
+        // Verify it's an array
+        if case .array(let itemsSchema, _) = addressesSchema {
+            // Verify the items are objects with street and city properties
+            if case .object(let itemProperties, let itemRequired, _) = itemsSchema {
+                #expect(itemProperties.count == 2)
+                #expect(itemRequired == ["street", "city"])
+                
+                // Verify property types
+                if case .string(description: _, enumValues: _) = itemProperties["street"] {
+                    // street property is correct
+                } else {
+                    #expect(Bool(false), "Expected string schema for street property")
+                }
+                
+                if case .string(description: _, enumValues: _) = itemProperties["city"] {
+                    // city property is correct
+                } else {
+                    #expect(Bool(false), "Expected string schema for city property")
+                }
+            } else {
+                #expect(Bool(false), "Expected object schema for array items")
             }
         } else {
             #expect(Bool(false), "Expected array schema")
