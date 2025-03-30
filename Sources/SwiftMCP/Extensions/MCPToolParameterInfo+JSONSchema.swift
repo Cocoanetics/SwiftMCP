@@ -7,6 +7,13 @@
 
 import Foundation
 
+// Extension to get element type from array type
+extension Array {
+	static var elementType: Any.Type? {
+		return Element.self
+	}
+}
+
 extension MCPToolParameterInfo {
 	
 	var jsonSchema: JSONSchema {
@@ -20,37 +27,34 @@ extension MCPToolParameterInfo {
 			return JSONSchema.string(description: description, enumValues: caseIterableType.caseLabels)
 		}
 		
-		switch type.JSONSchemaType {
-				
-			case "array":
-				
-				// This is an array type
-				let elementType: JSONSchema
-				if let arrayElementType = type.arrayElementType {
-					if arrayElementType.JSONSchemaType == "number" {
-						elementType = JSONSchema.number()
-					} else if arrayElementType.JSONSchemaType == "boolean" {
-						elementType = JSONSchema.boolean()
-					} else {
-						elementType = JSONSchema.string()
-					}
+		// Handle array types
+		if let arrayType = schemaType as? Array<Any>.Type {
+			// Get the element type from the array
+			let schema: JSONSchema
+			if let type = arrayType.elementType {
+				if type == Int.self || type == Double.self {
+					schema = JSONSchema.number()
+				} else if type == Bool.self {
+					schema = JSONSchema.boolean()
+				} else if let schemaType = type as? any SchemaRepresentable.Type {
+					schema = schemaType.schema
 				} else {
-					elementType = JSONSchema.string()
+					schema = JSONSchema.string()
 				}
-				
-				return JSONSchema.array(items: elementType, description: description)
-				
-			case "number":
-				
-				return JSONSchema.number(description: description)
-				
-			case "boolean":
-				
-				return JSONSchema.boolean(description: description)
-				
-			default:
-				
-				return JSONSchema.string(description: description)
+			} else {
+				schema = JSONSchema.string()
+			}
+			return JSONSchema.array(items: schema, description: description)
+		}
+		
+		// Handle basic types
+		switch schemaType {
+		case is Int.Type, is Double.Type:
+			return JSONSchema.number(description: description)
+		case is Bool.Type:
+			return JSONSchema.boolean(description: description)
+		default:
+			return JSONSchema.string(description: description)
 		}
 	}
 }

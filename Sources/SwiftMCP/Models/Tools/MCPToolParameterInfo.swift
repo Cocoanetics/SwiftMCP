@@ -12,9 +12,6 @@ public struct MCPToolParameterInfo: Sendable {
     /// The name of the parameter
     public let name: String
     
-    /// The type of the parameter
-    public let type: String
-    
     /// The actual type of the parameter (e.g. Address.self)
     public let schemaType: Any.Type
     
@@ -32,14 +29,12 @@ public struct MCPToolParameterInfo: Sendable {
      
      - Parameters:
        - name: The name of the parameter
-       - type: The type of the parameter
        - schemaType: The actual type of the parameter (e.g. Address.self)
        - description: An optional description of the parameter
        - defaultValue: An optional default value for the parameter
      */
-    public init(name: String, type: String, schemaType: Any.Type, description: String? = nil, defaultValue: Sendable? = nil, isRequired: Bool) {
+    public init(name: String, schemaType: Any.Type, description: String? = nil, defaultValue: Sendable? = nil, isRequired: Bool) {
         self.name = name
-        self.type = type
         self.schemaType = schemaType
         self.description = description
         self.defaultValue = defaultValue

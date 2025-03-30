@@ -13,11 +13,8 @@ public struct SchemaPropertyInfo: Sendable {
     /// The name of the parameter
     public let name: String
     
-    /// The type of the parameter
-    public let type: String
-    
     /// The actual type of the parameter (e.g. Address.self)
-    public let schemaType: Any.Type?
+    public let schemaType: Any.Type
     
     /// An optional description of the parameter
     public let description: String?
@@ -33,14 +30,12 @@ public struct SchemaPropertyInfo: Sendable {
      
      - Parameters:
        - name: The name of the parameter
-       - type: The type of the parameter
        - schemaType: The actual type of the parameter (e.g. Address.self)
        - description: An optional description of the parameter
        - defaultValue: An optional default value for the parameter
      */
-    public init(name: String, type: String, schemaType: Any.Type? = nil, description: String? = nil, defaultValue: Sendable? = nil, isRequired: Bool) {
+    public init(name: String, schemaType: Any.Type, description: String? = nil, defaultValue: Sendable? = nil, isRequired: Bool) {
         self.name = name
-        self.type = type
         self.schemaType = schemaType
         self.description = description
         self.defaultValue = defaultValue
@@ -49,103 +44,86 @@ public struct SchemaPropertyInfo: Sendable {
     
     /// Converts this property info to a JSON Schema representation
     public var schema: JSONSchema {
-        // Handle array types
-        if type.hasPrefix("[") && type.hasSuffix("]") {
-            let elementType = String(type.dropFirst().dropLast())
-            let baseElementType = elementType.hasSuffix("?") || elementType.hasSuffix("!") ? String(elementType.dropLast()) : elementType
-            
-            // If the element type is SchemaRepresentable, use its schema
-            if let elementSchemaType = schemaType as? any SchemaRepresentable.Type {
-                return .array(items: elementSchemaType.schema, description: description)
-            }
-            
-            // Handle basic array types
-            let elementSchema: JSONSchema
-            switch baseElementType {
-            case "Int", "Double", "Float":
-                elementSchema = .number()
-            case "Bool":
-                elementSchema = .boolean()
-            default:
-                // For unknown types, try to get the schema type
-                if let schemaType = schemaType as? any SchemaRepresentable.Type {
-                    elementSchema = schemaType.schema
-                } else {
-                    elementSchema = .string()
-                }
-            }
-            
-            return .array(items: elementSchema, description: description)
-        }
-        
-        // If this is a nested schema type, get its schema
+        // If this is a SchemaRepresentable type, use its schema
         if let schemaType = schemaType as? any SchemaRepresentable.Type {
             return schemaType.schema
         }
         
-        // Handle basic types
-        switch type {
-        case "String":
-            return .string(description: description)
-        case "Int", "Double", "Float":
-            return .number(description: description)
-        case "Bool":
-            return .boolean(description: description)
-        default:
-            // For unknown types, try to get the schema type
-            if let schemaType = schemaType as? any SchemaRepresentable.Type {
-                return schemaType.schema
+        // If this is a CaseIterable type, return a string schema with enum values
+        if let caseIterableType = schemaType as? any CaseIterable.Type {
+            return JSONSchema.string(description: description, enumValues: caseIterableType.caseLabels)
+        }
+        
+        // Handle array types
+        if let arrayType = schemaType as? Array<Any>.Type {
+            // Get the element type from the array
+            let schema: JSONSchema
+            if let type = arrayType.elementType {
+                if type == Int.self || type == Double.self || type == Float.self {
+                    schema = JSONSchema.number()
+                } else if type == Bool.self {
+                    schema = JSONSchema.boolean()
+                } else if let schemaType = type as? any SchemaRepresentable.Type {
+                    schema = schemaType.schema
+                } else {
+                    schema = JSONSchema.string()
+                }
             } else {
-                return .string(description: description)
+                schema = JSONSchema.string()
             }
+            return JSONSchema.array(items: schema, description: description)
+        }
+        
+        // Handle basic types
+        switch schemaType {
+        case is Int.Type, is Double.Type, is Float.Type:
+            return JSONSchema.number(description: description)
+        case is Bool.Type:
+            return JSONSchema.boolean(description: description)
+        default:
+            return JSONSchema.string(description: description)
         }
     }
 
     public var jsonSchema: JSONSchema {
+        // If this is a SchemaRepresentable type, use its schema
+        if let schemaType = schemaType as? any SchemaRepresentable.Type {
+            return schemaType.schema
+        }
+        
+        // If this is a CaseIterable type, return a string schema with enum values
+        if let caseIterableType = schemaType as? any CaseIterable.Type {
+            return JSONSchema.string(description: description, enumValues: caseIterableType.caseLabels)
+        }
+        
         // Handle array types
-        if type.hasPrefix("[") && type.hasSuffix("]") {
-            let elementType = String(type.dropFirst().dropLast())
-            let baseElementType = elementType.hasSuffix("?") || elementType.hasSuffix("!") ? String(elementType.dropLast()) : elementType
-            
-            // If the element type is SchemaRepresentable, use its schema
-            if let elementSchemaType = schemaType as? any SchemaRepresentable.Type {
-                return .array(items: elementSchemaType.schema, description: description)
-            }
-            
-            // Handle basic array types
-            let elementSchema: JSONSchema
-            switch baseElementType {
-            case "Int", "Double", "Float":
-                elementSchema = .number()
-            case "Bool":
-                elementSchema = .boolean()
-            default:
-                // For unknown types, try to get the schema type
-                if let schemaType = schemaType as? any SchemaRepresentable.Type {
-                    elementSchema = schemaType.schema
+        if let arrayType = schemaType as? Array<Any>.Type {
+            // Get the element type from the array
+            let schema: JSONSchema
+            if let type = arrayType.elementType {
+                if type == Int.self || type == Double.self || type == Float.self {
+                    schema = JSONSchema.number()
+                } else if type == Bool.self {
+                    schema = JSONSchema.boolean()
+                } else if let schemaType = type as? any SchemaRepresentable.Type {
+                    schema = schemaType.schema
                 } else {
-                    elementSchema = .string()
+                    schema = JSONSchema.string()
                 }
+            } else {
+                schema = JSONSchema.string()
             }
-            
-            return .array(items: elementSchema, description: description)
+            return JSONSchema.array(items: schema, description: description)
         }
         
         // Handle basic types
-        switch type {
-        case "String":
-            return .string(description: description)
-        case "Int", "Double", "Float":
-            return .number(description: description)
-        case "Bool":
-            return .boolean(description: description)
+        switch schemaType {
+        case is Int.Type, is Double.Type, is Float.Type:
+            return JSONSchema.number(description: description)
+        case is Bool.Type:
+            return JSONSchema.boolean(description: description)
         default:
-            // For unknown types, try to get the schema type
-            if let schemaType = schemaType as? any SchemaRepresentable.Type {
-                return schemaType.schema
-            } else {
-                return .string(description: description)
-            }
+            return JSONSchema.string(description: description)
         }
     }
 }
