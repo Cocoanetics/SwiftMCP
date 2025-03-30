@@ -274,10 +274,10 @@ public struct MCPToolMacro: PeerMacro {
 			// Use the parameter extraction utility with appropriate type conversions
 			if param.type.hasSuffix("?") || param.type.hasSuffix("!") {
 				// Check if it's an optional array of a SchemaRepresentable type
-				if param.type.hasPrefix("[") && param.type.contains("]?") {
+				if param.type.hasPrefix("[") && (param.type.hasSuffix("]?") || param.type.contains("]?")) {
 					// Extract the element type from [ElementType]?
 					let startIndex = param.type.index(after: param.type.startIndex)
-					let endIndex = param.type.index(param.type.endIndex, offsetBy: -2)
+					let endIndex = param.type.firstIndex(of: "]") ?? param.type.index(param.type.endIndex, offsetBy: -2)
 					let elementType = String(param.type[startIndex..<endIndex])
 					
 					// Use extractOptionalArray for arrays of SchemaRepresentable types
