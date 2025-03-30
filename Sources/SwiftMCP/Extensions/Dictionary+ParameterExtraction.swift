@@ -19,7 +19,7 @@ extension Array where Element == [String: Encodable] {
 }
 
 // MARK: - Parameter Extraction Extensions for Dictionaries
-public extension Dictionary where Key == String, Value == Sendable {
+public extension Dictionary where Key == String, Value == (Codable & Sendable) {
     
     /// Extracts a parameter of the specified type from the dictionary
     /// - Parameter name: The name of the parameter

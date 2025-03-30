@@ -81,7 +81,7 @@ public protocol MCPServer {
      - Returns: The result of the tool execution
      - Throws: An error if the tool execution fails
      */
-    func callTool(_ name: String, arguments: [String: Sendable]) async throws -> Encodable & Sendable 
+    func callTool(_ name: String, arguments: [String: Codable & Sendable]) async throws -> Encodable & Sendable
     
     /**
      Handles a JSON-RPC request and generates an appropriate response.
@@ -238,7 +238,7 @@ public extension MCPServer {
         }
         
         // Extract arguments from the request
-        let arguments = (params["arguments"]?.value as? [String: Sendable]) ?? [:]
+        let arguments = (params["arguments"]?.value as? [String: Codable & Sendable]) ?? [:]
         
         // Call the appropriate wrapper method based on the tool name
         do {

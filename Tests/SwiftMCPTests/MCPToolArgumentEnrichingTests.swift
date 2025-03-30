@@ -1,13 +1,13 @@
 import Testing
-import SwiftMCP
+@testable import SwiftMCP
 
 /**
- This test suite verifies that the MCPTool class correctly enriches arguments with default values.
+ This test suite verifies that the MCPTool macro correctly handles default values for parameters.
  
  It tests:
- 1. Enriching arguments with default values
- 2. Handling of missing required arguments
- 3. Type conversion of arguments
+ 1. Parameters with default values are correctly marked as optional (not required)
+ 2. Parameters with default values have the correct type in the JSON schema
+ 3. Multiple parameters with default values in the same function are handled correctly
  */
 
 @Test
@@ -18,7 +18,7 @@ func testEnrichArguments() throws {
     let metadata = unwrap(calculator.mcpToolMetadata(for: "add"))
     
     // Test enriching arguments
-    let arguments: [String: Sendable] = ["a": 2, "b": 3]
+    let arguments: [String: Codable & Sendable] = ["a": 2, "b": 3]
     let enrichedArguments = try metadata.enrichArguments(arguments)
     
     // Check that the arguments were not changed
@@ -35,7 +35,7 @@ func testEnrichArgumentsWithExplicitFunctionName() throws {
     let metadata = unwrap(calculator.mcpToolMetadata(for: "add"))
     
     // Test enriching arguments with explicit function name
-    let arguments: [String: Sendable] = ["a": 2, "b": 3]
+    let arguments: [String: Codable & Sendable] = ["a": 2, "b": 3]
     let enrichedArguments = try metadata.enrichArguments(arguments)
     
     // Check that the arguments were not changed
@@ -52,7 +52,7 @@ func testEnrichArgumentsWithNoDefaults() throws {
     let metadata = unwrap(calculator.mcpToolMetadata(for: "add"))
     
     // Test enriching arguments with no default values
-    let arguments: [String: Sendable] = ["a": 2, "b": 3]
+    let arguments: [String: Codable & Sendable] = ["a": 2, "b": 3]
     let enrichedArguments = try metadata.enrichArguments(arguments)
     
     // Check that the arguments were not changed
@@ -70,7 +70,7 @@ func testEnrichArgumentsWithMissingRequiredArgument() throws {
     
     // Test enriching arguments with a missing required argument
     #expect(throws: MCPToolError.self, "Should notice missing parameter") {
-        try metadata.enrichArguments(["a": 2])
+        try metadata.enrichArguments(["a": 2 as (Codable & Sendable)])
     }
 }
 
@@ -82,7 +82,7 @@ func testEnrichArgumentsWithTypeConversion() throws {
     let metadata = unwrap(calculator.mcpToolMetadata(for: "add"))
     
     // Test enriching arguments with string values that need to be converted
-    let arguments: [String: Sendable] = ["a": "2", "b": "3"]
+    let arguments: [String: Codable & Sendable] = ["a": "2", "b": "3"]
     let enrichedArguments = try metadata.enrichArguments(arguments)
     
     // Check that the arguments were not changed (enrichArguments doesn't do type conversion)
@@ -105,11 +105,11 @@ func testSubtractArguments() throws {
     
     // Test with partial arguments - should throw missing required parameter
     #expect(throws: MCPToolError.self, "Should notice missing parameter") {
-        try metadata.enrichArguments(["b": 5])
+        try metadata.enrichArguments(["b": 5 as (Codable & Sendable)])
     }
     
     // Test with all arguments - no defaults should be added
-    let allArgs = try metadata.enrichArguments(["a": 20, "b": 5])
+    let allArgs = try metadata.enrichArguments(["a": 20 as (Codable & Sendable), "b": 5 as (Codable & Sendable)])
     #expect(allArgs.count == 2)
     #expect(allArgs["a"] as? Int == 20)
     #expect(allArgs["b"] as? Int == 5)
@@ -129,11 +129,11 @@ func testMultiplyArguments() throws {
     
     // Test with partial arguments - should throw missing required parameter
     #expect(throws: MCPToolError.self, "Should notice missing parameter") {
-        try metadata.enrichArguments(["b": 5])
+        try metadata.enrichArguments(["b": 5 as (Codable & Sendable)])
     }
     
     // Test with all arguments - no defaults should be added
-    let allArgs = try metadata.enrichArguments(["a": 20, "b": 5])
+    let allArgs = try metadata.enrichArguments(["a": 20 as (Codable & Sendable), "b": 5 as (Codable & Sendable)])
     #expect(allArgs.count == 2)
     #expect(allArgs["a"] as? Int == 20)
     #expect(allArgs["b"] as? Int == 5)

@@ -20,7 +20,7 @@ extension MCPToolMetadata {
 	 - Returns: A new dictionary with default values added for missing parameters
 	 - Throws: MCPToolError if required parameters are missing or if parameter conversion fails
 	 */
-	public func enrichArguments(_ arguments: [String: Sendable]) throws -> [String: Sendable] {
+	public func enrichArguments(_ arguments: [String: Codable & Sendable]) throws -> [String: Codable & Sendable] {
 		// Create a copy of the arguments dictionary
 		var enrichedArguments = arguments
 		
@@ -30,7 +30,7 @@ extension MCPToolMetadata {
 			if enrichedArguments[param.name] == nil {
 				// If it has a default value, use it
 				if let defaultValue = param.defaultValue {
-					enrichedArguments[param.name] = defaultValue
+					enrichedArguments[param.name] = (defaultValue as! (Codable & Sendable))
 				}
 				// If it's required and has no default value, throw an error
 				else if param.isRequired {

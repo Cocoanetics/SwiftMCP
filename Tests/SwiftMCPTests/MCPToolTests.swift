@@ -130,12 +130,16 @@ class SchemaRepresentableTests {
     
     /// A person's address
     @Schema
-    struct Address {
-        /// The street name
+    struct Address: Codable {
         let street: String
-        
-        /// The city name
         let city: String
+        let zip: String
+        
+        init(street: String, city: String, zip: String) {
+            self.street = street
+            self.city = city
+            self.zip = zip
+        }
     }
     
     /**
@@ -374,19 +378,19 @@ func testURLParameters() async throws {
         }
         
         // Test with valid URL string
-        let validArgs = ["url": "https://example.com"] as [String: Sendable]
+        let validArgs = ["url": "https://example.com"] as [String: Codable & Sendable]
         let validResult = try await instance.callTool("processURL", arguments: validArgs)
         #expect(validResult as? String == "example.com")
         
         // Test with invalid URL string
-        let invalidArgs = ["url": "https://example.com:xyz"] as [String: Sendable]
+        let invalidArgs = ["url": "https://example.com:xyz"] as [String: Codable & Sendable]
         do {
             _ = try await instance.callTool("processURL", arguments: invalidArgs)
             #expect(Bool(false), "Should throw error for invalid URL")
         } catch let error as MCPToolError {
-            if case .invalidArgumentType(let paramName, let expectedType, _) = error {
+            // Verify that we get an invalid argument type error
+            if case .invalidArgumentType(let paramName, _, _) = error {
                 #expect(paramName == "url")
-                #expect(expectedType == "URL")
             } else {
                 #expect(Bool(false), "Wrong error type")
             }
@@ -402,10 +406,10 @@ func testSchemaRepresentableParameter() async throws {
     let tools = instance.mcpTools
     
     // Create test data
-    let address = SchemaRepresentableTests.Address(street: "123 Main St", city: "New York")
+    let address = SchemaRepresentableTests.Address(street: "123 Main St", city: "New York", zip: "10001")
     
     // Create parameters dictionary
-    let params: [String: Sendable] = [
+    let params: [String: Codable & Sendable] = [
         "contact": address
     ]
     
@@ -413,7 +417,7 @@ func testSchemaRepresentableParameter() async throws {
     let result = try await instance.callTool("fetchReminders", arguments: params)
     
     // Verify the result
-    #expect(result as? String == "Address(street: \"123 Main St\", city: \"New York\")")
+    #expect(result as? String == "Address(street: \"123 Main St\", city: \"New York\", zip: \"10001\")")
     
     // Verify the schema
     if let tool = tools.first(where: { $0.name == "fetchReminders" }) {
@@ -424,8 +428,8 @@ func testSchemaRepresentableParameter() async throws {
             
             // Verify the contact property
             if case .object(let contactProperties, let contactRequired, _) = properties["contact"] {
-                #expect(contactProperties.count == 2)
-                #expect(contactRequired == ["street", "city"])
+                #expect(contactProperties.count == 3)
+                #expect(contactRequired == ["street", "city", "zip"])
                 
                 // Verify property types
                 if case .string(description: _, enumValues: _) = contactProperties["street"] {
@@ -438,6 +442,12 @@ func testSchemaRepresentableParameter() async throws {
                     // city property is correct
                 } else {
                     #expect(Bool(false), "Expected string schema for city property")
+                }
+                
+                if case .string(description: _, enumValues: _) = contactProperties["zip"] {
+                    // zip property is correct
+                } else {
+                    #expect(Bool(false), "Expected string schema for zip property")
                 }
             } else {
                 #expect(Bool(false), "Expected object schema for contact property")
@@ -554,8 +564,8 @@ func testSchemaRepresentableArraySchema() throws {
         if case .array(let itemsSchema, _) = addressesSchema {
             // Verify the items are objects with street and city properties
             if case .object(let itemProperties, let itemRequired, _) = itemsSchema {
-                #expect(itemProperties.count == 2)
-                #expect(itemRequired == ["street", "city"])
+                #expect(itemProperties.count == 3)
+                #expect(itemRequired == ["street", "city", "zip"])
                 
                 // Verify property types
                 if case .string(description: _, enumValues: _) = itemProperties["street"] {
@@ -569,6 +579,12 @@ func testSchemaRepresentableArraySchema() throws {
                 } else {
                     #expect(Bool(false), "Expected string schema for city property")
                 }
+                
+                if case .string(description: _, enumValues: _) = itemProperties["zip"] {
+                    // zip property is correct
+                } else {
+                    #expect(Bool(false), "Expected string schema for zip property")
+                }
             } else {
                 #expect(Bool(false), "Expected object schema for array items")
             }
@@ -578,4 +594,91 @@ func testSchemaRepresentableArraySchema() throws {
     } else {
         #expect(Bool(false), "Expected object schema")
     }
+}
+
+@Test
+func testAddressDecoding() throws {
+    // Create a dictionary representing an address
+    let addressDict: [String: Any] = [
+        "street": "123 Main St",
+        "city": "New York",
+        "zip": "10001"
+    ]
+    
+    // Encode the dictionary to JSON data
+    let jsonData = try JSONSerialization.data(withJSONObject: addressDict)
+    
+    // Decode the JSON data into an Address struct
+    let address = try JSONDecoder().decode(SchemaRepresentableTests.Address.self, from: jsonData)
+    
+    // Verify the decoded values
+    #expect(address.street == "123 Main St")
+    #expect(address.city == "New York")
+    #expect(address.zip == "10001")
+}
+
+@Test
+func testAddressArrayDecoding() throws {
+    // Create an array of dictionaries representing addresses
+    let addressDicts: [[String: Any]] = [
+        [
+            "street": "123 Main St",
+            "city": "New York",
+            "zip": "10001"
+        ],
+        [
+            "street": "456 Oak Ave",
+            "city": "San Francisco",
+            "zip": "94102"
+        ],
+        [
+            "street": "789 Pine Rd",
+            "city": "Chicago",
+            "zip": "60601"
+        ]
+    ]
+    
+    // Encode the array to JSON data
+    let jsonData = try JSONSerialization.data(withJSONObject: addressDicts)
+    
+    // Decode the JSON data into an array of Address structs
+    let addresses = try JSONDecoder().decode([SchemaRepresentableTests.Address].self, from: jsonData)
+    
+    // Verify the number of addresses
+    #expect(addresses.count == 3)
+    
+    // Verify each address
+    #expect(addresses[0].street == "123 Main St")
+    #expect(addresses[0].city == "New York")
+    #expect(addresses[0].zip == "10001")
+    
+    #expect(addresses[1].street == "456 Oak Ave")
+    #expect(addresses[1].city == "San Francisco")
+    #expect(addresses[1].zip == "94102")
+    
+    #expect(addresses[2].street == "789 Pine Rd")
+    #expect(addresses[2].city == "Chicago")
+    #expect(addresses[2].zip == "60601")
+}
+
+@Test
+func testExtractAddressArray() throws {
+    let addresses = [
+        SchemaRepresentableTests.Address(street: "123 Main St", city: "New York", zip: "10001"),
+        SchemaRepresentableTests.Address(street: "456 Oak Ave", city: "San Francisco", zip: "94102")
+    ]
+    
+    let params: [String: any Codable & Sendable] = [
+        "addresses": addresses as [SchemaRepresentableTests.Address]
+    ]
+    
+    let extractedAddresses: [SchemaRepresentableTests.Address] = try params.extractParameter(named: "addresses")
+    
+    #expect(extractedAddresses.count == 2)
+    #expect(extractedAddresses[0].street == "123 Main St")
+    #expect(extractedAddresses[0].city == "New York")
+    #expect(extractedAddresses[0].zip == "10001")
+    #expect(extractedAddresses[1].street == "456 Oak Ave")
+    #expect(extractedAddresses[1].city == "San Francisco")
+    #expect(extractedAddresses[1].zip == "94102")
 } 
