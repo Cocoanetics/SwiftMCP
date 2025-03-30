@@ -85,14 +85,14 @@ public extension Dictionary where Key == String, Value == Sendable {
 	/// Extracts a parameter of the specified type from the dictionary, returning nil if the parameter is missing or invalid
 	/// - Parameter name: The name of the parameter
 	/// - Returns: The extracted value of type T, or nil if the parameter is missing or invalid
-	func extractOptionalParameter<T>(named name: String) -> T? {
+	func extractOptionalParameter<T>(named name: String) throws -> T? {
 		// If the parameter is missing, return nil
 		guard self[name] != nil else {
 			return nil
 		}
 		
 		// Use the throwing version with try? to handle any conversion errors
-		return try? extractParameter(named: name) as T
+		return try extractParameter(named: name) as T
 	}
     
     /// Extracts an Int parameter from the dictionary

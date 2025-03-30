@@ -278,7 +278,7 @@ public struct MCPToolMacro: PeerMacro {
 			if param.type.hasSuffix("?") || param.type.hasSuffix("!") {
 				wrapperMethod += """
 				
-				let \(paramName): \(paramType) = params.extractOptionalParameter(named: "\(paramName)")
+				let \(paramName): \(paramType) = try params.extractOptionalParameter(named: "\(paramName)")
 				"""
 			} else if param.type == "Double" {
 				wrapperMethod += """
