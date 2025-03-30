@@ -153,7 +153,7 @@ public struct SchemaMacro: MemberMacro {
         // Strip optional marker from type for JSON schema
         let baseType = isOptionalType ? String(propertyType.dropLast()) : propertyType
         
-        let propertyStr = "MCPToolParameterInfo(name: \"\(propertyName)\", type: \"\(baseType)\", description: \(propertyDescription), defaultValue: \(defaultValue), enumValues: \(enumValuesStr), isRequired: \(isRequired))"
+        let propertyStr = "SchemaPropertyInfo(name: \"\(propertyName)\", type: \"\(baseType)\", schemaType: \(propertyType).self, description: \(propertyDescription), defaultValue: \(defaultValue), enumValues: \(enumValuesStr), isRequired: \(isRequired))"
         
         return (propertyStr, (name: propertyName, type: propertyType, defaultValue: defaultValue))
     }
@@ -185,10 +185,14 @@ public struct SchemaMacro: MemberMacro {
         
         // Create metadata for nested struct
         return """
-        , SchemaMetadata(
+        , SchemaPropertyInfo(
             name: "\(structName)",
+            type: "\(structName)",
+            schemaType: \(structName).self,
             description: \(documentation.description.isEmpty ? "nil" : "\"\(documentation.description.escapedForSwiftString)\""),
-            parameters: [\(propertyString)]
+            defaultValue: nil,
+            enumValues: nil,
+            isRequired: true
         )
         """
     }

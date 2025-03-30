@@ -14,7 +14,7 @@ public struct SchemaMetadata: Sendable {
     public let name: String
     
     /// The parameters of the function
-    public let parameters: [MCPToolParameterInfo]
+    public let parameters: [SchemaPropertyInfo]
     
     /// A description of the function's purpose
     public let description: String?
@@ -27,7 +27,7 @@ public struct SchemaMetadata: Sendable {
        - description: A description of the function's purpose
        - parameters: The parameters of the function
      */
-    public init(name: String, description: String? = nil, parameters: [MCPToolParameterInfo]) {
+    public init(name: String, description: String? = nil, parameters: [SchemaPropertyInfo]) {
         self.name = name
         self.description = description
         self.parameters = parameters
