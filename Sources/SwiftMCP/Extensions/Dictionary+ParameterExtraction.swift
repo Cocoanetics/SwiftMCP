@@ -17,10 +17,10 @@ extension Array where Element == [String: Any] {
         }
     }
     
-    func decodeArray<T: Decodable>(_ type: T.Type) throws -> [T] {
+    func decodeArray<T: Decodable>(_ type: T.Type) throws -> [T.Element] where T: Collection {
         return try map { dict in
             let data = try JSONSerialization.data(withJSONObject: dict)
-            return try JSONDecoder().decode(type, from: data)
+            return try JSONDecoder().decode(T.Element.self, from: data)
         }
     }
 }
