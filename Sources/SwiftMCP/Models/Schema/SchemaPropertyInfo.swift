@@ -53,7 +53,7 @@ public struct SchemaPropertyInfo: Sendable {
     }
     
     /// Converts this property info to a JSON Schema representation
-	public var schema: JSONSchema {
+    public var schema: JSONSchema {
         // If this is a nested schema type, get its schema
         if let schemaType = schemaType as? any SchemaRepresentable.Type {
             return schemaType.schema
