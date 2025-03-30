@@ -238,7 +238,7 @@ public struct MCPToolMacro: PeerMacro {
 			let baseType = isOptionalType ? String(paramType.dropLast()) : paramType
 			
 			// Create parameter info with the type directly
-			parameterString += "MCPToolParameterInfo(name: \"\(paramName)\", schemaType: \(baseType).self, description: \(paramDescription), defaultValue: \(defaultValue), isRequired: \(isRequired))"
+			parameterString += "MCPToolParameterInfo(name: \"\(paramName)\", type: \(baseType).self, description: \(paramDescription), defaultValue: \(defaultValue), isRequired: \(isRequired))"
 			
 			// Store parameter info for wrapper function generation
 			parameterInfos.append((name: paramName, label: paramLabel, type: paramType, defaultValue: defaultValue))

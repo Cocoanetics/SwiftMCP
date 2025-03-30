@@ -18,17 +18,17 @@ extension MCPToolParameterInfo {
 	
 	var jsonSchema: JSONSchema {
 		// If this is a SchemaRepresentable type, use its schema
-		if let schemaType = schemaType as? any SchemaRepresentable.Type {
+		if let schemaType = type as? any SchemaRepresentable.Type {
 			return schemaType.schema
 		}
 		
 		// If this is a CaseIterable type, return a string schema with enum values
-		if let caseIterableType = schemaType as? any CaseIterable.Type {
+		if let caseIterableType = type as? any CaseIterable.Type {
 			return JSONSchema.string(description: description, enumValues: caseIterableType.caseLabels)
 		}
 		
 		// Handle array types
-		if let arrayType = schemaType as? Array<Any>.Type {
+		if let arrayType = type as? Array<Any>.Type {
 			// Get the element type from the array
 			let schema: JSONSchema
 			if let type = arrayType.elementType {
@@ -48,7 +48,7 @@ extension MCPToolParameterInfo {
 		}
 		
 		// Handle basic types
-		switch schemaType {
+		switch type {
 		case is Int.Type, is Double.Type:
 			return JSONSchema.number(description: description)
 		case is Bool.Type:

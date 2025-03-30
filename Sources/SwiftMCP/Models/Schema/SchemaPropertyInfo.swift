@@ -14,7 +14,7 @@ public struct SchemaPropertyInfo: Sendable {
     public let name: String
     
     /// The actual type of the parameter (e.g. Address.self)
-    public let schemaType: Any.Type
+    public let type: Any.Type
     
     /// An optional description of the parameter
     public let description: String?
@@ -34,9 +34,9 @@ public struct SchemaPropertyInfo: Sendable {
        - description: An optional description of the parameter
        - defaultValue: An optional default value for the parameter
      */
-    public init(name: String, schemaType: Any.Type, description: String? = nil, defaultValue: Sendable? = nil, isRequired: Bool) {
+    public init(name: String, type: Any.Type, description: String? = nil, defaultValue: Sendable? = nil, isRequired: Bool) {
         self.name = name
-        self.schemaType = schemaType
+        self.type = type
         self.description = description
         self.defaultValue = defaultValue
         self.isRequired = isRequired
@@ -45,17 +45,17 @@ public struct SchemaPropertyInfo: Sendable {
     /// Converts this property info to a JSON Schema representation
     public var schema: JSONSchema {
         // If this is a JSONSchemaTypeConvertible type, use its schema
-        if let convertibleType = schemaType as? any JSONSchemaTypeConvertible.Type {
+        if let convertibleType = type as? any JSONSchemaTypeConvertible.Type {
             return convertibleType.jsonSchema(description: description)
         }
         
         // If this is a SchemaRepresentable type, use its schema
-        if let schemaType = schemaType as? any SchemaRepresentable.Type {
+        if let schemaType = type as? any SchemaRepresentable.Type {
             return schemaType.schema
         }
         
         // If this is a CaseIterable type that isn't JSONSchemaTypeConvertible, return a string schema with enum values
-        if let caseIterableType = schemaType as? any CaseIterable.Type {
+        if let caseIterableType = type as? any CaseIterable.Type {
             return JSONSchema.string(description: description, enumValues: caseIterableType.caseLabels)
         }
         

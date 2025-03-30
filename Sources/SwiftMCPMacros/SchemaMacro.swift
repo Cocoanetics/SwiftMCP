@@ -179,7 +179,7 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
         let baseType = isOptionalType ? String(propertyType.dropLast()) : propertyType
         
         // Create parameter info with the type directly
-        let propertyStr = "SchemaPropertyInfo(name: \"\(propertyName)\", schemaType: \(baseType).self, description: \(propertyDescription), defaultValue: \(defaultValue), isRequired: \(isRequired))"
+        let propertyStr = "SchemaPropertyInfo(name: \"\(propertyName)\", type: \(baseType).self, description: \(propertyDescription), defaultValue: \(defaultValue), isRequired: \(isRequired))"
         
         return (propertyStr, (name: propertyName, type: propertyType, defaultValue: defaultValue))
     }
@@ -214,7 +214,7 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
         , SchemaPropertyInfo(
             name: "\(structName)",
             type: "\(structName)",
-            schemaType: \(structName).self,
+            type: \(structName).self,
             description: \(documentation.description.isEmpty ? "nil" : "\"\(documentation.description.escapedForSwiftString)\""),
             defaultValue: nil,
             enumValues: nil,
