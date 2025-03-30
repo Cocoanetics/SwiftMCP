@@ -51,4 +51,47 @@ public struct SchemaPropertyInfo: Sendable {
         self.enumValues = enumValues
         self.isRequired = isRequired
     }
+    
+    /// Converts this property info to a JSON Schema representation
+	public var schema: JSONSchema {
+        // If this is a nested schema type, get its schema
+        if let schemaType = schemaType as? any SchemaRepresentable.Type {
+            return schemaType.schema
+        }
+        
+        // If this is an enum parameter, return a string schema with enum values
+        if let enumValues = enumValues {
+            return .string(description: description, enumValues: enumValues)
+        }
+        
+        // Handle array types
+        if type.hasPrefix("[") && type.hasSuffix("]") {
+            let elementType: JSONSchema
+            let elementTypeStr = String(type.dropFirst().dropLast())
+            
+            switch elementTypeStr {
+            case "Int", "Double", "Float":
+                elementType = .number()
+            case "Bool":
+                elementType = .boolean()
+            default:
+                elementType = .string()
+            }
+            
+            return .array(items: elementType, description: description)
+        }
+        
+        // Handle basic types
+        switch type {
+        case "String":
+            return .string(description: description)
+        case "Int", "Double", "Float":
+            return .number(description: description)
+        case "Bool":
+            return .boolean(description: description)
+        default:
+            // For unknown types, return a string schema
+            return .string(description: description)
+        }
+    }
 } 
