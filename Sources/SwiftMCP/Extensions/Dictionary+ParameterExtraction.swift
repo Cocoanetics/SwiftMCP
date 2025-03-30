@@ -121,7 +121,7 @@ public extension Dictionary where Key == String, Value == Sendable {
     ///   - elementType: The type of the elements in the array
     /// - Returns: The extracted array of elements
     /// - Throws: MCPToolError.invalidArgumentType if the parameter cannot be converted to an array of the specified type
-    func extractArray<T: Decodable>(named name: String, elementType: T.Type) throws -> [T] {
+    func extractArray<T>(named name: String, elementType: T.Type) throws -> [T] {
         guard let anyValue = self[name] else {
             preconditionFailure("Failed to retrieve value for parameter \(name)")
         }
@@ -129,11 +129,59 @@ public extension Dictionary where Key == String, Value == Sendable {
         // Try direct type casting
         if let array = anyValue as? [T] {
             return array
+        } else if let caseIterableType = elementType as? any CaseIterable.Type {
+            // Handle arrays of CaseIterable enums like Weekday
+            if let stringArray = anyValue as? [String] {
+                return try stringArray.map { stringValue in
+                    let caseLabels = caseIterableType.caseLabels
+                    
+                    guard let index = caseLabels.firstIndex(of: stringValue) else {
+                        throw MCPToolError.invalidEnumValue(
+                            parameterName: name,
+                            expectedValues: caseLabels,
+                            actualValue: stringValue
+                        )
+                    }
+                    
+                    guard let allCases = caseIterableType.allCases as? [T] else {
+                        // This can never happen because the result of CaseIterable is an array of the enum type
+                        preconditionFailure()
+                    }
+                    
+                    // Return the actual enum case value that matches the string label
+                    return allCases[index]
+                }
+            } else {
+                throw MCPToolError.invalidArgumentType(
+                    parameterName: name,
+                    expectedType: "Array of Strings",
+                    actualType: String(describing: Swift.type(of: anyValue))
+                )
+            }
         } else if let dictArray = anyValue as? [[String: Any]] {
-            // Convert array of dictionaries to array of the specified type
-            return try dictArray.map { dict in
-                let data = try JSONSerialization.data(withJSONObject: dict)
-                return try JSONDecoder().decode(T.self, from: data)
+            // For JSON-decodable types, we need to use a generic helper
+            if let decodableType = elementType as? (any Decodable.Type) {
+                // Convert array of dictionaries to array of the specified type using JSONSerialization
+                let decoder = JSONDecoder()
+                return try dictArray.map { dict in
+                    let data = try JSONSerialization.data(withJSONObject: dict)
+                    // Cast the result back to T after decoding
+                    if let result = try decoder.decode(decodableType, from: data) as? T {
+                        return result
+                    } else {
+                        throw MCPToolError.invalidArgumentType(
+                            parameterName: name,
+                            expectedType: String(describing: T.self),
+                            actualType: "Decoded object could not be cast to \(String(describing: T.self))"
+                        )
+                    }
+                }
+            } else {
+                throw MCPToolError.invalidArgumentType(
+                    parameterName: name,
+                    expectedType: "Array of Decodable objects",
+                    actualType: String(describing: Swift.type(of: anyValue))
+                )
             }
         } else {
             throw MCPToolError.invalidArgumentType(
@@ -150,7 +198,7 @@ public extension Dictionary where Key == String, Value == Sendable {
     ///   - elementType: The type of the elements in the array
     /// - Returns: The extracted array of elements, or nil if the parameter is missing
     /// - Throws: MCPToolError.invalidArgumentType if the parameter cannot be converted to an array of the specified type
-    func extractOptionalArray<T: Decodable>(named name: String, elementType: T.Type) throws -> [T]? {
+    func extractOptionalArray<T>(named name: String, elementType: T.Type) throws -> [T]? {
         // If the parameter is missing, return nil
         guard self[name] != nil else {
             return nil
