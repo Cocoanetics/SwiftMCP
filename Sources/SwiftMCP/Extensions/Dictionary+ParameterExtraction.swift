@@ -13,7 +13,14 @@ extension Array where Element == [String: Any] {
     func decode<T: Decodable>(_ type: T.Type) throws -> [T] {
         return try map { dict in
             let data = try JSONSerialization.data(withJSONObject: dict)
-			return try JSONDecoder().decode(T.self, from: data)
+            return try JSONDecoder().decode(T.self, from: data)
+        }
+    }
+    
+    func decodeArray<T: Decodable>(_ type: T.Type) throws -> [T] {
+        return try map { dict in
+            let data = try JSONSerialization.data(withJSONObject: dict)
+            return try JSONDecoder().decode(type, from: data)
         }
     }
 }
@@ -77,7 +84,7 @@ public extension Dictionary where Key == String, Value == Sendable {
             if let dict = anyValue as? [String: Any] {
                 return try dict.decode(decodableType.self) as! T
             } else if let array = anyValue as? [[String: Any]] {
-                return try array.decode(decodableType.self) as! T
+                return try array.decodeArray(decodableType.self) as! T
             } else {
                 throw MCPToolError.invalidArgumentType(
                     parameterName: name,
