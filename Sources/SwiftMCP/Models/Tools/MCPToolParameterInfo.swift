@@ -13,7 +13,7 @@ public struct MCPToolParameterInfo: Sendable {
     public let name: String
     
     /// The actual type of the parameter (e.g. Address.self)
-    public let type: Any.Type
+    public let type: Sendable.Type
     
     /// An optional description of the parameter
     public let description: String?
@@ -33,7 +33,7 @@ public struct MCPToolParameterInfo: Sendable {
        - description: An optional description of the parameter
        - defaultValue: An optional default value for the parameter
      */
-    public init(name: String, type: Any.Type, description: String? = nil, defaultValue: Sendable? = nil, isRequired: Bool) {
+    public init(name: String, type: Sendable.Type, description: String? = nil, defaultValue: Sendable? = nil, isRequired: Bool) {
         self.name = name
         self.type = type
         self.description = description

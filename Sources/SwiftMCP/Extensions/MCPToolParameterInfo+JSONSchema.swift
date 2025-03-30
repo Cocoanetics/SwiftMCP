@@ -28,7 +28,7 @@ extension MCPToolParameterInfo {
 		}
 		
 		// Handle array types
-		if let arrayType = type as? Array<Any>.Type {
+		if let arrayType = type as? Array<Sendable>.Type {
 			// Get the element type from the array
 			let schema: JSONSchema
 			if let type = arrayType.elementType {

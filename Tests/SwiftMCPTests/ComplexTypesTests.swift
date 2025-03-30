@@ -371,8 +371,8 @@ func testContactInfoProcessing() async throws {
         ]
     )
     
-    let processResponse = try await client.send(processRequest)
-    
+	let processResponse = try await client.send(processRequest)
+	
     #expect(processResponse.id == 5)
     #expect(processResponse.error == nil)
     
@@ -384,8 +384,10 @@ func testContactInfoProcessing() async throws {
     let processFirstContent = unwrap(processContent.first)
     let processText = unwrap(processFirstContent["text"])
     
-    // Verify the processed contact
-    let processedContact = try JSONDecoder().decode(ContactInfo.self, from: processText.data(using: .utf8)!)
+	// Verify the processed contact
+	let json = processText.data(using: .utf8)!
+    let processedContacts = try JSONDecoder().decode([ContactInfo].self, from: json)
+    let processedContact = unwrap(processedContacts.first)
     #expect(processedContact.name == "JOHN DOE")
     #expect(processedContact.email == "john@example.com")
     #expect(processedContact.phone == "+1234567890")

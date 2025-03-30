@@ -216,7 +216,15 @@ public struct MCPToolMacro: PeerMacro {
 				   rawValue == "nil" || // nil
 				   (rawValue.hasPrefix("[") && rawValue.hasSuffix("]")) // arrays
 				{
-					defaultValue = rawValue
+					// For empty array literals, use the parameter type
+					if rawValue == "[]" {
+						// Convert [Type] to Array<Type>
+						let arrayType = paramType.replacingOccurrences(of: "[", with: "Array<")
+							.replacingOccurrences(of: "]", with: ">")
+						defaultValue = "\(arrayType)()"
+					} else {
+						defaultValue = rawValue
+					}
 				} else if let stringLiteral = defaultExpr.as(StringLiteralExprSyntax.self) {
 					// For string literals, extract the exact string value without quotes
 					defaultValue = "\"\(stringLiteral.segments.description)\""

@@ -25,6 +25,20 @@ extension Array where Element == [String: Any] {
     }
 }
 
+// MARK: - String to Decodable Conversion
+extension String {
+    func decode<T: Decodable>(_ type: T.Type) throws -> T {
+        guard let data = self.data(using: .utf8) else {
+            throw MCPToolError.invalidArgumentType(
+                parameterName: "jsonString",
+                expectedType: "Valid JSON string",
+                actualType: "Invalid JSON string"
+            )
+        }
+        return try JSONDecoder().decode(type, from: data)
+    }
+}
+
 // MARK: - Parameter Extraction Extensions for Dictionaries
 public extension Dictionary where Key == String, Value == Sendable {
     
@@ -85,10 +99,21 @@ public extension Dictionary where Key == String, Value == Sendable {
                 return try dict.decode(decodableType.self) as! T
             } else if let array = anyValue as? [[String: Any]] {
                 return try array.decode(decodableType.self) as! T
+            } else if let jsonString = anyValue as? String {
+                // Handle JSON string using the new decode method
+                if let result = try jsonString.decode(decodableType) as? T {
+                    return result
+                } else {
+                    throw MCPToolError.invalidArgumentType(
+                        parameterName: name,
+                        expectedType: String(describing: T.self),
+                        actualType: "Decoded object could not be cast to \(String(describing: T.self))"
+                    )
+                }
             } else {
                 throw MCPToolError.invalidArgumentType(
                     parameterName: name,
-                    expectedType: "Dictionary or Array of Dictionaries",
+                    expectedType: "Dictionary, Array of Dictionaries, or JSON string",
                     actualType: String(describing: Swift.type(of: anyValue))
                 )
             }
@@ -182,6 +207,28 @@ public extension Dictionary where Key == String, Value == Sendable {
                     expectedType: "Array of Decodable objects",
                     actualType: String(describing: Swift.type(of: anyValue))
                 )
+            }
+        } else if let stringArray = anyValue as? [String],
+                  let decodableType = elementType as? (any Decodable.Type) {
+            // Handle array of JSON strings
+            let decoder = JSONDecoder()
+            return try stringArray.map { jsonString in
+                guard let data = jsonString.data(using: .utf8) else {
+                    throw MCPToolError.invalidArgumentType(
+                        parameterName: name,
+                        expectedType: "Valid JSON string",
+                        actualType: "Invalid JSON string"
+                    )
+                }
+                if let result = try decoder.decode(decodableType, from: data) as? T {
+                    return result
+                } else {
+                    throw MCPToolError.invalidArgumentType(
+                        parameterName: name,
+                        expectedType: String(describing: T.self),
+                        actualType: "Decoded object could not be cast to \(String(describing: T.self))"
+                    )
+                }
             }
         } else {
             throw MCPToolError.invalidArgumentType(
