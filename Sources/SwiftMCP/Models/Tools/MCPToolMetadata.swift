@@ -16,7 +16,7 @@ public struct MCPToolMetadata: Sendable {
     public let parameters: [MCPToolParameterInfo]
     
     /// The return type of the function, if any
-    public let returnType: String?
+    public let returnType: Any.Type?
     
     /// A description of what the function returns
     public let returnTypeDescription: String?
@@ -42,7 +42,7 @@ public struct MCPToolMetadata: Sendable {
        - isAsync: Whether the function is asynchronous
        - isThrowing: Whether the function can throw errors
      */
-    public init(name: String, description: String? = nil, parameters: [MCPToolParameterInfo], returnType: String? = nil, returnTypeDescription: String? = nil, isAsync: Bool = false, isThrowing: Bool = false) {
+    public init(name: String, description: String? = nil, parameters: [MCPToolParameterInfo], returnType: Any.Type? = nil, returnTypeDescription: String? = nil, isAsync: Bool = false, isThrowing: Bool = false) {
         self.name = name
         self.description = description
         self.parameters = parameters

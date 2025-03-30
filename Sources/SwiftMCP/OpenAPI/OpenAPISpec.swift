@@ -106,24 +106,24 @@ struct OpenAPISpec: Codable {
             let responseDescription: String
             let voidDescription = "Empty string (void function)"
             
-            if metadata.returnType == nil || metadata.returnType == "Void" {
+            if metadata.returnType == nil || metadata.returnType == Void.self {
                 responseSchema = .string(description: voidDescription)
                 responseDescription = metadata.returnTypeDescription ?? "A void function that performs an action"
             } else {
                 // Convert Swift type to JSON Schema type
-                let returnType = metadata.returnType ?? "String"
-                switch returnType.JSONSchemaType {
-                    case "number":
+                let returnType = metadata.returnType!
+                switch returnType {
+                    case is Int.Type, is Double.Type:
                         responseSchema = .number(description: metadata.returnTypeDescription)
-                    case "boolean":
+                    case is Bool.Type:
                         responseSchema = .boolean(description: metadata.returnTypeDescription)
-                    case "array":
-                        if let elementType = returnType.arrayElementType {
+                    case is Array<Any>.Type:
+                        if let elementType = (returnType as? Array<Any>.Type)?.elementType {
                             let itemSchema: JSONSchema
-                            switch elementType.JSONSchemaType {
-                                case "number":
+                            switch elementType {
+                                case is Int.Type, is Double.Type:
                                     itemSchema = .number()
-                                case "boolean":
+                                case is Bool.Type:
                                     itemSchema = .boolean()
                                 default:
                                     itemSchema = .string()

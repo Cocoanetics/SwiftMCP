@@ -130,10 +130,10 @@ public struct MCPToolMacro: PeerMacro {
 		let returnTypeString: String
 		let returnTypeForBlock: String
 		if let returnType = funcDecl.signature.returnClause?.type.description.trimmingCharacters(in: .whitespacesAndNewlines) {
-			returnTypeString = "\"\(returnType)\""
+			returnTypeString = returnType
 			returnTypeForBlock = returnType
 		} else {
-			returnTypeString = "nil"
+			returnTypeString = "Void"
 			returnTypeForBlock = "Void"
 		}
 		
@@ -252,7 +252,7 @@ public struct MCPToolMacro: PeerMacro {
 			name: "\(functionName)",
 			description: \(descriptionArg),
 			parameters: [\(parameterString)],
-			returnType: \(returnTypeString),
+			returnType: \(returnTypeString).self,
 			returnTypeDescription: \(documentation.returns.map { "\"\($0.escapedForSwiftString)\"" } ?? "nil"),
 			isAsync: \(funcDecl.signature.effectSpecifiers?.asyncSpecifier != nil),
 			isThrowing: \(funcDecl.signature.effectSpecifiers?.throwsClause?.throwsSpecifier != nil)
