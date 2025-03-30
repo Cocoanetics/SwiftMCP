@@ -106,6 +106,52 @@ class URLParameterHandling {
     }
 }
 
+// Test class with SchemaRepresentable types
+@MCPServer
+class SchemaRepresentableTests {
+    /// A person's contact information
+    @Schema
+    struct ContactInfo {
+        /// The person's full name
+        let name: String
+        
+        /// The person's email address
+        let email: String
+        
+        /// The person's phone number (optional)
+        let phone: String?
+        
+        /// The person's age
+        var age: Int = 0
+        
+        /// The person's address
+        let address: Address
+    }
+    
+    /// A person's address
+    @Schema
+    struct Address {
+        /// The street name
+        let street: String
+        
+        /// The city name
+        let city: String
+    }
+    
+    /**
+     Get reminders from the reminders app with flexible filtering options.
+     
+     - Parameters:
+        - contact: A test contact
+     */
+    @MCPTool
+    func fetchReminders(
+        contact: Address
+    ) -> String {
+        return "\(contact)"
+    }
+}
+
 // MARK: - Tests
 
 @Test
@@ -307,5 +353,62 @@ func testURLParameters() async throws {
         }
     } else {
         #expect(Bool(false), "Could not find processURL function")
+    }
+}
+
+@Test
+func testSchemaRepresentableParameter() async throws {
+    let instance = SchemaRepresentableTests()
+    let tools = instance.mcpTools
+    
+    // Create test data
+    let addressDict: [String: Sendable] = [
+        "street": "123 Main St",
+        "city": "New York"
+    ]
+    
+    // Create parameters dictionary
+    let params: [String: Sendable] = [
+        "contact": addressDict
+    ]
+    
+    // Call the function
+    let result = try await instance.callTool("fetchReminders", arguments: params)
+    
+    // Verify the result
+    #expect(result as? String == "Address(street: \"123 Main St\", city: \"New York\")")
+    
+    // Verify the schema
+    if let tool = tools.first(where: { $0.name == "fetchReminders" }) {
+        // Verify the schema matches the expected JSON schema
+        if case .object(let properties, let required, _) = tool.inputSchema {
+            #expect(properties.count == 1)
+			#expect(required == ["contact"])
+            
+            // Verify the contact property
+            if case .object(let contactProperties, let contactRequired, _) = properties["contact"] {
+                #expect(contactProperties.count == 2)
+                #expect(contactRequired == ["street", "city"])
+                
+                // Verify property types
+                if case .string(description: _, enumValues: _) = contactProperties["street"] {
+                    // street property is correct
+                } else {
+                    #expect(Bool(false), "Expected string schema for street property")
+                }
+                
+                if case .string(description: _, enumValues: _) = contactProperties["city"] {
+                    // city property is correct
+                } else {
+                    #expect(Bool(false), "Expected string schema for city property")
+                }
+            } else {
+                #expect(Bool(false), "Expected object schema for contact property")
+            }
+        } else {
+            #expect(Bool(false), "Expected object schema")
+        }
+    } else {
+        #expect(Bool(false), "Could not find fetchReminders function")
     }
 } 

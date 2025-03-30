@@ -10,6 +10,11 @@ import Foundation
 extension MCPToolParameterInfo {
 	
 	var jsonSchema: JSONSchema {
+		// If this is a SchemaRepresentable type, use its schema
+		if let schemaType = schemaType as? any SchemaRepresentable.Type {
+			return schemaType.schema
+		}
+		
 		// If this is an enum parameter, return a string schema with enum values
 		if let enumValues = enumValues {
 			return JSONSchema.string(description: description, enumValues: enumValues)

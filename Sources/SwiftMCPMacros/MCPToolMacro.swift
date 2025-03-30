@@ -240,7 +240,10 @@ public struct MCPToolMacro: PeerMacro {
 			// Strip optional marker from type for JSON schema
 			let baseType = isOptionalType ? String(paramType.dropLast()) : paramType
 			
-			parameterString += "MCPToolParameterInfo(name: \"\(paramName)\", label: \"\(paramLabel)\", type: \"\(baseType)\", description: \(paramDescription), defaultValue: \(defaultValue), enumValues: \(enumValuesStr), isRequired: \(isRequired))"
+			// Get the actual type for schemaType
+			let schemaType = param.type.description.trimmingCharacters(in: .whitespacesAndNewlines)
+			
+			parameterString += "MCPToolParameterInfo(name: \"\(paramName)\", type: \"\(baseType)\", schemaType: \(schemaType).self, description: \(paramDescription), defaultValue: \(defaultValue), enumValues: \(enumValuesStr), isRequired: \(isRequired))"
 			
 			// Store parameter info for wrapper function generation
 			parameterInfos.append((name: paramName, label: paramLabel, type: paramType, defaultValue: defaultValue))
