@@ -54,76 +54,16 @@ public struct SchemaPropertyInfo: Sendable {
             return JSONSchema.string(description: description, enumValues: caseIterableType.caseLabels)
         }
         
-        // Handle array types
-        if let arrayType = schemaType as? Array<Any>.Type {
-            // Get the element type from the array
-            let schema: JSONSchema
-            if let type = arrayType.elementType {
-                if type == Int.self || type == Double.self || type == Float.self {
-                    schema = JSONSchema.number()
-                } else if type == Bool.self {
-                    schema = JSONSchema.boolean()
-                } else if let schemaType = type as? any SchemaRepresentable.Type {
-                    schema = schemaType.schema
-                } else {
-                    schema = JSONSchema.string()
-                }
-            } else {
-                schema = JSONSchema.string()
-            }
-            return JSONSchema.array(items: schema, description: description)
+        // If this is a JSONSchemaTypeConvertible type, use its schema
+        if let convertibleType = schemaType as? any JSONSchemaTypeConvertible.Type {
+            return convertibleType.jsonSchema(description: description)
         }
         
-        // Handle basic types
-        switch schemaType {
-        case is Int.Type, is Double.Type, is Float.Type:
-            return JSONSchema.number(description: description)
-        case is Bool.Type:
-            return JSONSchema.boolean(description: description)
-        default:
-            return JSONSchema.string(description: description)
-        }
+        // Default to string for unknown types
+        return JSONSchema.string(description: description)
     }
 
     public var jsonSchema: JSONSchema {
-        // If this is a SchemaRepresentable type, use its schema
-        if let schemaType = schemaType as? any SchemaRepresentable.Type {
-            return schemaType.schema
-        }
-        
-        // If this is a CaseIterable type, return a string schema with enum values
-        if let caseIterableType = schemaType as? any CaseIterable.Type {
-            return JSONSchema.string(description: description, enumValues: caseIterableType.caseLabels)
-        }
-        
-        // Handle array types
-        if let arrayType = schemaType as? Array<Any>.Type {
-            // Get the element type from the array
-            let schema: JSONSchema
-            if let type = arrayType.elementType {
-                if type == Int.self || type == Double.self || type == Float.self {
-                    schema = JSONSchema.number()
-                } else if type == Bool.self {
-                    schema = JSONSchema.boolean()
-                } else if let schemaType = type as? any SchemaRepresentable.Type {
-                    schema = schemaType.schema
-                } else {
-                    schema = JSONSchema.string()
-                }
-            } else {
-                schema = JSONSchema.string()
-            }
-            return JSONSchema.array(items: schema, description: description)
-        }
-        
-        // Handle basic types
-        switch schemaType {
-        case is Int.Type, is Double.Type, is Float.Type:
-            return JSONSchema.number(description: description)
-        case is Bool.Type:
-            return JSONSchema.boolean(description: description)
-        default:
-            return JSONSchema.string(description: description)
-        }
+        return schema
     }
 }
