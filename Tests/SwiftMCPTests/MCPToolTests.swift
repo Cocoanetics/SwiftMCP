@@ -152,6 +152,28 @@ class SchemaRepresentableTests {
     }
 }
 
+// Test class with array of enums
+@MCPServer
+class EnumArrayTest {
+    /// Function that takes an array of weekdays
+    /// - Parameter days: Array of weekdays
+    @MCPTool
+    func processWeekdays(days: [Weekday]) {
+        // Implementation not important for the test
+    }
+}
+
+// Add Weekday enum before the tests
+enum Weekday: String, CaseIterable {
+    case monday
+    case tuesday
+    case wednesday
+    case thursday
+    case friday
+    case saturday
+    case sunday
+}
+
 // MARK: - Tests
 
 @Test
@@ -362,14 +384,11 @@ func testSchemaRepresentableParameter() async throws {
     let tools = instance.mcpTools
     
     // Create test data
-    let addressDict: [String: Sendable] = [
-        "street": "123 Main St",
-        "city": "New York"
-    ]
+    let address = SchemaRepresentableTests.Address(street: "123 Main St", city: "New York")
     
     // Create parameters dictionary
     let params: [String: Sendable] = [
-        "contact": addressDict
+        "contact": address
     ]
     
     // Call the function
@@ -383,7 +402,7 @@ func testSchemaRepresentableParameter() async throws {
         // Verify the schema matches the expected JSON schema
         if case .object(let properties, let required, _) = tool.inputSchema {
             #expect(properties.count == 1)
-			#expect(required == ["contact"])
+            #expect(required == ["contact"])
             
             // Verify the contact property
             if case .object(let contactProperties, let contactRequired, _) = properties["contact"] {
@@ -410,5 +429,43 @@ func testSchemaRepresentableParameter() async throws {
         }
     } else {
         #expect(Bool(false), "Could not find fetchReminders function")
+    }
+}
+
+@Test
+func testEnumArraySchema() throws {
+    let server = EnumArrayTest()
+    let tools = server.mcpTools
+    
+    // Find the processWeekdays tool
+    guard let tool = tools.first(where: { $0.name == "processWeekdays" }) else {
+        #expect(Bool(false), "Could not find processWeekdays tool")
+        return
+    }
+    
+    // Get the schema for the days parameter
+    if case .object(let properties, _, _) = tool.inputSchema {
+        guard let daysSchema = properties["days"] else {
+            #expect(Bool(false), "Could not find days parameter in schema")
+            return
+        }
+        
+        // Verify it's an array
+        if case .array(let itemsSchema, _) = daysSchema {
+            // Verify the items are strings with enum values
+            if case .string(description: _, enumValues: let enumValues) = itemsSchema {
+                #expect(enumValues != nil, "Array items should have enum values")
+                
+                // Verify the enum values are the Weekday cases
+                let expectedValues = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+                #expect(enumValues?.sorted() == expectedValues.sorted())
+            } else {
+                #expect(Bool(false), "Array items should be strings")
+            }
+        } else {
+            #expect(Bool(false), "Expected array schema")
+        }
+    } else {
+        #expect(Bool(false), "Expected object schema")
     }
 } 

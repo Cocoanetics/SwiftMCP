@@ -110,15 +110,57 @@ public struct SchemaPropertyInfo: Sendable {
             }
         }
     }
-}
 
-/// Extension to provide schema support for arrays of SchemaRepresentable elements
-extension Array: SchemaRepresentable where Element: SchemaRepresentable {
-	public static var __schemaMetadata: SchemaMetadata {
-		return .init(name: "", parameters: [])
-	}
-	
-    public static var schema: JSONSchema {
-        .array(items: Element.schema)
+    public var jsonSchema: JSONSchema {
+        // If this is an enum parameter, return a string schema with enum values
+        if let enumValues = enumValues {
+            return .string(description: description, enumValues: enumValues)
+        }
+        
+        // Handle array types
+        if type.hasPrefix("[") && type.hasSuffix("]") {
+            let elementType = String(type.dropFirst().dropLast())
+            let baseElementType = elementType.hasSuffix("?") || elementType.hasSuffix("!") ? String(elementType.dropLast()) : elementType
+            
+            // If the element type is SchemaRepresentable, use its schema
+            if let elementSchemaType = schemaType as? any SchemaRepresentable.Type {
+                return .array(items: elementSchemaType.schema, description: description)
+            }
+            
+            // Handle basic array types
+            let elementSchema: JSONSchema
+            switch baseElementType {
+            case "Int", "Double", "Float":
+                elementSchema = .number()
+            case "Bool":
+                elementSchema = .boolean()
+            default:
+                // For unknown types, try to get the schema type
+                if let schemaType = schemaType as? any SchemaRepresentable.Type {
+                    elementSchema = schemaType.schema
+                } else {
+                    elementSchema = .string()
+                }
+            }
+            
+            return .array(items: elementSchema, description: description)
+        }
+        
+        // Handle basic types
+        switch type {
+        case "String":
+            return .string(description: description)
+        case "Int", "Double", "Float":
+            return .number(description: description)
+        case "Bool":
+            return .boolean(description: description)
+        default:
+            // For unknown types, try to get the schema type
+            if let schemaType = schemaType as? any SchemaRepresentable.Type {
+                return schemaType.schema
+            } else {
+                return .string(description: description)
+            }
+        }
     }
-} 
+}
