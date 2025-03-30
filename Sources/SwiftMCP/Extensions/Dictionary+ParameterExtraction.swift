@@ -3,18 +3,38 @@ import Foundation
 // MARK: - Parameter Extraction Extensions for Dictionaries
 public extension Dictionary where Key == String, Value == Sendable {
     
+    /// Converts a dictionary or array of dictionaries to a Decodable type
+    /// - Parameters:
+    ///   - value: The dictionary or array of dictionaries to convert
+    ///   - type: The type to convert to
+    /// - Returns: The converted value
+    /// - Throws: MCPToolError.invalidArgumentType if the conversion fails
+    private func convertToDecodable<T: Decodable>(_ value: Any, as type: T.Type) throws -> T {
+        let data: Data
+        if let dict = value as? [String: Any] {
+            data = try JSONSerialization.data(withJSONObject: dict)
+        } else if let array = value as? [[String: Any]] {
+            data = try JSONSerialization.data(withJSONObject: array)
+        } else {
+            throw MCPToolError.invalidArgumentType(
+                parameterName: "value",
+                expectedType: "Dictionary or Array of Dictionaries",
+                actualType: String(describing: Swift.type(of: value))
+            )
+        }
+        return try JSONDecoder().decode(type, from: data)
+    }
+    
     /// Extracts a parameter of the specified type from the dictionary
     /// - Parameter name: The name of the parameter
     /// - Returns: The extracted value of type T
     /// - Throws: MCPToolError.invalidArgumentType if the parameter cannot be converted to type T
     func extractParameter<T>(named name: String) throws -> T {
-		
-		guard let anyValue = self[name] else
-		{
-			// this can never happen because arguments have already been enriched with default values
-			preconditionFailure("Failed to retrieve value for parameter \(name)")
-		}
-		
+        guard let anyValue = self[name] else {
+            // this can never happen because arguments have already been enriched with default values
+            preconditionFailure("Failed to retrieve value for parameter \(name)")
+        }
+        
         // try direct type casting
         if let value = anyValue as? T {
             return value
@@ -23,57 +43,44 @@ public extension Dictionary where Key == String, Value == Sendable {
             let boolValue = try extractBool(named: name)
             return boolValue as! T
         }
-		else if T.self == Date.self {
-				// Handle Date type using the new extractDate method
-			let date = try extractDate(named: name)
-			return date as! T
-		}
+        else if T.self == Date.self {
+            // Handle Date type using the new extractDate method
+            let date = try extractDate(named: name)
+            return date as! T
+        }
         else if T.self == URL.self {
             // Handle URL type using the new extractURL method
             let url = try extractURL(named: name)
             return url as! T
         }
-        else if let caseType = T.self as? any CaseIterable.Type
-		{
-			guard let string = anyValue as? String else
-			{
-				throw MCPToolError.invalidArgumentType(
-					parameterName: name,
-					expectedType: "String",
-					actualType: String(describing: Swift.type(of: anyValue))
-				)
-			}
-			
-			let caseLabels = caseType.caseLabels
-			
-			guard let index = caseLabels.firstIndex(of: string) else {
-				
-				throw MCPToolError.invalidEnumValue(parameterName: name, expectedValues: caseLabels, actualValue: string)
-			}
-			
-			guard let allCases = caseType.allCases as? [T] else {
-				// This can never happen because the result of CaseIterable is an array of the enum type
-				preconditionFailure()
-			}
-			
-			// return the actual enum case value that matches the string label
-			return allCases[index]
-		}
-        else if let schemaType = T.self as? any SchemaRepresentable.Type,
-				let decodableType = schemaType as? Decodable.Type {
-            // For SchemaRepresentable types, re-encode the dictionary and decode as the type
-            guard let dict = anyValue as? [String: Any] else {
+        else if let caseType = T.self as? any CaseIterable.Type {
+            guard let string = anyValue as? String else {
                 throw MCPToolError.invalidArgumentType(
                     parameterName: name,
-                    expectedType: "Dictionary",
+                    expectedType: "String",
                     actualType: String(describing: Swift.type(of: anyValue))
                 )
             }
             
-			let data = try JSONSerialization.data(withJSONObject: dict)
-			return try JSONDecoder().decode(decodableType.self, from: data) as! T
+            let caseLabels = caseType.caseLabels
+            
+            guard let index = caseLabels.firstIndex(of: string) else {
+                throw MCPToolError.invalidEnumValue(parameterName: name, expectedValues: caseLabels, actualValue: string)
+            }
+            
+            guard let allCases = caseType.allCases as? [T] else {
+                // This can never happen because the result of CaseIterable is an array of the enum type
+                preconditionFailure()
+            }
+            
+            // return the actual enum case value that matches the string label
+            return allCases[index]
         }
-		else {
+        else if let schemaType = T.self as? any SchemaRepresentable.Type,
+                let decodableType = schemaType as? Decodable.Type {
+            return try convertToDecodable(anyValue, as: decodableType.self) as! T
+        }
+        else {
             throw MCPToolError.invalidArgumentType(
                 parameterName: name,
                 expectedType: String(describing: T.self),
