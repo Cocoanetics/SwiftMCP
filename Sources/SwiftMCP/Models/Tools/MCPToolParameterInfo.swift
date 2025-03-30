@@ -12,9 +12,6 @@ public struct MCPToolParameterInfo: Sendable {
     /// The name of the parameter
     public let name: String
     
-    /// The label of the parameter (e.g., "for" in "for subject: String")
-    public let label: String
-    
     /// The type of the parameter
     public let type: String
     
@@ -35,15 +32,13 @@ public struct MCPToolParameterInfo: Sendable {
      
      - Parameters:
        - name: The name of the parameter
-       - label: The label of the parameter (e.g., "for" in "for subject: String")
        - type: The type of the parameter
        - description: An optional description of the parameter
        - defaultValue: An optional default value for the parameter
        - enumValues: The possible values if this is an enum parameter
      */
-    public init(name: String, label: String, type: String, description: String? = nil, defaultValue: Sendable? = nil, enumValues: [String]? = nil, isRequired: Bool) {
+    public init(name: String, type: String, description: String? = nil, defaultValue: Sendable? = nil, enumValues: [String]? = nil, isRequired: Bool) {
         self.name = name
-        self.label = label
         self.type = type
         self.description = description
         self.defaultValue = defaultValue

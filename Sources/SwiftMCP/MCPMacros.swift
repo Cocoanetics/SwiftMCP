@@ -49,3 +49,28 @@ public macro MCPTool(description: String? = nil) = #externalMacro(module: "Swift
 @attached(member, names: named(callTool), named(__mcpServerName), named(__mcpServerVersion), named(__mcpServerDescription))
 @attached(extension, conformances: MCPServer)
 public macro MCPServer(name: String? = nil, version: String? = nil) = #externalMacro(module: "SwiftMCPMacros", type: "MCPServerMacro")
+
+/// A macro that generates schema metadata for a struct.
+///
+/// Apply this macro to structs to generate metadata about their properties,
+/// including property names, types, descriptions, and default values.
+/// The macro extracts documentation from comments and generates a hidden
+/// metadata property that can be used for validation and serialization.
+///
+/// Example:
+/// ```swift
+/// /// A person's contact information
+/// @Schema
+/// struct ContactInfo {
+///     /// The person's full name
+///     let name: String
+///     
+///     /// The person's email address
+///     let email: String
+///     
+///     /// The person's phone number (optional)
+///     let phone: String?
+/// }
+/// ```
+@attached(peer, names: prefixed(__schemaMetadata_))
+public macro Schema() = #externalMacro(module: "SwiftMCPMacros", type: "SchemaMacro")
