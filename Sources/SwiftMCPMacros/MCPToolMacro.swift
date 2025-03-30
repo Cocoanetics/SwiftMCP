@@ -240,10 +240,18 @@ public struct MCPToolMacro: PeerMacro {
 			// Strip optional marker from type for JSON schema
 			let baseType = isOptionalType ? String(paramType.dropLast()) : paramType
 			
-			// Get the actual type for schemaType
-			let schemaType = param.type.description.trimmingCharacters(in: .whitespacesAndNewlines)
-			
-			parameterString += "MCPToolParameterInfo(name: \"\(paramName)\", type: \"\(baseType)\", schemaType: \(schemaType).self, description: \(paramDescription), defaultValue: \(defaultValue), enumValues: \(enumValuesStr), isRequired: \(isRequired))"
+			// Handle array types
+			if baseType.hasPrefix("[") && baseType.hasSuffix("]") {
+				// For array types, we can use the type directly since Array is now SchemaRepresentable
+				parameterString += "MCPToolParameterInfo(name: \"\(paramName)\", type: \"\(baseType)\", schemaType: \(baseType).self, description: \(paramDescription), defaultValue: \(defaultValue), enumValues: \(enumValuesStr), isRequired: \(isRequired))"
+			} else {
+				// For non-array types, we need to handle the case where the schema type might be nil
+				if baseType == "String" || baseType == "Int" || baseType == "Double" || baseType == "Float" || baseType == "Bool" {
+					parameterString += "MCPToolParameterInfo(name: \"\(paramName)\", type: \"\(baseType)\", schemaType: \(baseType).self, description: \(paramDescription), defaultValue: \(defaultValue), enumValues: \(enumValuesStr), isRequired: \(isRequired))"
+				} else {
+					parameterString += "MCPToolParameterInfo(name: \"\(paramName)\", type: \"\(baseType)\", schemaType: \(baseType).self, description: \(paramDescription), defaultValue: \(defaultValue), enumValues: \(enumValuesStr), isRequired: \(isRequired))"
+				}
+			}
 			
 			// Store parameter info for wrapper function generation
 			parameterInfos.append((name: paramName, label: paramLabel, type: paramType, defaultValue: defaultValue))

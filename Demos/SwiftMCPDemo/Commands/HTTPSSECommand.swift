@@ -6,6 +6,36 @@ import Logging
 import OSLog
 #endif
 
+
+/// A person's contact information
+@Schema
+struct ContactInfo {
+	/// The person's full name
+	let name: String
+	
+	/// The person's email address
+	let email: String
+	
+	/// The person's phone number (optional)
+	let phone: String?
+	
+	/// The person's age
+	var age: Int = 0
+	
+	/// The person's address
+	var addresses: [Address]?
+}
+
+/// A person's address
+@Schema
+struct Address {
+	/// The street name
+	let street: String
+	
+	/// The city name
+	let city: String
+}
+
 /**
  A command that starts an HTTP server with Server-Sent Events (SSE) support for SwiftMCP.
  

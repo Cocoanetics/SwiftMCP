@@ -11,10 +11,11 @@ actor Calculator {
 	
 	/**
 	  Gets the current date/time on the server
+	 - parameter contact: A test contact
 	 - Returns: The current time
 	 */
 	@MCPTool
-	func getCurrentDateTime() -> Date {
+	func getCurrentDateTime(contact: ContactInfo) -> Date {
 		return Date()
 	}
 	

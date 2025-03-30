@@ -168,16 +168,39 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
         }
         
         // Use the Any extension to get case labels if available
-        let enumValuesStr = ".init(caseLabelsFrom: \(propertyType).self)"
+        let baseType = propertyType.hasSuffix("?") || propertyType.hasSuffix("!") ? String(propertyType.dropLast()) : propertyType
+        let enumValuesStr = ".init(caseLabelsFrom: \(baseType).self)"
         
         // Create property info with isRequired property
         let isOptionalType = propertyType.hasSuffix("?") || propertyType.hasSuffix("!")
         let isRequired = defaultValue == "nil" && !isOptionalType
         
-        // Strip optional marker from type for JSON schema
-        let baseType = isOptionalType ? String(propertyType.dropLast()) : propertyType
+        // Handle array types
+        if propertyType.hasPrefix("[") && propertyType.hasSuffix("]") {
+            let elementType = String(propertyType.dropFirst().dropLast())
+            let baseElementType = elementType.hasSuffix("?") || elementType.hasSuffix("!") ? String(elementType.dropLast()) : elementType
+            
+            // If the element type is SchemaRepresentable, use its schema
+            if baseElementType.contains(".") {
+                // For fully qualified types, use the last component
+                let components = baseElementType.split(separator: ".")
+                let lastComponent = String(components.last ?? "")
+                let propertyStr = "SchemaPropertyInfo(name: \"\(propertyName)\", type: \"\(propertyType)\", schemaType: \(lastComponent).self, description: \(propertyDescription), defaultValue: \(defaultValue), enumValues: \(enumValuesStr), isRequired: \(isRequired))"
+                return (propertyStr, (name: propertyName, type: propertyType, defaultValue: defaultValue))
+            } else {
+                // For simple types, use the base type
+                let propertyStr = "SchemaPropertyInfo(name: \"\(propertyName)\", type: \"\(propertyType)\", schemaType: \(baseElementType).self, description: \(propertyDescription), defaultValue: \(defaultValue), enumValues: \(enumValuesStr), isRequired: \(isRequired))"
+                return (propertyStr, (name: propertyName, type: propertyType, defaultValue: defaultValue))
+            }
+        }
         
-        let propertyStr = "SchemaPropertyInfo(name: \"\(propertyName)\", type: \"\(baseType)\", schemaType: \(propertyType).self, description: \(propertyDescription), defaultValue: \(defaultValue), enumValues: \(enumValuesStr), isRequired: \(isRequired))"
+        // Strip optional marker from type for JSON schema
+        let baseTypeForSchema = isOptionalType ? String(propertyType.dropLast()) : propertyType
+        
+        // Get the actual type for schemaType
+        let schemaType = isOptionalType ? String(propertyType.dropLast()) : propertyType
+        
+        let propertyStr = "SchemaPropertyInfo(name: \"\(propertyName)\", type: \"\(baseTypeForSchema)\", schemaType: \(schemaType).self, description: \(propertyDescription), defaultValue: \(defaultValue), enumValues: \(enumValuesStr), isRequired: \(isRequired))"
         
         return (propertyStr, (name: propertyName, type: propertyType, defaultValue: defaultValue))
     }

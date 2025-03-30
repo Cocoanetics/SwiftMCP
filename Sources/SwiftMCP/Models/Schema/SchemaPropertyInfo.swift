@@ -54,11 +54,6 @@ public struct SchemaPropertyInfo: Sendable {
     
     /// Converts this property info to a JSON Schema representation
     public var schema: JSONSchema {
-        // If this is a nested schema type, get its schema
-        if let schemaType = schemaType as? any SchemaRepresentable.Type {
-            return schemaType.schema
-        }
-        
         // If this is an enum parameter, return a string schema with enum values
         if let enumValues = enumValues {
             return .string(description: description, enumValues: enumValues)
@@ -66,19 +61,36 @@ public struct SchemaPropertyInfo: Sendable {
         
         // Handle array types
         if type.hasPrefix("[") && type.hasSuffix("]") {
-            let elementType: JSONSchema
-            let elementTypeStr = String(type.dropFirst().dropLast())
+            let elementType = String(type.dropFirst().dropLast())
+            let baseElementType = elementType.hasSuffix("?") || elementType.hasSuffix("!") ? String(elementType.dropLast()) : elementType
             
-            switch elementTypeStr {
-            case "Int", "Double", "Float":
-                elementType = .number()
-            case "Bool":
-                elementType = .boolean()
-            default:
-                elementType = .string()
+            // If the element type is SchemaRepresentable, use its schema
+            if let elementSchemaType = schemaType as? any SchemaRepresentable.Type {
+                return .array(items: elementSchemaType.schema, description: description)
             }
             
-            return .array(items: elementType, description: description)
+            // Handle basic array types
+            let elementSchema: JSONSchema
+            switch baseElementType {
+            case "Int", "Double", "Float":
+                elementSchema = .number()
+            case "Bool":
+                elementSchema = .boolean()
+            default:
+                // For unknown types, try to get the schema type
+                if let schemaType = schemaType as? any SchemaRepresentable.Type {
+                    elementSchema = schemaType.schema
+                } else {
+                    elementSchema = .string()
+                }
+            }
+            
+            return .array(items: elementSchema, description: description)
+        }
+        
+        // If this is a nested schema type, get its schema
+        if let schemaType = schemaType as? any SchemaRepresentable.Type {
+            return schemaType.schema
         }
         
         // Handle basic types
@@ -90,8 +102,23 @@ public struct SchemaPropertyInfo: Sendable {
         case "Bool":
             return .boolean(description: description)
         default:
-            // For unknown types, return a string schema
-            return .string(description: description)
+            // For unknown types, try to get the schema type
+            if let schemaType = schemaType as? any SchemaRepresentable.Type {
+                return schemaType.schema
+            } else {
+                return .string(description: description)
+            }
         }
+    }
+}
+
+/// Extension to provide schema support for arrays of SchemaRepresentable elements
+extension Array: SchemaRepresentable where Element: SchemaRepresentable {
+	public static var __schemaMetadata: SchemaMetadata {
+		return .init(name: "", parameters: [])
+	}
+	
+    public static var schema: JSONSchema {
+        .array(items: Element.schema)
     }
 } 
