@@ -231,13 +231,7 @@ public struct MCPToolMacro: PeerMacro {
 			}
 			
 			// Use the Any extension to get case labels if available
-			let enumValuesStr: String
-			if paramType.hasPrefix("[") && paramType.hasSuffix("]") {
-				let elementType = String(paramType.dropFirst().dropLast())
-				enumValuesStr = ".init(caseLabelsFrom: \(elementType).self)"
-			} else {
-				enumValuesStr = ".init(caseLabelsFrom: \(paramType).self)"
-			}
+			let enumValuesStr = ".init(caseLabelsFrom: \(paramType).self)"
 			
 			// Create parameter info with isRequired property
 			let isOptionalType = paramType.hasSuffix("?") || paramType.hasSuffix("!")
