@@ -7,7 +7,7 @@ public protocol JSONSchemaTypeConvertible {
 }
 
 // Add automatic conformance for CaseIterable types
-extension CaseIterable where Self: RawRepresentable, RawValue == String {
+extension CaseIterable {
     public static func jsonSchema(description: String?) -> JSONSchema {
         .string(description: description, enumValues: caseLabels)
     }
