@@ -9,48 +9,6 @@ import SwiftMCP
 @MCPServer(name: "SwiftMCP Demo")
 actor Calculator {
 	
-	// must be CaseIterable to 
-	enum Options: CaseIterable, CustomStringConvertible {
-		var description: String
-		{
-			switch self {
-				case .all: return "ALL"
-				case .unread: return "UNREAD"
-			}
-		}
-		
-		case all
-		case unread
-	}
-	
-	/**
-	 Get reminders from the reminders app with flexible filtering options.
-	 
-	 - Parameters:
-        - contect: A test contact
-	 */
-	@MCPTool
-	func fetchReminders(
-		contact: Address
-	) -> String {
-		return "\(contact)"
-	}
-	
-	/// Sends an email
-	/// - Parameter subject: The subject of the email
-	/// - Returns Some confirmation
-	@MCPTool
-	func searchEmailSubject(for subject: String = "Default", option: Options = .all) async throws -> String
-	{
-		switch option
-		{
-			case .all:
-				return "Search in ALL emails, for subject \(subject)"
-			case .unread:
-				return "Search in UNREAD emails, for subject \(subject)"
-		}
-	}
-	
 	/**
 	  Gets the current date/time on the server
 	 - Returns: The current time
