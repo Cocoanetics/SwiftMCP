@@ -17,10 +17,6 @@ extension CaseIterable {
 }
 
 extension Array: SchemaRepresentable {
-    public static var __schemaMetadata: SchemaMetadata {
-        return .init(name: "Array", parameters: [])
-    }
-    
     public static var schema: JSONSchema {
         let elementSchema: JSONSchema
         
