@@ -115,6 +115,51 @@ public extension Dictionary where Key == String, Value == Sendable {
 		return try extractParameter(named: name) as T
 	}
     
+    /// Extracts an array of elements of the specified type from the dictionary
+    /// - Parameters:
+    ///   - name: The name of the parameter
+    ///   - elementType: The type of the elements in the array
+    /// - Returns: The extracted array of elements
+    /// - Throws: MCPToolError.invalidArgumentType if the parameter cannot be converted to an array of the specified type
+    func extractArray<T: Decodable>(named name: String, elementType: T.Type) throws -> [T] {
+        guard let anyValue = self[name] else {
+            preconditionFailure("Failed to retrieve value for parameter \(name)")
+        }
+        
+        // Try direct type casting
+        if let array = anyValue as? [T] {
+            return array
+        } else if let dictArray = anyValue as? [[String: Any]] {
+            // Convert array of dictionaries to array of the specified type
+            return try dictArray.map { dict in
+                let data = try JSONSerialization.data(withJSONObject: dict)
+                return try JSONDecoder().decode(T.self, from: data)
+            }
+        } else {
+            throw MCPToolError.invalidArgumentType(
+                parameterName: name,
+                expectedType: "Array of \(String(describing: T.self))",
+                actualType: String(describing: Swift.type(of: anyValue))
+            )
+        }
+    }
+    
+    /// Extracts an optional array of elements of the specified type from the dictionary
+    /// - Parameters:
+    ///   - name: The name of the parameter
+    ///   - elementType: The type of the elements in the array
+    /// - Returns: The extracted array of elements, or nil if the parameter is missing
+    /// - Throws: MCPToolError.invalidArgumentType if the parameter cannot be converted to an array of the specified type
+    func extractOptionalArray<T: Decodable>(named name: String, elementType: T.Type) throws -> [T]? {
+        // If the parameter is missing, return nil
+        guard self[name] != nil else {
+            return nil
+        }
+        
+        // Use the throwing version to handle any conversion errors
+        return try extractArray(named: name, elementType: elementType)
+    }
+    
     /// Extracts an Int parameter from the dictionary
     /// - Parameter name: The name of the parameter
     /// - Returns: The extracted Int value

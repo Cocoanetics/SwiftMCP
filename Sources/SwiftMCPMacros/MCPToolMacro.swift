@@ -273,10 +273,24 @@ public struct MCPToolMacro: PeerMacro {
 			
 			// Use the parameter extraction utility with appropriate type conversions
 			if param.type.hasSuffix("?") || param.type.hasSuffix("!") {
-				wrapperMethod += """
-				
-				let \(paramName): \(paramType) = try params.extractOptionalParameter(named: "\(paramName)")
-				"""
+				// Check if it's an optional array of a SchemaRepresentable type
+				if param.type.hasPrefix("[") && param.type.contains("]?") {
+					// Extract the element type from [ElementType]?
+					let startIndex = param.type.index(after: param.type.startIndex)
+					let endIndex = param.type.index(param.type.endIndex, offsetBy: -2)
+					let elementType = String(param.type[startIndex..<endIndex])
+					
+					// Use extractOptionalArray for arrays of SchemaRepresentable types
+					wrapperMethod += """
+					
+					let \(paramName) = try params.extractOptionalArray(named: "\(paramName)", elementType: \(elementType).self)
+					"""
+				} else {
+					wrapperMethod += """
+					
+					let \(paramName): \(paramType) = try params.extractOptionalParameter(named: "\(paramName)")
+					"""
+				}
 			} else if param.type == "Double" {
 				wrapperMethod += """
 				
@@ -306,6 +320,17 @@ public struct MCPToolMacro: PeerMacro {
 				wrapperMethod += """
 				
 				let \(paramName) = try params.extractFloatArray(named: "\(paramName)")
+				"""
+			} else if param.type.hasPrefix("[") && param.type.hasSuffix("]") {
+				// Extract the element type from [ElementType]
+				let startIndex = param.type.index(after: param.type.startIndex)
+				let endIndex = param.type.index(before: param.type.endIndex)
+				let elementType = String(param.type[startIndex..<endIndex])
+				
+				// Use extractArray for arrays of SchemaRepresentable types
+				wrapperMethod += """
+				
+				let \(paramName) = try params.extractArray(named: "\(paramName)", elementType: \(elementType).self)
 				"""
 			} else {
 				// For other types, use a generic parameter extraction
