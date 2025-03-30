@@ -44,19 +44,19 @@ public struct SchemaPropertyInfo: Sendable {
     
     /// Converts this property info to a JSON Schema representation
     public var schema: JSONSchema {
+        // If this is a JSONSchemaTypeConvertible type, use its schema
+        if let convertibleType = schemaType as? any JSONSchemaTypeConvertible.Type {
+            return convertibleType.jsonSchema(description: description)
+        }
+        
         // If this is a SchemaRepresentable type, use its schema
         if let schemaType = schemaType as? any SchemaRepresentable.Type {
             return schemaType.schema
         }
         
-        // If this is a CaseIterable type, return a string schema with enum values
+        // If this is a CaseIterable type that isn't JSONSchemaTypeConvertible, return a string schema with enum values
         if let caseIterableType = schemaType as? any CaseIterable.Type {
             return JSONSchema.string(description: description, enumValues: caseIterableType.caseLabels)
-        }
-        
-        // If this is a JSONSchemaTypeConvertible type, use its schema
-        if let convertibleType = schemaType as? any JSONSchemaTypeConvertible.Type {
-            return convertibleType.jsonSchema(description: description)
         }
         
         // Default to string for unknown types

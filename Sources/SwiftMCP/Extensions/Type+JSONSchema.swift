@@ -6,6 +6,13 @@ public protocol JSONSchemaTypeConvertible {
     static func jsonSchema(description: String?) -> JSONSchema
 }
 
+// Add automatic conformance for CaseIterable types
+extension CaseIterable where Self: RawRepresentable, RawValue == String {
+    public static func jsonSchema(description: String?) -> JSONSchema {
+        .string(description: description, enumValues: caseLabels)
+    }
+}
+
 extension Int: JSONSchemaTypeConvertible {
     public static func jsonSchema(description: String?) -> JSONSchema {
         .number(description: description)
