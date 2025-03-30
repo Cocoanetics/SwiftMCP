@@ -12,28 +12,24 @@ import Foundation
  */
 extension MCPToolMetadata {
 	/**
-	 Enriches a dictionary of arguments with default values for any missing parameters.
+	 Enriches a dictionary of arguments with default values and throws an error if a required parameter is missing.
 	 
 	 - Parameters:
-	   - arguments: The original arguments dictionary
+	   - arguments: The dictionary of arguments to enrich
+	   - functionName: The name of the function being called (for error messages)
 	 
-	 - Returns: A new dictionary with default values added for missing parameters
-	 - Throws: MCPToolError if required parameters are missing or if parameter conversion fails
+	 - Returns: The enriched dictionary of arguments
+	 - Throws: An error if a required parameter is missing
 	 */
-	public func enrichArguments(_ arguments: [String: Codable & Sendable]) throws -> [String: Codable & Sendable] {
-		// Create a copy of the arguments dictionary
+	public func enrichArguments(_ arguments: [String: Sendable], functionName: String? = nil) throws -> [String: Sendable] {
 		var enrichedArguments = arguments
 		
-		// Check for missing required parameters and add default values
+		// Add default values for missing parameters
 		for param in parameters {
-			// If we don't have an argument for this parameter
 			if enrichedArguments[param.name] == nil {
-				// If it has a default value, use it
 				if let defaultValue = param.defaultValue {
-					enrichedArguments[param.name] = (defaultValue as! (Codable & Sendable))
-				}
-				// If it's required and has no default value, throw an error
-				else if param.isRequired {
+					enrichedArguments[param.name] = defaultValue
+				} else if param.isRequired {
 					throw MCPToolError.missingRequiredParameter(parameterName: param.name)
 				}
 			}
