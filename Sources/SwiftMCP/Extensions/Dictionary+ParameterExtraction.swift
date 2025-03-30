@@ -9,7 +9,7 @@ extension Dictionary where Key == String {
 }
 
 // MARK: - Array of Dictionaries to Array of Decodable Conversion
-extension Array {
+extension Array where Element == [String: Any] {
     func decode<T: Decodable>(_ type: T.Type) throws -> [T] {
         return try map { dict in
             let data = try JSONSerialization.data(withJSONObject: dict)
