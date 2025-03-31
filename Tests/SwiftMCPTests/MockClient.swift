@@ -9,10 +9,10 @@ class MockClient {
         self.server = server
     }
     
-    func send(_ request: JSONRPCMessage) async throws -> JSONRPCMessage {
-        guard let response = await server.handleRequest(request) else {
-            throw MCPError.invalidResponse
-        }
-        return response
+    func send(_ request: JSONRPCMessage) async -> JSONRPCMessage? {
+		
+		let response = await server.handleRequest(request)
+		
+		return response
     }
 } 

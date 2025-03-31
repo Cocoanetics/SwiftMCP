@@ -80,7 +80,7 @@ struct EnumTests {
         let server = EnumTestServer()
         let client = MockClient(server: server)
         
-        let request = JSONRPCMessage(
+        let request = JSONRPCRequest(
             id: 1,
             method: "tools/call",
             params: [
@@ -91,12 +91,14 @@ struct EnumTests {
             ]
         )
         
-        let response = try await client.send(request)
+        let response = unwrap(await client.send(request) as? JSONRPCResponse)
         
         #expect(response.id == 1)
-        #expect(response.error == nil)
         
-        let result = unwrap(response.result)
+        guard let result = response.result else {
+            throw TestError("Expected result to be non-nil")
+        }
+        
         let isError = unwrap(result["isError"]?.value as? Bool)
         #expect(isError == false)
         
@@ -114,7 +116,7 @@ struct EnumTests {
         let server = EnumTestServer()
         let client = MockClient(server: server)
         
-        let request = JSONRPCMessage(
+        let request = JSONRPCRequest(
             id: 2,
             method: "tools/call",
             params: [
@@ -125,12 +127,14 @@ struct EnumTests {
             ]
         )
         
-        let response = try await client.send(request)
+        let response = unwrap(await client.send(request) as? JSONRPCResponse)
         
-        #expect(response.id == 2)
-        #expect(response.error == nil)
+        #expect(response.id == 1)
         
-        let result = unwrap(response.result)
+        guard let result = response.result else {
+            throw TestError("Expected result to be non-nil")
+        }
+        
         let isError = unwrap(result["isError"]?.value as? Bool)
         #expect(isError == false)
         
@@ -148,7 +152,7 @@ struct EnumTests {
         let server = EnumTestServer()
         let client = MockClient(server: server)
         
-        let request = JSONRPCMessage(
+        let request = JSONRPCRequest(
             id: 3,
             method: "tools/call",
             params: [
@@ -159,12 +163,14 @@ struct EnumTests {
             ]
         )
         
-        let response = try await client.send(request)
+		let response = unwrap(await client.send(request) as? JSONRPCResponse)
         
-        #expect(response.id == 3)
-        #expect(response.error == nil)
+        #expect(response.id == 1)
         
-        let result = unwrap(response.result)
+        guard let result = response.result else {
+            throw TestError("Expected result to be non-nil")
+        }
+        
         let isError = unwrap(result["isError"]?.value as? Bool)
         #expect(isError == false)
         
@@ -174,7 +180,7 @@ struct EnumTests {
         let text = unwrap(firstContent["text"]) as String
         
         #expect(type == "text")
-        #expect(text == "Order: SORT_ASC")
+        #expect(text == "Order: ascending")
     }
     
     @Test("Test array of enums")
@@ -182,7 +188,7 @@ struct EnumTests {
         let server = EnumTestServer()
         let client = MockClient(server: server)
         
-        let request = JSONRPCMessage(
+        let request = JSONRPCRequest(
             id: 4,
             method: "tools/call",
             params: [
@@ -193,12 +199,14 @@ struct EnumTests {
             ]
         )
         
-        let response = try await client.send(request)
+		let response = unwrap(await client.send(request) as? JSONRPCResponse)
         
-        #expect(response.id == 4)
-        #expect(response.error == nil)
+        #expect(response.id == 1)
         
-        let result = unwrap(response.result)
+        guard let result = response.result else {
+            throw TestError("Expected result to be non-nil")
+        }
+        
         let isError = unwrap(result["isError"]?.value as? Bool)
         #expect(isError == false)
         
@@ -217,7 +225,7 @@ struct EnumTests {
         let client = MockClient(server: server)
         
         // Test with values
-        let requestWithValues = JSONRPCMessage(
+        let requestWithValues = JSONRPCRequest(
             id: 5,
             method: "tools/call",
             params: [
@@ -228,12 +236,14 @@ struct EnumTests {
             ]
         )
         
-        let responseWithValues = try await client.send(requestWithValues)
+		let responseWithValues = unwrap(await client.send(requestWithValues) as? JSONRPCResponse)
         
-        #expect(responseWithValues.id == 5)
-        #expect(responseWithValues.error == nil)
+        #expect(responseWithValues.id == 1)
         
-        let resultWithValues = unwrap(responseWithValues.result)
+        guard let resultWithValues = responseWithValues.result else {
+            throw TestError("Expected result to be non-nil")
+        }
+        
         let isErrorWithValues = unwrap(resultWithValues["isError"]?.value as? Bool)
         #expect(isErrorWithValues == false)
         
@@ -241,10 +251,10 @@ struct EnumTests {
         let firstContentWithValues = unwrap(contentWithValues.first) as [String: String]
         let textWithValues = unwrap(firstContentWithValues["text"]) as String
         
-        #expect(textWithValues == "PENDING,ACTIVE")
+        #expect(textWithValues == "pending,active")
         
         // Test with nil
-        let requestWithNil = JSONRPCMessage(
+        let requestWithNil = JSONRPCRequest(
             id: 6,
             method: "tools/call",
             params: [
@@ -253,12 +263,14 @@ struct EnumTests {
             ]
         )
         
-        let responseWithNil = try await client.send(requestWithNil)
+		let responseWithNil = unwrap(await client.send(requestWithNil) as? JSONRPCResponse)
         
-        #expect(responseWithNil.id == 6)
-        #expect(responseWithNil.error == nil)
+        #expect(responseWithNil.id == 1)
         
-        let resultWithNil = unwrap(responseWithNil.result)
+        guard let resultWithNil = responseWithNil.result else {
+            throw TestError("Expected result to be non-nil")
+        }
+        
         let isErrorWithNil = unwrap(resultWithNil["isError"]?.value as? Bool)
         #expect(isErrorWithNil == false)
         

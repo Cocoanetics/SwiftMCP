@@ -230,7 +230,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 		
 		// Validate token
 		if case .unauthorized(let message) = transport.authorizationHandler(token) {
-			let errorMessage = JSONRPCMessage(error: .init(code: 401, message: "Unauthorized: \(message)"))
+			let errorMessage = JSONRPCErrorResponse(error: .init(code: 401, message: "Unauthorized: \(message)"))
 			
 			let data = try! JSONEncoder().encode(errorMessage)
 			let errorResponse = String(data: data, encoding: .utf8)!
@@ -248,7 +248,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 		do {
 			let decoder = JSONDecoder()
 			decoder.dateDecodingStrategy = .iso8601
-			let request = try decoder.decode(JSONRPCMessage.self, from: body)
+			let request = try decoder.decode(JSONRPCRequest.self, from: body)
 			
 			if request.method == nil {
 				await sendResponseAsync(channel: channel, status: .ok, headers: nil)

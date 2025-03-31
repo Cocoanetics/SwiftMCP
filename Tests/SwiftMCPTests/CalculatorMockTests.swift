@@ -8,24 +8,21 @@ func testAddViaMockClient() async throws {
     let calculator = Calculator()
     let client = MockClient(server: calculator)
     
-    let request = JSONRPCMessage(
+    let request = JSONRPCRequest(
         id: 1,
         method: "tools/call",
         params: [
             "name": "add",
             "arguments": [
-                "a": 2,
+                "a": 5,
                 "b": 3
             ]
         ]
     )
     
-    let response = try await client.send(request)
+	let response = unwrap(await client.send(request) as? JSONRPCResponse)
     
     #expect(response.id == 1)
-    #expect(response.error == nil)
-    #expect(response.method == nil)
-    #expect(response.params == nil)
     
     let result = unwrap(response.result)
     let isError = unwrap(result["isError"]?.value as? Bool)
@@ -37,7 +34,7 @@ func testAddViaMockClient() async throws {
     let text = unwrap(firstContent["text"])
     
     #expect(type == "text")
-    #expect(text == "5")  // 2 + 3 = 5
+    #expect(text == "8")  // 5 + 3 = 8
 }
 
 @Test("Tests greet function with mock client")
@@ -45,8 +42,8 @@ func testGreetViaMockClient() async throws {
     let calculator = Calculator()
     let client = MockClient(server: calculator)
     
-    let request = JSONRPCMessage(
-        id: 2,
+    let request = JSONRPCRequest(
+        id: 1,
         method: "tools/call",
         params: [
             "name": "greet",
@@ -56,10 +53,9 @@ func testGreetViaMockClient() async throws {
         ]
     )
     
-    let response = try await client.send(request)
+	let response = unwrap(await client.send(request) as? JSONRPCResponse)
     
-    #expect(response.id == 2)
-    #expect(response.error == nil)
+    #expect(response.id == 1)
     
     let result = unwrap(response.result)
     let isError = unwrap(result["isError"]?.value as? Bool)
@@ -79,22 +75,21 @@ func testSubtractViaMockClient() async throws {
     let calculator = Calculator()
     let client = MockClient(server: calculator)
     
-    let request = JSONRPCMessage(
-        id: 3,
+    let request = JSONRPCRequest(
+        id: 1,
         method: "tools/call",
         params: [
             "name": "subtract",
             "arguments": [
-                "a": 5,
-                "b": 3
+                "a": 10,
+                "b": 4
             ]
         ]
     )
     
-    let response = try await client.send(request)
+	let response = unwrap(await client.send(request) as? JSONRPCResponse)
     
-    #expect(response.id == 3)
-    #expect(response.error == nil)
+    #expect(response.id == 1)
     
     let result = unwrap(response.result)
     let isError = unwrap(result["isError"]?.value as? Bool)
@@ -106,7 +101,7 @@ func testSubtractViaMockClient() async throws {
     let text = unwrap(firstContent["text"])
     
     #expect(type == "text")
-    #expect(text == "2")  // 5 - 3 = 2
+    #expect(text == "6")  // 10 - 4 = 6
 }
 
 @Test("Tests multiply function with mock client")
@@ -114,22 +109,21 @@ func testMultiplyViaMockClient() async throws {
     let calculator = Calculator()
     let client = MockClient(server: calculator)
     
-    let request = JSONRPCMessage(
-        id: 4,
+    let request = JSONRPCRequest(
+        id: 1,
         method: "tools/call",
         params: [
             "name": "multiply",
             "arguments": [
-                "a": 4,
-                "b": 3
+                "a": 6,
+                "b": 7
             ]
         ]
     )
     
-    let response = try await client.send(request)
+	let response = unwrap(await client.send(request) as? JSONRPCResponse)
     
-    #expect(response.id == 4)
-    #expect(response.error == nil)
+    #expect(response.id == 1)
     
     let result = unwrap(response.result)
     let isError = unwrap(result["isError"]?.value as? Bool)
@@ -141,7 +135,7 @@ func testMultiplyViaMockClient() async throws {
     let text = unwrap(firstContent["text"])
     
     #expect(type == "text")
-    #expect(text == "12")  // 4 * 3 = 12
+    #expect(text == "42")  // 6 * 7 = 42
 }
 
 @Test("Tests divide function with mock client")
@@ -149,8 +143,8 @@ func testDivideViaMockClient() async throws {
     let calculator = Calculator()
     let client = MockClient(server: calculator)
     
-    let request = JSONRPCMessage(
-        id: 5,
+    let request = JSONRPCRequest(
+        id: 1,
         method: "tools/call",
         params: [
             "name": "divide",
@@ -161,10 +155,9 @@ func testDivideViaMockClient() async throws {
         ]
     )
     
-    let response = try await client.send(request)
+	let response = unwrap(await client.send(request) as? JSONRPCResponse)
     
-    #expect(response.id == 5)
-    #expect(response.error == nil)
+    #expect(response.id == 1)
     
     let result = unwrap(response.result)
     let isError = unwrap(result["isError"]?.value as? Bool)
@@ -176,16 +169,16 @@ func testDivideViaMockClient() async throws {
     let text = unwrap(firstContent["text"])
     
     #expect(type == "text")
-    #expect(Double(text) == 5)  // 10 / 2 = 5.0
+    #expect(text == "5")  // 10 / 2 = 5
 }
 
-@Test("Tests array processing with mock client")
-func testArrayViaMockClient() async throws {
+@Test("Tests testArray function with mock client")
+func testTestArrayViaMockClient() async throws {
     let calculator = Calculator()
     let client = MockClient(server: calculator)
     
-    let request = JSONRPCMessage(
-        id: 6,
+    let request = JSONRPCRequest(
+        id: 1,
         method: "tools/call",
         params: [
             "name": "testArray",
@@ -195,10 +188,9 @@ func testArrayViaMockClient() async throws {
         ]
     )
     
-    let response = try await client.send(request)
+	let response = unwrap(await client.send(request) as? JSONRPCResponse)
     
-    #expect(response.id == 6)
-    #expect(response.error == nil)
+    #expect(response.id == 1)
     
     let result = unwrap(response.result)
     let isError = unwrap(result["isError"]?.value as? Bool)
@@ -218,8 +210,8 @@ func testPingViaMockClient() async throws {
     let calculator = Calculator()
     let client = MockClient(server: calculator)
     
-    let request = JSONRPCMessage(
-        id: 7,
+    let request = JSONRPCRequest(
+        id: 1,
         method: "tools/call",
         params: [
             "name": "ping",
@@ -227,10 +219,9 @@ func testPingViaMockClient() async throws {
         ]
     )
     
-    let response = try await client.send(request)
+	let response = unwrap(await client.send(request) as? JSONRPCResponse)
     
-    #expect(response.id == 7)
-    #expect(response.error == nil)
+    #expect(response.id == 1)
     
     let result = unwrap(response.result)
     let isError = unwrap(result["isError"]?.value as? Bool)
@@ -250,8 +241,8 @@ func testNoopViaMockClient() async throws {
     let calculator = Calculator()
     let client = MockClient(server: calculator)
     
-    let request = JSONRPCMessage(
-        id: 8,
+    let request = JSONRPCRequest(
+        id: 1,
         method: "tools/call",
         params: [
             "name": "noop",
@@ -259,10 +250,9 @@ func testNoopViaMockClient() async throws {
         ]
     )
     
-    let response = try await client.send(request)
+	let response = unwrap(await client.send(request) as? JSONRPCResponse)
     
-    #expect(response.id == 8)
-    #expect(response.error == nil)
+    #expect(response.id == 1)
     
     let result = unwrap(response.result)
     let isError = unwrap(result["isError"]?.value as? Bool)
@@ -274,16 +264,16 @@ func testNoopViaMockClient() async throws {
     let text = unwrap(firstContent["text"])
     
     #expect(type == "text")
-    #expect(text == "")  // noop returns empty string
+    #expect(text == "")
 }
 
-@Test("Tests getCurrentDateTime returns ISO formatted date")
+@Test("Tests getCurrentDateTime function with mock client")
 func testGetCurrentDateTimeViaMockClient() async throws {
     let calculator = Calculator()
     let client = MockClient(server: calculator)
     
-    let request = JSONRPCMessage(
-        id: 9,
+    let request = JSONRPCRequest(
+        id: 1,
         method: "tools/call",
         params: [
             "name": "getCurrentDateTime",
@@ -291,10 +281,9 @@ func testGetCurrentDateTimeViaMockClient() async throws {
         ]
     )
     
-    let response = try await client.send(request)
+	let response = unwrap(await client.send(request) as? JSONRPCResponse)
     
-    #expect(response.id == 9)
-    #expect(response.error == nil)
+    #expect(response.id == 1)
     
     let result = unwrap(response.result)
     let isError = unwrap(result["isError"]?.value as? Bool)
@@ -315,21 +304,21 @@ func testGetCurrentDateTimeViaMockClient() async throws {
 
 /// Errors that can occur during MCP client operations
 public enum MCPError: LocalizedError {
-	case notConnected
-	case invalidEndpointURL
-	case invalidResponse
-	case timeout
-	
-	public var errorDescription: String? {
-		switch self {
-		case .notConnected:
-			return "Client is not connected to the server"
-		case .invalidEndpointURL:
-			return "Invalid messages endpoint URL received from server"
-		case .invalidResponse:
-			return "Invalid response received from server"
-		case .timeout:
-			return "Request timed out"
-		}
-	}
+    case notConnected
+    case invalidEndpointURL
+    case invalidResponse
+    case timeout
+    
+    public var errorDescription: String? {
+        switch self {
+        case .notConnected:
+            return "Client is not connected to the server"
+        case .invalidEndpointURL:
+            return "Invalid messages endpoint URL received from server"
+        case .invalidResponse:
+            return "Invalid response received from server"
+        case .timeout:
+            return "Request timed out"
+        }
+    }
 }

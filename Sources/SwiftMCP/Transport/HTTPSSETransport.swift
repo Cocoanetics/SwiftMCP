@@ -194,7 +194,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
 			case .sse:
 				await self.channelManager.broadcastSSE(SSEMessage(data: ": keep-alive"))
 			case .ping:
-				let ping = JSONRPCMessage(jsonrpc: "2.0", id: self.sequenceNumber, method: "ping")
+				let ping = JSONRPCRequest(id: self.sequenceNumber, method: "ping")
 				let encoder = JSONEncoder()
 				let data = try! encoder.encode(ping)
 				let string = String(data: data, encoding: .utf8)!
@@ -207,7 +207,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
 	
 	// MARK: - Request Handling
 	/// Handle a JSON-RPC request and send the response through the SSE channels.
-	func handleJSONRPCRequest(_ request: JSONRPCMessage, from clientId: String) {
+	func handleJSONRPCRequest(_ request: JSONRPCRequest, from clientId: String) {
 		Task {
 			guard let response = await server.handleRequest(request) else {
 				return

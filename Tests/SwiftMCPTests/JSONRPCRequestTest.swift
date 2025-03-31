@@ -11,12 +11,11 @@ func testDecodeJSONRPCRequest() throws {
 	
 	let jsonData = jsonString.data(using: .utf8)!
 	
-	let request = try JSONDecoder().decode(JSONRPCMessage.self, from: jsonData)
+	let request = try JSONDecoder().decode(JSONRPCRequest.self, from: jsonData)
 	#expect(request.jsonrpc == "2.0")
 	#expect(request.id == 0)
 	#expect(request.method == "initialize")
 	#expect(request.params != nil)
-	#expect(request.result == nil)
 	
 	// Access the params dictionary directly
 	guard let params = request.params else {
@@ -60,15 +59,12 @@ func testDecodeJSONRPCResponse() throws {
 	
 	let jsonData = jsonString.data(using: .utf8)!
 	
-	let response = try JSONDecoder().decode(JSONRPCMessage.self, from: jsonData)
+	let response = try JSONDecoder().decode(JSONRPCResponse.self, from: jsonData)
 	#expect(response.jsonrpc == "2.0")
 	#expect(response.id == 1)
-	#expect(response.method == nil)
-	#expect(response.params == nil)
 	#expect(response.result != nil)
-	#expect(response.error == nil)
 	
-	guard let result = response.result else {
+	guard let result = response.result as? [String: AnyCodable] else {
 		throw TestError("result is nil")
 	}
 	
@@ -113,18 +109,10 @@ func testDecodeJSONRPCError() throws {
 	
 	let jsonData = jsonString.data(using: .utf8)!
 	
-	let response = try JSONDecoder().decode(JSONRPCMessage.self, from: jsonData)
+	let response = try JSONDecoder().decode(JSONRPCErrorResponse.self, from: jsonData)
 	#expect(response.jsonrpc == "2.0")
 	#expect(response.id == 1)
-	#expect(response.method == nil)
-	#expect(response.params == nil)
-	#expect(response.result == nil)
-	#expect(response.error != nil)
 	
-	guard let error = response.error else {
-		throw TestError("error is nil")
-	}
-	
-	#expect(error.code == -32000)
-	#expect(error.message == "An error occurred")
+	#expect(response.error.code == -32000)
+	#expect(response.error.message == "An error occurred")
 }

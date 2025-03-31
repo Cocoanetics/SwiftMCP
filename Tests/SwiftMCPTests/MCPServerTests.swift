@@ -8,7 +8,7 @@ func testInitializeRequest() async throws {
     let calculator = Calculator()
     
     // Create a request
-    let request = JSONRPCMessage(
+    let request = JSONRPCRequest(
         jsonrpc: "2.0",
         id: 1,
         method: "initialize",
@@ -16,12 +16,11 @@ func testInitializeRequest() async throws {
     )
     
     // Handle the request
-    let response = unwrap(await calculator.handleRequest(request))
+    let response = unwrap(await calculator.handleRequest(request) as? JSONRPCResponse)
     
     #expect(response.jsonrpc == "2.0")
     #expect(response.id == 1)
     #expect(response.result != nil)
-    #expect(response.params == nil)
     
     // Check result contents
     guard let result = response.result else {
@@ -58,7 +57,7 @@ func testToolsListRequest() async throws {
     let calculator = Calculator()
     
     // Create a request
-    let request = JSONRPCMessage(
+    let request = JSONRPCRequest(
         jsonrpc: "2.0",
         id: 2,
         method: "tools/list",
@@ -66,12 +65,11 @@ func testToolsListRequest() async throws {
     )
     
     // Handle the request
-    let response = unwrap(await calculator.handleRequest(request))
+    let response = unwrap(await calculator.handleRequest(request) as? JSONRPCResponse)
     
     #expect(response.jsonrpc == "2.0")
     #expect(response.id == 2)
     #expect(response.result != nil)
-    #expect(response.params == nil)
     
     guard let result = response.result else {
         throw TestError("Result is missing")
@@ -94,7 +92,7 @@ func testToolCallRequest() async throws {
     let calculator = Calculator()
     
     // Create a request
-    let request = JSONRPCMessage(
+    let request = JSONRPCRequest(
         jsonrpc: "2.0",
         id: 3,
         method: "tools/call",
@@ -108,13 +106,11 @@ func testToolCallRequest() async throws {
     )
     
     // Handle the request
-    let response = unwrap(await calculator.handleRequest(request))
+    let response = unwrap(await calculator.handleRequest(request) as? JSONRPCResponse)
     
     #expect(response.jsonrpc == "2.0")
     #expect(response.id == 3)
     #expect(response.result != nil)
-    #expect(response.params == nil)
-    #expect(response.error == nil)
     
     guard let result = response.result else {
         throw TestError("Result is missing")
@@ -134,7 +130,7 @@ func testToolCallRequestWithError() async throws {
     let calculator = Calculator()
     
     // Create a request with an unknown tool
-    let request = JSONRPCMessage(
+    let request = JSONRPCRequest(
         jsonrpc: "2.0",
         id: 4,
         method: "tools/call",
@@ -145,13 +141,11 @@ func testToolCallRequestWithError() async throws {
     )
     
     // Handle the request
-    let response = unwrap(await calculator.handleRequest(request))
+    let response = unwrap(await calculator.handleRequest(request) as? JSONRPCResponse)
     
     #expect(response.jsonrpc == "2.0")
     #expect(response.id == 4)
     #expect(response.result != nil)
-    #expect(response.params == nil)
-    #expect(response.error == nil)
     
     guard let result = response.result else {
         throw TestError("Result is missing")
@@ -179,7 +173,7 @@ func testToolCallRequestWithInvalidArgument() async throws {
     let calculator = Calculator()
     
     // Create a request with an invalid argument type
-    let request = JSONRPCMessage(
+    let request = JSONRPCRequest(
         jsonrpc: "2.0",
         id: 5,
         method: "tools/call",
@@ -193,13 +187,11 @@ func testToolCallRequestWithInvalidArgument() async throws {
     )
     
     // Handle the request
-    let response = unwrap(await calculator.handleRequest(request))
+    let response = unwrap(await calculator.handleRequest(request) as? JSONRPCResponse)
     
     #expect(response.jsonrpc == "2.0")
     #expect(response.id == 5)
     #expect(response.result != nil)
-    #expect(response.params == nil)
-    #expect(response.error == nil)
     
     guard let result = response.result else {
         throw TestError("Result is missing")
