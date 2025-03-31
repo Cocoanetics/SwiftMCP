@@ -9,7 +9,7 @@ func testPingRequest() async throws {
     let calculator = Calculator()
     
     // Create a ping request
-    let pingRequest = JSONRPCMessage(
+    let pingRequest = JSONRPCRequest(
         jsonrpc: "2.0",
         id: 10,
         method: "ping",
@@ -17,13 +17,11 @@ func testPingRequest() async throws {
     )
     
     // Handle the request
-    let response = unwrap(await calculator.handleRequest(pingRequest))
+    let response = unwrap(await calculator.handleRequest(pingRequest) as? JSONRPCResponse)
     
     // Verify the response format
     #expect(response.jsonrpc == "2.0", "jsonrpc should be 2.0")
     #expect(response.id == 10, "id should match the request id")
-    #expect(response.result != nil, "result should not be nil")
-    #expect(response.params == nil, "params should be nil")
     
     // Verify that the result is an empty object
     guard let resultDict = response.result else {

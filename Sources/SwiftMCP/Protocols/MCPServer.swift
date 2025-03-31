@@ -125,6 +125,11 @@ public extension MCPServer {
      - Returns: A response message if one should be sent, nil otherwise
      */
     func handleRequest(_ request: JSONRPCMessage) async -> JSONRPCMessage? {
+		
+		guard let request = request as? JSONRPCRequest else {
+			return nil
+		}
+		
         // Prepare the response based on the method
         switch request.method {
             case "initialize":
@@ -167,8 +172,8 @@ public extension MCPServer {
      - Parameter id: The request ID to include in the response
      - Returns: A JSON-RPC message containing the initialization response
      */
-    func createInitializeResponse(id: Int) -> JSONRPCMessage {
-        var response = JSONRPCMessage()
+    func createInitializeResponse(id: Int) -> JSONRPCResponse {
+        var response = JSONRPCResponse()
         response.id = id
         response.result = [
             "protocolVersion": AnyCodable("2024-11-05"),
@@ -201,11 +206,7 @@ public extension MCPServer {
             ]
         }
         
-        var response = JSONRPCMessage()
-        response.id = id
-        response.result = [
-            "resources": AnyCodable(resourceDicts)
-        ]
+		let response = JSONRPCResponse(id: id, result: ["resources": AnyCodable(resourceDicts)])
         return response
     }
     
@@ -215,8 +216,8 @@ public extension MCPServer {
      - Parameter id: The request ID to include in the response
      - Returns: A JSON-RPC message containing the tools list
      */
-    private func createToolsResponse(id: Int) -> JSONRPCMessage {
-        var response = JSONRPCMessage()
+    private func createToolsResponse(id: Int) -> JSONRPCResponse {
+        var response = JSONRPCResponse()
         response.id = id
         response.result = [
             "tools": AnyCodable(mcpTools)
@@ -230,7 +231,7 @@ public extension MCPServer {
      - Parameter request: The JSON-RPC request containing the tool call details
      - Returns: A JSON-RPC message containing the tool execution result
      */
-    private func handleToolCall(_ request: JSONRPCMessage) async -> JSONRPCMessage? {
+    private func handleToolCall(_ request: JSONRPCRequest) async -> JSONRPCResponse? {
         guard let params = request.params,
               let toolName = params["name"]?.value as? String else {
             // Invalid request: missing tool name
@@ -258,8 +259,7 @@ public extension MCPServer {
 				responseText = String(data: jsonData, encoding: .utf8) ?? ""
 			}
 			
-            var response = JSONRPCMessage()
-            response.jsonrpc = "2.0"
+            var response = JSONRPCResponse()
             response.id = request.id
             response.result = [
                 "content": AnyCodable([
@@ -270,8 +270,7 @@ public extension MCPServer {
             return response
             
         } catch {
-            var response = JSONRPCMessage()
-            response.jsonrpc = "2.0"
+            var response = JSONRPCResponse()
             response.id = request.id
             response.result = [
                 "content": AnyCodable([
@@ -312,57 +311,16 @@ public extension MCPServer {
        - request: The original JSON-RPC request
      - Returns: A JSON-RPC message containing the resource content or an error
      */
-    func createResourcesReadResponse(id: Int, request: JSONRPCMessage) async -> JSONRPCMessage {
-        // Extract the URI from the request params
-        guard let uriString = request.params?["uri"]?.value as? String,
-              let uri = URL(string: uriString) else {
-            var response = JSONRPCMessage()
-            response.id = id
-            response.error = .init(code: -32602, message: "Invalid or missing URI parameter")
-            return response
-        }
-        
-        do {
-            // Try to get the resource content
-            if let resourceContent = try await getResource(uri: uri) {
-                // Convert MCPResourceContent to dictionary
-                var contentDict: [String: Any] = [
-                    "uri": resourceContent.uri.absoluteString
-                ]
-                
-                // Add optional fields if they exist
-                if let mimeType = resourceContent.mimeType {
-                    contentDict["mimeType"] = mimeType
-                }
-                
-                if let text = resourceContent.text {
-                    contentDict["text"] = text
-                }
-                
-                if let blob = resourceContent.blob {
-                    // Convert binary data to base64 string
-                    contentDict["blob"] = blob.base64EncodedString()
-                }
-                
-                var response = JSONRPCMessage()
-                response.id = id
-                response.result = [
-                    "contents": AnyCodable([contentDict])
-                ]
-                return response
-                
-            } else {
-                var response = JSONRPCMessage()
-                response.id = id
-                response.error = .init(code: -32001, message: "Resource not found: \(uri.absoluteString)")
-                return response
-            }
-        } catch {
-            var response = JSONRPCMessage()
-            response.id = id
-            response.error = .init(code: -32000, message: "Error getting resource: \(error.localizedDescription)")
-            return response
-        }
+    func createResourcesReadResponse(id: Int, request: JSONRPCRequest) async -> JSONRPCResponse {
+        var response = JSONRPCResponse()
+        response.id = id
+        response.result = [
+            "resources": [
+                "type": "list",
+                "description": "List of available resources"
+            ]
+        ]
+        return response
     }
     
     /**
@@ -371,20 +329,14 @@ public extension MCPServer {
      - Parameter id: The request ID to include in the response
      - Returns: A JSON-RPC message containing the resource templates list
      */
-    func createResourceTemplatesListResponse(id: Int) async -> JSONRPCMessage {
-        let templateDicts = await mcpResourceTemplates.map { template -> [String: Any] in
-            return [
-                "uriTemplate": template.uriTemplate.absoluteString,
-                "name": template.name,
-                "description": template.description,
-                "mimeType": template.mimeType
-            ]
-        }
-        
-        var response = JSONRPCMessage()
+    func createResourceTemplatesListResponse(id: Int) async -> JSONRPCResponse {
+        var response = JSONRPCResponse()
         response.id = id
         response.result = [
-            "resourceTemplates": AnyCodable(templateDicts)
+            "templates": [
+                "type": "list",
+                "description": "List of available resource templates"
+            ]
         ]
         return response
     }
@@ -395,8 +347,8 @@ public extension MCPServer {
      - Parameter id: The request ID to include in the response
      - Returns: A JSON-RPC message acknowledging the ping
      */
-    func createPingResponse(id: Int) -> JSONRPCMessage {
-        var response = JSONRPCMessage()
+    func createPingResponse(id: Int) -> JSONRPCResponse {
+        var response = JSONRPCResponse()
         response.id = id
         response.result = [:]
         return response

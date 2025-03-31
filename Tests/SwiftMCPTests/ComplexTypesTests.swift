@@ -210,21 +210,20 @@ func testIntArrayProcessing() async throws {
     let server = ComplexTypesServer()
     let client = MockClient(server: server)
     
-    let request = JSONRPCMessage(
+    let request = JSONRPCRequest(
         id: 1,
         method: "tools/call",
         params: [
-            "name": AnyCodable("processIntArray"),
-            "arguments": AnyCodable([
+            "name": "processIntArray",
+            "arguments": [
                 "numbers": [1, 2, 3, 4, 5]
-            ])
+            ]
         ]
     )
     
-    let response = try await client.send(request)
+	let response = unwrap(await client.send(request) as? JSONRPCResponse)
     
     #expect(response.id == 1)
-    #expect(response.error == nil)
     
     let result = unwrap(response.result)
     let isError = unwrap(result["isError"]?.value as? Bool)
@@ -244,21 +243,20 @@ func testOptionalIntArrayProcessing() async throws {
     let server = ComplexTypesServer()
     let client = MockClient(server: server)
     
-    let request = JSONRPCMessage(
-        id: 2,
+    let request = JSONRPCRequest(
+        id: 1,
         method: "tools/call",
         params: [
-            "name": AnyCodable("processOptionalIntArray"),
-            "arguments": AnyCodable([
+            "name": "processOptionalIntArray",
+            "arguments": [
                 "numbers": [1, 2, 3, 4, 5]
-            ])
+            ]
         ]
     )
     
-    let response = try await client.send(request)
+    let response = unwrap(await client.send(request) as? JSONRPCResponse)
     
-    #expect(response.id == 2)
-    #expect(response.error == nil)
+    #expect(response.id == 1)
     
     let result = unwrap(response.result)
     let isError = unwrap(result["isError"]?.value as? Bool)
@@ -278,8 +276,8 @@ func testStringArrayProcessing() async throws {
     let server = ComplexTypesServer()
     let client = MockClient(server: server)
     
-    let request = JSONRPCMessage(
-        id: 3,
+    let request = JSONRPCRequest(
+        id: 1,
         method: "tools/call",
         params: [
             "name": AnyCodable("processStringArray"),
@@ -289,10 +287,9 @@ func testStringArrayProcessing() async throws {
         ]
     )
     
-    let response = try await client.send(request)
+    let response = unwrap(await client.send(request) as? JSONRPCResponse)
     
-    #expect(response.id == 3)
-    #expect(response.error == nil)
+    #expect(response.id == 1)
     
     let result = unwrap(response.result)
     let isError = unwrap(result["isError"]?.value as? Bool)
@@ -315,8 +312,8 @@ func testContactInfoProcessing() async throws {
     let client = MockClient(server: server)
     
     // First create a contact
-    let createRequest = JSONRPCMessage(
-        id: 4,
+    let createRequest = JSONRPCRequest(
+        id: 1,
         method: "tools/call",
         params: [
             "name": AnyCodable("createContact"),
@@ -330,10 +327,9 @@ func testContactInfoProcessing() async throws {
         ]
     )
     
-    let createResponse = try await client.send(createRequest)
+    let createResponse = unwrap(await client.send(createRequest) as? JSONRPCResponse)
     
-    #expect(createResponse.id == 4)
-    #expect(createResponse.error == nil)
+    #expect(createResponse.id == 1)
     
     let createResult = unwrap(createResponse.result)
     let createIsError = unwrap(createResult["isError"]?.value as? Bool)
@@ -344,8 +340,8 @@ func testContactInfoProcessing() async throws {
     let createText = unwrap(createFirstContent["text"])
     
     // Now process the contact array
-    let processRequest = JSONRPCMessage(
-        id: 5,
+    let processRequest = JSONRPCRequest(
+        id: 1,
         method: "tools/call",
         params: [
             "name": AnyCodable("processContactArray"),
@@ -355,10 +351,9 @@ func testContactInfoProcessing() async throws {
         ]
     )
     
-    let processResponse = try await client.send(processRequest)
+	let processResponse = unwrap(await client.send(processRequest) as? JSONRPCResponse)
     
-    #expect(processResponse.id == 5)
-    #expect(processResponse.error == nil)
+    #expect(processResponse.id == 1)
     
     let processResult = unwrap(processResponse.result)
     let processIsError = unwrap(processResult["isError"]?.value as? Bool)
@@ -385,8 +380,8 @@ func testProfileCreation() async throws {
     let client = MockClient(server: server)
     
     // First create a contact
-    let contactRequest = JSONRPCMessage(
-        id: 6,
+    let contactRequest = JSONRPCRequest(
+        id: 1,
         method: "tools/call",
         params: [
             "name": AnyCodable("createContact"),
@@ -400,14 +395,14 @@ func testProfileCreation() async throws {
         ]
     )
     
-    let contactResponse = try await client.send(contactRequest)
+    let contactResponse = unwrap(await client.send(contactRequest) as? JSONRPCResponse)
     let contactResult = unwrap(contactResponse.result)
     let contactContent = unwrap(contactResult["content"]?.value as? [[String: String]])
     let contactText = unwrap(contactContent.first?["text"])
     
     // Create an address
-    let addressRequest = JSONRPCMessage(
-        id: 7,
+    let addressRequest = JSONRPCRequest(
+        id: 1,
         method: "tools/call",
         params: [
             "name": AnyCodable("createAddress"),
@@ -420,14 +415,14 @@ func testProfileCreation() async throws {
         ]
     )
     
-    let addressResponse = try await client.send(addressRequest)
+    let addressResponse = unwrap(await client.send(addressRequest) as? JSONRPCResponse)
     let addressResult = unwrap(addressResponse.result)
     let addressContent = unwrap(addressResult["content"]?.value as? [[String: String]])
     let addressText = unwrap(addressContent.first?["text"])
     
     // Create the profile
-    let profileRequest = JSONRPCMessage(
-        id: 8,
+    let profileRequest = JSONRPCRequest(
+        id: 1,
         method: "tools/call",
         params: [
             "name": AnyCodable("createProfile"),
@@ -442,10 +437,9 @@ func testProfileCreation() async throws {
         ]
     )
     
-    let profileResponse = try await client.send(profileRequest)
+    let profileResponse = unwrap(await client.send(profileRequest) as? JSONRPCResponse)
     
-    #expect(profileResponse.id == 8)
-    #expect(profileResponse.error == nil)
+    #expect(profileResponse.id == 1)
     
     let profileResult = unwrap(profileResponse.result)
     let profileIsError = unwrap(profileResult["isError"]?.value as? Bool)
@@ -479,24 +473,24 @@ func testOptionalArraysWithNil() async throws {
     let client = MockClient(server: server)
     
     // Test optional int array with nil
-    let intRequest = JSONRPCMessage(
-        id: 9,
+    let intRequest = JSONRPCRequest(
+        id: 1,
         method: "tools/call",
         params: [
-            "name": AnyCodable("processOptionalIntArray"),
-            "arguments": AnyCodable([:])
+            "name": "processOptionalIntArray",
+            "arguments": [:]
         ]
     )
     
-    let intResponse = try await client.send(intRequest)
+    let intResponse = unwrap(await client.send(intRequest) as? JSONRPCResponse)
     let intResult = unwrap(intResponse.result)
     let intContent = unwrap(intResult["content"]?.value as? [[String: String]])
     let intText = unwrap(intContent.first?["text"])
     #expect(intText == "[]")
     
     // Test optional string array with nil
-    let stringRequest = JSONRPCMessage(
-        id: 10,
+    let stringRequest = JSONRPCRequest(
+        id: 1,
         method: "tools/call",
         params: [
             "name": AnyCodable("processOptionalStringArray"),
@@ -504,15 +498,15 @@ func testOptionalArraysWithNil() async throws {
         ]
     )
     
-    let stringResponse = try await client.send(stringRequest)
+    let stringResponse = unwrap(await client.send(stringRequest) as? JSONRPCResponse)
     let stringResult = unwrap(stringResponse.result)
     let stringContent = unwrap(stringResult["content"]?.value as? [[String: String]])
     let stringText = unwrap(stringContent.first?["text"])
     #expect(stringText == "[]")
     
     // Test optional contact array with nil
-    let contactRequest = JSONRPCMessage(
-        id: 11,
+    let contactRequest = JSONRPCRequest(
+        id: 1,
         method: "tools/call",
         params: [
             "name": AnyCodable("processOptionalContactArray"),
@@ -520,7 +514,7 @@ func testOptionalArraysWithNil() async throws {
         ]
     )
     
-    let contactResponse = try await client.send(contactRequest)
+    let contactResponse = unwrap(await client.send(contactRequest) as? JSONRPCResponse)
     let contactResult = unwrap(contactResponse.result)
     let contactContent = unwrap(contactResult["content"]?.value as? [[String: String]])
     let contactText = unwrap(contactContent.first?["text"])
