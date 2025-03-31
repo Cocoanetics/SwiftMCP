@@ -203,28 +203,12 @@ class ComplexTypesServer {
 
 // MARK: - Tests
 
-/// A mock client that directly calls the ComplexTypesServer's handleRequest method
-class MockComplexClient {
-    private let server: ComplexTypesServer
-    
-    init(server: ComplexTypesServer) {
-        self.server = server
-    }
-    
-    func send(_ request: JSONRPCMessage) async throws -> JSONRPCMessage {
-        guard let response = await server.handleRequest(request) else {
-            throw MCPError.invalidResponse
-        }
-        return response
-    }
-}
-
 // MARK: - Basic Type Tests
 
 @Test("Tests processing of integer arrays")
 func testIntArrayProcessing() async throws {
     let server = ComplexTypesServer()
-    let client = MockComplexClient(server: server)
+    let client = MockClient(server: server)
     
     let request = JSONRPCMessage(
         id: 1,
@@ -258,7 +242,7 @@ func testIntArrayProcessing() async throws {
 @Test("Tests processing of optional integer arrays")
 func testOptionalIntArrayProcessing() async throws {
     let server = ComplexTypesServer()
-    let client = MockComplexClient(server: server)
+    let client = MockClient(server: server)
     
     let request = JSONRPCMessage(
         id: 2,
@@ -292,7 +276,7 @@ func testOptionalIntArrayProcessing() async throws {
 @Test("Tests processing of string arrays")
 func testStringArrayProcessing() async throws {
     let server = ComplexTypesServer()
-    let client = MockComplexClient(server: server)
+    let client = MockClient(server: server)
     
     let request = JSONRPCMessage(
         id: 3,
@@ -328,7 +312,7 @@ func testStringArrayProcessing() async throws {
 @Test("Tests creating and processing contact info")
 func testContactInfoProcessing() async throws {
     let server = ComplexTypesServer()
-    let client = MockComplexClient(server: server)
+    let client = MockClient(server: server)
     
     // First create a contact
     let createRequest = JSONRPCMessage(
@@ -371,8 +355,8 @@ func testContactInfoProcessing() async throws {
         ]
     )
     
-	let processResponse = try await client.send(processRequest)
-	
+    let processResponse = try await client.send(processRequest)
+    
     #expect(processResponse.id == 5)
     #expect(processResponse.error == nil)
     
@@ -384,8 +368,8 @@ func testContactInfoProcessing() async throws {
     let processFirstContent = unwrap(processContent.first)
     let processText = unwrap(processFirstContent["text"])
     
-	// Verify the processed contact
-	let json = processText.data(using: .utf8)!
+    // Verify the processed contact
+    let json = processText.data(using: .utf8)!
     let processedContacts = try JSONDecoder().decode([ContactInfo].self, from: json)
     let processedContact = unwrap(processedContacts.first)
     #expect(processedContact.name == "JOHN DOE")
@@ -398,7 +382,7 @@ func testContactInfoProcessing() async throws {
 @Test("Tests creating a complete profile")
 func testProfileCreation() async throws {
     let server = ComplexTypesServer()
-    let client = MockComplexClient(server: server)
+    let client = MockClient(server: server)
     
     // First create a contact
     let contactRequest = JSONRPCMessage(
@@ -492,7 +476,7 @@ func testProfileCreation() async throws {
 @Test("Tests processing of optional arrays with nil value")
 func testOptionalArraysWithNil() async throws {
     let server = ComplexTypesServer()
-    let client = MockComplexClient(server: server)
+    let client = MockClient(server: server)
     
     // Test optional int array with nil
     let intRequest = JSONRPCMessage(

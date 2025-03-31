@@ -3,26 +3,10 @@ import Testing
 @testable import SwiftMCP
 import AnyCodable
 
-/// A mock client that directly calls the Calculator's handleRequest method
-class MockClient {
-    private let calculator: Calculator
-    
-    init(calculator: Calculator) {
-        self.calculator = calculator
-    }
-    
-    func send(_ request: JSONRPCMessage) async throws -> JSONRPCMessage {
-        guard let response = await calculator.handleRequest(request) else {
-            throw MCPError.invalidResponse
-        }
-        return response
-    }
-}
-
 @Test("Tests add function with mock client")
 func testAddViaMockClient() async throws {
     let calculator = Calculator()
-    let client = MockClient(calculator: calculator)
+    let client = MockClient(server: calculator)
     
     let request = JSONRPCMessage(
         id: 1,
@@ -59,7 +43,7 @@ func testAddViaMockClient() async throws {
 @Test("Tests greet function with mock client")
 func testGreetViaMockClient() async throws {
     let calculator = Calculator()
-    let client = MockClient(calculator: calculator)
+    let client = MockClient(server: calculator)
     
     let request = JSONRPCMessage(
         id: 2,
@@ -93,7 +77,7 @@ func testGreetViaMockClient() async throws {
 @Test("Tests subtract function with mock client")
 func testSubtractViaMockClient() async throws {
     let calculator = Calculator()
-    let client = MockClient(calculator: calculator)
+    let client = MockClient(server: calculator)
     
     let request = JSONRPCMessage(
         id: 3,
@@ -128,7 +112,7 @@ func testSubtractViaMockClient() async throws {
 @Test("Tests multiply function with mock client")
 func testMultiplyViaMockClient() async throws {
     let calculator = Calculator()
-    let client = MockClient(calculator: calculator)
+    let client = MockClient(server: calculator)
     
     let request = JSONRPCMessage(
         id: 4,
@@ -163,7 +147,7 @@ func testMultiplyViaMockClient() async throws {
 @Test("Tests divide function with mock client")
 func testDivideViaMockClient() async throws {
     let calculator = Calculator()
-    let client = MockClient(calculator: calculator)
+    let client = MockClient(server: calculator)
     
     let request = JSONRPCMessage(
         id: 5,
@@ -198,7 +182,7 @@ func testDivideViaMockClient() async throws {
 @Test("Tests array processing with mock client")
 func testArrayViaMockClient() async throws {
     let calculator = Calculator()
-    let client = MockClient(calculator: calculator)
+    let client = MockClient(server: calculator)
     
     let request = JSONRPCMessage(
         id: 6,
@@ -232,7 +216,7 @@ func testArrayViaMockClient() async throws {
 @Test("Tests ping function with mock client")
 func testPingViaMockClient() async throws {
     let calculator = Calculator()
-    let client = MockClient(calculator: calculator)
+    let client = MockClient(server: calculator)
     
     let request = JSONRPCMessage(
         id: 7,
@@ -264,7 +248,7 @@ func testPingViaMockClient() async throws {
 @Test("Tests noop function with mock client")
 func testNoopViaMockClient() async throws {
     let calculator = Calculator()
-    let client = MockClient(calculator: calculator)
+    let client = MockClient(server: calculator)
     
     let request = JSONRPCMessage(
         id: 8,
@@ -296,7 +280,7 @@ func testNoopViaMockClient() async throws {
 @Test("Tests getCurrentDateTime returns ISO formatted date")
 func testGetCurrentDateTimeViaMockClient() async throws {
     let calculator = Calculator()
-    let client = MockClient(calculator: calculator)
+    let client = MockClient(server: calculator)
     
     let request = JSONRPCMessage(
         id: 9,
