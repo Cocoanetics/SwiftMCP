@@ -95,10 +95,7 @@ struct EnumTests {
         
         #expect(response.id == 1)
         
-        guard let result = response.result else {
-            throw TestError("Expected result to be non-nil")
-        }
-        
+        let result = unwrap(response.result)
         let isError = unwrap(result["isError"]?.value as? Bool)
         #expect(isError == false)
         
@@ -129,7 +126,7 @@ struct EnumTests {
         
         let response = unwrap(await client.send(request) as? JSONRPCResponse)
         
-        #expect(response.id == 1)
+        #expect(response.id == 2)
         
         guard let result = response.result else {
             throw TestError("Expected result to be non-nil")
@@ -165,7 +162,7 @@ struct EnumTests {
         
 		let response = unwrap(await client.send(request) as? JSONRPCResponse)
         
-        #expect(response.id == 1)
+        #expect(response.id == 3)
         
         guard let result = response.result else {
             throw TestError("Expected result to be non-nil")
@@ -180,7 +177,7 @@ struct EnumTests {
         let text = unwrap(firstContent["text"]) as String
         
         #expect(type == "text")
-        #expect(text == "Order: ascending")
+        #expect(text == "Order: SORT_ASC")
     }
     
     @Test("Test array of enums")
@@ -201,7 +198,7 @@ struct EnumTests {
         
 		let response = unwrap(await client.send(request) as? JSONRPCResponse)
         
-        #expect(response.id == 1)
+        #expect(response.id == 4)
         
         guard let result = response.result else {
             throw TestError("Expected result to be non-nil")
@@ -238,7 +235,7 @@ struct EnumTests {
         
 		let responseWithValues = unwrap(await client.send(requestWithValues) as? JSONRPCResponse)
         
-        #expect(responseWithValues.id == 1)
+        #expect(responseWithValues.id == 5)
         
         guard let resultWithValues = responseWithValues.result else {
             throw TestError("Expected result to be non-nil")
@@ -251,7 +248,7 @@ struct EnumTests {
         let firstContentWithValues = unwrap(contentWithValues.first) as [String: String]
         let textWithValues = unwrap(firstContentWithValues["text"]) as String
         
-        #expect(textWithValues == "pending,active")
+        #expect(textWithValues == "PENDING,ACTIVE")
         
         // Test with nil
         let requestWithNil = JSONRPCRequest(
@@ -265,7 +262,7 @@ struct EnumTests {
         
 		let responseWithNil = unwrap(await client.send(requestWithNil) as? JSONRPCResponse)
         
-        #expect(responseWithNil.id == 1)
+        #expect(responseWithNil.id == 6)
         
         guard let resultWithNil = responseWithNil.result else {
             throw TestError("Expected result to be non-nil")

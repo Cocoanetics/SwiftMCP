@@ -64,9 +64,7 @@ func testDecodeJSONRPCResponse() throws {
 	#expect(response.id == 1)
 	#expect(response.result != nil)
 	
-	guard let result = response.result as? [String: AnyCodable] else {
-		throw TestError("result is nil")
-	}
+	let result = unwrap(response.result)
 	
 	// Check protocolVersion
 	#expect(result["protocolVersion"]?.value as? String == "2024-11-05")

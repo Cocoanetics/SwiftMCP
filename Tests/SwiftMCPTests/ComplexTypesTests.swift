@@ -282,7 +282,7 @@ func testStringArrayProcessing() async throws {
         params: [
             "name": AnyCodable("processStringArray"),
             "arguments": AnyCodable([
-                "strings": AnyCodable(["a", "b", "c"])
+                "strings": ["hello", "world", "test"]
             ])
         ]
     )
@@ -301,7 +301,7 @@ func testStringArrayProcessing() async throws {
     let text = unwrap(firstContent["text"])
     
     #expect(type == "text")
-    #expect(text == "[\"A\",\"B\",\"C\"]")
+    #expect(text == "[\"HELLO\",\"WORLD\",\"TEST\"]")
 }
 
 // MARK: - Complex Type Tests
@@ -318,12 +318,11 @@ func testContactInfoProcessing() async throws {
         params: [
             "name": AnyCodable("createContact"),
             "arguments": AnyCodable([
-                "name": AnyCodable("John Doe"),
-                "age": AnyCodable(30),
-                "contactInfo": AnyCodable([
-                    "email": AnyCodable("john@example.com"),
-                    "phone": AnyCodable("123-456-7890")
-                ])
+                "name": "John Doe",
+                "email": "john@example.com",
+                "phone": "+1234567890",
+                "age": 30,
+                "isActive": true
             ])
         ]
     )
@@ -345,9 +344,9 @@ func testContactInfoProcessing() async throws {
         id: 1,
         method: "tools/call",
         params: [
-            "name": AnyCodable("processContactInfo"),
+            "name": AnyCodable("processContactArray"),
             "arguments": AnyCodable([
-                "contactInfo": createText
+                "contacts": [createText]
             ])
         ]
     )
@@ -370,9 +369,9 @@ func testContactInfoProcessing() async throws {
     let processedContact = unwrap(processedContacts.first)
     #expect(processedContact.name == "JOHN DOE")
     #expect(processedContact.email == "john@example.com")
-    #expect(processedContact.phone == "123-456-7890")
-    #expect(processedContact.age == 30)
-    #expect(processedContact.isActive == true)
+    #expect(processedContact.phone == "+1234567890")
+    #expect(processedContact.age == 60)
+    #expect(processedContact.isActive == false)
 }
 
 @Test("Tests creating a complete profile")
@@ -406,7 +405,7 @@ func testProfileCreation() async throws {
         id: 1,
         method: "tools/call",
         params: [
-            "name": AnyCodable("processAddress"),
+            "name": AnyCodable("createAddress"),
             "arguments": AnyCodable([
                 "street": "123 Main St",
                 "city": "New York",
@@ -426,7 +425,7 @@ func testProfileCreation() async throws {
         id: 1,
         method: "tools/call",
         params: [
-            "name": AnyCodable("processProfile"),
+            "name": AnyCodable("createProfile"),
             "arguments": AnyCodable([
                 "contact": contactText,
                 "address": addressText,
@@ -460,10 +459,10 @@ func testProfileCreation() async throws {
     #expect(profile.address.city == "New York")
     #expect(profile.address.postalCode == "10001")
     #expect(profile.address.country == "USA")
-    #expect(profile.interests == [])
-    #expect(profile.scores == [])
-    #expect(profile.ratings == [])
-    #expect(profile.activeStatuses == [])
+    #expect(profile.interests == ["reading", "gaming", "coding"])
+    #expect(profile.scores == [95, 88, 92])
+    #expect(profile.ratings == [4.5, 4.8, 4.2])
+    #expect(profile.activeStatuses == [true, false, true])
 }
 
 // MARK: - Optional Array Tests
@@ -494,7 +493,7 @@ func testOptionalArraysWithNil() async throws {
         id: 1,
         method: "tools/call",
         params: [
-            "name": AnyCodable("processStringArray"),
+            "name": AnyCodable("processOptionalStringArray"),
             "arguments": AnyCodable([:])
         ]
     )
@@ -510,7 +509,7 @@ func testOptionalArraysWithNil() async throws {
         id: 1,
         method: "tools/call",
         params: [
-            "name": AnyCodable("processContactInfo"),
+            "name": AnyCodable("processOptionalContactArray"),
             "arguments": AnyCodable([:])
         ]
     )
