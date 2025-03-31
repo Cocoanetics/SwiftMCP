@@ -19,11 +19,11 @@ enum Status: String, CaseIterable {
 }
 
 // Enum with custom string representation
-enum SortOrder: CaseIterable, CustomStringConvertible {
-    case ascending
-    case descending
+enum SortOrder: String, CaseIterable, CustomStringConvertible {
+    case ascending = "ascending"
+    case descending = "descending"
     
-    var description: String {
+	var description: String {
         switch self {
         case .ascending: return "SORT_ASC"
         case .descending: return "SORT_DESC"
@@ -154,7 +154,7 @@ struct EnumTests {
             params: [
                 "name": "processSortOrder",
                 "arguments": [
-                    "order": "ascending"
+                    "order": "SORT_ASC"
                 ]
             ]
         )
@@ -284,7 +284,7 @@ struct EnumTests {
         // Test custom string representation
         let sortOrderLabels = Array<String>(caseLabelsFrom: SortOrder.self)
         #expect(sortOrderLabels != nil)
-        #expect(sortOrderLabels == ["ascending", "descending"])
+        #expect(sortOrderLabels == ["SORT_ASC", "SORT_DESC"])
     }
     
     @Test("Test enum schema generation")
