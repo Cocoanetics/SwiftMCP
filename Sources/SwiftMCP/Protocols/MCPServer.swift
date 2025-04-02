@@ -90,6 +90,11 @@ public protocol MCPServer {
      - Returns: A response message if one should be sent, nil otherwise
      */
     func handleRequest(_ request: JSONRPCMessage) async -> JSONRPCMessage?
+	
+	/**
+	 An array of MCPServers that are properties of this server
+	 */
+	var servers: [MCPServer] { get }
 }
 
 /**
@@ -302,6 +307,22 @@ public extension MCPServer {
     var serverDescription: String? {
         Mirror(reflecting: self).children.first(where: { $0.label == "__mcpServerDescription" })?.value as? String
     }
+	
+	
+	/**
+	 An array of MCPServers that are properties of this server
+	 */
+	var servers: [MCPServer] {
+		
+		Mirror(reflecting: self).children.compactMap { (label, value) in
+			
+			if let server = value as? MCPServer {
+				return server
+			}
+			
+			return nil
+		}
+	}
     
     /**
      Creates a response for a resource read request.
@@ -409,13 +430,16 @@ public extension MCPServer {
     }
     
     /**
-     Converts tool metadata into MCP tool descriptions.
+     Converts tool metadata into MCP tool descriptions. If there any other MCPServer-tagged properties their tools will be included as well
      
      This property transforms the metadata from `@MCPTool` annotations into
      a format suitable for tool discovery and documentation.
      */
     var mcpTools: [MCPTool] {
-        return mcpToolMetadata.convertedToTools()
+        let ownTools = mcpToolMetadata.convertedToTools()
+		let subserverTools = servers.flatMap { $0.mcpTools }
+		
+		return ownTools + subserverTools
     }
 	
 	// MARK: - Internal Helpers
