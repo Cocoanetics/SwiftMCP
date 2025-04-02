@@ -133,7 +133,25 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
 			}
 		}
 		
-		let callToolPrefix = """
+		let callToolMethod: String
+		
+		if mcpTools.isEmpty {
+			// Simplified version when no tools exist
+			callToolMethod = """
+/// Calls a tool by name with the provided arguments
+/// - Parameters:
+///   - name: The name of the tool to call
+///   - arguments: A dictionary of arguments to pass to the tool
+/// - Returns: The result of the tool call
+/// - Throws: MCPToolError if the tool doesn't exist or cannot be called
+public func callTool(_ name: String, arguments: [String: Sendable]) async throws -> (Encodable & Sendable) {
+   // No tools are defined in this server
+   throw MCPToolError.unknownTool(name: name)
+}
+"""
+		} else {
+			// Full version with switch statement for when tools exist
+			let callToolPrefix = """
 /// Calls a tool by name with the provided arguments
 /// - Parameters:
 ///   - name: The name of the tool to call
@@ -154,14 +172,16 @@ public func callTool(_ name: String, arguments: [String: Sendable]) async throws
 
 """
 
-		let callToolSuffix = """
+			let callToolSuffix = """
 
-      default:\n         throw MCPToolError.unknownTool(name: name)
+      default:
+         throw MCPToolError.unknownTool(name: name)
    }
 }
 """
-		
-		let callToolMethod = callToolPrefix + switchCases + callToolSuffix
+			
+			callToolMethod = callToolPrefix + switchCases + callToolSuffix
+		}
 		
 		return [
 			DeclSyntax(stringLiteral: nameProperty),
