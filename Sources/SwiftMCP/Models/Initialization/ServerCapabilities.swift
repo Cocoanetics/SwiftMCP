@@ -19,7 +19,7 @@ public struct ServerCapabilities: Codable, Sendable {
 	public var experimental: [String: AnyCodable] = [:]
 	
 	/// Present if the server supports sending log messages to the client.
-	public var logging: Bool?
+	public var logging: AnyCodable?
 	
 	/// Present if the server supports argument autocompletion suggestions.
 	public var completions: AnyCodable?
