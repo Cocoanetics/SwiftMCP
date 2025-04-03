@@ -123,35 +123,25 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
 			}
 		}
 		
-		// Create a callTool method that uses a switch statement to call the appropriate wrapper function
-		var switchCases = ""
-		for (index, funcName) in mcpTools.enumerated() {
-			switchCases += "      case \"\(funcName)\":\n"
-			switchCases += "         return try await __mcpCall_\(funcName)(enrichedArguments)"
-			if index < mcpTools.count - 1 {
-				switchCases += "\n"
+		var declarations: [DeclSyntax] = [
+			DeclSyntax(stringLiteral: nameProperty),
+			DeclSyntax(stringLiteral: versionProperty),
+			DeclSyntax(stringLiteral: descriptionProperty),
+		]
+		
+		// Only add callTool method if there are MCPTools defined
+		if !mcpTools.isEmpty {
+			// Create a callTool method that uses a switch statement to call the appropriate wrapper function
+			var switchCases = ""
+			for (index, funcName) in mcpTools.enumerated() {
+				switchCases += "      case \"\(funcName)\":\n"
+				switchCases += "         return try await __mcpCall_\(funcName)(enrichedArguments)"
+				if index < mcpTools.count - 1 {
+					switchCases += "\n"
+				}
 			}
-		}
-		
-		let callToolMethod: String
-		
-		if mcpTools.isEmpty {
-			// Simplified version when no tools exist
-			callToolMethod = """
-/// Calls a tool by name with the provided arguments
-/// - Parameters:
-///   - name: The name of the tool to call
-///   - arguments: A dictionary of arguments to pass to the tool
-/// - Returns: The result of the tool call
-/// - Throws: MCPToolError if the tool doesn't exist or cannot be called
-public func callTool(_ name: String, arguments: [String: Sendable]) async throws -> (Encodable & Sendable) {
-   // No tools are defined in this server
-   throw MCPToolError.unknownTool(name: name)
-}
-"""
-		} else {
-			// Full version with switch statement for when tools exist
-			let callToolPrefix = """
+			
+			let callToolMethod = """
 /// Calls a tool by name with the provided arguments
 /// - Parameters:
 ///   - name: The name of the tool to call
@@ -169,10 +159,7 @@ public func callTool(_ name: String, arguments: [String: Sendable]) async throws
    
    // Call the appropriate wrapper method based on the tool name
    switch name {
-
-"""
-
-			let callToolSuffix = """
+\(switchCases)
 
       default:
          throw MCPToolError.unknownTool(name: name)
@@ -180,15 +167,10 @@ public func callTool(_ name: String, arguments: [String: Sendable]) async throws
 }
 """
 			
-			callToolMethod = callToolPrefix + switchCases + callToolSuffix
+			declarations.append(DeclSyntax(stringLiteral: callToolMethod))
 		}
 		
-		return [
-			DeclSyntax(stringLiteral: nameProperty),
-			DeclSyntax(stringLiteral: versionProperty),
-			DeclSyntax(stringLiteral: descriptionProperty),
-			DeclSyntax(stringLiteral: callToolMethod)
-		]
+		return declarations
 	}
 	
 	/**
@@ -210,18 +192,10 @@ public func callTool(_ name: String, arguments: [String: Sendable]) async throws
 		conformingTo protocols: [TypeSyntax],
 		in context: some MacroExpansionContext
 	) throws -> [ExtensionDeclSyntax] {
-		var extensions: [ExtensionDeclSyntax] = []
-		
 		// Check if the declaration already conforms to MCPServer
 		let inheritedTypes = declaration.inheritanceClause?.inheritedTypes ?? []
 		let alreadyConformsToMCPServer = inheritedTypes.contains { type in
 			type.type.trimmedDescription == "MCPServer"
-		}
-		
-		// If it doesn't already conform, add the MCPServer conformance
-		if !alreadyConformsToMCPServer {
-			let serverExtension = try ExtensionDeclSyntax("extension \(type): MCPServer {}")
-			extensions.append(serverExtension)
 		}
 		
 		// Check if the declaration has any MCPTool functions
@@ -245,12 +219,24 @@ public func callTool(_ name: String, arguments: [String: Sendable]) async throws
 			type.type.trimmedDescription == "MCPToolProviding"
 		}
 		
-		// If it has tools and doesn't already conform, add MCPToolProviding conformance
-		if hasMCPTools && !alreadyConformsToToolProviding {
-			let toolProviderExtension = try ExtensionDeclSyntax("extension \(type): MCPToolProviding {}")
-			extensions.append(toolProviderExtension)
+		// Determine which protocols need to be added
+		var protocolsToAdd: [String] = []
+		
+		if !alreadyConformsToMCPServer {
+			protocolsToAdd.append("MCPServer")
 		}
 		
-		return extensions
+		if hasMCPTools && !alreadyConformsToToolProviding {
+			protocolsToAdd.append("MCPToolProviding")
+		}
+		
+		// If we have protocols to add, create a single extension with all needed conformances
+		if !protocolsToAdd.isEmpty {
+			let protocolList = protocolsToAdd.joined(separator: ", ")
+			let extensionDecl = try ExtensionDeclSyntax("extension \(type): \(raw: protocolList) {}")
+			return [extensionDecl]
+		}
+		
+		return []
 	}
 }
