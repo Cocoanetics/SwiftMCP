@@ -46,11 +46,6 @@ public protocol MCPServer {
      - Returns: A response message if one should be sent, nil otherwise
      */
     func handleRequest(_ request: JSONRPCMessage) async -> JSONRPCMessage?
-	
-	/**
-	 An array of MCPServers that are properties of this server
-	 */
-	var servers: [MCPServer] { get }
 }
 
 // MARK: - Default Implementations
@@ -246,22 +241,6 @@ public extension MCPServer {
         Mirror(reflecting: self).children.first(where: { $0.label == "__mcpServerDescription" })?.value as? String
     }
 	
-	
-	/**
-	 An array of MCPServers that are properties of this server
-	 */
-	var servers: [MCPServer] {
-		
-		Mirror(reflecting: self).children.compactMap { (label, value) in
-			
-			if let server = value as? MCPServer {
-				return server
-			}
-			
-			return nil
-		}
-	}
-	
 	// MARK: - List Responses
 	
 	/**
@@ -426,10 +405,7 @@ public extension MCPServer {
      a format suitable for tool discovery and documentation.
      */
     var mcpTools: [MCPTool] {
-        let ownTools = mcpToolMetadata.convertedToTools()
-		let subserverTools = servers.flatMap { $0.mcpTools }
-		
-		return ownTools + subserverTools
+        mcpToolMetadata.convertedToTools()
     }
 	
 	// MARK: - Internal Helpers

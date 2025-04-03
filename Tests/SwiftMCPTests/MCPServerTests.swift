@@ -29,22 +29,21 @@ func testInitializeRequest() async throws {
     
     #expect(result["protocolVersion"]?.value as? String == "2024-11-05")
     
-    guard let capabilities = result["capabilities"]?.value as? [String: Any] else {
-        throw TestError("Capabilities not found or not a dictionary")
+    // Extract the server capabilities
+    guard let capabilities = result["capabilities"]?.value as? ServerCapabilities else {
+        throw TestError("Capabilities not found or not a ServerCapabilities struct")
     }
     
-    #expect(capabilities["experimental"] as? [String: String] == [:])
+    // Verify the capabilities
+    #expect(capabilities.experimental.isEmpty, "Experimental should be empty")
     
-    guard let resources = capabilities["resources"] as? [String: Bool] else {
-        throw TestError("Resources not found or not a dictionary")
+    // Check tools capabilities
+    guard let tools = capabilities.tools else {
+        throw TestError("Tools capabilities not found")
     }
-    #expect(resources["listChanged"] == false)
+    #expect(tools.listChanged == false, "Tools listChanged should be false")
     
-    guard let tools = capabilities["tools"] as? [String: Bool] else {
-        throw TestError("Tools not found or not a dictionary")
-    }
-    #expect(tools["listChanged"] == false)
-    
+    // Check server info
     guard let serverInfo = result["serverInfo"]?.value as? [String: String] else {
         throw TestError("ServerInfo not found or not a dictionary")
     }

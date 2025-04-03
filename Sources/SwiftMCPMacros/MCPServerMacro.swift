@@ -145,12 +145,6 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
 /// - Returns: The result of the tool call
 /// - Throws: MCPToolError if the tool doesn't exist or cannot be called
 public func callTool(_ name: String, arguments: [String: Sendable]) async throws -> (Encodable & Sendable) {
-   // Try to find the tool in sub-servers
-   for server in servers {
-      guard let toolProvider = server as? MCPToolProviding, toolProvider.mcpTools.contains(where: { $0.name == name }) else { continue }
-      return try await toolProvider.callTool(name, arguments: arguments)
-   }
-   
    // No tools are defined in this server
    throw MCPToolError.unknownTool(name: name)
 }
@@ -181,12 +175,6 @@ public func callTool(_ name: String, arguments: [String: Sendable]) async throws
 			let callToolSuffix = """
 
       default:
-         // Try to find the tool in sub-servers
-         for server in servers {
-            guard let toolProvider = server as? MCPToolProviding, toolProvider.mcpTools.contains(where: { $0.name == name }) else { continue }
-            return try await toolProvider.callTool(name, arguments: arguments)
-         }
-         
          throw MCPToolError.unknownTool(name: name)
    }
 }
