@@ -98,7 +98,7 @@ struct OpenAPISpec: Codable {
         let rootPath = server.serverName.asModelName
         var paths: [String: PathItem] = [:]
         
-        for metadata in server.mcpToolMetadata {
+        for metadata in (server as? MCPToolProviding)?.mcpToolMetadata ?? [] {
             let pathKey = "/\(rootPath)/\(metadata.name)"
             
             // Create response schema based on return type
