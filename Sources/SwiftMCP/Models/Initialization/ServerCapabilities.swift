@@ -34,7 +34,7 @@ public struct ServerCapabilities: Codable, Sendable {
 	public var tools: ToolsCapabilities?
 	
 	/// Capabilities related to prompt templates.
-	public struct PromptsCapabilities: Codable, Sendable {
+	public struct PromptsCapabilities: Codable, Sendable {	
 		/// Whether this server supports notifications for changes to the prompt list.
 		public var listChanged: Bool?
 		
