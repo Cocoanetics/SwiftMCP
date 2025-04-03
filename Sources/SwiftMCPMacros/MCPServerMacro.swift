@@ -147,8 +147,8 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
 public func callTool(_ name: String, arguments: [String: Sendable]) async throws -> (Encodable & Sendable) {
    // Try to find the tool in sub-servers
    for server in servers {
-      guard server.mcpTools.contains(where: { $0.name == name }) else { continue }
-      return try await server.callTool(name, arguments: arguments)
+      guard let toolProvider = server as? MCPToolProviding, toolProvider.mcpTools.contains(where: { $0.name == name }) else { continue }
+      return try await toolProvider.callTool(name, arguments: arguments)
    }
    
    // No tools are defined in this server
@@ -183,8 +183,8 @@ public func callTool(_ name: String, arguments: [String: Sendable]) async throws
       default:
          // Try to find the tool in sub-servers
          for server in servers {
-            guard server.mcpTools.contains(where: { $0.name == name }) else { continue }
-            return try await server.callTool(name, arguments: arguments)
+            guard let toolProvider = server as? MCPToolProviding, toolProvider.mcpTools.contains(where: { $0.name == name }) else { continue }
+            return try await toolProvider.callTool(name, arguments: arguments)
          }
          
          throw MCPToolError.unknownTool(name: name)
@@ -222,20 +222,47 @@ public func callTool(_ name: String, arguments: [String: Sendable]) async throws
 		conformingTo protocols: [TypeSyntax],
 		in context: some MacroExpansionContext
 	) throws -> [ExtensionDeclSyntax] {
+		var extensions: [ExtensionDeclSyntax] = []
+		
 		// Check if the declaration already conforms to MCPServer
 		let inheritedTypes = declaration.inheritanceClause?.inheritedTypes ?? []
 		let alreadyConformsToMCPServer = inheritedTypes.contains { type in
 			type.type.trimmedDescription == "MCPServer"
 		}
 		
-		// If it already conforms, don't add the conformance again
-		if alreadyConformsToMCPServer {
-			return []
+		// If it doesn't already conform, add the MCPServer conformance
+		if !alreadyConformsToMCPServer {
+			let serverExtension = try ExtensionDeclSyntax("extension \(type): MCPServer {}")
+			extensions.append(serverExtension)
 		}
 		
-		// Create an extension that adds the MCPServer protocol conformance
-		let extensionDecl = try ExtensionDeclSyntax("extension \(type): MCPServer {}")
+		// Check if the declaration has any MCPTool functions
+		var hasMCPTools = false
+		for member in declaration.memberBlock.members {
+			if let funcDecl = member.decl.as(FunctionDeclSyntax.self) {
+				for attribute in funcDecl.attributes {
+					if let identifierAttr = attribute.as(AttributeSyntax.self),
+					   let identifier = identifierAttr.attributeName.as(IdentifierTypeSyntax.self),
+					   identifier.name.text == "MCPTool" {
+						hasMCPTools = true
+						break
+					}
+				}
+				if hasMCPTools { break }
+			}
+		}
 		
-		return [extensionDecl]
+		// Check if the declaration already conforms to MCPToolProviding
+		let alreadyConformsToToolProviding = inheritedTypes.contains { type in
+			type.type.trimmedDescription == "MCPToolProviding"
+		}
+		
+		// If it has tools and doesn't already conform, add MCPToolProviding conformance
+		if hasMCPTools && !alreadyConformsToToolProviding {
+			let toolProviderExtension = try ExtensionDeclSyntax("extension \(type): MCPToolProviding {}")
+			extensions.append(toolProviderExtension)
+		}
+		
+		return extensions
 	}
 }

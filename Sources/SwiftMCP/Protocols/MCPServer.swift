@@ -19,30 +19,6 @@ import AnyCodable
  */
 public protocol MCPServer {
     /**
-     The tools available on this server.
-     
-     Tools are functions that can be called remotely through the MCP protocol.
-     Each tool has a name, description, and set of parameters it accepts.
-     */
-    var mcpTools: [MCPTool] { get }
-    
-    /**
-     The resources available on this server.
-     
-     Resources are data objects that can be accessed through the MCP protocol.
-     Each resource has a URI, name, description, and MIME type.
-     */
-    var mcpResources: [MCPResource] { get async }
-    
-    /**
-     The resource templates available on this server.
-     
-     Resource templates define patterns for resources that can be dynamically created
-     or accessed. Each template has a URI pattern, name, description, and MIME type.
-     */
-    var mcpResourceTemplates: [MCPResourceTemplate] { get async }
-    
-    /**
      The name of the server.
      
      This name is used to identify the server in communications and logging.
@@ -64,26 +40,6 @@ public protocol MCPServer {
     var serverDescription: String? { get }
     
     /**
-     Retrieves a resource by its URI.
-     
-     - Parameter uri: The URI of the resource to retrieve
-     - Returns: The resource content if found, nil otherwise
-     - Throws: An error if the resource cannot be accessed
-     */
-    func getResource(uri: URL) async throws -> MCPResourceContent?
-    
-    /**
-     Calls a tool by name with the provided arguments.
-     
-     - Parameters:
-       - name: The name of the tool to call
-       - arguments: The arguments to pass to the tool
-     - Returns: The result of the tool execution
-     - Throws: An error if the tool execution fails
-     */
-    func callTool(_ name: String, arguments: [String: Sendable]) async throws -> Encodable & Sendable
-    
-    /**
      Handles a JSON-RPC request and generates an appropriate response.
      
      - Parameter request: The JSON-RPC request to handle
@@ -95,20 +51,6 @@ public protocol MCPServer {
 	 An array of MCPServers that are properties of this server
 	 */
 	var servers: [MCPServer] { get }
-}
-
-/**
- Represents the kind of content a resource can provide.
- 
- Resources can provide either textual or binary data:
- - text: Plain text content
- - data: Binary data content
- */
-public enum MCPResourceKind
-{
-	case text(String)
-	
-	case data(Data)
 }
 
 // MARK: - Default Implementations
@@ -147,7 +89,7 @@ public extension MCPServer {
                 return createPingResponse(id: request.id ?? 0)
                 
             case "tools/list":
-                return createToolsResponse(id: request.id ?? 0)
+                return createToolsListResponse(id: request.id ?? 0)
                 
             case "resources/list":
                 return await createResourcesListResponse(id: request.id ?? 0)
@@ -177,43 +119,34 @@ public extension MCPServer {
      - Parameter id: The request ID to include in the response
      - Returns: A JSON-RPC message containing the initialization response
      */
-    func createInitializeResponse(id: Int) -> JSONRPCResponse {
-        var response = JSONRPCResponse()
-        response.id = id
-        response.result = [
-            "protocolVersion": AnyCodable("2024-11-05"),
-            "capabilities": AnyCodable([
-                "experimental": [:],
-                "resources": ["listChanged": false],
-                "tools": ["listChanged": false]
-            ] as [String: Any]),
-            "serverInfo": AnyCodable([
-                "name": serverName,
-                "version": serverVersion
-            ] as [String: Any])
-        ]
-        return response
-    }
-    
-    /**
-     Creates a response listing all available resources.
-     
-     - Parameter id: The request ID to include in the response
-     - Returns: A JSON-RPC message containing the resources list
-     */
-    func createResourcesListResponse(id: Int) async -> JSONRPCMessage {
-        let resourceDicts = await mcpResources.map { resource -> [String: Any] in
-            return [
-                "uri": resource.uri.absoluteString,
-                "name": resource.name,
-                "description": resource.description,
-                "mimeType": resource.mimeType
-            ]
-        }
-        
-		let response = JSONRPCResponse(id: id, result: ["resources": AnyCodable(resourceDicts)])
-        return response
-    }
+	func createInitializeResponse(id: Int) -> JSONRPCResponse {
+		var response = JSONRPCResponse()
+		response.id = id
+		
+		var capabilities = ServerCapabilities()
+
+		// capabilities.logging = false
+		
+		if self is MCPToolProviding
+		{
+			capabilities.tools = .init(listChanged: false)
+		}
+		
+		if self is MCPRessourceProviding
+		{
+			capabilities.resources = .init(listChanged: false)
+		}
+		
+		response.result = [
+			"protocolVersion": AnyCodable("2024-11-05"),
+			"capabilities": AnyCodable(capabilities),
+			"serverInfo": AnyCodable([
+				"name": serverName,
+				"version": serverVersion
+			])
+		]
+		return response
+	}
     
     /**
      Creates a response listing all available tools.
@@ -229,7 +162,7 @@ public extension MCPServer {
         ]
         return response
     }
-    
+	
     /**
      Handles a tool execution request.
      
@@ -237,6 +170,11 @@ public extension MCPServer {
      - Returns: A JSON-RPC message containing the tool execution result
      */
     private func handleToolCall(_ request: JSONRPCRequest) async -> JSONRPCResponse? {
+		
+		guard let toolProvider = self as? MCPToolProviding else {
+			return nil
+		}
+		
         guard let params = request.params,
               let toolName = params["name"]?.value as? String else {
             // Invalid request: missing tool name
@@ -248,7 +186,7 @@ public extension MCPServer {
         
         // Call the appropriate wrapper method based on the tool name
         do {
-            let result = try await self.callTool(toolName, arguments: arguments)
+            let result = try await toolProvider.callTool(toolName, arguments: arguments)
 			
 			let responseText: String
 			
@@ -323,6 +261,72 @@ public extension MCPServer {
 			return nil
 		}
 	}
+	
+	// MARK: - List Responses
+	
+	/**
+	 Creates a response listing all available tools.
+	 
+	 - Parameter id: The request ID to include in the response
+	 - Returns: A JSON-RPC message containing the tools list
+	 */
+	private func createToolsListResponse(id: Int) -> JSONRPCResponse {
+		
+		guard let toolProvider = self as? MCPToolProviding else
+		{
+			var response = JSONRPCResponse()
+			response.id = id
+			response.result = [
+				"content": [
+					["type": "text", "text": "Server does not provide any tools"]
+				],
+				"isError": true
+			]
+			return response
+		}
+		
+		var response = JSONRPCResponse()
+		response.id = id
+		response.result = [
+			"tools": AnyCodable(toolProvider.mcpTools)
+		]
+		
+		return response
+	}
+	
+	/**
+	 Creates a response listing all available resources.
+	 
+	 - Parameter id: The request ID to include in the response
+	 - Returns: A JSON-RPC message containing the resources list
+	 */
+	func createResourcesListResponse(id: Int) async -> JSONRPCMessage {
+		
+		guard let ressourceProvider = self as? MCPRessourceProviding else
+		{
+			var response = JSONRPCResponse()
+			response.id = id
+			response.result = [
+				"content": [
+					["type": "text", "text": "Server does not provide any resources"]
+				],
+				"isError": true
+			]
+			return response
+		}
+		
+		let resourceDicts = await ressourceProvider.mcpResources.map { resource -> [String: Any] in
+			return [
+				"uri": resource.uri.absoluteString,
+				"name": resource.name,
+				"description": resource.description,
+				"mimeType": resource.mimeType
+			]
+		}
+		
+		let response = JSONRPCResponse(id: id, result: ["resources": AnyCodable(resourceDicts)])
+		return response
+	}
     
     /**
      Creates a response for a resource read request.
@@ -350,14 +354,34 @@ public extension MCPServer {
      - Parameter id: The request ID to include in the response
      - Returns: A JSON-RPC message containing the resource templates list
      */
-    func createResourceTemplatesListResponse(id: Int) async -> JSONRPCResponse {
+    func createResourceTemplatesListResponse(id: Int) async -> JSONRPCMessage {
+		
+		guard let ressourceProvider = self as? MCPRessourceProviding else
+		{
+			var response = JSONRPCResponse()
+			response.id = id
+			response.result = [
+				"content": [
+					["type": "text", "text": "Server does not provide any resources"]
+				],
+				"isError": true
+			]
+			return response
+		}
+		
+		let templateDicts = await ressourceProvider.mcpResourceTemplates.map { template -> [String: Any] in
+            return [
+                "uriTemplate": template.uriTemplate.absoluteString,
+                "name": template.name,
+                "description": template.description,
+                "mimeType": template.mimeType
+            ]
+        }
+        
         var response = JSONRPCResponse()
         response.id = id
         response.result = [
-            "templates": [
-                "type": "list",
-                "description": "List of available resource templates"
-            ]
+            "resourceTemplates": AnyCodable(templateDicts)
         ]
         return response
     }
@@ -373,40 +397,6 @@ public extension MCPServer {
         response.id = id
         response.result = [:]
         return response
-    }
-    
-    /**
-     Default implementation providing an empty list of resources.
-     
-     Override this property to provide actual resources.
-     */
-    var mcpResources: [MCPResource] {
-        // By default, return an empty array
-        // Implementations can override this to provide actual resources
-        return []
-    }
-    
-    /**
-     Default implementation providing an empty list of resource templates.
-     
-     Override this property to provide actual resource templates.
-     */
-    var mcpResourceTemplates: [MCPResourceTemplate] {
-        // By default, return an empty array
-        // Implementations can override this to provide actual resources
-        return []
-    }
-    
-    /**
-     Default implementation for resource retrieval.
-     
-     Override this method to provide actual resource content.
-     
-     - Parameter uri: The URI of the resource to retrieve
-     - Returns: nil, indicating no resources are available
-     */
-    func getResource(uri: URL) async throws -> MCPResourceContent? {
-        return nil
     }
     
     /**

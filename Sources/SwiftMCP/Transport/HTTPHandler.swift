@@ -436,13 +436,17 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 		let bodyData = Data(buffer: body)
 		
 		do {
+			guard let toolProvider = transport.server as? MCPToolProviding else {
+				throw MCPToolError.unknownTool(name: toolName)
+			}
+			
 			// Parse request body as JSON dictionary
 			guard let arguments = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Codable & Sendable] else {
 				throw MCPToolError.invalidJSONDictionary
 			}
 			
 			// Call the tool
-			let result = try await transport.server.callTool(toolName, arguments: arguments)
+			let result = try await toolProvider.callTool(toolName, arguments: arguments)
 			
 			// Convert result to JSON data
 			let jsonData = try JSONEncoder().encode(result)
