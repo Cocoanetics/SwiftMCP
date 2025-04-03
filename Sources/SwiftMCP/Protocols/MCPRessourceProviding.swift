@@ -17,6 +17,14 @@ public protocol MCPRessourceProviding {
 	var mcpResources: [MCPResource] { get async }
 	
 	/**
+	 The resource templates available on this server.
+	 
+	 Resource templates define patterns for resources that can be dynamically created
+	 or accessed. Each template has a URI pattern, name, description, and MIME type.
+	 */
+	var mcpResourceTemplates: [MCPResourceTemplate] { get async }
+	
+	/**
 	 Retrieves a resource by its URI.
 	 
 	 - Parameter uri: The URI of the resource to retrieve

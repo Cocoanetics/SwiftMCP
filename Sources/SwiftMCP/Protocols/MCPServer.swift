@@ -119,23 +119,34 @@ public extension MCPServer {
      - Parameter id: The request ID to include in the response
      - Returns: A JSON-RPC message containing the initialization response
      */
-    func createInitializeResponse(id: Int) -> JSONRPCResponse {
-        var response = JSONRPCResponse()
-        response.id = id
-        response.result = [
-            "protocolVersion": AnyCodable("2024-11-05"),
-            "capabilities": AnyCodable([
-                "experimental": [:],
-                "resources": ["listChanged": false],
-                "tools": ["listChanged": false]
-            ] as [String: Any]),
-            "serverInfo": AnyCodable([
-                "name": serverName,
-                "version": serverVersion
-            ] as [String: Any])
-        ]
-        return response
-    }
+	func createInitializeResponse(id: Int) -> JSONRPCResponse {
+		var response = JSONRPCResponse()
+		response.id = id
+		
+		var capabilities = ServerCapabilities()
+
+		// capabilities.logging = false
+		
+		if self is MCPToolProviding
+		{
+			capabilities.tools = .init(listChanged: false)
+		}
+		
+		if self is MCPRessourceProviding
+		{
+			capabilities.resources = .init(listChanged: false)
+		}
+		
+		response.result = [
+			"protocolVersion": AnyCodable("2024-11-05"),
+			"capabilities": AnyCodable(capabilities),
+			"serverInfo": AnyCodable([
+				"name": serverName,
+				"version": serverVersion
+			])
+		]
+		return response
+	}
     
     /**
      Creates a response listing all available tools.
@@ -343,14 +354,34 @@ public extension MCPServer {
      - Parameter id: The request ID to include in the response
      - Returns: A JSON-RPC message containing the resource templates list
      */
-    func createResourceTemplatesListResponse(id: Int) async -> JSONRPCResponse {
+    func createResourceTemplatesListResponse(id: Int) async -> JSONRPCMessage {
+		
+		guard let ressourceProvider = self as? MCPRessourceProviding else
+		{
+			var response = JSONRPCResponse()
+			response.id = id
+			response.result = [
+				"content": [
+					["type": "text", "text": "Server does not provide any resources"]
+				],
+				"isError": true
+			]
+			return response
+		}
+		
+		let templateDicts = await ressourceProvider.mcpResourceTemplates.map { template -> [String: Any] in
+            return [
+                "uriTemplate": template.uriTemplate.absoluteString,
+                "name": template.name,
+                "description": template.description,
+                "mimeType": template.mimeType
+            ]
+        }
+        
         var response = JSONRPCResponse()
         response.id = id
         response.result = [
-            "templates": [
-                "type": "list",
-                "description": "List of available resource templates"
-            ]
+            "resourceTemplates": AnyCodable(templateDicts)
         ]
         return response
     }

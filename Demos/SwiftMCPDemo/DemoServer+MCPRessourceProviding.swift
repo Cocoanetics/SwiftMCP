@@ -78,4 +78,10 @@ extension DemoServer: MCPRessourceProviding
         // Get the resource content
         return try FileResourceContent.from(fileURL: uri)
     }
+	
+	var mcpResourceTemplates: [MCPResourceTemplate] {
+		get async {
+			return []
+		}
+	}
 }
