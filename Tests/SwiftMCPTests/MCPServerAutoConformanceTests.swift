@@ -20,7 +20,7 @@ func testAutoProtocolConformance() async {
     let calculator = AutoConformingCalculator()
     
     // Verify that it conforms to MCPServer by checking if mcpTools is available
-    #expect(!calculator.mcpTools.isEmpty)
+    #expect(!calculator.mcpToolMetadata.isEmpty)
     
     // Verify that we can call a tool through the MCPServer protocol method
     do {

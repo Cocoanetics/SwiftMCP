@@ -168,13 +168,13 @@ public extension MCPServer {
         do {
             let result = try await toolProvider.callTool(toolName, arguments: arguments)
 			
-			let content: [String: AnyCodable]
+			let content: [String: Codable]
 			
 			if let resource = result as? MCPResourceContent {
 				// Handle MCPResourceContent type
 				content = [
 					"type": "resource",
-					"resource": AnyCodable(resource)
+					"resource": resource
 				]
 			} else {
 				// Handle regular text response
@@ -191,8 +191,8 @@ public extension MCPServer {
 				}
 				
 				content = [
-					"type": AnyCodable("text"),
-					"text": AnyCodable(responseText)
+					"type": "text",
+					"text": responseText
 				]
 			}
 			
@@ -200,8 +200,8 @@ public extension MCPServer {
             response.id = request.id
 			
             response.result = [
-                "content": AnyCodable([content]),
-                "isError": AnyCodable(false)
+                "content": [content],
+                "isError": false
             ]
             return response
             
@@ -209,10 +209,10 @@ public extension MCPServer {
             var response = JSONRPCResponse()
             response.id = request.id
             response.result = [
-                "content": AnyCodable([
+                "content": [
                     ["type": "text", "text": error.localizedDescription]
-                ]),
-                "isError": AnyCodable(true)
+                ],
+                "isError": true
             ]
             return response
         }

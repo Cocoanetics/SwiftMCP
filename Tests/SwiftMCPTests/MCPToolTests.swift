@@ -204,7 +204,7 @@ func testBasicFunctionality() {
     let instance = TripleSlashDocumentation()
     
     // Get the tools array
-    let tools = instance.mcpTools
+    let tools = instance.mcpToolMetadata.convertedToTools()
     
     // Test that the tools array contains the expected functions
     if let noParamsTool = tools.first(where: { $0.name == "noParameters" }) {
@@ -302,7 +302,7 @@ func testMultiLineDoc() throws {
     let calculator = MultiLineDocumentation()
     
     // Get all tools from the calculator
-    let tools = calculator.mcpTools
+    let tools = calculator.mcpToolMetadata.convertedToTools()
     
     // Test function with multi-line documentation
     if let longDescTool = tools.first(where: { $0.name == "longDescription" }) {
@@ -336,7 +336,7 @@ func testMixedDocumentationStyles() {
     let instance = MixedDocumentationStyles()
     
     // Get the tools array
-    let tools = instance.mcpTools
+    let tools = instance.mcpToolMetadata.convertedToTools()
     
     // Test triple-slash documentation
     if let tripleSlashTool = tools.first(where: { $0.name == "tripleSlash" }) {
@@ -363,7 +363,7 @@ func testMixedDocumentationStyles() {
 @Test("URL parameters should accept both URL objects and valid URL strings")
 func testURLParameters() async throws {
     let instance = URLParameterHandling()
-    let tools = instance.mcpTools
+    let tools = instance.mcpToolMetadata.convertedToTools()
     
     // Test that the URL parameter is represented as a string in the schema
     if let urlTool = tools.first(where: { $0.name == "processURL" }) {
@@ -403,7 +403,7 @@ func testURLParameters() async throws {
 @Test
 func testSchemaRepresentableParameter() async throws {
     let instance = SchemaRepresentableTests()
-    let tools = instance.mcpTools
+    let tools = instance.mcpToolMetadata.convertedToTools()
     
     // Create test data
     let address = SchemaRepresentableTests.Address(street: "123 Main St", city: "New York", zip: "10001")
@@ -463,7 +463,7 @@ func testSchemaRepresentableParameter() async throws {
 @Test
 func testEnumArraySchema() throws {
     let server = EnumArrayTest()
-    let tools = server.mcpTools
+    let tools = server.mcpToolMetadata.convertedToTools()
     
     // Find the processWeekdays tool
     guard let tool = tools.first(where: { $0.name == "processWeekdays" }) else {
@@ -501,7 +501,7 @@ func testEnumArraySchema() throws {
 @Test
 func testOptionalEnumArraySchema() throws {
     let server = EnumArrayTest()
-    let tools = server.mcpTools
+    let tools = server.mcpToolMetadata.convertedToTools()
     
     // Find the processOptionalWeekdays tool
     guard let tool = tools.first(where: { $0.name == "processOptionalWeekdays" }) else {
@@ -542,7 +542,7 @@ func testOptionalEnumArraySchema() throws {
 @Test
 func testSchemaRepresentableArraySchema() throws {
     let server = SchemaRepresentableArrayTest()
-    let tools = server.mcpTools
+    let tools = server.mcpToolMetadata.convertedToTools()
     
     // Find the processAddresses tool
     guard let tool = tools.first(where: { $0.name == "processAddresses" }) else {

@@ -38,7 +38,7 @@ func testMissingDescriptions() throws {
     let instance = MissingDescriptions()
     
     // Get the tools array
-    let tools = instance.mcpTools
+	let tools = instance.mcpToolMetadata.convertedToTools()
     
     // Test function with parameter documentation but no function description
     guard let missingDescriptionTool = tools.first(where: { $0.name == "missingDescription" }) else {

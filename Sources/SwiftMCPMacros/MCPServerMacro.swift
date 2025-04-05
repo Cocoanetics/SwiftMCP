@@ -170,6 +170,18 @@ public func callTool(_ name: String, arguments: [String: Sendable]) async throws
 			declarations.append(DeclSyntax(stringLiteral: callToolMethod))
 		}
 		
+		// Add static mcpToolMetadata property
+		if !mcpTools.isEmpty {
+			let metadataArray = mcpTools.map { "__mcpMetadata_\($0)" }.joined(separator: ", ")
+			let metadataProperty = """
+/// Returns an array of all available tool metadata
+nonisolated public var mcpToolMetadata: [MCPToolMetadata] {
+   return [\(metadataArray)]
+}
+"""
+			declarations.append(DeclSyntax(stringLiteral: metadataProperty))
+		}
+		
 		return declarations
 	}
 	

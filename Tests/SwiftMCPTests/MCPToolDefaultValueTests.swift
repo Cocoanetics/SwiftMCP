@@ -69,7 +69,7 @@ final class DefaultValueFunctions {
 @Test
 func testIntDefaultValue() throws {
     let instance = DefaultValueFunctions()
-    let tools = instance.mcpTools
+    let tools = instance.mcpToolMetadata.convertedToTools()
     
     guard let intDefaultTool = tools.first(where: { $0.name == "intDefault" }) else {
         throw TestError("Could not find intDefault function")
@@ -101,7 +101,7 @@ func testIntDefaultValue() throws {
 @Test
 func testStringDefaultValue() throws {
     let instance = DefaultValueFunctions()
-    let tools = instance.mcpTools
+    let tools = instance.mcpToolMetadata.convertedToTools()
     
     guard let stringDefaultTool = tools.first(where: { $0.name == "stringDefault" }) else {
         throw TestError("Could not find stringDefault function")
@@ -125,7 +125,7 @@ func testStringDefaultValue() throws {
 @Test
 func testBoolDefaultValue() throws {
     let instance = DefaultValueFunctions()
-    let tools = instance.mcpTools
+    let tools = instance.mcpToolMetadata.convertedToTools()
     
     guard let boolDefaultTool = tools.first(where: { $0.name == "boolDefault" }) else {
         throw TestError("Could not find boolDefault function")
@@ -149,7 +149,7 @@ func testBoolDefaultValue() throws {
 @Test
 func testDoubleDefaultValue() throws {
     let instance = DefaultValueFunctions()
-    let tools = instance.mcpTools
+    let tools = instance.mcpToolMetadata.convertedToTools()
     
     guard let doubleDefaultTool = tools.first(where: { $0.name == "doubleDefault" }) else {
         throw TestError("Could not find doubleDefault function")
@@ -173,7 +173,7 @@ func testDoubleDefaultValue() throws {
 @Test
 func testArrayDefaultValue() throws {
     let instance = DefaultValueFunctions()
-    let tools = instance.mcpTools
+    let tools = instance.mcpToolMetadata.convertedToTools()
     
     guard let arrayDefaultTool = tools.first(where: { $0.name == "arrayDefault" }) else {
         throw TestError("Could not find arrayDefault function")
@@ -197,7 +197,7 @@ func testArrayDefaultValue() throws {
 @Test
 func testMultipleDefaultValues() throws {
     let instance = DefaultValueFunctions()
-    let tools = instance.mcpTools
+    let tools = instance.mcpToolMetadata.convertedToTools()
     
     guard let multipleDefaultsTool = tools.first(where: { $0.name == "multipleDefaults" }) else {
         throw TestError("Could not find multipleDefaults function")

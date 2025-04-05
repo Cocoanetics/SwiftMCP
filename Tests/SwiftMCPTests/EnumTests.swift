@@ -299,7 +299,7 @@ struct EnumTests {
     @Test("Test enum schema generation")
     func testEnumSchemaGeneration() throws {
         let server = EnumTestServer()
-        let tools = server.mcpTools
+		let tools = server.mcpToolMetadata.convertedToTools()
         
         // Test priority schema
         if let priorityTool = tools.first(where: { $0.name == "processPriority" }) {
