@@ -362,19 +362,12 @@ public extension MCPServer {
 			return response
 		}
 		
-		let templateDicts = await ressourceProvider.mcpResourceTemplates.map { template -> [String: Any] in
-            return [
-                "uriTemplate": template.uriTemplate.absoluteString,
-                "name": template.name,
-                "description": template.description,
-                "mimeType": template.mimeType
-            ]
-        }
+		let templates = await ressourceProvider.mcpResourceTemplates
         
         var response = JSONRPCResponse()
         response.id = id
         response.result = [
-            "resourceTemplates": AnyCodable(templateDicts)
+            "resourceTemplates": AnyCodable(templates)
         ]
         return response
     }
