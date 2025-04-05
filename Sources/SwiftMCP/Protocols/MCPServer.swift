@@ -200,7 +200,7 @@ public extension MCPServer {
 			let content: [String: AnyCodable]
 			
 			if let resource = result as? MCPResourceContent {
-				// Handle MCPResource type
+				// Handle MCPResourceContent type
 				content = [
 					"type": "resource",
 					"resource": AnyCodable(resource)
