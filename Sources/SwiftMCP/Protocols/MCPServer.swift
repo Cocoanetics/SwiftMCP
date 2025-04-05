@@ -144,35 +144,6 @@ public extension MCPServer {
 	}
     
     /**
-     Creates a response listing all available tools.
-     
-     - Parameter id: The request ID to include in the response
-     - Returns: A JSON-RPC message containing the tools list
-     */
-    private func createToolsResponse(id: Int) -> JSONRPCResponse {
-		
-		guard let toolProvider = self as? MCPToolProviding else
-		{
-			var response = JSONRPCResponse()
-			response.id = id
-			response.result = [
-				"content": [
-					["type": "text", "text": "Server does not provide any tools"]
-				],
-				"isError": true
-			]
-			return response
-		}
-		
-        var response = JSONRPCResponse()
-        response.id = id
-        response.result = [
-			"tools": AnyCodable(toolProvider.mcpTools)
-        ]
-        return response
-    }
-	
-    /**
      Handles a tool execution request.
      
      - Parameter request: The JSON-RPC request containing the tool call details
@@ -294,7 +265,7 @@ public extension MCPServer {
 		var response = JSONRPCResponse()
 		response.id = id
 		response.result = [
-			"tools": AnyCodable(toolProvider.mcpTools)
+			"tools": AnyCodable(toolProvider.mcpToolMetadata.convertedToTools())
 		]
 		
 		return response
