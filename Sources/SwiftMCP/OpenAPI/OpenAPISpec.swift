@@ -54,6 +54,17 @@ struct OpenAPISpec: Codable {
         let requestBody: RequestBody?
         /// The possible responses keyed by status code
         let responses: [String: Response]
+		/// If the method requires extra confirmation
+		let isConsequential: Bool?
+        
+        private enum CodingKeys: String, CodingKey {
+            case summary
+            case operationId
+            case description
+            case requestBody
+            case responses
+            case isConsequential = "x-openai-isConsequential"
+        }
     }
     
     /// Path item specification
@@ -189,7 +200,7 @@ struct OpenAPISpec: Codable {
                             "application/json": Content(schema: inputSchema)
                         ]
                     ),
-                    responses: responses
+					responses: responses, isConsequential: false
                 )
             )
             
