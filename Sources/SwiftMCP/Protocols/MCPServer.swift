@@ -197,26 +197,39 @@ public extension MCPServer {
         do {
             let result = try await toolProvider.callTool(toolName, arguments: arguments)
 			
-			let responseText: String
+			let content: [String: AnyCodable]
 			
-			if let resultString = result as? String {
-				// transfer string directly so we don't get quotes
-				responseText = resultString
-			}
-			else
-			{
-				let encoder = JSONEncoder()
-				encoder.dateEncodingStrategy = .iso8601
-				let jsonData = try encoder.encode(result)
-				responseText = String(data: jsonData, encoding: .utf8) ?? ""
+			if let resource = result as? MCPResource {
+				// Handle MCPResource type
+				content = [
+					"type": "resource",
+					"resource": AnyCodable(resource)
+				]
+			} else {
+				// Handle regular text response
+				let responseText: String
+				
+				if let resultString = result as? String {
+					// transfer string directly so we don't get quotes
+					responseText = resultString
+				} else {
+					let encoder = JSONEncoder()
+					encoder.dateEncodingStrategy = .iso8601
+					let jsonData = try encoder.encode(result)
+					responseText = String(data: jsonData, encoding: .utf8) ?? ""
+				}
+				
+				content = [
+					"type": AnyCodable("text"),
+					"text": AnyCodable(responseText)
+				]
 			}
 			
             var response = JSONRPCResponse()
             response.id = request.id
+			
             response.result = [
-                "content": AnyCodable([
-                    ["type": "text", "text": responseText]
-                ]),
+                "content": AnyCodable([content]),
                 "isError": AnyCodable(false)
             ]
             return response
