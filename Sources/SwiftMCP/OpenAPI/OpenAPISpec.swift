@@ -123,30 +123,37 @@ struct OpenAPISpec: Codable {
             } else {
                 // Convert Swift type to JSON Schema type
                 let returnType = metadata.returnType!
-                switch returnType {
-                    case is Int.Type, is Double.Type:
-                        responseSchema = .number(description: metadata.returnTypeDescription)
-                    case is Bool.Type:
-                        responseSchema = .boolean(description: metadata.returnTypeDescription)
-                    case is Array<Any>.Type:
-                        if let elementType = (returnType as? Array<Any>.Type)?.elementType {
-                            let itemSchema: JSONSchema
-                            switch elementType {
-                                case is Int.Type, is Double.Type:
-                                    itemSchema = .number()
-                                case is Bool.Type:
-                                    itemSchema = .boolean()
-                                default:
-                                    itemSchema = .string()
+                
+                // Check if the type provides its own schema
+                if let schemaType = returnType as? any SchemaRepresentable.Type {
+                    responseSchema = schemaType.schema
+                    responseDescription = metadata.returnTypeDescription ?? "A structured response"
+                } else {
+                    switch returnType {
+                        case is Int.Type, is Double.Type:
+                            responseSchema = .number(description: metadata.returnTypeDescription)
+                        case is Bool.Type:
+                            responseSchema = .boolean(description: metadata.returnTypeDescription)
+                        case is Array<Any>.Type:
+                            if let elementType = (returnType as? Array<Any>.Type)?.elementType {
+                                let itemSchema: JSONSchema
+                                switch elementType {
+                                    case is Int.Type, is Double.Type:
+                                        itemSchema = .number()
+                                    case is Bool.Type:
+                                        itemSchema = .boolean()
+                                    default:
+                                        itemSchema = .string()
+                                }
+                                responseSchema = .array(items: itemSchema, description: metadata.returnTypeDescription)
+                            } else {
+                                responseSchema = .array(items: .string(), description: metadata.returnTypeDescription)
                             }
-                            responseSchema = .array(items: itemSchema, description: metadata.returnTypeDescription)
-                        } else {
-                            responseSchema = .array(items: .string(), description: metadata.returnTypeDescription)
-                        }
-                    default:
-                        responseSchema = .string(description: metadata.returnTypeDescription)
+                        default:
+                            responseSchema = .string(description: metadata.returnTypeDescription)
+                    }
+                    responseDescription = metadata.returnTypeDescription ?? "The returned value of the tool"
                 }
-                responseDescription = metadata.returnTypeDescription ?? "The returned value of the tool"
             }
             
             // Create error response schema to match {"error": "error message"}
