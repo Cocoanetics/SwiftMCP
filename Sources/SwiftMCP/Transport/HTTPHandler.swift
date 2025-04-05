@@ -441,7 +441,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 			}
 			
 			// Parse request body as JSON dictionary
-			guard let arguments = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Codable & Sendable] else {
+			guard let arguments = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Sendable] else {
 				throw MCPToolError.invalidJSONDictionary
 			}
 			
