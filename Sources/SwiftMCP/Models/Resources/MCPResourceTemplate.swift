@@ -9,8 +9,8 @@ public protocol MCPResourceTemplate: Codable, Sendable {
     var name: String { get }
     
     /// The description of the resource
-    var description: String { get }
+    var description: String? { get }
     
     /// The MIME type of the resource
-    var mimeType: String { get }
+    var mimeType: String? { get }
 }
