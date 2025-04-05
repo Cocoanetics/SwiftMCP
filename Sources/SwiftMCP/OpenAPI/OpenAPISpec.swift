@@ -173,7 +173,7 @@ struct OpenAPISpec: Codable {
                     // Use the parameter's JSONSchema directly
                     dict[param.name] = param.jsonSchema
                 },
-                required: metadata.parameters.filter { $0.defaultValue == nil }.map { $0.name },
+				required: metadata.parameters.filter { $0.isRequired }.map { $0.name },
                 description: metadata.description ?? "No description available"
             )
             
