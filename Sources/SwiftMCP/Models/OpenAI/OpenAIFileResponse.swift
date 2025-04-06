@@ -14,7 +14,7 @@ public struct File: Codable, Sendable {
     public let name: String
     
     /// The MIME type of the file
-    public let mime_type: String
+    public let mimeType: String
     
     /**
 	 The content of the file in base64 encoding
@@ -31,13 +31,13 @@ public struct File: Codable, Sendable {
      */
     public init(name: String, mimeType: String, content: Data) {
         self.name = name
-        self.mime_type = mimeType
+        self.mimeType = mimeType
         self.content = content
     }
     
     private enum CodingKeys: String, CodingKey {
         case name
-        case mime_type
+        case mimeType = "mime_type"
         case content
     }
 }

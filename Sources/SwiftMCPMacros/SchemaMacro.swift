@@ -179,10 +179,64 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
         // Strip optional marker from type for JSON schema
         let baseType = isOptionalType ? String(propertyType.dropLast()) : propertyType
         
+        // Get the coding key raw value if available, otherwise use property name
+        let schemaName = getCodingKeyRawValue(for: propertyName, in: Syntax(property)) ?? propertyName
+        
         // Create parameter info with the type directly
-        let propertyStr = "SchemaPropertyInfo(name: \"\(propertyName)\", type: \(baseType).self, description: \(propertyDescription), defaultValue: \(defaultValue), isRequired: \(isRequired))"
+        let propertyStr = "SchemaPropertyInfo(name: \"\(schemaName)\", type: \(baseType).self, description: \(propertyDescription), defaultValue: \(defaultValue) as Sendable?, isRequired: \(isRequired))"
         
         return (propertyStr, (name: propertyName, type: propertyType, defaultValue: defaultValue))
+    }
+    
+    /// Gets the raw value from CodingKeys enum for a given property name
+    private static func getCodingKeyRawValue(for propertyName: String, in parent: Syntax?) -> String? {
+        // Traverse up until we find the struct declaration
+        var currentParent = parent
+        while let current = currentParent {
+            if let structDecl = current.as(StructDeclSyntax.self) {
+                // Look for CodingKeys enum in the struct members
+                for member in structDecl.memberBlock.members {
+                    guard let enumDecl = member.decl.as(EnumDeclSyntax.self),
+                          enumDecl.name.text == "CodingKeys",
+                          enumDecl.modifiers.contains(where: { $0.name.text == "private" }) else {
+                        continue
+                    }
+                    
+                    // Get all inherited types as strings
+                    let inheritedTypeDescriptions = enumDecl.inheritanceClause?.inheritedTypes.map { 
+                        $0.type.description.trimmingCharacters(in: .whitespacesAndNewlines) 
+                    } ?? []
+                    
+                    guard inheritedTypeDescriptions.contains("String"),
+                          inheritedTypeDescriptions.contains("CodingKey") else {
+                        continue
+                    }
+                    
+                    // Found CodingKeys enum, look for the case matching our property
+                    for member in enumDecl.memberBlock.members {
+                        guard let enumCase = member.decl.as(EnumCaseDeclSyntax.self) else { continue }
+                        
+                        for element in enumCase.elements {
+                            if element.name.text == propertyName {
+                                // Found matching case, check for raw value
+                                if let rawValue = element.rawValue?.value {
+                                    // Handle string literal
+                                    if let stringLiteral = rawValue.as(StringLiteralExprSyntax.self) {
+                                        return stringLiteral.segments.description
+                                            .trimmingCharacters(in: .init(charactersIn: "\""))
+                                    }
+                                }
+                                // If no raw value, use the case name
+                                return element.name.text
+                            }
+                        }
+                    }
+                }
+            }
+            currentParent = current.parent
+        }
+        
+        return nil
     }
     
     private static func processNestedStruct(
