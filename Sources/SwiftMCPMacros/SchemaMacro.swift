@@ -144,10 +144,11 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
         let propertyName = property.bindings.first?.pattern.as(IdentifierPatternSyntax.self)?.identifier.text ?? ""
         let propertyType = property.bindings.first?.typeAnnotation?.type.description.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) ?? ""
         
-        // Get property description from documentation
+        // Get property description from property's documentation
         var propertyDescription = "nil"
-        if let description = documentation.parameters[propertyName], !description.isEmpty {
-            propertyDescription = "\"\(description.escapedForSwiftString)\""
+        let propertyDoc = Documentation(from: property.leadingTrivia.description)
+        if !propertyDoc.description.isEmpty {
+            propertyDescription = "\"\(propertyDoc.description.escapedForSwiftString)\""
         }
         
         // Check for default value
