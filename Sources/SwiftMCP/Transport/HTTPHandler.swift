@@ -448,8 +448,38 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 			// Call the tool
 			let result = try await toolProvider.callTool(toolName, arguments: arguments)
 			
+			// Convert MCPResourceContent to OpenAIFileResponse if applicable
+			let responseToEncode: Encodable
+			
+			if let resourceContent = result as? MCPResourceContent {
+				
+				let file = FileContent(
+					name: resourceContent.uri.lastPathComponent,
+					mimeType: resourceContent.mimeType ?? "application/octet-stream",
+					content: resourceContent.blob ?? resourceContent.text?.data(using: .utf8) ?? Data()
+				)
+				
+				responseToEncode = OpenAIFileResponse(files: [file])
+			}
+			else if let resourceContentArray = result as? [MCPResourceContent] {
+				
+				let files = resourceContentArray.compactMap { resourceContent in
+					FileContent(
+						name: resourceContent.uri.lastPathComponent,
+						mimeType: resourceContent.mimeType ?? "application/octet-stream",
+						content: resourceContent.blob ?? resourceContent.text?.data(using: .utf8) ?? Data()
+					)
+				}
+
+				responseToEncode = OpenAIFileResponse(files: files)
+			}
+			
+			else {
+				responseToEncode = result
+			}
+			
 			// Convert result to JSON data
-			let jsonData = try JSONEncoder().encode(result)
+			let jsonData = try JSONEncoder().encode(responseToEncode)
 			
 			var buffer = allocator.buffer(capacity: jsonData.count)
 			buffer.writeBytes(jsonData)

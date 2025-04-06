@@ -125,7 +125,10 @@ struct OpenAPISpec: Codable {
                 let returnType = metadata.returnType!
                 
                 // Check if the type provides its own schema
-                if let schemaType = returnType as? any SchemaRepresentable.Type {
+				if returnType is any MCPResourceContent.Type || returnType is [any MCPResourceContent].Type {
+                    responseSchema = OpenAIFileResponse.schema
+                    responseDescription = metadata.returnTypeDescription ?? "A file response containing name, mime type, and base64-encoded content"
+                } else if let schemaType = returnType as? any SchemaRepresentable.Type {
                     responseSchema = schemaType.schema
                     responseDescription = metadata.returnTypeDescription ?? "A structured response"
                 } else {

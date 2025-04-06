@@ -112,12 +112,13 @@ actor DemoServer {
 		
 	}
 	
-	/** A function returning a random file */
+	/** A function returning a random file
+	 - returns: A multiple simple text files */
 	@MCPTool
-	func randomFile() -> OpenAIFileResponse
+	func randomFile() -> [FileResourceContent]
 	{
-		let file = File.init(name: "hello.txt", mimeType: "text/plain", content: "Hello World!".data(using: .utf8)!)
-		return OpenAIFileResponse(files: [file])
+		return [FileResourceContent(uri: URL(string: "file:///hello.txt")!, mimeType: "text/plain", text: "Hello World!"),
+				FileResourceContent(uri: URL(string: "file:///hello2.txt")!, mimeType: "text/plain", text: "Hello World 2!")]
 	}
 }
 

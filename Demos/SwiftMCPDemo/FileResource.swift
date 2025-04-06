@@ -2,6 +2,7 @@ import Foundation
 import SwiftMCP
 
 /// A resource implementation for files in the file system
+@Schema
 public struct FileResource: MCPResource {
     /// The URI of the resource
     public let uri: URL
@@ -37,6 +38,7 @@ public struct FileResource: MCPResource {
 }
 
 /// A resource content implementation for files in the file system
+@Schema
 public struct FileResourceContent: MCPResourceContent {
     /// The URI of the resource
     public let uri: URL

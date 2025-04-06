@@ -1,15 +1,16 @@
 //
-//  OpenAIFileResponse.swift
+//  FileContent.swift
 //  SwiftMCP
 //
-//  Created by Oliver Drobnik on 08.03.25.
+//  Created by Oliver Drobnik on 06.04.25.
 //
+
 
 import Foundation
 
-/// A file
+/// Contents of a File to be returned by a tool call
 @Schema
-public struct File: Codable, Sendable {
+public struct FileContent: Codable, Sendable {
     /// The name of the file
     public let name: String
     
@@ -39,21 +40,5 @@ public struct File: Codable, Sendable {
         case name
         case mimeType = "mime_type"
         case content
-    }
-}
-
-/// One or more files being returned
-@Schema
-public struct OpenAIFileResponse: Codable, Sendable {
-    /// The array of file responses
-    public let openaiFileResponse: [File]
-    
-    /**
-     Creates a new collection of file responses
-     
-     - Parameter files: The array of file responses
-     */
-    public init(files: [File]) {
-        self.openaiFileResponse = files
     }
 }
