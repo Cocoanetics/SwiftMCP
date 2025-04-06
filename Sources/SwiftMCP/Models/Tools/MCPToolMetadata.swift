@@ -30,6 +30,9 @@ public struct MCPToolMetadata: Sendable {
     /// A description of the function's purpose
     public let description: String?
     
+    /// Whether the function's actions are consequential (defaults to true)
+    public let isConsequential: Bool
+    
     /**
      Creates a new MCPToolMetadata instance.
      
@@ -41,8 +44,9 @@ public struct MCPToolMetadata: Sendable {
        - returnTypeDescription: A description of what the function returns
        - isAsync: Whether the function is asynchronous
        - isThrowing: Whether the function can throw errors
+       - isConsequential: Whether the function's actions are consequential
      */
-    public init(name: String, description: String? = nil, parameters: [MCPToolParameterInfo], returnType: Any.Type? = nil, returnTypeDescription: String? = nil, isAsync: Bool = false, isThrowing: Bool = false) {
+    public init(name: String, description: String? = nil, parameters: [MCPToolParameterInfo], returnType: Any.Type? = nil, returnTypeDescription: String? = nil, isAsync: Bool = false, isThrowing: Bool = false, isConsequential: Bool = true) {
         self.name = name
         self.description = description
         self.parameters = parameters
@@ -50,5 +54,6 @@ public struct MCPToolMetadata: Sendable {
         self.returnTypeDescription = returnTypeDescription
         self.isAsync = isAsync
         self.isThrowing = isThrowing
+        self.isConsequential = isConsequential
     }
 } 

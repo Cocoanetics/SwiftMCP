@@ -27,7 +27,7 @@ import Foundation
 /// }
 /// ```
 @attached(peer, names: prefixed(__mcpMetadata_), prefixed(__mcpCall_))
-public macro MCPTool(description: String? = nil) = #externalMacro(module: "SwiftMCPMacros", type: "MCPToolMacro")
+public macro MCPTool(description: String? = nil, isConsequential: Bool = true) = #externalMacro(module: "SwiftMCPMacros", type: "MCPToolMacro")
 
 /// A macro that adds a `mcpTools` property to a class to aggregate function metadata.
 ///

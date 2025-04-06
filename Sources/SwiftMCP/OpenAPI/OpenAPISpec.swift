@@ -55,7 +55,7 @@ struct OpenAPISpec: Codable {
         /// The possible responses keyed by status code
         let responses: [String: Response]
 		/// If the method requires extra confirmation
-		let isConsequential: Bool?
+		let isConsequential: Bool
         
         private enum CodingKeys: String, CodingKey {
             case summary
@@ -207,7 +207,8 @@ struct OpenAPISpec: Codable {
                             "application/json": Content(schema: inputSchema)
                         ]
                     ),
-					responses: responses, isConsequential: false
+                    responses: responses,
+                    isConsequential: metadata.isConsequential
                 )
             )
             

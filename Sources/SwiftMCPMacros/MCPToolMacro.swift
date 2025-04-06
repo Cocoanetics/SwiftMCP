@@ -32,6 +32,7 @@ import SwiftSyntaxMacros
  
  - Parameters:
    - description: Optional override for the function's documentation description.
+   - isConsequential: Whether the function's actions are consequential (defaults to true).
  
  - Note: The macro extracts documentation from the function's comments for:
    * Function description
@@ -75,6 +76,8 @@ public struct MCPToolMacro: PeerMacro {
 		// Extract description from the attribute if provided
 		var descriptionArg = "nil"
 		var hasExplicitDescription = false
+		var isConsequentialArg = "true"  // Default to true
+		
 		if let arguments = node.arguments?.as(LabeledExprListSyntax.self) {
 			for argument in arguments {
 				if argument.label?.text == "description", let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
@@ -84,7 +87,8 @@ public struct MCPToolMacro: PeerMacro {
 					let cleanedValue = stringValue
 					descriptionArg = "\"\(cleanedValue)\""
 					hasExplicitDescription = true
-					break
+				} else if argument.label?.text == "isConsequential", let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
+					isConsequentialArg = boolLiteral.literal.text
 				}
 			}
 		}
@@ -263,7 +267,8 @@ public struct MCPToolMacro: PeerMacro {
 			returnType: \(returnTypeString).self,
 			returnTypeDescription: \(documentation.returns.map { "\"\($0.escapedForSwiftString)\"" } ?? "nil"),
 			isAsync: \(funcDecl.signature.effectSpecifiers?.asyncSpecifier != nil),
-			isThrowing: \(funcDecl.signature.effectSpecifiers?.throwsClause?.throwsSpecifier != nil)
+			isThrowing: \(funcDecl.signature.effectSpecifiers?.throwsClause?.throwsSpecifier != nil),
+			isConsequential: \(isConsequentialArg)
 		)
 		"""
 		

@@ -23,7 +23,7 @@ actor DemoServer {
 	 - Parameter date: The Date to format
 	 - Returns: A string with the date formatted
 	 */
-	@MCPTool
+	@MCPTool(isConsequential: false)
 	func formatDateAsString(date: Date) -> String {
 		
 		let dateFormatter = DateFormatter()
