@@ -7,14 +7,14 @@
 
 import Foundation
 
-/// Represents a file response in the OpenAI format
+/// A file
 @Schema
-public struct File: Codable {
+public struct File: Codable, Sendable {
     /// The name of the file
     public let name: String
     
     /// The MIME type of the file
-    public let mimeType: String
+    public let mime_type: String
     
     /**
 	 The content of the file in base64 encoding
@@ -31,21 +31,22 @@ public struct File: Codable {
      */
     public init(name: String, mimeType: String, content: Data) {
         self.name = name
-        self.mimeType = mimeType
+        self.mime_type = mimeType
         self.content = content
     }
     
     private enum CodingKeys: String, CodingKey {
         case name
-        case mimeType = "mime_type"
+        case mime_type
         case content
     }
 }
 
-/// A collection of file responses
-public struct OpenAIFileResponse: Codable {
+/// One or more files being returned
+@Schema
+public struct OpenAIFileResponse: Codable, Sendable {
     /// The array of file responses
-    public let files: [File]
+    public let openaiFileResponse: [File]
     
     /**
      Creates a new collection of file responses
@@ -53,10 +54,6 @@ public struct OpenAIFileResponse: Codable {
      - Parameter files: The array of file responses
      */
     public init(files: [File]) {
-        self.files = files
+        self.openaiFileResponse = files
     }
-    
-    private enum CodingKeys: String, CodingKey {
-        case files = "openaiFileResponse"
-    }
-} 
+}

@@ -191,7 +191,7 @@ struct OpenAPISpec: Codable {
                     // Use the parameter's JSONSchema directly
                     dict[param.name] = param.jsonSchema
                 },
-				required: metadata.parameters.filter { $0.isRequired }.map { $0.name },
+                required: metadata.parameters.filter { $0.isRequired }.map { $0.name },
                 description: metadata.description ?? "No description available"
             )
             
@@ -201,7 +201,7 @@ struct OpenAPISpec: Codable {
                     summary: metadata.name,
                     operationId: metadata.name,
                     description: metadata.description ?? "No description available",
-                    requestBody: RequestBody(
+                    requestBody: metadata.parameters.isEmpty ? nil : RequestBody(
                         required: true,
                         content: [
                             "application/json": Content(schema: inputSchema)

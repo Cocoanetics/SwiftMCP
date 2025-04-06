@@ -80,6 +80,8 @@ extension JSONSchema: Codable {
 		case items
 		/// The possible values for an enum schema
 		case enumValues = "enum"
+		/// The format of the content
+		case format
 	}
 	
 	/**
@@ -94,31 +96,32 @@ extension JSONSchema: Codable {
 		let description = try container.decodeIfPresent(String.self, forKey: .description)
 		
 		switch type {
-		case "string":
-			let enumValues = try container.decodeIfPresent([String].self, forKey: .enumValues)
-			self = .string(description: description, enumValues: enumValues)
-		case "number":
-			self = .number(description: description)
-		case "boolean":
-			self = .boolean(description: description)
-		case "array":
-			let items = try container.decode(JSONSchema.self, forKey: .items)
-			self = .array(items: items, description: description)
-		case "object":
-			var properties: [String: JSONSchema] = [:]
-			if let propertiesContainer = try? container.nestedContainer(keyedBy: AnyCodingKey.self, forKey: .properties) {
-				for key in propertiesContainer.allKeys {
-					properties[key.stringValue] = try propertiesContainer.decode(JSONSchema.self, forKey: key)
+			case "string":
+				let enumValues = try container.decodeIfPresent([String].self, forKey: .enumValues)
+				let format = try container.decodeIfPresent(String.self, forKey: .format)
+				self = .string(description: description, format: format, enumValues: enumValues)
+			case "number":
+				self = .number(description: description)
+			case "boolean":
+				self = .boolean(description: description)
+			case "array":
+				let items = try container.decode(JSONSchema.self, forKey: .items)
+				self = .array(items: items, description: description)
+			case "object":
+				var properties: [String: JSONSchema] = [:]
+				if let propertiesContainer = try? container.nestedContainer(keyedBy: AnyCodingKey.self, forKey: .properties) {
+					for key in propertiesContainer.allKeys {
+						properties[key.stringValue] = try propertiesContainer.decode(JSONSchema.self, forKey: key)
+					}
 				}
-			}
-			let required = try container.decodeIfPresent([String].self, forKey: .required) ?? []
-			self = .object(properties: properties, required: required, description: description)
-		default:
-			throw DecodingError.dataCorruptedError(
-				forKey: .type,
-				in: container,
-				debugDescription: "Unsupported schema type: \(type)"
-			)
+				let required = try container.decodeIfPresent([String].self, forKey: .required) ?? []
+				self = .object(properties: properties, required: required, description: description)
+			default:
+				throw DecodingError.dataCorruptedError(
+					forKey: .type,
+					in: container,
+					debugDescription: "Unsupported schema type: \(type)"
+				)
 		}
 	}
 	
@@ -132,8 +135,9 @@ extension JSONSchema: Codable {
 		var container = encoder.container(keyedBy: CodingKeys.self)
 		
 		switch self {
-		case .string(let description, let enumValues):
+		case .string(let description, let format, let enumValues):
 			try container.encode("string", forKey: .type)
+			try container.encodeIfPresent(format, forKey: .format)
 			try container.encodeIfPresent(description, forKey: .description)
 			if let enumValues = enumValues {
 				try container.encode(enumValues, forKey: .enumValues)

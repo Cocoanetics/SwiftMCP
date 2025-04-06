@@ -111,5 +111,13 @@ actor DemoServer {
 	func noop() {
 		
 	}
+	
+	/** A function returning a random file */
+	@MCPTool
+	func randomFile() -> OpenAIFileResponse
+	{
+		let file = File.init(name: "hello.txt", mimeType: "text/plain", content: "Hello World!".data(using: .utf8)!)
+		return OpenAIFileResponse(files: [file])
+	}
 }
 
