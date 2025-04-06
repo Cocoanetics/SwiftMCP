@@ -105,7 +105,7 @@ extension Character: JSONSchemaTypeConvertible {
 
 extension Data: JSONSchemaTypeConvertible {
     public static func jsonSchema(description: String?) -> JSONSchema {
-        .string(description: description)
+        .string(description: description, format: "byte")
     }
 }
 
