@@ -479,7 +479,11 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 			}
 			
 			// Convert result to JSON data
-			let jsonData = try JSONEncoder().encode(responseToEncode)
+			let encoder = JSONEncoder()
+			encoder.dateEncodingStrategy = .iso8601
+			encoder.outputFormatting = [.prettyPrinted]
+			
+			let jsonData = try encoder.encode(responseToEncode)
 			
 			var buffer = allocator.buffer(capacity: jsonData.count)
 			buffer.writeBytes(jsonData)
