@@ -177,22 +177,17 @@ public extension MCPServer {
 					"resource": resource
 				]
 			} else {
-				// Handle regular text response
-				let responseText: String
+				let encoder = JSONEncoder()
 				
-				if let resultString = result as? String {
-					// transfer string directly so we don't get quotes
-					responseText = resultString
-				} else {
-					let encoder = JSONEncoder()
-					encoder.dateEncodingStrategy = .iso8601
-					let jsonData = try encoder.encode(result)
-					responseText = String(data: jsonData, encoding: .utf8) ?? ""
-				}
+				// Create ISO8601 formatter with timezone
+				encoder.dateEncodingStrategy = .iso8601WithTimeZone
+				
+				let jsonData = try encoder.encode(result)
+				let responseText = String(data: jsonData, encoding: .utf8) ?? ""
 				
 				content = [
 					"type": "text",
-					"text": responseText
+					"text": responseText.removingQuotes
 				]
 			}
 			

@@ -215,7 +215,10 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
 			
 			do {
 				let encoder = JSONEncoder()
-				encoder.dateEncodingStrategy = .iso8601
+				
+				// Create ISO8601 formatter with timezone
+				encoder.dateEncodingStrategy = .iso8601WithTimeZone
+				
 				let jsonData = try encoder.encode(response)
 				
 				guard let jsonString = String(data: jsonData, encoding: .utf8) else {

@@ -3,6 +3,7 @@ import Foundation
 import NIOHTTP1
 import Logging
 
+
 /// HTTP request handler for the SSE transport
 final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendable {
 	typealias InboundIn = HTTPServerRequestPart
@@ -480,7 +481,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 			
 			// Convert result to JSON data
 			let encoder = JSONEncoder()
-			encoder.dateEncodingStrategy = .iso8601
+			encoder.dateEncodingStrategy = .iso8601WithTimeZone
 			encoder.outputFormatting = [.prettyPrinted]
 			
 			let jsonData = try encoder.encode(responseToEncode)
