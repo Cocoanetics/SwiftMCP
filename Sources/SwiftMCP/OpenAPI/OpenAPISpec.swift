@@ -131,6 +131,34 @@ struct OpenAPISpec: Codable {
                 } else if let schemaType = returnType as? any SchemaRepresentable.Type {
                     responseSchema = schemaType.schema
                     responseDescription = metadata.returnTypeDescription ?? "A structured response"
+                } else if let caseIterableType = returnType as? any CaseIterable.Type {
+                    responseSchema = .string(description: metadata.returnTypeDescription, enumValues: caseIterableType.caseLabels)
+                    responseDescription = metadata.returnTypeDescription ?? "An enumerated value"
+                } else if let arrayType = returnType as? any ArrayWithSchemaRepresentableElements.Type {
+                    responseSchema = arrayType.schema(description: metadata.returnTypeDescription)
+                    responseDescription = metadata.returnTypeDescription ?? "An array of structured responses"
+                } else if let arrayType = returnType as? any ArrayWithCaseIterableElements.Type {
+                    responseSchema = arrayType.schema(description: metadata.returnTypeDescription)
+                    responseDescription = metadata.returnTypeDescription ?? "An array of enumerated values"
+                } else if let arrayBridge = returnType as? ArraySchemaBridge.Type {
+                    // Get the element type from the array
+                    let elementType = arrayBridge.elementType
+                    
+                    let itemSchema: JSONSchema
+                    if elementType == Int.self || elementType == Double.self {
+                        itemSchema = .number()
+                    } else if elementType == Bool.self {
+                        itemSchema = .boolean()
+                    } else if let schemaType = elementType as? any SchemaRepresentable.Type {
+                        itemSchema = schemaType.schema
+                    } else if let caseIterableType = elementType as? any CaseIterable.Type {
+                        itemSchema = .string(enumValues: caseIterableType.caseLabels)
+                    } else {
+                        itemSchema = .string()
+                    }
+                    
+                    responseSchema = .array(items: itemSchema, description: metadata.returnTypeDescription)
+                    responseDescription = metadata.returnTypeDescription ?? "An array of values"
                 } else {
                     switch returnType {
                         case is Int.Type, is Double.Type:

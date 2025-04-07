@@ -224,4 +224,161 @@ func testComplexFunctionSpec() {
     
     // Check that the request body is required
     #expect(requestBody.required == true)
+}
+
+// Test model for SchemaRepresentable
+@Schema
+struct TestWeatherForecast: Codable {
+    let temperature: Double
+    let condition: String
+    let timestamp: Date
+}
+
+// Test enum for CaseIterable
+enum TestWeatherCondition: String, CaseIterable, Codable {
+    case sunny, cloudy, rainy, snowy
+}
+
+// Test server with various return types
+@MCPServer(name: "TestServer", version: "1.0")
+class TestServer {
+    
+    /// Get a single weather forecast
+    /// - Returns: A weather forecast with temperature, condition and timestamp
+    @MCPTool
+    func getSingleForecast() -> TestWeatherForecast {
+        fatalError("Not implemented")
+    }
+    
+    /// Get multiple weather forecasts
+    /// - Returns: An array of weather forecasts
+    @MCPTool
+    func getMultipleForecasts() -> [TestWeatherForecast] {
+        fatalError("Not implemented")
+    }
+    
+    /// Get a single weather condition
+    /// - Returns: A weather condition (sunny, cloudy, rainy, or snowy)
+    @MCPTool
+    func getSingleCondition() -> TestWeatherCondition {
+        fatalError("Not implemented")
+    }
+    
+    /// Get multiple weather conditions
+    /// - Returns: An array of weather conditions
+    @MCPTool
+    func getMultipleConditions() -> [TestWeatherCondition] {
+        fatalError("Not implemented")
+    }
+    
+    /// Get an array of strings
+    /// - Returns: A basic array of strings
+    @MCPTool
+    func getBasicArray() -> [String] {
+        fatalError("Not implemented")
+    }
+}
+
+@Test("OpenAPI spec correctly handles various return types")
+func testOpenAPISpecGeneration() throws {
+    let server = TestServer()
+    let spec = OpenAPISpec(server: server, scheme: "http", host: "localhost:8080")
+    
+    // Test paths exist
+    #expect(spec.paths["/testserver/getSingleForecast"] != nil, "Missing path for getSingleForecast")
+    #expect(spec.paths["/testserver/getMultipleForecasts"] != nil, "Missing path for getMultipleForecasts")
+    #expect(spec.paths["/testserver/getSingleCondition"] != nil, "Missing path for getSingleCondition")
+    #expect(spec.paths["/testserver/getMultipleConditions"] != nil, "Missing path for getMultipleConditions")
+    #expect(spec.paths["/testserver/getBasicArray"] != nil, "Missing path for getBasicArray")
+    
+    // Test single SchemaRepresentable response
+    guard let singleForecastOp = spec.paths["/testserver/getSingleForecast"]?.post,
+          let singleForecastSchema = singleForecastOp.responses["200"]?.content?["application/json"]?.schema else {
+        #expect(Bool(false), "Failed to get schema for getSingleForecast")
+        return
+    }
+    #expect(singleForecastSchema.type == "object", "Expected object schema for single forecast")
+    
+    // Test array of SchemaRepresentable response
+    guard let multipleForecastsOp = spec.paths["/testserver/getMultipleForecasts"]?.post,
+          let multipleForecastsSchema = multipleForecastsOp.responses["200"]?.content?["application/json"]?.schema else {
+        #expect(Bool(false), "Failed to get schema for getMultipleForecasts")
+        return
+    }
+    #expect(multipleForecastsSchema.type == "array", "Expected array schema for multiple forecasts")
+    if case .array(let items, _) = multipleForecastsSchema {
+        #expect(items.type == "object", "Expected object schema for array items")
+    } else {
+        #expect(Bool(false), "Expected array schema")
+    }
+    
+    // Test single CaseIterable response
+    guard let singleConditionOp = spec.paths["/testserver/getSingleCondition"]?.post,
+          let singleConditionSchema = singleConditionOp.responses["200"]?.content?["application/json"]?.schema else {
+        #expect(Bool(false), "Failed to get schema for getSingleCondition")
+        return
+    }
+	
+	print(singleConditionSchema)
+	
+    #expect(singleConditionSchema.type == "string", "Expected string schema for single condition")
+    if case .string(_, _, let enumValues) = singleConditionSchema {
+        #expect(enumValues == ["sunny", "cloudy", "rainy", "snowy"],
+               "Enum values don't match expected values")
+    } else {
+        #expect(Bool(false), "Expected string schema with enum values")
+    }
+    
+    // Test array of CaseIterable response
+    guard let multipleConditionsOp = spec.paths["/testserver/getMultipleConditions"]?.post,
+          let multipleConditionsSchema = multipleConditionsOp.responses["200"]?.content?["application/json"]?.schema else {
+        #expect(Bool(false), "Failed to get schema for getMultipleConditions")
+        return
+    }
+    #expect(multipleConditionsSchema.type == "array", "Expected array schema for multiple conditions")
+    if case .array(let items, _) = multipleConditionsSchema {
+        #expect(items.type == "string", "Expected string schema for array items")
+        if case .string(_, _, let enumValues) = items {
+            #expect(Set(enumValues ?? []) == Set(["sunny", "cloudy", "rainy", "snowy"]), 
+                   "Array items enum values don't match expected values")
+        } else {
+            #expect(Bool(false), "Expected string schema with enum values for array items")
+        }
+    } else {
+        #expect(Bool(false), "Expected array schema")
+    }
+    
+    // Test basic array response
+    guard let basicArrayOp = spec.paths["/testserver/getBasicArray"]?.post,
+          let basicArraySchema = basicArrayOp.responses["200"]?.content?["application/json"]?.schema else {
+        #expect(Bool(false), "Failed to get schema for getBasicArray")
+        return
+    }
+	
+    print("Array schema:", basicArraySchema)
+    if case .array(let items, let description) = basicArraySchema {
+        print("  - type: array")
+        print("  - description:", description ?? "nil")
+        print("  - items:", items)
+    }
+	
+    #expect(basicArraySchema.type == "array", "Expected array schema for basic array")
+    if case .array(let items, _) = basicArraySchema {
+        #expect(items.type == "string", "Expected string schema for array items")
+    } else {
+        #expect(Bool(false), "Expected array schema")
+    }
+}
+
+private extension JSONSchema {
+    var type: String {
+        switch self {
+        case .string: return "string"
+        case .number: return "number"
+        case .boolean: return "boolean"
+        case .array: return "array"
+        case .object: return "object"
+        case .enum: return "string"
+        }
+    }
 } 
