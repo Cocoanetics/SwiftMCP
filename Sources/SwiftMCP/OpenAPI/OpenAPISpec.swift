@@ -201,7 +201,7 @@ struct OpenAPISpec: Codable {
                 "200": Response(
                     description: responseDescription,
                     content: [
-                        "application/json": Content(schema: responseSchema)
+						"application/json": Content(schema: responseSchema.withoutRequired)
                     ]
                 )
             ]
@@ -211,7 +211,7 @@ struct OpenAPISpec: Codable {
                 responses["400"] = Response(
                     description: "The function threw an error",
                     content: [
-                        "application/json": Content(schema: errorSchema)
+						"application/json": Content(schema: errorSchema.withoutRequired)
                     ]
                 )
             }
