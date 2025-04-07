@@ -235,7 +235,7 @@ func testBasicFunctionality() {
                 #expect(Bool(false), "Expected number schema for parameter 'a'")
             }
             
-            if case .string(description: let description, enumValues: _) = properties["b"] {
+            if case .string(description: let description, format: _, enumValues: _) = properties["b"] {
                 #expect(description == "A string parameter")
             } else {
                 #expect(Bool(false), "Expected string schema for parameter 'b'")
@@ -277,7 +277,7 @@ func testBasicFunctionality() {
         
         // Extract properties from the object schema
         if case .object(let properties, _, _) = optionalParamTool.inputSchema {
-            if case .string(description: let description, enumValues: _) = properties["required"] {
+            if case .string(description: let description, format: _, enumValues: _) = properties["required"] {
                 #expect(description == "A required parameter")
             } else {
                 #expect(Bool(false), "Expected string schema for parameter 'required'")
@@ -315,7 +315,7 @@ func testMultiLineDoc() throws {
         
         // Extract properties from the object schema
         if case .object(let properties, _, _) = longDescTool.inputSchema {
-            if case .string(description: let description, enumValues: _) = properties["text"] {
+            if case .string(description: let description, format: _, enumValues: _) = properties["text"] {
                 #expect(description?.contains("A text parameter with a long description") == true, "Parameter description should mention it's a long description")
                 // The actual output doesn't contain "spans multiple lines" so we'll check for "spans" instead
                 #expect(description?.contains("spans") == true, "Parameter description should mention it spans")
@@ -368,7 +368,7 @@ func testURLParameters() async throws {
     // Test that the URL parameter is represented as a string in the schema
     if let urlTool = tools.first(where: { $0.name == "processURL" }) {
         if case .object(let properties, _, _) = urlTool.inputSchema {
-            if case .string(description: let description, enumValues: _) = properties["url"] {
+            if case .string(description: let description, format: _, enumValues: _) = properties["url"] {
                 #expect(description == "The URL to process")
             } else {
                 #expect(Bool(false), "URL parameter should be represented as string in schema")
@@ -432,19 +432,19 @@ func testSchemaRepresentableParameter() async throws {
                 #expect(contactRequired == ["street", "city", "zip"])
                 
                 // Verify property types
-                if case .string(description: _, enumValues: _) = contactProperties["street"] {
+                if case .string(description: _, format: _, enumValues: _) = contactProperties["street"] {
                     // street property is correct
                 } else {
                     #expect(Bool(false), "Expected string schema for street property")
                 }
                 
-                if case .string(description: _, enumValues: _) = contactProperties["city"] {
+                if case .string(description: _, format: _, enumValues: _) = contactProperties["city"] {
                     // city property is correct
                 } else {
                     #expect(Bool(false), "Expected string schema for city property")
                 }
                 
-                if case .string(description: _, enumValues: _) = contactProperties["zip"] {
+                if case .string(description: _, format: _, enumValues: _) = contactProperties["zip"] {
                     // zip property is correct
                 } else {
                     #expect(Bool(false), "Expected string schema for zip property")
@@ -481,7 +481,7 @@ func testEnumArraySchema() throws {
         // Verify it's an array
         if case .array(let itemsSchema, _) = daysSchema {
             // Verify the items are strings with enum values
-            if case .string(description: _, enumValues: let enumValues) = itemsSchema {
+            if case .string(description: _, format: _, enumValues: let enumValues) = itemsSchema {
                 #expect(enumValues != nil, "Array items should have enum values")
                 
                 // Verify the enum values are the Weekday cases
@@ -522,7 +522,7 @@ func testOptionalEnumArraySchema() throws {
         // Verify it's an array
         if case .array(let itemsSchema, _) = daysSchema {
             // Verify the items are strings with enum values
-            if case .string(description: _, enumValues: let enumValues) = itemsSchema {
+            if case .string(description: _, format: _, enumValues: let enumValues) = itemsSchema {
                 #expect(enumValues != nil, "Array items should have enum values")
                 
                 // Verify the enum values are the Weekday cases
@@ -568,19 +568,19 @@ func testSchemaRepresentableArraySchema() throws {
                 #expect(itemRequired == ["street", "city", "zip"])
                 
                 // Verify property types
-                if case .string(description: _, enumValues: _) = itemProperties["street"] {
+                if case .string(description: _, format: _, enumValues: _) = itemProperties["street"] {
                     // street property is correct
                 } else {
                     #expect(Bool(false), "Expected string schema for street property")
                 }
                 
-                if case .string(description: _, enumValues: _) = itemProperties["city"] {
+                if case .string(description: _, format: _, enumValues: _) = itemProperties["city"] {
                     // city property is correct
                 } else {
                     #expect(Bool(false), "Expected string schema for city property")
                 }
                 
-                if case .string(description: _, enumValues: _) = itemProperties["zip"] {
+                if case .string(description: _, format: _, enumValues: _) = itemProperties["zip"] {
                     // zip property is correct
                 } else {
                     #expect(Bool(false), "Expected string schema for zip property")

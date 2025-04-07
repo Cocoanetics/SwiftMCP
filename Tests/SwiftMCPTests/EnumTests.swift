@@ -305,7 +305,7 @@ struct EnumTests {
         if let priorityTool = tools.first(where: { $0.name == "processPriority" }) {
             if case .object(let properties, _, _) = priorityTool.inputSchema {
                 if let prioritySchema = properties["priority"] {
-                    if case .string(description: _, enumValues: let enumValues) = prioritySchema {
+                    if case .string(description: _, format: _, enumValues: let enumValues) = prioritySchema {
                         #expect(enumValues != nil)
                         #expect(enumValues?.sorted() == ["low", "medium", "high"].sorted())
                     } else {
@@ -325,7 +325,7 @@ struct EnumTests {
         if let statusTool = tools.first(where: { $0.name == "processStatus" }) {
             if case .object(let properties, _, _) = statusTool.inputSchema {
                 if let statusSchema = properties["status"] {
-                    if case .string(description: _, enumValues: let enumValues) = statusSchema {
+                    if case .string(description: _, format: _, enumValues: let enumValues) = statusSchema {
                         #expect(enumValues != nil)
                         #expect(enumValues?.sorted() == ["pending", "active", "completed"].sorted())
                     } else {
