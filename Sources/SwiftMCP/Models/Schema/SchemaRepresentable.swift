@@ -8,7 +8,7 @@
 import Foundation
 
 /// Protocol for types that can represent themselves as a JSON Schema
-public protocol SchemaRepresentable {
+public protocol SchemaRepresentable: Sendable {
 	/// The JSON Schema representation of this type
 	static var schema: JSONSchema { get }
 }
