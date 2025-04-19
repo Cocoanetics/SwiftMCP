@@ -15,16 +15,16 @@ public indirect enum JSONSchema: Sendable {
 	public struct Object: Sendable
 	{
 		/// The properties of the type
-		var properties: [String: JSONSchema]
+		public var properties: [String: JSONSchema]
 		
 		/// Which if the properties are mandatory
-		var required: [String] = []
+		public var required: [String] = []
 		
 		/// Description of the type
-		var description: String? = nil
+		public var description: String? = nil
 		
 		/// Whether additional properties are allowed
-		var additionalProperties: Bool? = false
+		public var additionalProperties: Bool? = false
 	}
 	
 	/// A string schema
