@@ -353,13 +353,6 @@ func testOpenAPISpecGeneration() throws {
         return
     }
 	
-    print("Array schema:", basicArraySchema)
-    if case .array(let items, let description) = basicArraySchema {
-        print("  - type: array")
-        print("  - description:", description ?? "nil")
-        print("  - items:", items)
-    }
-	
     #expect(basicArraySchema.type == "array", "Expected array schema for basic array")
     if case .array(let items, _) = basicArraySchema {
         #expect(items.type == "string", "Expected string schema for array items")
