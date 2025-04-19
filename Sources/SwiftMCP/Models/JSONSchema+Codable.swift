@@ -28,7 +28,7 @@ extension JSONSchema: Codable {
 		/// The format of the content
 		case format
 		/// If additional properties are allowed (optional, needed for structured responses, not for MCP)
-		case additionalProperties = "additionalProperties"  // sic, no underscore
+		case additionalProperties
 	}
 	
 	/**

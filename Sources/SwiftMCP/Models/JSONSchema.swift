@@ -67,4 +67,27 @@ extension JSONSchema {
             return self
         }
     }
-} 
+}
+
+// Extension to add additionalProperties:false to all objects, for use with structured results
+extension JSONSchema {
+	/// Returns a new schema with all required fields removed
+	var addingAdditionalPropertiesRestrictionToObjects: JSONSchema {
+		switch self {
+			case .object(let object):
+				return .object(Object(properties: object.properties,
+									  required: object.required,
+									  description: object.description,
+									  additionalProperties: false))
+				
+			case .array(let items, let description):
+				// For array schemas, recursively apply to items
+				return .array(items: items.addingAdditionalPropertiesRestrictionToObjects, description: description)
+				
+				// For other schema types, return as is since they don't have required fields
+			default:
+				return self
+		}
+	}
+}
+
