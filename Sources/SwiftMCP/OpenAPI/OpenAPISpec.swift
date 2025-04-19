@@ -188,13 +188,13 @@ struct OpenAPISpec: Codable {
             }
             
             // Create error response schema to match {"error": "error message"}
-            let errorSchema = JSONSchema.object(
+			let errorSchema = JSONSchema.object(JSONSchema.Object(
                 properties: [
                     "error": .string()  // No description needed as it will contain error.localizedDescription
                 ],
                 required: ["error"],
                 description: "Error response containing the error message"
-            )
+            ))
             
             // Create responses dictionary with success and error cases
             var responses: [String: Response] = [
@@ -217,14 +217,14 @@ struct OpenAPISpec: Codable {
             }
             
             // Create input schema from parameters
-            let inputSchema = JSONSchema.object(
+			let inputSchema = JSONSchema.object(JSONSchema.Object(
                 properties: metadata.parameters.reduce(into: [:]) { dict, param in
                     // Use the parameter's JSONSchema directly
                     dict[param.name] = param.jsonSchema
                 },
                 required: metadata.parameters.filter { $0.isRequired }.map { $0.name },
                 description: metadata.description ?? "No description available"
-            )
+            ))
             
             // Create the path item
             let pathItem = PathItem(

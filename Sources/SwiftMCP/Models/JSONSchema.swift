@@ -22,10 +22,18 @@ public indirect enum JSONSchema: Sendable {
     case array(items: JSONSchema, description: String? = nil)
     
     /// An object schema
-    case object(properties: [String: JSONSchema], required: [String] = [], description: String? = nil)
+	case object(Object)
     
     /// An enum schema with possible values
     case `enum`(values: [String], description: String? = nil)
+	
+	public struct Object: Sendable
+	{
+		var properties: [String: JSONSchema]
+		var required: [String] = []
+		var description: String? = nil
+		var additionalProperties: Bool? = false
+	}
 }
 
 // Extension to remove required fields from a schema
@@ -33,9 +41,12 @@ extension JSONSchema {
     /// Returns a new schema with all required fields removed
     var withoutRequired: JSONSchema {
         switch self {
-        case .object(let properties, _, let description):
+        case .object(let object):
             // For object schemas, create a new object with empty required array
-            return .object(properties: properties, required: [], description: description)
+				return .object(Object(properties: object.properties,
+									  required: [],
+									  description: object.description,
+									  additionalProperties: object.additionalProperties))
             
         case .array(let items, let description):
             // For array schemas, recursively apply to items

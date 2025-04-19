@@ -49,8 +49,8 @@ func testMissingDescriptions() throws {
     #expect(missingDescriptionTool.description == nil, "Function with no description should have nil description")
     
     // Extract properties from the object schema
-    if case .object(let properties, _, _) = missingDescriptionTool.inputSchema {
-        if case .number(let description) = properties["a"] {
+    if case .object(let object) = missingDescriptionTool.inputSchema {
+		if case .number(let description) = object.properties["a"] {
             #expect(description == "A parameter")
         } else {
             #expect(Bool(false), "Expected number schema for parameter 'a'")

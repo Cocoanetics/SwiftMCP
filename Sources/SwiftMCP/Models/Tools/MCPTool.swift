@@ -115,7 +115,7 @@ extension JSONSchema: Codable {
 					}
 				}
 				let required = try container.decodeIfPresent([String].self, forKey: .required) ?? []
-				self = .object(properties: properties, required: required, description: description)
+				self = .object(JSONSchema.Object(properties: properties, required: required, description: description))
 			default:
 				throw DecodingError.dataCorruptedError(
 					forKey: .type,
@@ -135,40 +135,40 @@ extension JSONSchema: Codable {
 		var container = encoder.container(keyedBy: CodingKeys.self)
 		
 		switch self {
-		case .string(let description, let format, let enumValues):
-			try container.encode("string", forKey: .type)
-			try container.encodeIfPresent(format, forKey: .format)
-			try container.encodeIfPresent(description, forKey: .description)
-			if let enumValues = enumValues {
-				try container.encode(enumValues, forKey: .enumValues)
-			}
-		case .number(let description):
-			try container.encode("number", forKey: .type)
-			try container.encodeIfPresent(description, forKey: .description)
-		case .boolean(let description):
-			try container.encode("boolean", forKey: .type)
-			try container.encodeIfPresent(description, forKey: .description)
-		case .array(let items, let description):
-			try container.encode("array", forKey: .type)
-			try container.encode(items, forKey: .items)
-			try container.encodeIfPresent(description, forKey: .description)
-		case .object(let properties, let required, let description):
-			try container.encode("object", forKey: .type)
-			
-			var propertiesContainer = container.nestedContainer(keyedBy: AnyCodingKey.self, forKey: .properties)
-			for (key, value) in properties {
-				try propertiesContainer.encode(value, forKey: AnyCodingKey(stringValue: key)!)
-			}
-			
-			if !required.isEmpty {
-				try container.encode(required, forKey: .required)
-			}
-			
-			try container.encodeIfPresent(description, forKey: .description)
-		case .enum(let values, let description):
-			try container.encode("string", forKey: .type)
-			try container.encodeIfPresent(description, forKey: .description)
-			try container.encode(values, forKey: .enumValues)
+			case .string(let description, let format, let enumValues):
+				try container.encode("string", forKey: .type)
+				try container.encodeIfPresent(format, forKey: .format)
+				try container.encodeIfPresent(description, forKey: .description)
+				if let enumValues = enumValues {
+					try container.encode(enumValues, forKey: .enumValues)
+				}
+			case .number(let description):
+				try container.encode("number", forKey: .type)
+				try container.encodeIfPresent(description, forKey: .description)
+			case .boolean(let description):
+				try container.encode("boolean", forKey: .type)
+				try container.encodeIfPresent(description, forKey: .description)
+			case .array(let items, let description):
+				try container.encode("array", forKey: .type)
+				try container.encode(items, forKey: .items)
+				try container.encodeIfPresent(description, forKey: .description)
+			case .object(let object):
+				try container.encode("object", forKey: .type)
+				
+				var propertiesContainer = container.nestedContainer(keyedBy: AnyCodingKey.self, forKey: .properties)
+				for (key, value) in object.properties {
+					try propertiesContainer.encode(value, forKey: AnyCodingKey(stringValue: key)!)
+				}
+				
+				if !object.required.isEmpty {
+					try container.encode(object.required, forKey: .required)
+				}
+				
+				try container.encodeIfPresent(object.description, forKey: .description)
+			case .enum(let values, let description):
+				try container.encode("string", forKey: .type)
+				try container.encodeIfPresent(description, forKey: .description)
+				try container.encode(values, forKey: .enumValues)
 		}
 	}
 }

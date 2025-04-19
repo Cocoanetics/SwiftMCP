@@ -116,20 +116,20 @@ func testThrowingFunctionSpec() {
     }
     
     // Verify request body schema
-    if case let .object(properties: properties, required: required, description: description) = content.schema {
-        #expect(description == "A function that takes parameters and can throw")
-        #expect(required.contains("name"))
-        #expect(required.contains("count"))
+    if case .object(let object) = content.schema {
+		#expect(object.description == "A function that takes parameters and can throw")
+		#expect(object.required.contains("name"))
+		#expect(object.required.contains("count"))
         
         // Check name parameter
-        guard case let .string(description: nameDesc, format: _, enumValues: _) = properties["name"] else {
+		guard case let .string(description: nameDesc, format: _, enumValues: _) = object.properties["name"] else {
             #expect(Bool(false), "name parameter should be a string")
             return
         }
         #expect(nameDesc == "The name to greet")
         
         // Check count parameter
-        guard case let .number(description: countDesc) = properties["count"] else {
+		guard case let .number(description: countDesc) = object.properties["count"] else {
             #expect(Bool(false), "count parameter should be a number")
             return
         }
@@ -168,9 +168,9 @@ func testVoidFunctionSpec() {
     }
     
     // Check parameter schema
-    if case let .object(properties: properties, required: _, description: _) = content.schema {
-        #expect(properties["message"] != nil)
-        if case let .string(description: description, format: _, enumValues: _) = properties["message"] {
+    if case .object(let object) = content.schema {
+		#expect(object.properties["message"] != nil)
+		if case let .string(description: description, _, _) = object.properties["message"] {
             #expect(description == "Message to process")
         } else {
             #expect(Bool(false), "Message parameter should be a string")

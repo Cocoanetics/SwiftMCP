@@ -129,7 +129,7 @@ extension Array: JSONSchemaTypeConvertible {
 
 extension Dictionary: JSONSchemaTypeConvertible {
     public static func jsonSchema(description: String?) -> JSONSchema {
-        .object(properties: [:], required: [], description: description)
+		.object(JSONSchema.Object(properties: [:], required: [], description: description))
     }
 }
 

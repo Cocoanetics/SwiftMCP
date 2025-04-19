@@ -75,15 +75,15 @@ func testIntDefaultValue() throws {
         throw TestError("Could not find intDefault function")
     }
     
-    if case .object(let properties, let required, _) = intDefaultTool.inputSchema {
+    if case .object(let object) = intDefaultTool.inputSchema {
         // Check default values
-        if case .number = properties["a"] {
+		if case .number = object.properties["a"] {
             // Parameter 'a' should not have a default value
         } else {
             #expect(Bool(false), "Expected number schema for parameter 'a'")
         }
         
-        if case .number = properties["b"] {
+		if case .number = object.properties["b"] {
             // Parameter 'b' should have a default value of 42
             // Note: In the current implementation, default values are not stored in the JSONSchema
         } else {
@@ -91,8 +91,8 @@ func testIntDefaultValue() throws {
         }
         
         // Check that only 'a' is required since 'b' has a default value
-        #expect(required.contains("a"))
-        #expect(!required.contains("b"))
+		#expect(object.required.contains("a"))
+		#expect(!object.required.contains("b"))
     } else {
         #expect(Bool(false), "Expected object schema")
     }
@@ -107,8 +107,8 @@ func testStringDefaultValue() throws {
         throw TestError("Could not find stringDefault function")
     }
     
-    if case .object(let properties, let required, _) = stringDefaultTool.inputSchema {
-        if case .string = properties["name"] {
+    if case .object(let object) = stringDefaultTool.inputSchema {
+		if case .string = object.properties["name"] {
             // Parameter 'name' should have a default value of "John Doe"
             // Note: In the current implementation, default values are not stored in the JSONSchema
         } else {
@@ -116,7 +116,7 @@ func testStringDefaultValue() throws {
         }
         
         // Check that 'name' is not required since it has a default value
-        #expect(!required.contains("name"))
+		#expect(!object.required.contains("name"))
     } else {
         #expect(Bool(false), "Expected object schema")
     }
@@ -131,8 +131,8 @@ func testBoolDefaultValue() throws {
         throw TestError("Could not find boolDefault function")
     }
     
-    if case .object(let properties, let required, _) = boolDefaultTool.inputSchema {
-        if case .boolean = properties["flag"] {
+    if case .object(let object) = boolDefaultTool.inputSchema {
+		if case .boolean = object.properties["flag"] {
             // Parameter 'flag' should have a default value of true
             // Note: In the current implementation, default values are not stored in the JSONSchema
         } else {
@@ -140,7 +140,7 @@ func testBoolDefaultValue() throws {
         }
         
         // Check that 'flag' is not required since it has a default value
-        #expect(!required.contains("flag"))
+		#expect(!object.required.contains("flag"))
     } else {
         #expect(Bool(false), "Expected object schema")
     }
@@ -155,8 +155,8 @@ func testDoubleDefaultValue() throws {
         throw TestError("Could not find doubleDefault function")
     }
     
-    if case .object(let properties, let required, _) = doubleDefaultTool.inputSchema {
-        if case .number = properties["value"] {
+    if case .object(let object) = doubleDefaultTool.inputSchema {
+		if case .number = object.properties["value"] {
             // Parameter 'value' should have a default value of 3.14
             // Note: In the current implementation, default values are not stored in the JSONSchema
         } else {
@@ -164,7 +164,7 @@ func testDoubleDefaultValue() throws {
         }
         
         // Check that 'value' is not required since it has a default value
-        #expect(!required.contains("value"))
+		#expect(!object.required.contains("value"))
     } else {
         #expect(Bool(false), "Expected object schema")
     }
@@ -181,8 +181,8 @@ func testArrayDefaultValue() throws {
     
 	print(arrayDefaultTool.inputSchema)
 	
-    if case .object(let properties, let required, _) = arrayDefaultTool.inputSchema {
-        if case .array = properties["values"] {
+    if case .object(let object) = arrayDefaultTool.inputSchema {
+		if case .array = object.properties["values"] {
             // Parameter 'values' should have a default value of [1, 2, 3]
             // Note: In the current implementation, default values are not stored in the JSONSchema
         } else {
@@ -190,7 +190,7 @@ func testArrayDefaultValue() throws {
         }
         
         // Check that 'values' is not required since it has a default value
-        #expect(!required.contains("values"))
+		#expect(!object.required.contains("values"))
     } else {
         #expect(Bool(false), "Expected object schema")
     }
@@ -205,21 +205,21 @@ func testMultipleDefaultValues() throws {
         throw TestError("Could not find multipleDefaults function")
     }
     
-    if case .object(let properties, let required, _) = multipleDefaultsTool.inputSchema {
-        if case .string = properties["a"] {
+    if case .object(let object) = multipleDefaultsTool.inputSchema {
+		if case .string = object.properties["a"] {
             // Parameter 'a' should not have a default value
         } else {
             #expect(Bool(false), "Expected string schema for parameter 'a'")
         }
         
-        if case .number = properties["b"] {
+		if case .number = object.properties["b"] {
             // Parameter 'b' should have a default value of 10
             // Note: In the current implementation, default values are not stored in the JSONSchema
         } else {
             #expect(Bool(false), "Expected number schema for parameter 'b'")
         }
         
-        if case .boolean = properties["c"] {
+		if case .boolean = object.properties["c"] {
             // Parameter 'c' should have a default value of false
             // Note: In the current implementation, default values are not stored in the JSONSchema
         } else {
@@ -227,9 +227,9 @@ func testMultipleDefaultValues() throws {
         }
         
         // Check that only 'a' is required since 'b' and 'c' have default values
-        #expect(required.contains("a"))
-        #expect(!required.contains("b"))
-        #expect(!required.contains("c"))
+		#expect(object.required.contains("a"))
+		#expect(!object.required.contains("b"))
+		#expect(!object.required.contains("c"))
     } else {
         #expect(Bool(false), "Expected object schema")
     }

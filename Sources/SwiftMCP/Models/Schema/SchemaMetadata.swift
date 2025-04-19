@@ -48,10 +48,10 @@ public struct SchemaMetadata: Sendable {
             }
         }
         
-        return .object(
-            properties: properties,
-            required: required,
-            description: description
-        )
+		return .object(JSONSchema.Object(
+			properties: properties,
+			required: required,
+			description: description
+		))
     }
 } 
