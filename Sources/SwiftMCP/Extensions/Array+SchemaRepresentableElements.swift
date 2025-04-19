@@ -8,6 +8,6 @@ extension Array: ArrayWithSchemaRepresentableElements where Element: SchemaRepre
 	
 	public static func schema(description: String? = nil) -> JSONSchema {
 		
-		return .array(items: Element.schema, description: description)
+		return .array(items: Element.schemaMetadata.schema, description: description)
 	}
 }

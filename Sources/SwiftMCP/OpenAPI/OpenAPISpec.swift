@@ -126,10 +126,10 @@ struct OpenAPISpec: Codable {
                 
                 // Check if the type provides its own schema
 				if returnType is any MCPResourceContent.Type || returnType is [any MCPResourceContent].Type {
-                    responseSchema = OpenAIFileResponse.schema
+					responseSchema = OpenAIFileResponse.schemaMetadata.schema
                     responseDescription = metadata.returnTypeDescription ?? "A file response containing name, mime type, and base64-encoded content"
                 } else if let schemaType = returnType as? any SchemaRepresentable.Type {
-                    responseSchema = schemaType.schema
+					responseSchema = schemaType.schemaMetadata.schema
                     responseDescription = metadata.returnTypeDescription ?? "A structured response"
                 } else if let caseIterableType = returnType as? any CaseIterable.Type {
 					responseSchema = .enum(values: caseIterableType.caseLabels, description: metadata.returnTypeDescription)
@@ -150,7 +150,7 @@ struct OpenAPISpec: Codable {
                     } else if elementType == Bool.self {
                         itemSchema = .boolean()
                     } else if let schemaType = elementType as? any SchemaRepresentable.Type {
-                        itemSchema = schemaType.schema
+						itemSchema = schemaType.schemaMetadata.schema
                     } else if let caseIterableType = elementType as? any CaseIterable.Type {
                         itemSchema = .enum(values: caseIterableType.caseLabels)
                     } else {

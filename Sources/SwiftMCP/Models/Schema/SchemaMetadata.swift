@@ -10,7 +10,7 @@ import Foundation
 
 /// Metadata about a SchemaRepresentable struct
 public struct SchemaMetadata: Sendable {
-    /// The name of the function
+    /// The name of the type
     public let name: String
     
     /// The parameters of the function

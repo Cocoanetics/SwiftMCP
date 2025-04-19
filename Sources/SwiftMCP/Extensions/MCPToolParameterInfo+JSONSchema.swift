@@ -20,7 +20,7 @@ extension MCPToolParameterInfo {
 	var schema: JSONSchema {
 		// If this is a SchemaRepresentable type, use its schema
 		if let schemaType = type as? any SchemaRepresentable.Type {
-			return schemaType.schema
+			return schemaType.schemaMetadata.schema
 		}
 		
 		// If this is a CaseIterable type, return a string schema with enum values
@@ -50,7 +50,7 @@ extension MCPToolParameterInfo {
 			} else if type == Bool.self {
 				schema = JSONSchema.boolean()
 			} else if let schemaType = type as? any SchemaRepresentable.Type {
-				schema = schemaType.schema
+				schema = schemaType.schemaMetadata.schema
 			} else {
 				schema = JSONSchema.string()
 			}

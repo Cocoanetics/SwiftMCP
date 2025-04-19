@@ -51,7 +51,7 @@ public struct SchemaPropertyInfo: Sendable {
         
         // If this is a SchemaRepresentable type, use its schema
         if let schemaType = type as? any SchemaRepresentable.Type {
-            return schemaType.schema
+			return schemaType.schemaMetadata.schema
         }
         
         // If this is a CaseIterable type that isn't JSONSchemaTypeConvertible, return a string schema with enum values

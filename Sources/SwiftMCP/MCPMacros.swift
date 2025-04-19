@@ -72,6 +72,6 @@ public macro MCPServer(name: String? = nil, version: String? = nil) = #externalM
 ///     let phone: String?
 /// }
 /// ```
-@attached(member, names: named(schema))
+@attached(member, names: named(schemaMetadata))
 @attached(extension, conformances: SchemaRepresentable)
 public macro Schema() = #externalMacro(module: "SwiftMCPMacros", type: "SchemaMacro")
