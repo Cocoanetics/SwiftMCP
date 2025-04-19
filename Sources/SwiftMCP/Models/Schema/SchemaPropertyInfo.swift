@@ -56,7 +56,7 @@ public struct SchemaPropertyInfo: Sendable {
         
         // If this is a CaseIterable type that isn't JSONSchemaTypeConvertible, return a string schema with enum values
         if let caseIterableType = type as? any CaseIterable.Type {
-            return JSONSchema.string(description: description, enumValues: caseIterableType.caseLabels)
+            return JSONSchema.enum(values: caseIterableType.caseLabels, description: description, )
         }
         
         // Default to string for unknown types

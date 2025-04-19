@@ -15,7 +15,7 @@ extension Array: ArrayWithCaseIterableElements where Element: CaseIterable {
 	
 	public static func schema(description: String? = nil) -> JSONSchema {
 		
-		let elementSchema = JSONSchema.string(enumValues: Element.caseLabels)
+		let elementSchema = JSONSchema.enum(values: Element.caseLabels)
 		return .array(items: elementSchema, description: description)
 	}
 }

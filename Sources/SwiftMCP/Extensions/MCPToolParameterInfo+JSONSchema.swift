@@ -25,7 +25,7 @@ extension MCPToolParameterInfo {
 		
 		// If this is a CaseIterable type, return a string schema with enum values
 		if let caseIterableType = type as? any CaseIterable.Type {
-			return JSONSchema.string(description: description, enumValues: caseIterableType.caseLabels)
+			return JSONSchema.enum(values: caseIterableType.caseLabels, description: description)
 		}
 		
 		// Handle array types

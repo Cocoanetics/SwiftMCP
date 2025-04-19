@@ -132,7 +132,7 @@ struct OpenAPISpec: Codable {
                     responseSchema = schemaType.schema
                     responseDescription = metadata.returnTypeDescription ?? "A structured response"
                 } else if let caseIterableType = returnType as? any CaseIterable.Type {
-                    responseSchema = .string(description: metadata.returnTypeDescription, enumValues: caseIterableType.caseLabels)
+					responseSchema = .enum(values: caseIterableType.caseLabels, description: metadata.returnTypeDescription)
                     responseDescription = metadata.returnTypeDescription ?? "An enumerated value"
                 } else if let arrayType = returnType as? any ArrayWithSchemaRepresentableElements.Type {
                     responseSchema = arrayType.schema(description: metadata.returnTypeDescription)
@@ -152,7 +152,7 @@ struct OpenAPISpec: Codable {
                     } else if let schemaType = elementType as? any SchemaRepresentable.Type {
                         itemSchema = schemaType.schema
                     } else if let caseIterableType = elementType as? any CaseIterable.Type {
-                        itemSchema = .string(enumValues: caseIterableType.caseLabels)
+                        itemSchema = .enum(values: caseIterableType.caseLabels)
                     } else {
                         itemSchema = .string()
                     }

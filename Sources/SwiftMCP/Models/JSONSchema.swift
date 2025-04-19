@@ -9,8 +9,26 @@ import Foundation
 
 /// A simplified representation of JSON Schema for use in the macros
 public indirect enum JSONSchema: Sendable {
-    /// A string schema
-    case string(description: String? = nil, format: String? = nil, enumValues: [String]? = nil)
+	/**
+	 A structured schema type
+	 */
+	public struct Object: Sendable
+	{
+		/// The properties of the type
+		var properties: [String: JSONSchema]
+		
+		/// Which if the properties are mandatory
+		var required: [String] = []
+		
+		/// Description of the type
+		var description: String? = nil
+		
+		/// Whether additional properties are allowed
+		var additionalProperties: Bool? = false
+	}
+	
+	/// A string schema
+    case string(description: String? = nil, format: String? = nil)
     
     /// A number schema
     case number(description: String? = nil)
@@ -26,14 +44,6 @@ public indirect enum JSONSchema: Sendable {
     
     /// An enum schema with possible values
     case `enum`(values: [String], description: String? = nil)
-	
-	public struct Object: Sendable
-	{
-		var properties: [String: JSONSchema]
-		var required: [String] = []
-		var description: String? = nil
-		var additionalProperties: Bool? = false
-	}
 }
 
 // Extension to remove required fields from a schema

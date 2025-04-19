@@ -305,9 +305,8 @@ struct EnumTests {
         if let priorityTool = tools.first(where: { $0.name == "processPriority" }) {
 			if case .object(let object) = priorityTool.inputSchema {
 				if let prioritySchema = object.properties["priority"] {
-                    if case .string(description: _, format: _, enumValues: let enumValues) = prioritySchema {
-                        #expect(enumValues != nil)
-                        #expect(enumValues?.sorted() == ["low", "medium", "high"].sorted())
+                    if case .enum(let enumValues, description: _) = prioritySchema {
+                        #expect(enumValues.sorted() == ["low", "medium", "high"].sorted())
                     } else {
                         #expect(Bool(false), "Expected string schema with enum values")
                     }
@@ -325,9 +324,8 @@ struct EnumTests {
         if let statusTool = tools.first(where: { $0.name == "processStatus" }) {
             if case .object(let object) = statusTool.inputSchema {
 				if let statusSchema = object.properties["status"] {
-                    if case .string(description: _, format: _, enumValues: let enumValues) = statusSchema {
-                        #expect(enumValues != nil)
-                        #expect(enumValues?.sorted() == ["pending", "active", "completed"].sorted())
+                    if case .enum(let values, description: _) = statusSchema {
+                        #expect(values.sorted() == ["pending", "active", "completed"].sorted())
                     } else {
                         #expect(Bool(false), "Expected string schema with enum values")
                     }

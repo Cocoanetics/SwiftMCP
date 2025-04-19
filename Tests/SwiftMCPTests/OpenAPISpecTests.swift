@@ -122,7 +122,7 @@ func testThrowingFunctionSpec() {
 		#expect(object.required.contains("count"))
         
         // Check name parameter
-		guard case let .string(description: nameDesc, format: _, enumValues: _) = object.properties["name"] else {
+		guard case let .string(description: nameDesc, format: _) = object.properties["name"] else {
             #expect(Bool(false), "name parameter should be a string")
             return
         }
@@ -170,7 +170,7 @@ func testVoidFunctionSpec() {
     // Check parameter schema
     if case .object(let object) = content.schema {
 		#expect(object.properties["message"] != nil)
-		if case let .string(description: description, _, _) = object.properties["message"] {
+		if case let .string(description: description, _) = object.properties["message"] {
             #expect(description == "Message to process")
         } else {
             #expect(Bool(false), "Message parameter should be a string")
@@ -187,7 +187,7 @@ func testVoidFunctionSpec() {
     // Check response schema
     let schema = response?.content?["application/json"]?.schema
     #expect(schema != nil)
-    if case let .string(description: description, format: _, enumValues: _) = schema {
+    if case let .string(description: description, format: _) = schema {
         #expect(description == "Empty string (void function)")
     } else {
         #expect(Bool(false), "Response schema should be a string")
@@ -319,10 +319,8 @@ func testOpenAPISpecGeneration() throws {
         return
     }
 	
-	print(singleConditionSchema)
-	
     #expect(singleConditionSchema.type == "string", "Expected string schema for single condition")
-    if case .string(_, _, let enumValues) = singleConditionSchema {
+    if case .enum(let enumValues, _) = singleConditionSchema {
         #expect(enumValues == ["sunny", "cloudy", "rainy", "snowy"],
                "Enum values don't match expected values")
     } else {
@@ -338,8 +336,8 @@ func testOpenAPISpecGeneration() throws {
     #expect(multipleConditionsSchema.type == "array", "Expected array schema for multiple conditions")
     if case .array(let items, _) = multipleConditionsSchema {
         #expect(items.type == "string", "Expected string schema for array items")
-        if case .string(_, _, let enumValues) = items {
-            #expect(Set(enumValues ?? []) == Set(["sunny", "cloudy", "rainy", "snowy"]), 
+        if case .enum(let enumValues, _) = items {
+            #expect(Set(enumValues) == Set(["sunny", "cloudy", "rainy", "snowy"]), 
                    "Array items enum values don't match expected values")
         } else {
             #expect(Bool(false), "Expected string schema with enum values for array items")

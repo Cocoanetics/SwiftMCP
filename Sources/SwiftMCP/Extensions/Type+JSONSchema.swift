@@ -9,7 +9,7 @@ public protocol JSONSchemaTypeConvertible {
 // Add automatic conformance for CaseIterable types
 extension CaseIterable {
     public static func jsonSchema(description: String?) -> JSONSchema {
-        .string(description: description, enumValues: caseLabels)
+		.enum(values: caseLabels, description: description)
     }
 }
 
@@ -118,7 +118,7 @@ extension Array: JSONSchemaTypeConvertible {
         } else if let schemaType = Element.self as? any SchemaRepresentable.Type {
             elementSchema = schemaType.schema
         } else if let caseIterableType = Element.self as? any CaseIterable.Type {
-            elementSchema = .string(enumValues: caseIterableType.caseLabels)
+            elementSchema = .enum(values: caseIterableType.caseLabels)
         } else {
             elementSchema = .string()
         }
@@ -140,7 +140,7 @@ extension Optional: JSONSchemaTypeConvertible {
         } else if let schemaType = Wrapped.self as? any SchemaRepresentable.Type {
             return schemaType.schema
         } else if let caseIterableType = Wrapped.self as? any CaseIterable.Type {
-            return .string(description: description, enumValues: caseIterableType.caseLabels)
+            return .enum(values: caseIterableType.caseLabels, description: description)
         }
         return .string(description: description)
     }
