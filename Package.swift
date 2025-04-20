@@ -24,12 +24,12 @@ let package = Package(
 		)
 	],
 	dependencies: [
-		.package(url: "https://github.com/apple/swift-syntax.git", from: "600.0.1"),
 		.package(url: "https://github.com/apple/swift-log.git", from: "1.0.0"),
-		.package(url: "https://github.com/Flight-School/AnyCodable", from: "0.6.0"),
 		.package(url: "https://github.com/apple/swift-argument-parser", from: "1.2.0"),
 		.package(url: "https://github.com/apple/swift-nio.git", from: "2.0.0"),
-		.package(url: "https://github.com/apple/swift-docc-plugin.git", from: "1.0.0")
+		.package(url: "https://github.com/Flight-School/AnyCodable", from: "0.6.0"),
+		.package(url: "https://github.com/swiftlang/swift-docc-plugin.git", from: "1.0.0"),
+		.package(url: "https://github.com/swiftlang/swift-syntax.git", from: "600.0.1")
 	],
 	targets: [
 		.macro(
