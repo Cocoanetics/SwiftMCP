@@ -17,7 +17,7 @@ extension Array: ArraySchemaBridge {
 
 extension MCPToolParameterInfo {
 	
-	var schema: JSONSchema {
+	public var schema: JSONSchema {
 		// If this is a SchemaRepresentable type, use its schema
 		if let schemaType = type as? any SchemaRepresentable.Type {
 			return schemaType.schemaMetadata.schema
