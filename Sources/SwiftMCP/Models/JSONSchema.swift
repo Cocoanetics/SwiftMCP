@@ -25,6 +25,14 @@ public indirect enum JSONSchema: Sendable {
 		
 		/// Whether additional properties are allowed
 		public var additionalProperties: Bool? = false
+		
+		/// public initializer
+		public init(properties: [String : JSONSchema], required: [String], description: String? = nil, additionalProperties: Bool? = nil) {
+			self.properties = properties
+			self.required = required
+			self.description = description
+			self.additionalProperties = additionalProperties
+		}
 	}
 	
 	/// A string schema
