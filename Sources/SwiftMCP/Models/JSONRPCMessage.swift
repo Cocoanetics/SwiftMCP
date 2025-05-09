@@ -36,13 +36,13 @@ public struct JSONRPCRequest: JSONRPCMessage {
 	public var id: Int?
 	
 	/** The name of the method to be invoked */
-	public var method: String?
+	public var method: String
 	
 	/** The parameters to be passed to the method, as a dictionary of parameter names to values */
 	public var params: [String: AnyCodable]?
 	
 	/** Public initializer */
-	public init(jsonrpc: String = "2.0", id: Int? = nil, method: String? = nil, params: [String : AnyCodable]? = nil) {
+	public init(jsonrpc: String = "2.0", id: Int? = nil, method: String, params: [String : AnyCodable]? = nil) {
 		self.jsonrpc = jsonrpc
 		self.id = id
 		self.method = method
