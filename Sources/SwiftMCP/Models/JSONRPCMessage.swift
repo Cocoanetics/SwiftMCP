@@ -40,6 +40,13 @@ public struct JSONRPCRequest: JSONRPCMessage {
 	
 	/** The parameters to be passed to the method, as a dictionary of parameter names to values */
 	public var params: [String: AnyCodable]?
+	
+	/** Public initializer */
+	public init(id: Int? = nil, method: String? = nil, params: [String : AnyCodable]? = nil) {
+		self.id = id
+		self.method = method
+		self.params = params
+	}
 }
 
 /// JSON-RPC success response structure used for communication with the MCP server
