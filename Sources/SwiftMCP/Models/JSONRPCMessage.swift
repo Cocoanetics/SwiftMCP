@@ -42,7 +42,8 @@ public struct JSONRPCRequest: JSONRPCMessage {
 	public var params: [String: AnyCodable]?
 	
 	/** Public initializer */
-	public init(id: Int? = nil, method: String? = nil, params: [String : AnyCodable]? = nil) {
+	public init(jsonrpc: String = "2.0", id: Int? = nil, method: String? = nil, params: [String : AnyCodable]? = nil) {
+		self.jsonrpc = jsonrpc
 		self.id = id
 		self.method = method
 		self.params = params
@@ -64,6 +65,13 @@ public struct JSONRPCResponse: JSONRPCMessage {
 	
 	/** The result of the method invocation, as a dictionary of result fields */
 	public var result: [String: AnyCodable]?
+	
+	/** Public initializer */
+	public init(jsonrpc: String = "2.0", id: Int? = nil, result: [String: AnyCodable]? = nil) {
+		self.jsonrpc = jsonrpc
+		self.id = id
+		self.result = result
+	}
 }
 
 /// JSON-RPC error response structure used for communication with the MCP server
