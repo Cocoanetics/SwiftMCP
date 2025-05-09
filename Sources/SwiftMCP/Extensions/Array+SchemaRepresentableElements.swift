@@ -1,6 +1,6 @@
 import Foundation
 
-protocol ArrayWithSchemaRepresentableElements {
+public protocol ArrayWithSchemaRepresentableElements {
 	static func schema(description: String?) -> JSONSchema
 }
 
