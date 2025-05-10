@@ -82,7 +82,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 				
 			// Handle all OPTIONS requests in one case
 			case (.OPTIONS, _):
-				handleOPTIONS(context: context, head: head)
+				handleOPTIONS(channel: context.channel, head: head)
 				
 			// SSE Endpoint
 				
@@ -90,7 +90,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 				handleSSE(context: context, head: head, body: body)
 				
 			case (_, let path) where path.hasPrefix("/sse"):
-				sendResponse(context: context, status: .methodNotAllowed)
+				sendResponse(channel: context.channel, status: .methodNotAllowed)
 				
 			// Messages
 				
@@ -109,12 +109,12 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 				}
 				
 			case (_, let path) where path.hasPrefix("/messages"):
-				sendResponse(context: context, status: .methodNotAllowed)
+				sendResponse(channel: context.channel, status: .methodNotAllowed)
 				
 			// if OpenAPI is disabled: everything else is NOT FOUND
 				
 			case (_, _) where !transport.serveOpenAPI:
-				sendResponse(context: context, status: .notFound)
+				sendResponse(channel: context.channel, status: .notFound)
 				
 			// AI Plugin Manifest (OpenAPI)
 				
@@ -122,26 +122,26 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 				handleAIPluginManifest(context: context, head: head)
 				
 			case (_, "/.well-known/ai-plugin.json"):
-				sendResponse(context: context, status: .methodNotAllowed)
+				sendResponse(channel: context.channel, status: .methodNotAllowed)
 				
 			// OpenAPI Spec
 				
 			case (.GET, "/openapi.json"):
-				handleOpenAPISpec(context: context, head: head)
+				handleOpenAPISpec(channel: context.channel, head: head)
 				
 			case (_, "/openapi.json"):
-				sendResponse(context: context, status: .methodNotAllowed)
+				sendResponse(channel: context.channel, status: .methodNotAllowed)
 				
 			// Tool Endpoint
 			case (.POST, let path) where path.hasPrefix(serverPath):
 				handleToolCall(context: context, head: head, body: body)
 				
 			case (_, let path) where path.hasPrefix(serverPath):
-				sendResponse(context: context, status: .methodNotAllowed)
+				sendResponse(channel: context.channel, status: .methodNotAllowed)
 				
 				// Fallback for unknown endpoints
 			default:
-				sendResponse(context: context, status: .notFound)
+				sendResponse(channel: context.channel, status: .notFound)
 		}
 	}
 	
@@ -154,7 +154,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 		
 		guard "text/event-stream".matchesAcceptHeader(acceptHeader) else {
 			logger.warning("Rejected non-SSE request (Accept: \(acceptHeader))")
-			sendResponse(context: context, status: .badRequest)
+			sendResponse(channel: context.channel, status: .badRequest)
 			return
 		}
 		
@@ -251,11 +251,6 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 			decoder.dateDecodingStrategy = .iso8601
 			let request = try decoder.decode(JSONRPCRequest.self, from: body)
 			
-			if request.method == nil {
-				await sendResponseAsync(channel: channel, status: .ok, headers: nil)
-				return
-			}
-			
 			// Send Accepted first
 			await sendResponseAsync(channel: channel, status: .accepted)
 			
@@ -322,14 +317,14 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 			var buffer = context.channel.allocator.buffer(capacity: jsonData.count)
 			buffer.writeBytes(jsonData)
 			
-			sendResponse(context: context, status: .ok, body: buffer)
+			sendResponse(channel: context.channel, status: .ok, body: buffer)
 		} catch {
 			logger.error("Failed to encode AI plugin manifest: \(error)")
-			sendResponse(context: context, status: .internalServerError)
+			sendResponse(channel: context.channel, status: .internalServerError)
 		}
 	}
 	
-	private func handleOpenAPISpec(context: ChannelHandlerContext, head: HTTPRequestHead) {
+	private func handleOpenAPISpec(channel: Channel, head: HTTPRequestHead) {
 		
 		precondition(head.method == .GET)
 		precondition(transport.serveOpenAPI)
@@ -349,7 +344,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 		} else {
 			scheme = "http"
 		}
-
+		
 		let spec = OpenAPISpec(server: transport.server,
 							   scheme: scheme,
 							   host: host)
@@ -360,13 +355,13 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 		
 		do {
 			let jsonData = try encoder.encode(spec)
-			var buffer = context.channel.allocator.buffer(capacity: jsonData.count)
+			var buffer = channel.allocator.buffer(capacity: jsonData.count)
 			buffer.writeBytes(jsonData)
 			
-			sendResponse(context: context, status: .ok, body: buffer)
+			sendResponse(channel: channel, status: .ok, body: buffer)
 		} catch {
 			logger.error("Failed to encode OpenAPI spec: \(error)")
-			sendResponse(context: context, status: .internalServerError)
+			sendResponse(channel: channel, status: .internalServerError)
 		}
 	}
 	
@@ -577,16 +572,15 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 		return components.url
 	}
 	
-	private func handleOPTIONS(context: ChannelHandlerContext, head: HTTPRequestHead) {
+	private func handleOPTIONS(channel: Channel, head: HTTPRequestHead) {
 		logger.info("Handling OPTIONS request for URI: \(head.uri)")
 		var headers = HTTPHeaders()
 		headers.add(name: "Access-Control-Allow-Methods", value: "GET, POST, OPTIONS")
 		headers.add(name: "Access-Control-Allow-Headers", value: "Content-Type, Authorization")
-		sendResponse(context: context, status: .ok, headers: headers)
+		sendResponse(channel: channel, status: .ok, headers: headers)
 	}
 	
-	private func sendResponse(context: ChannelHandlerContext, status: HTTPResponseStatus, headers: HTTPHeaders? = nil, body: ByteBuffer? = nil) {
-		let channel = context.channel
+	private func sendResponse(channel: Channel, status: HTTPResponseStatus, headers: HTTPHeaders? = nil, body: ByteBuffer? = nil) {
 		var responseHeaders = headers ?? HTTPHeaders()
 		
 		if body != nil {
@@ -606,5 +600,3 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 		channel.flush()
 	}
 }
-
-// extension ChannelHandlerContext: @retroactive @unchecked Sendable {}
