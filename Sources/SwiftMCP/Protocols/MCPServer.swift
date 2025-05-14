@@ -331,9 +331,11 @@ public extension MCPServer {
 		   
 		   do {
 			   // Try to get the resource content
-			   if let resourceContent = try await ressourceProvider.getResource(uri: uri) {
-				   return JSONRPCResponse(id: id, result: ["contents": AnyCodable([resourceContent])])
-				   
+			  let resourceContentArray = try await ressourceProvider.getResource(uri: uri)
+			   
+			   if !resourceContentArray.isEmpty
+			   {
+				   return JSONRPCResponse(id: id, result: ["contents": AnyCodable(resourceContentArray)])
 			   } else {
 				   return JSONRPCErrorResponse(id: id, error: .init(code: -32001, message: "Resource not found: \(uri.absoluteString)"))
 			   }

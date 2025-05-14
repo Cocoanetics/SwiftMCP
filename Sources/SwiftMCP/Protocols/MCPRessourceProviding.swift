@@ -31,5 +31,5 @@ public protocol MCPRessourceProviding {
 	 - Returns: The resource content if found, nil otherwise
 	 - Throws: An error if the resource cannot be accessed
 	 */
-	func getResource(uri: URL) async throws -> MCPResourceContent?
+	func getResource(uri: URL) async throws -> [MCPResourceContent]
 }

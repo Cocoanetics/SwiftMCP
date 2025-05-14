@@ -67,16 +67,16 @@ extension DemoServer: MCPRessourceProviding
     
     /// Gets a resource by URI
     /// - Parameter uri: The URI of the resource to get
-    /// - Returns: The resource content, or nil if the resource doesn't exist
+    /// - Returns: The resource content, or an empty array if the resource doesn't exist
     /// - Throws: MCPResourceError if there's an error getting the resource
-    func getResource(uri: URL) throws -> MCPResourceContent? {
+    func getResource(uri: URL) throws -> [MCPResourceContent] {
         // Check if the file exists
         guard FileManager.default.fileExists(atPath: uri.path) else {
-            return nil
+            return []
         }
         
         // Get the resource content
-        return try FileResourceContent.from(fileURL: uri)
+        return try [FileResourceContent.from(fileURL: uri)]
     }
 	
 	var mcpResourceTemplates: [MCPResourceTemplate] {
