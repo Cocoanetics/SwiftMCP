@@ -61,7 +61,7 @@ extension JSONSchema {
 		switch self {
 			case .object(let object):
 				// For object schemas, create a new object with empty required array
-				return .object(Object(properties: object.properties,
+				return .object(Object(properties: object.properties.mapValues { $0.withoutRequired },
 									  required: [],
 									  description: object.description,
 									  additionalProperties: object.additionalProperties))
@@ -83,7 +83,7 @@ extension JSONSchema {
 	public var addingAdditionalPropertiesRestrictionToObjects: JSONSchema {
 		switch self {
 			case .object(let object):
-				return .object(Object(properties: object.properties,
+				return .object(Object(properties: object.properties.mapValues { $0.addingAdditionalPropertiesRestrictionToObjects },
 									  required: object.required,
 									  description: object.description,
 									  additionalProperties: false))
