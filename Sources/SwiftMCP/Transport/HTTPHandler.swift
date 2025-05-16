@@ -249,6 +249,12 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 		do {
 			let decoder = JSONDecoder()
 			decoder.dateDecodingStrategy = .iso8601
+			
+			// ignore emptey result from ping, this would fail for a request where method is required
+			if let empty = try? decoder.decode(JSONRPCEmptyResponse.self, from: body), empty.result == [:] {
+				return
+			}
+			
 			let request = try decoder.decode(JSONRPCRequest.self, from: body)
 			
 			// Send Accepted first
