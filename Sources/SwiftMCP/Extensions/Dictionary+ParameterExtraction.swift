@@ -320,6 +320,17 @@ public extension Dictionary where Key == String, Value == Sendable {
             return value
         } else if let doubleArray = self[name] as? [Double] {
             return doubleArray.map { Int($0) }
+        } else if let anyArray = self[name] as? [Any] {
+            return try anyArray.map { element in
+                if let i = element as? Int { return i }
+                if let d = element as? Double { return Int(d) }
+                if let f = element as? Float { return Int(f) }
+                throw MCPToolError.invalidArgumentType(
+                    parameterName: name,
+                    expectedType: "Int",
+                    actualType: String(describing: Swift.type(of: element))
+                )
+            }
         } else {
             throw MCPToolError.invalidArgumentType(
                 parameterName: name,
@@ -338,6 +349,17 @@ public extension Dictionary where Key == String, Value == Sendable {
             return value
         } else if let intArray = self[name] as? [Int] {
             return intArray.map { Double($0) }
+        } else if let anyArray = self[name] as? [Any] {
+            return try anyArray.map { element in
+                if let d = element as? Double { return d }
+                if let i = element as? Int { return Double(i) }
+                if let f = element as? Float { return Double(f) }
+                throw MCPToolError.invalidArgumentType(
+                    parameterName: name,
+                    expectedType: "Double",
+                    actualType: String(describing: Swift.type(of: element))
+                )
+            }
         } else {
             throw MCPToolError.invalidArgumentType(
                 parameterName: name,
@@ -358,6 +380,17 @@ public extension Dictionary where Key == String, Value == Sendable {
             return intArray.map { Float($0) }
         } else if let doubleArray = self[name] as? [Double] {
             return doubleArray.map { Float($0) }
+        } else if let anyArray = self[name] as? [Any] {
+            return try anyArray.map { element in
+                if let f = element as? Float { return f }
+                if let d = element as? Double { return Float(d) }
+                if let i = element as? Int { return Float(i) }
+                throw MCPToolError.invalidArgumentType(
+                    parameterName: name,
+                    expectedType: "Float",
+                    actualType: String(describing: Swift.type(of: element))
+                )
+            }
         } else {
             throw MCPToolError.invalidArgumentType(
                 parameterName: name,
