@@ -114,34 +114,30 @@ public extension MCPServer {
      - Parameter id: The request ID to include in the response
      - Returns: A JSON-RPC message containing the initialization response
      */
-	func createInitializeResponse(id: Int) -> JSONRPCResponse {
-		var response = JSONRPCResponse()
-		response.id = id
-		
-		var capabilities = ServerCapabilities()
+        func createInitializeResponse(id: Int) -> JSONRPCInitializeResponse {
+                var capabilities = ServerCapabilities()
 
-		// capabilities.logging = false
-		
-		if self is MCPToolProviding
-		{
-			capabilities.tools = .init(listChanged: false)
-		}
-		
-                if self is MCPResourceProviding
-		{
-			capabilities.resources = .init(listChanged: false)
-		}
-		
-		response.result = [
-			"protocolVersion": AnyCodable("2024-11-05"),
-			"capabilities": AnyCodable(capabilities),
-			"serverInfo": AnyCodable([
-				"name": serverName,
-				"version": serverVersion
-			])
-		]
-		return response
-	}
+                if self is MCPToolProviding {
+                        capabilities.tools = .init(listChanged: false)
+                }
+
+                if self is MCPResourceProviding {
+                        capabilities.resources = .init(listChanged: false)
+                }
+
+                let serverInfo = JSONRPCInitializeResponse.InitializeResult.ServerInfo(
+                        name: serverName,
+                        version: serverVersion
+                )
+
+                let result = JSONRPCInitializeResponse.InitializeResult(
+                        protocolVersion: "2024-11-05",
+                        capabilities: capabilities,
+                        serverInfo: serverInfo
+                )
+
+                return JSONRPCInitializeResponse(id: id, result: result)
+        }
     
     /**
      Handles a tool execution request.
