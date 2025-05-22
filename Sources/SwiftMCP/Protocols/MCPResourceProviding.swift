@@ -1,5 +1,5 @@
 //
-//  MCPRessourceProviding.swift
+//  MCPResourceProviding.swift
 //  SwiftMCP
 //
 //  Created by Oliver Drobnik on 03.04.25.
@@ -7,7 +7,7 @@
 
 import Foundation
 
-public protocol MCPRessourceProviding {
+public protocol MCPResourceProviding {
 	/**
 	 The resources available on this server.
 	 

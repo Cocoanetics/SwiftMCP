@@ -1,5 +1,5 @@
 //
-//  DemoServer+MCPRessourceProviding.swift
+//  DemoServer+MCPResourceProviding.swift
 //  SwiftMCP
 //
 //  Created by Oliver Drobnik on 03.04.25.
@@ -8,7 +8,7 @@
 import Foundation
 import SwiftMCP
 
-extension DemoServer: MCPRessourceProviding
+extension DemoServer: MCPResourceProviding
 {
     /// Returns an array of all MCP resources defined in this type
     var mcpResources: [MCPResource] {
