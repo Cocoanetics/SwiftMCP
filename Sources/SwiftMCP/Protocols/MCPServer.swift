@@ -127,7 +127,7 @@ public extension MCPServer {
 			capabilities.tools = .init(listChanged: false)
 		}
 		
-		if self is MCPRessourceProviding
+                if self is MCPResourceProviding
 		{
 			capabilities.resources = .init(listChanged: false)
 		}
@@ -272,22 +272,22 @@ public extension MCPServer {
 	 - Parameter id: The request ID to include in the response
 	 - Returns: A JSON-RPC message containing the resources list
 	 */
-	func createResourcesListResponse(id: Int) async -> JSONRPCMessage {
-		
-		guard let ressourceProvider = self as? MCPRessourceProviding else
-		{
-			var response = JSONRPCResponse()
-			response.id = id
-			response.result = [
-				"content": [
-					["type": "text", "text": "Server does not provide any resources"]
+        func createResourcesListResponse(id: Int) async -> JSONRPCMessage {
+
+                guard let resourceProvider = self as? MCPResourceProviding else
+                {
+                        var response = JSONRPCResponse()
+                        response.id = id
+                        response.result = [
+                                "content": [
+                                        ["type": "text", "text": "Server does not provide any resources"]
 				],
 				"isError": true
 			]
 			return response
 		}
 		
-		let resourceDicts = await ressourceProvider.mcpResources.map { resource -> [String: Any] in
+                let resourceDicts = await resourceProvider.mcpResources.map { resource -> [String: Any] in
 			return [
 				"uri": resource.uri.absoluteString,
 				"name": resource.name,
@@ -296,9 +296,9 @@ public extension MCPServer {
 			]
 		}
 		
-		let response = JSONRPCResponse(id: id, result: ["resources": AnyCodable(resourceDicts)])
-		return response
-	}
+                let response = JSONRPCResponse(id: id, result: ["resources": AnyCodable(resourceDicts)])
+                return response
+        }
     
     /**
      Creates a response for a resource read request.
@@ -308,15 +308,15 @@ public extension MCPServer {
        - request: The original JSON-RPC request
      - Returns: A JSON-RPC message containing the resource content or an error
      */
-	func createResourcesReadResponse(id: Int, request: JSONRPCRequest) async -> JSONRPCMessage {
-		
-		guard let ressourceProvider = self as? MCPRessourceProviding else
-		{
-			var response = JSONRPCResponse()
-			response.id = id
-			response.result = [
-				"content": [
-					["type": "text", "text": "Server does not provide any resources"]
+        func createResourcesReadResponse(id: Int, request: JSONRPCRequest) async -> JSONRPCMessage {
+
+                guard let resourceProvider = self as? MCPResourceProviding else
+                {
+                        var response = JSONRPCResponse()
+                        response.id = id
+                        response.result = [
+                                "content": [
+                                        ["type": "text", "text": "Server does not provide any resources"]
 				],
 				"isError": true
 			]
@@ -329,9 +329,9 @@ public extension MCPServer {
 			  return JSONRPCErrorResponse(id: id, error: .init(code: -32602, message: "Invalid or missing URI parameter"))
 		   }
 		   
-		   do {
-			   // Try to get the resource content
-			  let resourceContentArray = try await ressourceProvider.getResource(uri: uri)
+                   do {
+                           // Try to get the resource content
+                          let resourceContentArray = try await resourceProvider.getResource(uri: uri)
 			   
 			   if !resourceContentArray.isEmpty
 			   {
@@ -351,21 +351,21 @@ public extension MCPServer {
      - Returns: A JSON-RPC message containing the resource templates list
      */
     func createResourceTemplatesListResponse(id: Int) async -> JSONRPCMessage {
-		
-		guard let ressourceProvider = self as? MCPRessourceProviding else
-		{
-			var response = JSONRPCResponse()
-			response.id = id
-			response.result = [
-				"content": [
-					["type": "text", "text": "Server does not provide any resources"]
+
+                guard let resourceProvider = self as? MCPResourceProviding else
+                {
+                        var response = JSONRPCResponse()
+                        response.id = id
+                        response.result = [
+                                "content": [
+                                        ["type": "text", "text": "Server does not provide any resources"]
 				],
 				"isError": true
 			]
 			return response
 		}
 		
-		let templates = await ressourceProvider.mcpResourceTemplates
+                let templates = await resourceProvider.mcpResourceTemplates
         
         var response = JSONRPCResponse()
         response.id = id
