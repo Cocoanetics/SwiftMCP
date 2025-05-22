@@ -16,39 +16,35 @@ func testInitializeRequest() async throws {
     )
     
     // Handle the request
-    let response = unwrap(await calculator.handleRequest(request) as? JSONRPCResponse)
+    let response = unwrap(await calculator.handleRequest(request) as? JSONRPCInitializeResponse)
     
     #expect(response.jsonrpc == "2.0")
     #expect(response.id == 1)
     #expect(response.result != nil)
-    
+
     // Check result contents
     guard let result = response.result else {
         throw TestError("Result is missing")
     }
-    
-    #expect(result["protocolVersion"]?.value as? String == "2024-11-05")
-    
+
+    #expect(result.protocolVersion == "2024-11-05")
+
     // Extract the server capabilities
-    guard let capabilities = result["capabilities"]?.value as? ServerCapabilities else {
-        throw TestError("Capabilities not found or not a ServerCapabilities struct")
-    }
-    
+    let capabilities = result.capabilities
+
     // Verify the capabilities
     #expect(capabilities.experimental.isEmpty, "Experimental should be empty")
-    
+
     // Check tools capabilities
     guard let tools = capabilities.tools else {
         throw TestError("Tools capabilities not found")
     }
     #expect(tools.listChanged == false, "Tools listChanged should be false")
-    
+
     // Check server info
-    guard let serverInfo = result["serverInfo"]?.value as? [String: String] else {
-        throw TestError("ServerInfo not found or not a dictionary")
-    }
-    #expect(serverInfo["name"] != nil)
-    #expect(serverInfo["version"] != nil)
+    let serverInfo = result.serverInfo
+    #expect(!serverInfo.name.isEmpty)
+    #expect(!serverInfo.version.isEmpty)
 }
 
 @Test
@@ -220,15 +216,14 @@ func testCustomNameAndVersion() async throws {
     
     // Get the response using our test method
     let response = calculator.createInitializeResponse(id: 1)
-    
+
     // Extract server info from the response using dictionary access
-    guard let result = response.result,
-          let serverInfo = result["serverInfo"]?.value as? [String: String],
-          let name = serverInfo["name"],
-          let version = serverInfo["version"] else {
-        throw TestError("Failed to extract server info from response")
+    guard let result = response.result else {
+        throw TestError("Failed to extract result from response")
     }
-    
+    let name = result.serverInfo.name
+    let version = result.serverInfo.version
+
     #expect(name == "CustomCalculator", "Server name should match specified name")
     #expect(version == "2.0", "Server version should match specified version")
 }
@@ -240,15 +235,14 @@ func testDefaultNameAndVersion() async throws {
     
     // Get the response using our test method
     let response = calculator.createInitializeResponse(id: 1)
-    
+
     // Extract server info from the response using dictionary access
-    guard let result = response.result,
-          let serverInfo = result["serverInfo"]?.value as? [String: String],
-          let name = serverInfo["name"],
-          let version = serverInfo["version"] else {
-        throw TestError("Failed to extract server info from response")
+    guard let result = response.result else {
+        throw TestError("Failed to extract result from response")
     }
-    
+    let name = result.serverInfo.name
+    let version = result.serverInfo.version
+
     #expect(name == "DefaultNameCalculator", "Server name should match class name")
     #expect(version == "1.0", "Server version should be default value")
 }
