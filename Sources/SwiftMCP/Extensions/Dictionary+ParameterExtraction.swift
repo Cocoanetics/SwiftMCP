@@ -262,6 +262,9 @@ public extension Dictionary where Key == String, Value == Sendable {
     func extractInt(named name: String) throws -> Int {
         if let value = self[name] as? Int {
             return value
+        } else if let boolValue = self[name] as? Bool {
+            // JSON decoding may coerce 0/1 into Bool values, so handle those
+            return boolValue ? 1 : 0
         } else if let doubleValue = self[name] as? Double {
             return Int(doubleValue)
         } else {
