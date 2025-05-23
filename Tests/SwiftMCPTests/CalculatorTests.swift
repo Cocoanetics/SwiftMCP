@@ -60,4 +60,28 @@ func testInvalidArgumentType() async throws {
     } catch {
         #expect(Bool(false), "Error should be MCPToolError")
     }
-} 
+}
+
+@Test("Bool values should be converted when Int parameters are expected")
+func testBoolToIntConversion() async throws {
+    let calculator = Calculator()
+
+    let result = try await calculator.callTool("add", arguments: [
+        "a": true,
+        "b": false
+    ])
+
+    #expect(result as? Int == 1)
+}
+
+@Test("Bool values should be converted when Double parameters are expected")
+func testBoolToDoubleConversion() async throws {
+    let calculator = Calculator()
+
+    let result = try await calculator.callTool("divide", arguments: [
+        "numerator": true,
+        "denominator": true
+    ])
+
+    #expect(result as? Double == 1.0)
+}
