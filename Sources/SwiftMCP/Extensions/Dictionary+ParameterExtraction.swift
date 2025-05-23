@@ -250,9 +250,95 @@ public extension Dictionary where Key == String, Value == Sendable {
         guard self[name] != nil else {
             return nil
         }
-        
+
         // Use the throwing version to handle any conversion errors
         return try extractArray(named: name, elementType: elementType)
+    }
+
+    /// Extracts a numeric parameter of a `BinaryInteger` type from the dictionary.
+    /// - Parameters:
+    ///   - name: The name of the parameter.
+    ///   - type: The numeric type to convert to.
+    /// - Returns: The converted numeric value.
+    internal func extractNumber<N: BinaryInteger>(named name: String, as type: N.Type = N.self) throws -> N {
+        guard let anyValue = self[name] else {
+            preconditionFailure("Failed to retrieve value for parameter \(name)")
+        }
+
+        if let value = N.convert(from: anyValue) {
+            return value
+        } else {
+            throw MCPToolError.invalidArgumentType(
+                parameterName: name,
+                expectedType: String(describing: N.self),
+                actualType: String(describing: Swift.type(of: anyValue))
+            )
+        }
+    }
+
+    /// Extracts a numeric parameter of a `BinaryFloatingPoint` type from the dictionary.
+    internal func extractNumber<N: BinaryFloatingPoint>(named name: String, as type: N.Type = N.self) throws -> N {
+        guard let anyValue = self[name] else {
+            preconditionFailure("Failed to retrieve value for parameter \(name)")
+        }
+
+        if let value = N.convert(from: anyValue) {
+            return value
+        } else {
+            throw MCPToolError.invalidArgumentType(
+                parameterName: name,
+                expectedType: String(describing: N.self),
+                actualType: String(describing: Swift.type(of: anyValue))
+            )
+        }
+    }
+
+    /// Extracts an array of numeric values of a `BinaryInteger` type from the dictionary.
+    internal func extractNumberArray<N: BinaryInteger>(named name: String, as type: N.Type = N.self) throws -> [N] {
+        if let array = self[name] as? [N] {
+            return array
+        } else if let anyArray = self[name] as? [Any] {
+            return try anyArray.map { element in
+                guard let converted = N.convert(from: element) else {
+                    throw MCPToolError.invalidArgumentType(
+                        parameterName: name,
+                        expectedType: String(describing: N.self),
+                        actualType: String(describing: Swift.type(of: element))
+                    )
+                }
+                return converted
+            }
+        } else {
+            throw MCPToolError.invalidArgumentType(
+                parameterName: name,
+                expectedType: "Array of \(String(describing: N.self))",
+                actualType: String(describing: Swift.type(of: self[name] ?? "nil"))
+            )
+        }
+    }
+
+    /// Extracts an array of numeric values of a `BinaryFloatingPoint` type from the dictionary.
+    internal func extractNumberArray<N: BinaryFloatingPoint>(named name: String, as type: N.Type = N.self) throws -> [N] {
+        if let array = self[name] as? [N] {
+            return array
+        } else if let anyArray = self[name] as? [Any] {
+            return try anyArray.map { element in
+                guard let converted = N.convert(from: element) else {
+                    throw MCPToolError.invalidArgumentType(
+                        parameterName: name,
+                        expectedType: String(describing: N.self),
+                        actualType: String(describing: Swift.type(of: element))
+                    )
+                }
+                return converted
+            }
+        } else {
+            throw MCPToolError.invalidArgumentType(
+                parameterName: name,
+                expectedType: "Array of \(String(describing: N.self))",
+                actualType: String(describing: Swift.type(of: self[name] ?? "nil"))
+            )
+        }
     }
     
     /// Extracts an Int parameter from the dictionary
@@ -260,20 +346,7 @@ public extension Dictionary where Key == String, Value == Sendable {
     /// - Returns: The extracted Int value
     /// - Throws: MCPToolError.invalidArgumentType if the parameter cannot be converted to an Int
     func extractInt(named name: String) throws -> Int {
-        if let value = self[name] as? Int {
-            return value
-        } else if let boolValue = self[name] as? Bool {
-            // JSON decoding may coerce 0/1 into Bool values, so handle those
-            return boolValue ? 1 : 0
-        } else if let doubleValue = self[name] as? Double {
-            return Int(doubleValue)
-        } else {
-            throw MCPToolError.invalidArgumentType(
-                parameterName: name,
-                expectedType: "Int",
-                actualType: String(describing: Swift.type(of: self[name] ?? "nil"))
-            )
-        }
+        return try extractNumber(named: name, as: Int.self)
     }
     
     /// Extracts a Double parameter from the dictionary
@@ -281,20 +354,7 @@ public extension Dictionary where Key == String, Value == Sendable {
     /// - Returns: The extracted Double value
     /// - Throws: MCPToolError.invalidArgumentType if the parameter cannot be converted to a Double
     func extractDouble(named name: String) throws -> Double {
-        if let value = self[name] as? Double {
-            return value
-        } else if let boolValue = self[name] as? Bool {
-            // JSON decoding may coerce 0/1 into Bool values, so handle those
-            return boolValue ? 1 : 0
-        } else if let intValue = self[name] as? Int {
-            return Double(intValue)
-        } else {
-            throw MCPToolError.invalidArgumentType(
-                parameterName: name,
-                expectedType: "Double",
-                actualType: String(describing: Swift.type(of: self[name] ?? "nil"))
-            )
-        }
+        return try extractNumber(named: name, as: Double.self)
     }
     
     /// Extracts a Float parameter from the dictionary
@@ -302,22 +362,7 @@ public extension Dictionary where Key == String, Value == Sendable {
     /// - Returns: The extracted Float value
     /// - Throws: MCPToolError.invalidArgumentType if the parameter cannot be converted to a Float
     func extractFloat(named name: String) throws -> Float {
-        if let value = self[name] as? Float {
-            return value
-        } else if let boolValue = self[name] as? Bool {
-            // JSON decoding may coerce 0/1 into Bool values, so handle those
-            return boolValue ? 1 : 0
-        } else if let intValue = self[name] as? Int {
-            return Float(intValue)
-        } else if let doubleValue = self[name] as? Double {
-            return Float(doubleValue)
-        } else {
-            throw MCPToolError.invalidArgumentType(
-                parameterName: name,
-                expectedType: "Float",
-                actualType: String(describing: Swift.type(of: self[name] ?? "nil"))
-            )
-        }
+        return try extractNumber(named: name, as: Float.self)
     }
     
     /// Extracts an array of Int values from the dictionary
@@ -325,28 +370,7 @@ public extension Dictionary where Key == String, Value == Sendable {
     /// - Returns: The extracted [Int] value
     /// - Throws: MCPToolError.invalidArgumentType if the parameter cannot be converted to [Int]
     func extractIntArray(named name: String) throws -> [Int] {
-        if let value = self[name] as? [Int] {
-            return value
-        } else if let doubleArray = self[name] as? [Double] {
-            return doubleArray.map { Int($0) }
-        } else if let anyArray = self[name] as? [Any] {
-            return try anyArray.map { element in
-                if let i = element as? Int { return i }
-                if let d = element as? Double { return Int(d) }
-                if let f = element as? Float { return Int(f) }
-                throw MCPToolError.invalidArgumentType(
-                    parameterName: name,
-                    expectedType: "Int",
-                    actualType: String(describing: Swift.type(of: element))
-                )
-            }
-        } else {
-            throw MCPToolError.invalidArgumentType(
-                parameterName: name,
-                expectedType: "[Int]",
-                actualType: String(describing: Swift.type(of: self[name] ?? "nil"))
-            )
-        }
+        return try extractNumberArray(named: name, as: Int.self)
     }
     
     /// Extracts an array of Double values from the dictionary
@@ -354,28 +378,7 @@ public extension Dictionary where Key == String, Value == Sendable {
     /// - Returns: The extracted [Double] value
     /// - Throws: MCPToolError.invalidArgumentType if the parameter cannot be converted to [Double]
     func extractDoubleArray(named name: String) throws -> [Double] {
-        if let value = self[name] as? [Double] {
-            return value
-        } else if let intArray = self[name] as? [Int] {
-            return intArray.map { Double($0) }
-        } else if let anyArray = self[name] as? [Any] {
-            return try anyArray.map { element in
-                if let d = element as? Double { return d }
-                if let i = element as? Int { return Double(i) }
-                if let f = element as? Float { return Double(f) }
-                throw MCPToolError.invalidArgumentType(
-                    parameterName: name,
-                    expectedType: "Double",
-                    actualType: String(describing: Swift.type(of: element))
-                )
-            }
-        } else {
-            throw MCPToolError.invalidArgumentType(
-                parameterName: name,
-                expectedType: "[Double]",
-                actualType: String(describing: Swift.type(of: self[name] ?? "nil"))
-            )
-        }
+        return try extractNumberArray(named: name, as: Double.self)
     }
     
     /// Extracts an array of Float values from the dictionary
@@ -383,30 +386,7 @@ public extension Dictionary where Key == String, Value == Sendable {
     /// - Returns: The extracted [Float] value
     /// - Throws: MCPToolError.invalidArgumentType if the parameter cannot be converted to [Float]
     func extractFloatArray(named name: String) throws -> [Float] {
-        if let value = self[name] as? [Float] {
-            return value
-        } else if let intArray = self[name] as? [Int] {
-            return intArray.map { Float($0) }
-        } else if let doubleArray = self[name] as? [Double] {
-            return doubleArray.map { Float($0) }
-        } else if let anyArray = self[name] as? [Any] {
-            return try anyArray.map { element in
-                if let f = element as? Float { return f }
-                if let d = element as? Double { return Float(d) }
-                if let i = element as? Int { return Float(i) }
-                throw MCPToolError.invalidArgumentType(
-                    parameterName: name,
-                    expectedType: "Float",
-                    actualType: String(describing: Swift.type(of: element))
-                )
-            }
-        } else {
-            throw MCPToolError.invalidArgumentType(
-                parameterName: name,
-                expectedType: "[Float]",
-                actualType: String(describing: Swift.type(of: self[name] ?? "nil"))
-            )
-        }
+        return try extractNumberArray(named: name, as: Float.self)
     }
     
     /// Extracts a Date parameter from the dictionary, attempting multiple parsing strategies
