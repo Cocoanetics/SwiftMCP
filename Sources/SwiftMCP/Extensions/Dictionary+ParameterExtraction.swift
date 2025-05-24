@@ -260,7 +260,7 @@ public extension Dictionary where Key == String, Value == Sendable {
     ///   - name: The name of the parameter.
     ///   - type: The numeric type to convert to.
     /// - Returns: The converted numeric value.
-    internal func extractNumber<N: BinaryInteger>(named name: String, as type: N.Type = N.self) throws -> N {
+    func extractNumber<N: BinaryInteger>(named name: String, as type: N.Type = N.self) throws -> N {
         guard let anyValue = self[name] else {
             preconditionFailure("Failed to retrieve value for parameter \(name)")
         }
@@ -277,7 +277,7 @@ public extension Dictionary where Key == String, Value == Sendable {
     }
 
     /// Extracts a numeric parameter of a `BinaryFloatingPoint` type from the dictionary.
-    internal func extractNumber<N: BinaryFloatingPoint>(named name: String, as type: N.Type = N.self) throws -> N {
+    func extractNumber<N: BinaryFloatingPoint>(named name: String, as type: N.Type = N.self) throws -> N {
         guard let anyValue = self[name] else {
             preconditionFailure("Failed to retrieve value for parameter \(name)")
         }
@@ -294,7 +294,7 @@ public extension Dictionary where Key == String, Value == Sendable {
     }
 
     /// Extracts an array of numeric values of a `BinaryInteger` type from the dictionary.
-    internal func extractNumberArray<N: BinaryInteger>(named name: String, as type: N.Type = N.self) throws -> [N] {
+    func extractNumberArray<N: BinaryInteger>(named name: String, as type: N.Type = N.self) throws -> [N] {
         if let array = self[name] as? [N] {
             return array
         } else if let anyArray = self[name] as? [Any] {
@@ -318,7 +318,7 @@ public extension Dictionary where Key == String, Value == Sendable {
     }
 
     /// Extracts an array of numeric values of a `BinaryFloatingPoint` type from the dictionary.
-    internal func extractNumberArray<N: BinaryFloatingPoint>(named name: String, as type: N.Type = N.self) throws -> [N] {
+    func extractNumberArray<N: BinaryFloatingPoint>(named name: String, as type: N.Type = N.self) throws -> [N] {
         if let array = self[name] as? [N] {
             return array
         } else if let anyArray = self[name] as? [Any] {
@@ -339,6 +339,69 @@ public extension Dictionary where Key == String, Value == Sendable {
                 actualType: String(describing: Swift.type(of: self[name] ?? "nil"))
             )
         }
+    }
+
+    /// Extracts an optional numeric parameter of a `BinaryInteger` type from the dictionary.
+    func extractOptionalNumber<N: BinaryInteger>(named name: String, as type: N.Type = N.self) throws -> N? {
+        guard self[name] != nil else { return nil }
+        return try extractNumber(named: name, as: type)
+    }
+
+    /// Extracts an optional numeric parameter of a `BinaryFloatingPoint` type from the dictionary.
+    func extractOptionalNumber<N: BinaryFloatingPoint>(named name: String, as type: N.Type = N.self) throws -> N? {
+        guard self[name] != nil else { return nil }
+        return try extractNumber(named: name, as: type)
+    }
+
+    /// Extracts an optional array of numeric values of a `BinaryInteger` type from the dictionary.
+    func extractOptionalNumberArray<N: BinaryInteger>(named name: String, as type: N.Type = N.self) throws -> [N]? {
+        guard self[name] != nil else { return nil }
+        return try extractNumberArray(named: name, as: type)
+    }
+
+    /// Extracts an optional array of numeric values of a `BinaryFloatingPoint` type from the dictionary.
+    func extractOptionalNumberArray<N: BinaryFloatingPoint>(named name: String, as type: N.Type = N.self) throws -> [N]? {
+        guard self[name] != nil else { return nil }
+        return try extractNumberArray(named: name, as: type)
+    }
+
+    /// Extracts a value of the specified type from the dictionary using runtime conversion logic.
+    /// Falls back to numeric conversion for `BinaryInteger` and `BinaryFloatingPoint` types.
+    func extractValue<T>(named name: String, as type: T.Type = T.self) throws -> T {
+        if let intType = T.self as? any BinaryInteger.Type {
+            return try extractNumber(named: name, as: intType) as! T
+        }
+
+        if let floatType = T.self as? any BinaryFloatingPoint.Type {
+            return try extractNumber(named: name, as: floatType) as! T
+        }
+
+        return try extractParameter(named: name)
+    }
+
+    /// Extracts an optional value of the specified type from the dictionary using runtime conversion logic.
+    func extractValue<T>(named name: String, as type: T?.Type) throws -> T? {
+        guard self[name] != nil else { return nil }
+        return try extractValue(named: name, as: T.self)
+    }
+
+    /// Extracts an array of values of the specified type from the dictionary using runtime conversion logic.
+    func extractValue<Element>(named name: String, as type: [Element].Type) throws -> [Element] {
+        if let intType = Element.self as? any BinaryInteger.Type {
+            return try extractNumberArray(named: name, as: intType) as! [Element]
+        }
+
+        if let floatType = Element.self as? any BinaryFloatingPoint.Type {
+            return try extractNumberArray(named: name, as: floatType) as! [Element]
+        }
+
+        return try extractArray(named: name, elementType: Element.self)
+    }
+
+    /// Extracts an optional array of values of the specified type from the dictionary using runtime conversion logic.
+    func extractValue<Element>(named name: String, as type: [Element]?.Type) throws -> [Element]? {
+        guard self[name] != nil else { return nil }
+        return try extractValue(named: name, as: [Element].self)
     }
     
     /// Extracts an Int parameter from the dictionary
