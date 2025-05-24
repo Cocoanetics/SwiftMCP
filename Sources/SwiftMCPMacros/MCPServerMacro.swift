@@ -123,6 +123,23 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
 			}
 		}
 		
+		// Find all functions with the MCPResource macro
+		var mcpResources: [String] = []
+		
+		for member in declaration.memberBlock.members {
+			if let funcDecl = member.decl.as(FunctionDeclSyntax.self) {
+				// Check if the function has the MCPResource macro
+				for attribute in funcDecl.attributes {
+					if let identifierAttr = attribute.as(AttributeSyntax.self),
+					   let identifier = identifierAttr.attributeName.as(IdentifierTypeSyntax.self),
+					   identifier.name.text == "MCPResource" {
+						mcpResources.append(funcDecl.name.text)
+						break
+					}
+				}
+			}
+		}
+		
 		var declarations: [DeclSyntax] = [
 			DeclSyntax(stringLiteral: nameProperty),
 			DeclSyntax(stringLiteral: versionProperty),
@@ -182,6 +199,75 @@ nonisolated public var mcpToolMetadata: [MCPToolMetadata] {
 			declarations.append(DeclSyntax(stringLiteral: metadataProperty))
 		}
 		
+		// Add resource-related properties and methods if there are MCPResources defined
+		if !mcpResources.isEmpty {
+			// Add mcpResourceMetadata property
+			let resourceMetadataArray = mcpResources.map { "__mcpResourceMetadata_\($0)" }.joined(separator: ", ")
+			let resourceMetadataProperty = """
+/// Returns an array of all available resource metadata
+nonisolated public var mcpResourceMetadata: [MCPResourceMetadata] {
+   return [\(resourceMetadataArray)]
+}
+"""
+			declarations.append(DeclSyntax(stringLiteral: resourceMetadataProperty))
+			
+			// Add mcpResources property (for static resources - empty for now)
+			let mcpResourcesProperty = """
+/// Returns static resources (empty for template-based resources)
+public var mcpResources: [MCPResource] {
+   get async {
+      return []
+   }
+}
+"""
+			declarations.append(DeclSyntax(stringLiteral: mcpResourcesProperty))
+			
+			// Add mcpResourceTemplates property
+			let mcpResourceTemplatesProperty = """
+/// Returns resource templates generated from MCPResource functions
+public var mcpResourceTemplates: [MCPResourceTemplate] {
+   get async {
+      return mcpResourceMetadata.map { $0.toResourceTemplate() }
+   }
+}
+"""
+			declarations.append(DeclSyntax(stringLiteral: mcpResourceTemplatesProperty))
+			
+			// Add getResource method
+			let getResourceMethod = """
+/// Retrieves a resource by its URI
+/// - Parameter uri: The URI of the resource to retrieve
+/// - Returns: The resource content if found
+/// - Throws: An error if the resource cannot be accessed
+public func getResource(uri: URL) async throws -> [MCPResourceContent] {
+   // Try to match against resource templates
+   for metadata in mcpResourceMetadata {
+      if let params = uri.extractTemplateVariables(from: metadata.uriTemplate) {
+         // Enrich parameters with defaults
+         var enrichedParams = params
+         for param in metadata.parameters {
+            if enrichedParams[param.name] == nil, let defaultValue = param.defaultValue {
+               enrichedParams[param.name] = defaultValue.trimmingCharacters(in: CharacterSet(charactersIn: "\\""))
+            }
+         }
+         
+         // Call the appropriate wrapper method
+         switch metadata.name {
+\(mcpResources.map { funcName in
+"         case \"\(funcName)\":\n            return try await __mcpResourceCall_\(funcName)(enrichedParams)"
+}.joined(separator: "\n"))
+         default:
+            break
+         }
+      }
+   }
+   
+   throw MCPResourceError.notFound(uri: uri.absoluteString)
+}
+"""
+			declarations.append(DeclSyntax(stringLiteral: getResourceMethod))
+		}
+		
 		return declarations
 	}
 	
@@ -226,9 +312,30 @@ nonisolated public var mcpToolMetadata: [MCPToolMetadata] {
 			}
 		}
 		
+		// Check if the declaration has any MCPResource functions
+		var hasMCPResources = false
+		for member in declaration.memberBlock.members {
+			if let funcDecl = member.decl.as(FunctionDeclSyntax.self) {
+				for attribute in funcDecl.attributes {
+					if let identifierAttr = attribute.as(AttributeSyntax.self),
+					   let identifier = identifierAttr.attributeName.as(IdentifierTypeSyntax.self),
+					   identifier.name.text == "MCPResource" {
+						hasMCPResources = true
+						break
+					}
+				}
+				if hasMCPResources { break }
+			}
+		}
+		
 		// Check if the declaration already conforms to MCPToolProviding
 		let alreadyConformsToToolProviding = inheritedTypes.contains { type in
 			type.type.trimmedDescription == "MCPToolProviding"
+		}
+		
+		// Check if the declaration already conforms to MCPResourceProviding
+		let alreadyConformsToResourceProviding = inheritedTypes.contains { type in
+			type.type.trimmedDescription == "MCPResourceProviding"
 		}
 		
 		// Determine which protocols need to be added
@@ -242,6 +349,10 @@ nonisolated public var mcpToolMetadata: [MCPToolMetadata] {
 			protocolsToAdd.append("MCPToolProviding")
 		}
 		
+		if hasMCPResources && !alreadyConformsToResourceProviding {
+			protocolsToAdd.append("MCPResourceProviding")
+		}
+		
 		// If we have protocols to add, create a single extension with all needed conformances
 		if !protocolsToAdd.isEmpty {
 			let protocolList = protocolsToAdd.joined(separator: ", ")
@@ -250,5 +361,14 @@ nonisolated public var mcpToolMetadata: [MCPToolMetadata] {
 		}
 		
 		return []
+	}
+	
+	public static func expansion(
+		of node: AttributeSyntax,
+		providingMembersOf declaration: some DeclGroupSyntax,
+		conformingTo protocols: [TypeSyntax],
+		in context: some MacroExpansionContext
+	) throws -> [DeclSyntax] {
+		try expansion(of: node, providingMembersOf: declaration, in: context)
 	}
 }

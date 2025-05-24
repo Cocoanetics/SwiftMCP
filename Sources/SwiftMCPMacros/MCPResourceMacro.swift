@@ -6,8 +6,14 @@ import SwiftSyntaxMacros
 
 /// Implementation of the `MCPResource` macro used to expose read-only resources.
 ///
-/// This minimal implementation only validates that the provided URI template
-/// matches the function's parameters.
+/// This macro transforms a function into an MCP resource by generating metadata and wrapper
+/// functions for parameter handling and type safety.
+///
+/// Example usage:
+/// ```swift
+/// @MCPResource("users://{user_id}/profile?locale={lang}")
+/// func getUserProfile(user_id: Int, lang: String = "en") -> ProfileResource
+/// ```
 public struct MCPResourceMacro: PeerMacro {
     public static func expansion(
         of node: AttributeSyntax,
@@ -32,7 +38,9 @@ public struct MCPResourceMacro: PeerMacro {
         }
 
         let template = stringLiteral.segments.description
-        let placeholderRegex = try NSRegularExpression(pattern: "\\{([^}]+)\\)")
+        
+        // Extract placeholders from both path and query string
+        let placeholderRegex = try NSRegularExpression(pattern: "\\{([^}]+)\\}")
         let ns = template as NSString
         let matches = placeholderRegex.matches(in: template, range: NSRange(location: 0, length: ns.length))
         var placeholders: [String] = []
@@ -40,14 +48,46 @@ public struct MCPResourceMacro: PeerMacro {
             placeholders.append(ns.substring(with: m.range(at: 1)))
         }
 
+        // Extract function name
+        let functionName = funcDecl.name.text
+        
+        // Extract documentation
+        let documentation = Documentation(from: funcDecl.leadingTrivia.description)
+        
+        // Extract description from documentation
+        var descriptionArg = "nil"
+        if !documentation.description.isEmpty {
+            descriptionArg = "\"\(documentation.description.escapedForSwiftString)\""
+        }
+        
+        // Extract MIME type from arguments if provided
+        var mimeTypeArg = "nil"
+        if let arguments = node.arguments?.as(LabeledExprListSyntax.self) {
+            for argument in arguments {
+                if argument.label?.text == "mimeType", 
+                   let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
+                    let stringValue = stringLiteral.segments.description
+                    mimeTypeArg = "\"\(stringValue)\""
+                }
+            }
+        }
+
         // Collect parameter names and check optional parameters
         var paramNames: [String] = []
+        var parameterInfos: [(name: String, label: String, type: String, defaultValue: String?)] = []
+        var parameterString = ""
+        
         for param in funcDecl.signature.parameterClause.parameters {
             let name = param.secondName?.text ?? param.firstName.text
+            let label = param.firstName.text
+            let typeText = param.type.description.trimmingCharacters(in: .whitespacesAndNewlines)
+            
             paramNames.append(name)
 
-            let typeText = param.type.description.trimmingCharacters(in: .whitespacesAndNewlines)
-            let isOptional = typeText.hasSuffix("?") || param.type.is(OptionalTypeSyntax.self) || param.type.is(ImplicitlyUnwrappedOptionalTypeSyntax.self)
+            let isOptional = typeText.hasSuffix("?") || 
+                           param.type.is(OptionalTypeSyntax.self) || 
+                           param.type.is(ImplicitlyUnwrappedOptionalTypeSyntax.self)
+            
             if isOptional && param.defaultValue == nil {
                 let diag = Diagnostic(
                     node: Syntax(param.type),
@@ -55,6 +95,55 @@ public struct MCPResourceMacro: PeerMacro {
                 )
                 context.diagnose(diag)
             }
+            
+            // Extract parameter description
+            var paramDescription = "nil"
+            if let description = documentation.parameters[name], !description.isEmpty {
+                paramDescription = "\"\(description.escapedForSwiftString)\""
+            }
+            
+            // Extract default value if it exists
+            var defaultValue: String? = nil
+            var defaultValueString = "nil"
+            if let defaultExpr = param.defaultValue?.value {
+                let rawValue = defaultExpr.description.trimmingCharacters(in: .whitespaces)
+                
+                // Handle different types of default values
+                if rawValue.hasPrefix(".") {
+                    defaultValue = "\(typeText)\(rawValue)"
+                    defaultValueString = "\"\(typeText)\(rawValue)\""
+                } else if rawValue.contains(".") || 
+                   rawValue == "true" || rawValue == "false" ||
+                   Double(rawValue) != nil ||
+                   rawValue == "nil" ||
+                   (rawValue.hasPrefix("[") && rawValue.hasSuffix("]"))
+                {
+                    if rawValue == "[]" {
+                        let arrayType = typeText.replacingOccurrences(of: "[", with: "Array<")
+                            .replacingOccurrences(of: "]", with: ">")
+                        defaultValue = "\(arrayType)()"
+                    } else {
+                        defaultValue = rawValue
+                    }
+                    defaultValueString = "\"\(rawValue)\""
+                } else if let stringLiteral = defaultExpr.as(StringLiteralExprSyntax.self) {
+                    let stringValue = stringLiteral.segments.description
+                    defaultValue = "\"\(stringValue)\""
+                    defaultValueString = "\"\\\"\(stringValue)\\\"\""
+                } else {
+                    defaultValue = "\"\(rawValue)\""
+                    defaultValueString = "\"\\\"\(rawValue)\\\"\""
+                }
+            }
+            
+            if !parameterString.isEmpty {
+                parameterString += ", "
+            }
+            
+            let hasDefault = defaultValue != nil
+            parameterString += "MCPResourceParameterInfo(name: \"\(name)\", type: \(typeText).self, description: \(paramDescription), isOptional: \(hasDefault), defaultValue: \(defaultValueString))"
+            
+            parameterInfos.append((name: name, label: label, type: typeText, defaultValue: defaultValue))
         }
 
         // Check that each placeholder has a corresponding parameter
@@ -81,8 +170,97 @@ public struct MCPResourceMacro: PeerMacro {
                 }
             }
         }
+        
+        // Extract return type information
+        let returnTypeString: String
+        if let returnType = funcDecl.signature.returnClause?.type.description.trimmingCharacters(in: .whitespacesAndNewlines) {
+            returnTypeString = returnType
+        } else {
+            returnTypeString = "Void"
+        }
 
-        return []
+        // Create metadata registration
+        let registrationDecl = """
+        ///
+        /// autogenerated resource metadata
+        let __mcpResourceMetadata_\(functionName) = MCPResourceMetadata(
+            uriTemplate: "\(template)",
+            name: "\(functionName)",
+            description: \(descriptionArg),
+            parameters: [\(parameterString)],
+            returnType: \(returnTypeString).self,
+            isAsync: \(funcDecl.signature.effectSpecifiers?.asyncSpecifier != nil),
+            isThrowing: \(funcDecl.signature.effectSpecifiers?.throwsClause?.throwsSpecifier != nil),
+            mimeType: \(mimeTypeArg)
+        )
+        """
+        
+        // Generate the wrapper method
+        var wrapperMethod = """
+
+        /// Autogenerated wrapper for \(functionName) that takes a dictionary of parameters
+        func __mcpResourceCall_\(functionName)(_ params: [String: String]) async throws -> [MCPResourceContent] {
+        """
+
+        // Add parameter extraction code
+        for param in parameterInfos {
+            let paramName = param.name
+            let paramType = param.type
+            
+            // For resources, parameters come as strings from URI, so we need to convert them
+            if let defaultValue = param.defaultValue {
+                // Parameter with default value
+                wrapperMethod += """
+                
+                    let \(paramName): \(paramType) = try params.extractValueFromString(named: "\(paramName)", as: \(paramType).self, defaultValue: \(defaultValue))
+                """
+            } else {
+                // Required parameter
+                wrapperMethod += """
+                
+                    let \(paramName): \(paramType) = try params.extractValueFromString(named: "\(paramName)", as: \(paramType).self)
+                """
+            }
+        }
+        
+        // Add the function call
+        let parameterList = parameterInfos.map { param in
+            if param.label == "_" {
+                return param.name
+            }
+            return "\(param.label): \(param.name)"
+        }.joined(separator: ", ")
+        
+        let isThrowing = funcDecl.signature.effectSpecifiers?.throwsClause?.throwsSpecifier != nil
+        let isAsync = funcDecl.signature.effectSpecifiers?.asyncSpecifier != nil
+        
+        // Handle return type conversion
+        wrapperMethod += """
+        
+            let result = \(isThrowing ? "try " : "")\(isAsync ? "await " : "")\(functionName)(\(parameterList))
+            
+            // Convert result to array of MCPResourceContent
+            if let resourceContent = result as? MCPResourceContent {
+                return [resourceContent]
+            } else if let resourceArray = result as? [MCPResourceContent] {
+                return resourceArray
+            } else if \(returnTypeString == "Void") {
+                // For Void return type, return empty array
+                return []
+            } else {
+                // For other types, use String representation
+                let text = String(describing: result)
+                let uri = URL(string: "resource://\(functionName)")!
+                let mimeType = \(mimeTypeArg == "nil" ? "nil" : mimeTypeArg) ?? "text/plain"
+                return [GenericResourceContent(uri: uri, mimeType: mimeType, text: text)]
+            }
+        }
+        """
+        
+        return [
+            DeclSyntax(stringLiteral: registrationDecl),
+            DeclSyntax(stringLiteral: wrapperMethod)
+        ]
     }
 }
 
