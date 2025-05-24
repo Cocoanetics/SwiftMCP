@@ -11,12 +11,9 @@ import SwiftMCP
 extension DemoServer
 {
     /// Returns an array of all MCP resources defined in this type
-    var mcpResources: [MCPResource] {
+    var mcpResources: [any MCPResource] {
         get async {
-            // Combine static resources (from @MCPResource functions with 0 parameters) 
-            // with dynamic resources (files from Downloads folder)
-            let dynamicResources = await getDynamicFileResources()
-            return mcpStaticResources + dynamicResources
+			return await getDynamicFileResources()
         }
     }
     

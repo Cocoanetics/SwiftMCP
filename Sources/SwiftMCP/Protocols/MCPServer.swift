@@ -271,22 +271,25 @@ public extension MCPServer {
 	 - Parameter id: The request ID to include in the response
 	 - Returns: A JSON-RPC message containing the resources list
 	 */
-        func createResourcesListResponse(id: Int) async -> JSONRPCMessage {
-
-                guard let resourceProvider = self as? MCPResourceProviding else
-                {
-                        var response = JSONRPCResponse()
-                        response.id = id
-                        response.result = [
-                                "content": [
-                                        ["type": "text", "text": "Server does not provide any resources"]
+	func createResourcesListResponse(id: Int) async -> JSONRPCMessage {
+		
+		guard let resourceProvider = self as? MCPResourceProviding else
+		{
+			var response = JSONRPCResponse()
+			response.id = id
+			response.result = [
+				"content": [
+					["type": "text", "text": "Server does not provide any resources"]
 				],
 				"isError": true
 			]
 			return response
 		}
 		
-                let resourceDicts = await resourceProvider.mcpResources.map { resource -> [String: Any] in
+		/// get resources from templates that have no parameters plus developer provided array
+		let resources = resourceProvider.mcpStaticResources + (await resourceProvider.mcpResources)
+		
+		let resourceDicts = resources.map { resource -> [String: Any] in
 			return [
 				"uri": resource.uri.absoluteString,
 				"name": resource.name,
@@ -295,9 +298,9 @@ public extension MCPServer {
 			]
 		}
 		
-                let response = JSONRPCResponse(id: id, result: ["resources": AnyCodable(resourceDicts)])
-                return response
-        }
+		let response = JSONRPCResponse(id: id, result: ["resources": AnyCodable(resourceDicts)])
+		return response
+	}
     
     /**
      Creates a response for a resource read request.

@@ -33,3 +33,47 @@ public protocol MCPResourceProviding {
 	 */
 	func getResource(uri: URL) async throws -> [MCPResourceContent]
 }
+
+
+extension MCPResourceProviding {
+	
+	/// Returns an array of all MCP resources defined in this type
+	public var mcpResources: [any MCPResource] {
+		get async {
+			return []
+		}
+	}
+	
+	/// Resource templates with zero parameters are listed together with mcpResources
+	var mcpStaticResources: [MCPResource]
+	{
+		// Find the resources without parameters
+		let mirror = Mirror(reflecting: self)
+		
+		let array: [MCPResourceMetadata] = mirror.children.compactMap { child in
+				
+			guard let label = child.label,
+					label.hasPrefix("__mcpResourceMetadata_") else {
+				return nil
+			}
+			
+			guard let metadata = child.value as? MCPResourceMetadata else {
+				return nil
+			}
+			
+			guard metadata.parameters.isEmpty else
+			{
+				return nil
+			}
+			
+			return metadata
+		}
+		
+		return array.map { metadata in
+			
+			let url = URL(string: metadata.uriTemplate)!
+			
+			return SimpleResource(uri: url, name: metadata.name, description: metadata.description, mimeType: metadata.mimeType)
+		}
+	}
+}
