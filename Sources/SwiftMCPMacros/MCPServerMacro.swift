@@ -211,29 +211,45 @@ nonisolated public var mcpResourceMetadata: [MCPResourceMetadata] {
 """
 			declarations.append(DeclSyntax(stringLiteral: resourceMetadataProperty))
 			
-			// Add mcpResources property (for static resources - empty for now)
-			let mcpResourcesProperty = """
-/// Returns static resources (empty for template-based resources)
-public var mcpResources: [MCPResource] {
-   get async {
-      return []
-   }
+			// Identify static resources (0 parameters) vs template resources
+			let staticResourcesCode = mcpResources.compactMap { funcName in
+				// Check if this resource has 0 parameters by looking at its metadata
+				return "(__mcpResourceMetadata_\(funcName).parameters.isEmpty ? SimpleResource(uri: URL(string: __mcpResourceMetadata_\(funcName).uriTemplate)!, name: __mcpResourceMetadata_\(funcName).name, description: __mcpResourceMetadata_\(funcName).description, mimeType: __mcpResourceMetadata_\(funcName).mimeType) : nil)"
+			}.joined(separator: ", ")
+			
+			// Add mcpStaticResources property
+			let staticResourcesProperty = """
+/// Returns static resources (resources with 0 parameters)
+nonisolated public var mcpStaticResources: [MCPResource] {
+   return [\(staticResourcesCode)].compactMap { $0 }
 }
 """
-			declarations.append(DeclSyntax(stringLiteral: mcpResourcesProperty))
+			declarations.append(DeclSyntax(stringLiteral: staticResourcesProperty))
 			
-			// Add mcpResourceTemplates property
+			// Note: mcpResources should be implemented by the developer to combine
+			// mcpStaticResources with any dynamic resources they want to provide
+			
+			// Add mcpResourceTemplates property (only for resources with parameters)
 			let mcpResourceTemplatesProperty = """
-/// Returns resource templates generated from MCPResource functions
+/// Returns resource templates (resources with parameters)
 public var mcpResourceTemplates: [MCPResourceTemplate] {
    get async {
-      return mcpResourceMetadata.map { $0.toResourceTemplate() }
+      return mcpResourceMetadata.filter { !$0.parameters.isEmpty }.map { $0.toResourceTemplate() }
    }
 }
 """
 			declarations.append(DeclSyntax(stringLiteral: mcpResourceTemplatesProperty))
 			
 			// Add getResource method
+			var resourceSwitchCases = ""
+			for (index, funcName) in mcpResources.enumerated() {
+				resourceSwitchCases += "         case \"\(funcName)\":\n"
+				resourceSwitchCases += "            return try await __mcpResourceCall_\(funcName)(enrichedParams, requestedUri: uri, overrideMimeType: metadata.mimeType)"
+				if index < mcpResources.count - 1 {
+					resourceSwitchCases += "\n"
+				}
+			}
+			
 			let getResourceMethod = """
 /// Retrieves a resource by its URI
 /// - Parameter uri: The URI of the resource to retrieve
@@ -248,14 +264,7 @@ public func getResource(uri: URL) async throws -> [MCPResourceContent] {
          let enrichedParams = try metadata.enrichArguments(params)
          // Call the appropriate wrapper method
          switch metadata.name {
-         case "getServerInfo":
-            return try await __mcpResourceCall_getServerInfo(enrichedParams, requestedUri: uri, overrideMimeType: metadata.mimeType)
-         case "getUserGreeting":
-            return try await __mcpResourceCall_getUserGreeting(enrichedParams, requestedUri: uri, overrideMimeType: metadata.mimeType)
-         case "searchUsers":
-            return try await __mcpResourceCall_searchUsers(enrichedParams, requestedUri: uri, overrideMimeType: metadata.mimeType)
-         case "getFeatureList":
-            return try await __mcpResourceCall_getFeatureList(enrichedParams, requestedUri: uri, overrideMimeType: metadata.mimeType)
+\(resourceSwitchCases)
          default:
             break
          }

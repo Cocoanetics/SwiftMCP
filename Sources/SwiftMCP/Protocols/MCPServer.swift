@@ -79,6 +79,9 @@ public extension MCPServer {
                 
             case "notifications/initialized":
                 return nil
+				
+			case "notifications/cancelled":
+				return nil
                 
             case "ping":
                 return createPingResponse(id: request.id ?? 0)
