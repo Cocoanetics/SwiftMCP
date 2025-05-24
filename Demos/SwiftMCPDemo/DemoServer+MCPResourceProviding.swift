@@ -70,4 +70,15 @@ extension DemoServer
             return []
         }
     }
+    
+    /// Override to handle file-based resources by reading actual file content
+    public func getNonTemplateResource(uri: URL) async throws -> [MCPResourceContent] {
+		// Check if the file exists
+		guard FileManager.default.fileExists(atPath: uri.path) else {
+			return []
+		}
+		
+		// Get the resource content
+		return try [FileResourceContent.from(fileURL: uri)]
+    }
 }

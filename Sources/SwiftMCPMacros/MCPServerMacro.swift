@@ -263,14 +263,19 @@ public func getResource(uri: URL) async throws -> [MCPResourceContent] {
          let params = uri.extractTemplateVariables(from: metadata.uriTemplate) ?? [:]
          let enrichedParams = try metadata.enrichArguments(params)
          // Call the appropriate wrapper method
-         switch metadata.name {
+         switch metadata.functionName {
 \(resourceSwitchCases)
          default:
-            break
+            // This case should ideally not be hit if mcpResources covers all functionNames in mcpResourceMetadata
+            // and resourceSwitchCases are generated from mcpResources.
+            break 
          }
       }
    }
-   throw MCPResourceError.notFound(uri: uri.absoluteString)
+   
+   // If no template matched, directly try to get it as a non-template resource.
+   // The getNonTemplateResource method is responsible for throwing .notFound if it can't handle the URI.
+   return try await getNonTemplateResource(uri: uri)
 }
 """
 			declarations.append(DeclSyntax(stringLiteral: getResourceMethod))

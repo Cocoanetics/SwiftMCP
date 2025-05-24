@@ -32,6 +32,17 @@ public protocol MCPResourceProviding {
 	 - Throws: An error if the resource cannot be accessed
 	 */
 	func getResource(uri: URL) async throws -> [MCPResourceContent]
+	
+	/**
+	 Handles non-template resources (e.g., file-based resources).
+	 Override this method to provide custom resource content handling.
+	 
+	 - Parameters:
+	   - uri: The URI of the resource
+	 - Returns: The resource content
+	 - Throws: An error if the resource cannot be accessed
+	 */
+	func getNonTemplateResource(uri: URL) async throws -> [MCPResourceContent]
 }
 
 
@@ -75,5 +86,11 @@ extension MCPResourceProviding {
 			
 			return SimpleResource(uri: url, name: metadata.name, description: metadata.description, mimeType: metadata.mimeType)
 		}
+	}
+	
+	public func getNonTemplateResource(uri: URL) async throws -> [MCPResourceContent] {
+		// Default implementation: returns an empty array, indicating no non-template resource found by default.
+		// Implementers should override this to provide specific non-template resource handling.
+		return []
 	}
 }

@@ -5,7 +5,10 @@ public struct MCPResourceMetadata: Sendable {
     /// The URI template of the resource
     public let uriTemplate: String
     
-    /// The name of the function
+    /// The name of the function (for internal dispatching)
+    public let functionName: String
+    
+    /// The display name of the resource (defaults to function name, can be overridden)
     public let name: String
     
     /// A description of the resource
@@ -31,7 +34,8 @@ public struct MCPResourceMetadata: Sendable {
      
      - Parameters:
        - uriTemplate: The URI template of the resource
-       - name: The name of the function
+       - functionName: The name of the function (for dispatching)
+       - name: The display name of the resource
        - description: A description of the resource
        - parameters: The parameters of the function
        - returnType: The return type of the function, if any
@@ -41,6 +45,7 @@ public struct MCPResourceMetadata: Sendable {
      */
     public init(
         uriTemplate: String,
+        functionName: String,
         name: String,
         description: String? = nil,
         parameters: [MCPResourceParameterInfo],
@@ -50,6 +55,7 @@ public struct MCPResourceMetadata: Sendable {
         mimeType: String? = nil
     ) {
         self.uriTemplate = uriTemplate
+        self.functionName = functionName
         self.name = name
         self.description = description
         self.parameters = parameters
