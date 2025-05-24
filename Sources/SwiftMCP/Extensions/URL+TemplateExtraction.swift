@@ -101,4 +101,9 @@ extension URL {
         }
         return params
     }
+    
+    /// Returns true if the URL matches the given template
+    public func matches(template: String) -> Bool {
+        return self.extractTemplateVariables(from: template) != nil
+    }
 } 

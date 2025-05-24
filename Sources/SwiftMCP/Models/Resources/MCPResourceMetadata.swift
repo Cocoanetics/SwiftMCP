@@ -68,6 +68,21 @@ public struct MCPResourceMetadata: Sendable {
             mimeType: mimeType
         )
     }
+    
+    /// Enriches a dictionary of arguments with default values and throws if a required parameter is missing
+    public func enrichArguments(_ arguments: [String: String]) throws -> [String: String] {
+        var enrichedArguments = arguments
+        for param in parameters {
+            if enrichedArguments[param.name] == nil {
+                if let defaultValue = param.defaultValue {
+                    enrichedArguments[param.name] = defaultValue.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+                } else if !param.isOptional {
+                    throw MCPResourceError.missingParameter(name: param.name)
+                }
+            }
+        }
+        return enrichedArguments
+    }
 }
 
 /// Simple implementation of MCPResourceTemplate

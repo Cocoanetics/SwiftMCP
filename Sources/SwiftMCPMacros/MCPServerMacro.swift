@@ -242,26 +242,25 @@ public var mcpResourceTemplates: [MCPResourceTemplate] {
 public func getResource(uri: URL) async throws -> [MCPResourceContent] {
    // Try to match against resource templates
    for metadata in mcpResourceMetadata {
-      if let params = uri.extractTemplateVariables(from: metadata.uriTemplate) {
-         // Enrich parameters with defaults
-         var enrichedParams = params
-         for param in metadata.parameters {
-            if enrichedParams[param.name] == nil, let defaultValue = param.defaultValue {
-               enrichedParams[param.name] = defaultValue.trimmingCharacters(in: CharacterSet(charactersIn: "\\""))
-            }
-         }
-         
+      if uri.matches(template: metadata.uriTemplate) {
+         // Extract variables after confirming match
+         let params = uri.extractTemplateVariables(from: metadata.uriTemplate) ?? [:]
+         let enrichedParams = try metadata.enrichArguments(params)
          // Call the appropriate wrapper method
          switch metadata.name {
-\(mcpResources.map { funcName in
-"         case \"\(funcName)\":\n            return try await __mcpResourceCall_\(funcName)(enrichedParams)"
-}.joined(separator: "\n"))
+         case "getServerInfo":
+            return try await __mcpResourceCall_getServerInfo(enrichedParams, requestedUri: uri, overrideMimeType: metadata.mimeType)
+         case "getUserGreeting":
+            return try await __mcpResourceCall_getUserGreeting(enrichedParams, requestedUri: uri, overrideMimeType: metadata.mimeType)
+         case "searchUsers":
+            return try await __mcpResourceCall_searchUsers(enrichedParams, requestedUri: uri, overrideMimeType: metadata.mimeType)
+         case "getFeatureList":
+            return try await __mcpResourceCall_getFeatureList(enrichedParams, requestedUri: uri, overrideMimeType: metadata.mimeType)
          default:
             break
          }
       }
    }
-   
    throw MCPResourceError.notFound(uri: uri.absoluteString)
 }
 """
