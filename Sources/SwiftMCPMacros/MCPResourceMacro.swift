@@ -240,20 +240,8 @@ public struct MCPResourceMacro: PeerMacro {
             let result = \(isThrowing ? "try " : "")\(isAsync ? "await " : "")\(functionName)(\(parameterList))
             
             // Convert result to array of MCPResourceContent
-            if let resourceContent = result as? MCPResourceContent {
-                return [resourceContent]
-            } else if let resourceArray = result as? [MCPResourceContent] {
-                return resourceArray
-            } else if \(returnTypeString == "Void") {
-                // For Void return type, return empty array
-                return []
-            } else {
-                // For other types, use String representation
-                let text = String(describing: result)
-                let uri = URL(string: "resource://\(functionName)")!
-                let mimeType = \(mimeTypeArg == "nil" ? "nil" : mimeTypeArg) ?? "text/plain"
-                return [GenericResourceContent(uri: uri, mimeType: mimeType, text: text)]
-            }
+            let uri = URL(string: \"resource://\(functionName)\")!
+            return GenericResourceContent.fromResult(result, uri: uri, mimeType: \(mimeTypeArg == "nil" ? "nil" : mimeTypeArg))
         }
         """
         

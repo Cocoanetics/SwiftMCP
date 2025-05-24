@@ -120,5 +120,34 @@ actor DemoServer {
 		return [FileResourceContent(uri: URL(string: "file:///hello.txt")!, mimeType: "text/plain", text: "Hello World!"),
 				FileResourceContent(uri: URL(string: "file:///hello2.txt")!, mimeType: "text/plain", text: "Hello World 2!")]
 	}
+	
+	/// Returns a static server info string
+	@MCPResource("server://info")
+	func getServerInfo() -> String {
+		return "SwiftMCP Demo Server v1.0"
+	}
+	
+	/// Returns a greeting for a user by ID
+	/// - Parameter user_id: The user's unique identifier
+	@MCPResource("users://{user_id}/greeting")
+	func getUserGreeting(user_id: Int) -> String {
+		return "Hello, user #\(user_id)!"
+	}
+	
+	/// Searches users with a query and optional page/limit
+	/// - Parameters:
+	///   - query: The search query
+	///   - page: The page number (default: 1)
+	///   - limit: The number of results per page (default: 10)
+	@MCPResource("users://search?q={query}&page={page}&limit={limit}")
+	func searchUsers(query: String, page: Int = 1, limit: Int = 10) -> String {
+		return "Results for query '\(query)' (page \(page), limit \(limit))"
+	}
+	
+	/// Returns a list of available features
+	@MCPResource("features://list")
+	func getFeatureList() -> [String] {
+		return ["math", "date", "greet", "file"]
+	}
 }
 
