@@ -211,21 +211,6 @@ nonisolated public var mcpResourceMetadata: [MCPResourceMetadata] {
 """
 			declarations.append(DeclSyntax(stringLiteral: resourceMetadataProperty))
 			
-			// Identify static resources (0 parameters) vs template resources
-			let staticResourcesCode = mcpResources.compactMap { funcName in
-				// Check if this resource has 0 parameters by looking at its metadata
-				return "(__mcpResourceMetadata_\(funcName).parameters.isEmpty ? SimpleResource(uri: URL(string: __mcpResourceMetadata_\(funcName).uriTemplate)!, name: __mcpResourceMetadata_\(funcName).name, description: __mcpResourceMetadata_\(funcName).description, mimeType: __mcpResourceMetadata_\(funcName).mimeType) : nil)"
-			}.joined(separator: ", ")
-			
-			// Add mcpStaticResources property
-			let staticResourcesProperty = """
-/// Returns static resources (resources with 0 parameters)
-nonisolated public var mcpStaticResources: [MCPResource] {
-   return [\(staticResourcesCode)].compactMap { $0 }
-}
-"""
-			declarations.append(DeclSyntax(stringLiteral: staticResourcesProperty))
-			
 			// Note: mcpResources should be implemented by the developer to combine
 			// mcpStaticResources with any dynamic resources they want to provide
 			
