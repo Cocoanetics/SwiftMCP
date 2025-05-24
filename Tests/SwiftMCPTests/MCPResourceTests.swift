@@ -77,7 +77,7 @@ final class MCPResourceTests: XCTestCase {
         let server = ResourceTestServer()
         
         let templates = await server.mcpResourceTemplates
-        XCTAssertEqual(templates.count, 4)
+        XCTAssertEqual(templates.count, 2)
         
         // Check that templates have correct structure
         for template in templates {

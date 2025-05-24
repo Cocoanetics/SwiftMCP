@@ -279,12 +279,20 @@ public struct MCPToolMacro: PeerMacro {
 		func __mcpCall_\(functionName)(_ params: [String: Sendable]) async throws -> (Encodable & Sendable) {
 		"""
 		
+		// Add the print statement to the generated function body
+		wrapperFuncString += """
+		
+		print("__mcpCall_\(functionName): received params: \\(String(describing: params))")
+		"""
+		
 		for info in parameterInfos {
 			let paramName = info.name
-			// Ensure to use the non-optional type for extraction, as enrichArguments handles optionals/defaults
-			let paramType = info.type.replacingOccurrences(of: "?", with: "") 
+			// Use the original parameter type string (info.type), which includes optional markers like "?"
+			// This is crucial for both the variable declaration and the extractValue call.
+			let originalParamType = info.type 
+
 			wrapperFuncString += """
-			let \(paramName): \(paramType) = try params.extractValue(named: "\(paramName)", as: \(paramType).self)
+			let \(paramName): \(originalParamType) = try params.extractValue(named: "\(paramName)", as: \(originalParamType).self)
 		"""
 		}
 		
@@ -298,10 +306,12 @@ public struct MCPToolMacro: PeerMacro {
 		let isThrowing = funcDecl.signature.effectSpecifiers?.throwsClause?.throwsSpecifier != nil
 		let isAsync = funcDecl.signature.effectSpecifiers?.asyncSpecifier != nil
 		
+		// Use returnTypeForBlock which was determined earlier in the macro
+		// returnTypeForBlock should be "Void" or the actual return type string like "String", "[String]"
 		if returnTypeForBlock == "Void" {
 			wrapperFuncString += """
 				\(isThrowing ? "try " : "")\(isAsync ? "await " : "")\(functionName)(\(parameterList))
-				return ""  // return empty string
+				return ""  // return empty string for Void functions
 			}
 			"""
 		} else {

@@ -394,7 +394,7 @@ public extension Dictionary where Key == String, Value == Sendable {
         if let floatType = Element.self as? any BinaryFloatingPoint.Type {
             return try extractNumberArray(named: name, as: floatType) as! [Element]
         }
-
+		
         return try extractArray(named: name, elementType: Element.self)
     }
 
