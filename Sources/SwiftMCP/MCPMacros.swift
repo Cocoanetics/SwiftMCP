@@ -75,3 +75,8 @@ public macro MCPServer(name: String? = nil, version: String? = nil) = #externalM
 @attached(member, names: named(schemaMetadata))
 @attached(extension, conformances: SchemaRepresentable)
 public macro Schema() = #externalMacro(module: "SwiftMCPMacros", type: "SchemaMacro")
+
+/// Macro for validating resource functions against a URI template.
+/// Currently it only performs compile-time checks and emits no additional code.
+@attached(peer)
+public macro MCPResource(_ template: String) = #externalMacro(module: "SwiftMCPMacros", type: "MCPResourceMacro")
