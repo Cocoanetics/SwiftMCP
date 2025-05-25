@@ -14,6 +14,9 @@ public struct MCPFunctionMetadata: Sendable {
     /// The return type of the function, if any
     public let returnType: Sendable.Type?
     
+    /// A description of what the function returns
+    public let returnTypeDescription: String?
+    
     /// Whether the function is asynchronous
     public let isAsync: Bool
     
@@ -28,6 +31,7 @@ public struct MCPFunctionMetadata: Sendable {
        - description: A description of the function's purpose
        - parameters: The parameters of the function
        - returnType: The return type of the function, if any
+       - returnTypeDescription: A description of what the function returns
        - isAsync: Whether the function is asynchronous
        - isThrowing: Whether the function can throw errors
      */
@@ -36,6 +40,7 @@ public struct MCPFunctionMetadata: Sendable {
         description: String? = nil,
         parameters: [MCPParameterInfo],
         returnType: Sendable.Type? = nil,
+        returnTypeDescription: String? = nil,
         isAsync: Bool = false,
         isThrowing: Bool = false
     ) {
@@ -43,6 +48,7 @@ public struct MCPFunctionMetadata: Sendable {
         self.description = description
         self.parameters = parameters
         self.returnType = returnType
+        self.returnTypeDescription = returnTypeDescription
         self.isAsync = isAsync
         self.isThrowing = isThrowing
     }

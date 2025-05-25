@@ -12,9 +12,6 @@ public struct MCPToolMetadata: Sendable {
     /// The common function metadata
     public let functionMetadata: MCPFunctionMetadata
     
-    /// A description of what the function returns
-    public let returnTypeDescription: String?
-    
     /// Whether the function's actions are consequential (defaults to true)
     public let isConsequential: Bool
     
@@ -46,10 +43,10 @@ public struct MCPToolMetadata: Sendable {
             description: description,
             parameters: parameters,
             returnType: returnType,
+            returnTypeDescription: returnTypeDescription,
             isAsync: isAsync,
             isThrowing: isThrowing
         )
-        self.returnTypeDescription = returnTypeDescription
         self.isConsequential = isConsequential
     }
     
@@ -58,6 +55,7 @@ public struct MCPToolMetadata: Sendable {
     public var description: String? { functionMetadata.description }
     public var parameters: [MCPParameterInfo] { functionMetadata.parameters }
     public var returnType: Sendable.Type? { functionMetadata.returnType }
+    public var returnTypeDescription: String? { functionMetadata.returnTypeDescription }
     public var isAsync: Bool { functionMetadata.isAsync }
     public var isThrowing: Bool { functionMetadata.isThrowing }
     

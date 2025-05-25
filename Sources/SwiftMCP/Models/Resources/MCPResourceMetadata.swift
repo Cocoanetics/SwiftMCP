@@ -57,6 +57,7 @@ public struct MCPResourceMetadata: Sendable {
     public var description: String? { functionMetadata.description }
     public var parameters: [MCPParameterInfo] { functionMetadata.parameters }
     public var returnType: Sendable.Type? { functionMetadata.returnType }
+    public var returnTypeDescription: String? { functionMetadata.returnTypeDescription }
     public var isAsync: Bool { functionMetadata.isAsync }
     public var isThrowing: Bool { functionMetadata.isThrowing }
     
