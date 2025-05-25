@@ -246,8 +246,12 @@ public func getResource(uri: URL) async throws -> [MCPResourceContent] {
       if uri.matches(template: metadata.uriTemplate) {
          // Extract variables after confirming match
          let params = uri.extractTemplateVariables(from: metadata.uriTemplate) ?? [:]
+         // Convert [String: String] to [String: Sendable]
+         let sendableParams: [String: Sendable] = params.reduce(into: [:]) { result, pair in
+            result[pair.key] = pair.value as Sendable
+         }
          // Enrich arguments. This can throw if required params are missing or types are wrong for a TEMPLATE.
-         let enrichedParams = try metadata.enrichArguments(params)
+         let enrichedParams = try metadata.enrichArguments(sendableParams)
          
          // Call the appropriate wrapper method for the matched template
          switch metadata.functionName {

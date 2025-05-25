@@ -21,170 +21,94 @@ public struct MCPResourceMacro: PeerMacro {
         in context: some MacroExpansionContext
     ) throws -> [DeclSyntax] {
         guard let funcDecl = declaration.as(FunctionDeclSyntax.self) else {
-            let diag = Diagnostic(node: node, message: MCPResourceDiagnostic.onlyFunctions)
+            let diag = Diagnostic(node: Syntax(node), message: MCPResourceDiagnostic.onlyFunctions)
             context.diagnose(diag)
             return []
         }
 
-        // Validate attribute argument is a string literal
+        let extractor = FunctionMetadataExtractor(funcDecl: funcDecl, context: context)
+        let commonMetadata = try extractor.extract()
+
+        let functionName = commonMetadata.functionName
+
         guard let argList = node.arguments?.as(LabeledExprListSyntax.self),
-              let first = argList.first,
-              first.label == nil,
-              let stringLiteral = first.expression.as(StringLiteralExprSyntax.self)
+              let firstTemplateArg = argList.first(where: { $0.label == nil }),
+              let stringLiteralTemplate = firstTemplateArg.expression.as(StringLiteralExprSyntax.self)
         else {
-            let diag = Diagnostic(node: node, message: MCPResourceDiagnostic.requiresStringLiteral)
+            let diag = Diagnostic(node: Syntax(node), message: MCPResourceDiagnostic.requiresStringLiteral)
             context.diagnose(diag)
             return []
         }
-
-        let template = stringLiteral.segments.description
+        let template = stringLiteralTemplate.segments.description
         
-        // Extract placeholders from both path and query string
         let placeholderRegex = try NSRegularExpression(pattern: "\\{([^}]+)\\}")
-        let ns = template as NSString
-        let matches = placeholderRegex.matches(in: template, range: NSRange(location: 0, length: ns.length))
+        let nsTemplate = template as NSString
+        let matches = placeholderRegex.matches(in: template, range: NSRange(location: 0, length: nsTemplate.length))
         var placeholders: [String] = []
         for m in matches {
-            placeholders.append(ns.substring(with: m.range(at: 1)))
+            placeholders.append(nsTemplate.substring(with: m.range(at: 1)))
         }
 
-        // Extract function name
-        let functionName = funcDecl.name.text
-        
-        // Extract documentation
-        let documentation = Documentation(from: funcDecl.leadingTrivia.description)
-        
-        // Extract description from documentation
         var descriptionArg = "nil"
-        if !documentation.description.isEmpty {
-            descriptionArg = "\"\(documentation.description.escapedForSwiftString)\""
+        if !commonMetadata.documentation.description.isEmpty {
+            descriptionArg = "\"\(commonMetadata.documentation.description.escapedForSwiftString)\""
         }
         
-        // Extract public resource name and MIME type from arguments if provided
-        var resourceName = functionName  // Default to function name
+        var resourceName = functionName
         var mimeTypeArg = "nil"
 
         if let arguments = node.arguments?.as(LabeledExprListSyntax.self) {
             for argument in arguments {
+                if argument.label == nil { continue }
+
                 if argument.label?.text == "name",
                    let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
-                    resourceName = stringLiteral.segments.description // Override with provided name
+                    resourceName = stringLiteral.segments.description
                 } else if argument.label?.text == "mimeType", 
                    let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
                     let stringValue = stringLiteral.segments.description
-                    mimeTypeArg = "\"\(stringValue)\""
+                    mimeTypeArg = "\"\(stringValue.escapedForSwiftString)\""
                 }
             }
         }
 
-        // Collect parameter names and check optional parameters
-        var paramNames: [String] = []
-        var parameterInfos: [(name: String, label: String, type: String, defaultValue: String?)] = []
-        var parameterString = ""
-        
-        for param in funcDecl.signature.parameterClause.parameters {
-            let name = param.secondName?.text ?? param.firstName.text
-            let label = param.firstName.text
-            let typeText = param.type.description.trimmingCharacters(in: .whitespacesAndNewlines)
-            
-            paramNames.append(name)
+        var parameterInfoStrings: [String] = []
+        var wrapperParamDetails: [(name: String, label: String, type: String)] = []
+        var functionParamNames: [String] = []
 
-            let isOptional = typeText.hasSuffix("?") || 
-                           param.type.is(OptionalTypeSyntax.self) || 
-                           param.type.is(ImplicitlyUnwrappedOptionalTypeSyntax.self)
+        for parsedParam in commonMetadata.parameters {
+            functionParamNames.append(parsedParam.name)
+
+            let paramDescriptionString = parsedParam.description ?? "nil"
+            let defaultValueForResourceMetadata = parsedParam.defaultValueForMetadata
             
-            if isOptional && param.defaultValue == nil {
+            let isOptionalForResource = parsedParam.defaultValueClause != nil
+
+            parameterInfoStrings.append("MCPResourceParameterInfo(name: \"\(parsedParam.name)\", type: \(parsedParam.baseTypeString).self, description: \(paramDescriptionString), defaultValue: \(defaultValueForResourceMetadata), isOptional: \(isOptionalForResource))")
+            wrapperParamDetails.append((name: parsedParam.name, label: parsedParam.label, type: parsedParam.typeString))
+        }
+        let parameterString = parameterInfoStrings.joined(separator: ", ")
+
+        for ph in placeholders {
+            if !functionParamNames.contains(ph) {
+                let diag = Diagnostic(node: Syntax(node), message: MCPResourceDiagnostic.missingParameterForPlaceholder(placeholder: ph))
+                context.diagnose(diag)
+            }
+        }
+
+        for funcParamName in functionParamNames {
+            if !placeholders.contains(funcParamName) {
+                let originalParamSyntax = commonMetadata.parameters.first(where: { $0.name == funcParamName })?.funcParam
                 let diag = Diagnostic(
-                    node: Syntax(param.type),
-                    message: MCPResourceDiagnostic.optionalParameterNeedsDefault(paramName: name)
+                    node: originalParamSyntax != nil ? Syntax(originalParamSyntax!) : Syntax(funcDecl.name),
+                    message: MCPResourceDiagnostic.unknownPlaceholder(parameterName: funcParamName)
                 )
                 context.diagnose(diag)
             }
-            
-            // Extract parameter description
-            var paramDescription = "nil"
-            if let description = documentation.parameters[name], !description.isEmpty {
-                paramDescription = "\"\(description.escapedForSwiftString)\""
-            }
-            
-            // Extract default value if it exists
-            var defaultValue: String? = nil
-            var defaultValueString = "nil"
-            if let defaultExpr = param.defaultValue?.value {
-                let rawValue = defaultExpr.description.trimmingCharacters(in: .whitespaces)
-                
-                // Handle different types of default values
-                if rawValue.hasPrefix(".") {
-                    defaultValue = "\(typeText)\(rawValue)"
-                    defaultValueString = "\"\(typeText)\(rawValue)\""
-                } else if rawValue.contains(".") || 
-                   rawValue == "true" || rawValue == "false" ||
-                   Double(rawValue) != nil ||
-                   rawValue == "nil" ||
-                   (rawValue.hasPrefix("[") && rawValue.hasSuffix("]"))
-                {
-                    if rawValue == "[]" {
-                        let arrayType = typeText.replacingOccurrences(of: "[", with: "Array<")
-                            .replacingOccurrences(of: "]", with: ">")
-                        defaultValue = "\(arrayType)()"
-                    } else {
-                        defaultValue = rawValue
-                    }
-                    defaultValueString = "\"\(rawValue)\""
-                } else if let stringLiteral = defaultExpr.as(StringLiteralExprSyntax.self) {
-                    let stringValue = stringLiteral.segments.description
-                    defaultValue = "\"\(stringValue)\""
-                    defaultValueString = "\"\\\"\(stringValue)\\\"\""
-                } else {
-                    defaultValue = "\"\(rawValue)\""
-                    defaultValueString = "\"\\\"\(rawValue)\\\"\""
-                }
-            }
-            
-            if !parameterString.isEmpty {
-                parameterString += ", "
-            }
-            
-            let hasDefault = defaultValue != nil
-            parameterString += "MCPResourceParameterInfo(name: \"\(name)\", type: \(typeText).self, description: \(paramDescription), isOptional: \(hasDefault), defaultValue: \(defaultValueString))"
-            
-            parameterInfos.append((name: name, label: label, type: typeText, defaultValue: defaultValue))
-        }
-
-        // Check that each placeholder has a corresponding parameter
-        for ph in placeholders {
-            if !paramNames.contains(ph) {
-                let diag = Diagnostic(node: node, message: MCPResourceDiagnostic.missingParameterForPlaceholder(placeholder: ph))
-                context.diagnose(diag)
-            }
-        }
-
-        // Check for parameters without matching placeholders
-        for name in paramNames {
-            if !placeholders.contains(name) {
-                let param = funcDecl.signature.parameterClause.parameters.first { p in
-                    let n = p.secondName?.text ?? p.firstName.text
-                    return n == name
-                }
-                if let paramNode = param {
-                    let diag = Diagnostic(
-                        node: Syntax(paramNode),
-                        message: MCPResourceDiagnostic.unknownPlaceholder(parameterName: name)
-                    )
-                    context.diagnose(diag)
-                }
-            }
         }
         
-        // Extract return type information
-        let returnTypeString: String
-        if let returnType = funcDecl.signature.returnClause?.type.description.trimmingCharacters(in: .whitespacesAndNewlines) {
-            returnTypeString = returnType
-        } else {
-            returnTypeString = "Void"
-        }
+        let returnTypeString = commonMetadata.returnTypeString
 
-        // Create metadata registration
         let registrationDecl = """
         ///
         /// autogenerated resource metadata
@@ -195,48 +119,35 @@ public struct MCPResourceMacro: PeerMacro {
             description: \(descriptionArg),
             parameters: [\(parameterString)],
             returnType: \(returnTypeString).self,
-            isAsync: \(funcDecl.signature.effectSpecifiers?.asyncSpecifier != nil),
-            isThrowing: \(funcDecl.signature.effectSpecifiers?.throwsClause?.throwsSpecifier != nil),
+            isAsync: \(commonMetadata.isAsync),
+            isThrowing: \(commonMetadata.isThrowing),
             mimeType: \(mimeTypeArg)
         )
         """
         
-        // Parameter list for calling the original function
-        let parameterList = parameterInfos.map { param in
+        let callParameterList = wrapperParamDetails.map { param in
             if param.label == "_" {
                 return param.name
             }
             return "\(param.label): \(param.name)"
         }.joined(separator: ", ")
 
-        // Generate the wrapper method
         var wrapperMethod = """
 
         /// Autogenerated wrapper for \(functionName) that takes a dictionary of parameters and URI
         private func __mcpResourceCall_\(functionName)(_ params: [String: Sendable], requestedUri: URL, overrideMimeType: String?) async throws -> [MCPResourceContent] {
         """
 
-        for info in parameterInfos {
-            let paramName = info.name
-            let originalParamType = info.type
+        for detail in wrapperParamDetails {
             wrapperMethod += """
-                let \(paramName): \(originalParamType) = try params.extractValue(named: "\(paramName)", as: \(originalParamType).self)
+                let \(detail.name): \(detail.type) = try params.extractValue(named: "\(detail.name)", as: \(detail.type).self)
             """
         }
 
-        // Resolve components for the function call
-        let isThrowingText = funcDecl.signature.effectSpecifiers?.throwsClause?.throwsSpecifier != nil ? "try " : ""
-        let isAsyncText = funcDecl.signature.effectSpecifiers?.asyncSpecifier != nil ? "await " : ""
-        // functionName and parameterList are already strings.
-
-        // This is the actual call to the original function, fully resolved.
-        let concreteFunctionCall = "\(isThrowingText)\(isAsyncText)\(functionName)(\(parameterList))"
-
-        // Use the user-provided concrete type name
+        let concreteFunctionCall = "\(commonMetadata.isThrowing ? "try " : "")\(commonMetadata.isAsync ? "await " : "")\(functionName)(\(callParameterList))"
         let concreteResourceContentTypeName = "GenericResourceContent"
 
         var returnHandlingCode: String
-
         if returnTypeString == "String" {
             returnHandlingCode = """
                 let result = \(concreteFunctionCall)
@@ -257,7 +168,7 @@ public struct MCPResourceMacro: PeerMacro {
                 let result = \(concreteFunctionCall)
                 return result
             """
-        } else { // For other types (structs, Bool, [Double], Encodable arrays etc.)
+        } else {
             returnHandlingCode = """
                 let result = \(concreteFunctionCall)
                 return GenericResourceContent.fromResult(result, uri: requestedUri, mimeType: overrideMimeType)
@@ -267,7 +178,7 @@ public struct MCPResourceMacro: PeerMacro {
         wrapperMethod += """
         \(returnHandlingCode)
         }
-        """ // Close the __mcpResourceCall_ function
+        """
 
         return [
             DeclSyntax(stringLiteral: registrationDecl),

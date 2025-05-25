@@ -76,12 +76,12 @@ public struct MCPResourceMetadata: Sendable {
     }
     
     /// Enriches a dictionary of arguments with default values and throws if a required parameter is missing
-    public func enrichArguments(_ arguments: [String: String]) throws -> [String: String] {
+    public func enrichArguments(_ arguments: [String: Sendable]) throws -> [String: Sendable] {
         var enrichedArguments = arguments
         for param in parameters {
             if enrichedArguments[param.name] == nil {
                 if let defaultValue = param.defaultValue {
-                    enrichedArguments[param.name] = defaultValue.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+                    enrichedArguments[param.name] = defaultValue
                 } else if !param.isOptional {
                     throw MCPResourceError.missingParameter(name: param.name)
                 }

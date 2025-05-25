@@ -6,16 +6,16 @@ public struct MCPResourceParameterInfo: Sendable {
     public let name: String
     
     /// The type of the parameter
-    public let type: Any.Type
-    
-    /// Whether the parameter is optional (has a default value)
-    public let isOptional: Bool
-    
-    /// The default value of the parameter as a string representation
-    public let defaultValue: String?
+    public let type: Sendable.Type
     
     /// A description of the parameter
     public let description: String?
+    
+    /// An optional default value for the parameter
+    public let defaultValue: Sendable?
+    
+    /// Whether the parameter is optional (has a default value)
+    public let isOptional: Bool
     
     /**
      Creates a new MCPResourceParameterInfo instance.
@@ -24,20 +24,20 @@ public struct MCPResourceParameterInfo: Sendable {
        - name: The name of the parameter
        - type: The type of the parameter
        - description: A description of the parameter
+       - defaultValue: The default value of the parameter
        - isOptional: Whether the parameter is optional
-       - defaultValue: The default value of the parameter as a string
      */
     public init(
         name: String,
-        type: Any.Type,
+        type: Sendable.Type,
         description: String? = nil,
-        isOptional: Bool = false,
-        defaultValue: String? = nil
+        defaultValue: Sendable? = nil,
+        isOptional: Bool = false
     ) {
         self.name = name
         self.type = type
         self.description = description
-        self.isOptional = isOptional
         self.defaultValue = defaultValue
+        self.isOptional = isOptional
     }
 } 

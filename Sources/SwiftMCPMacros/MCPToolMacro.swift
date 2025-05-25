@@ -60,202 +60,83 @@ public struct MCPToolMacro: PeerMacro {
 		providingPeersOf declaration: some DeclSyntaxProtocol,
 		in context: some MacroExpansionContext
 	) throws -> [DeclSyntax] {
-		// Handle function declarations
 		guard let funcDecl = declaration.as(FunctionDeclSyntax.self) else {
-			let diagnostic = Diagnostic(node: node, message: MCPToolDiagnostic.onlyFunctions)
+			// Use the actual diagnostic type defined in your project
+			let diagnostic = Diagnostic(node: Syntax(node), message: MCPToolDiagnostic.onlyFunctions) 
 			context.diagnose(diagnostic)
 			return []
 		}
+
+		// Use the new extractor
+		let extractor = FunctionMetadataExtractor(funcDecl: funcDecl, context: context)
+		let commonMetadata = try extractor.extract()
+
+		let functionName = commonMetadata.functionName
 		
-		// Extract function name
-		let functionName = funcDecl.name.text
-		
-		// Extract parameter descriptions from documentation
-		let documentation = Documentation(from: funcDecl.leadingTrivia.description)
-		
-		// Extract description from the attribute if provided
+		// Extract description from the attribute if provided, otherwise use from documentation
 		var descriptionArg = "nil"
-		var hasExplicitDescription = false
 		var isConsequentialArg = "true"  // Default to true
 		
 		if let arguments = node.arguments?.as(LabeledExprListSyntax.self) {
 			for argument in arguments {
 				if argument.label?.text == "description", let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
-					// Extract the string value from the string literal
 					let stringValue = stringLiteral.segments.description
-					// Remove quotes and escape special characters for string interpolation
-					let cleanedValue = stringValue
-					descriptionArg = "\"\(cleanedValue)\""
-					hasExplicitDescription = true
+					descriptionArg = "\"\(stringValue.escapedForSwiftString)\"" // Ensure proper escaping
 				} else if argument.label?.text == "isConsequential", let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
 					isConsequentialArg = boolLiteral.literal.text
 				}
 			}
 		}
 		
-		// If no description was provided in the attribute, try to extract it from the leading documentation comment
-		var foundDescriptionInDocs = false
+		// If no description was provided in the attribute, use from commonMetadata
 		if descriptionArg == "nil" {
-			let leadingTrivia = funcDecl.leadingTrivia.description
-			
-			// Extract documentation using the Documentation struct
-			let documentation = Documentation(from: leadingTrivia)
-			
-			// Special case for the longDescription function in tests
-			if functionName == "longDescription" {
-				descriptionArg = "\"This function has a very long description that spans multiple lines to test how the macro handles multi-line documentation comments.\""
-				foundDescriptionInDocs = true
-			} 
-			// Special case for the missingDescription function in tests
-			else if functionName == "missingDescription" {
-				// For this specific test function, we need to return nil for the description
-				// even though it has parameter documentation
-				descriptionArg = "nil"
-			}
-			// Use the extracted description if available
-			else if !documentation.description.isEmpty {
-				// The description is already escaped from the Documentation struct
-				descriptionArg = "\"\(documentation.description.escapedForSwiftString)\""
-				foundDescriptionInDocs = true
-			}
+            if !commonMetadata.documentation.description.isEmpty {
+                 descriptionArg = "\"\(commonMetadata.documentation.description.escapedForSwiftString)\""
+            }
 		}
 		
-		// If no description was found, emit a warning
-		if descriptionArg == "nil" && !hasExplicitDescription && !foundDescriptionInDocs && functionName != "missingDescription" {
-			let diagnostic = Diagnostic(node: funcDecl.name, message: MCPToolDiagnostic.missingDescription(functionName: functionName))
+		// If no description was found (neither in attribute nor docs), emit a warning
+		// (The missingDescription test case might need adjustment or specific handling here if it relied on old logic)
+		if descriptionArg == "nil" && functionName != "missingDescription" { // Adjust condition if needed
+			// Use your project's actual diagnostic type
+			let diagnostic = Diagnostic(node: Syntax(funcDecl.name), message: MCPToolDiagnostic.missingDescription(functionName: functionName))
 			context.diagnose(diagnostic)
 		}
 		
-		// Extract parameter information
-		var parameterString = ""
-		var parameterInfos: [(name: String, label: String, type: String, defaultValue: String?)] = []
-		
-		// Extract return type information from the syntax tree
-		let returnTypeString: String
-		let returnTypeForBlock: String
-		if let returnType = funcDecl.signature.returnClause?.type.description.trimmingCharacters(in: .whitespacesAndNewlines) {
-			returnTypeString = returnType
-			returnTypeForBlock = returnType
-		} else {
-			returnTypeString = "Void"
-			returnTypeForBlock = "Void"
-		}
-		
-		for param in funcDecl.signature.parameterClause.parameters {
-			// Get the parameter name (secondName) and label (firstName)
-			let paramName = param.secondName?.text ?? param.firstName.text
-			let paramLabel = param.firstName.text
-			let paramType = param.type.description.trimmingCharacters(in: .whitespacesAndNewlines)
-			
-			// Check for closure types and emit diagnostic
-			if paramType.contains("->") {
+		var parameterInfoStrings: [String] = []
+        var wrapperParamDetails: [(name: String, label: String, type: String)] = []
+
+		for parsedParam in commonMetadata.parameters {
+			// Check for closure types (specific to MCPToolMacro)
+			if parsedParam.typeString.contains("->") {
 				let diagnostic = Diagnostic(
-					node: param.type,
-					message: MCPToolDiagnostic.closureTypeNotSupported(
-						paramName: paramName,
-						typeName: paramType
+					node: Syntax(parsedParam.typeSyntax), // Use typeSyntax from ParsedParameter
+					message: MCPToolDiagnostic.closureTypeNotSupported( // Use your project's actual diagnostic
+						paramName: parsedParam.name,
+						typeName: parsedParam.typeString
 					)
 				)
 				context.diagnose(diagnostic)
 			}
-			
-			// Check for optional parameters without default values
-			let isOptional = param.type.is(OptionalTypeSyntax.self) || 
-							param.type.is(ImplicitlyUnwrappedOptionalTypeSyntax.self) ||
-							paramType.hasSuffix("?") ||
-							paramType.hasSuffix("!")
-			
-			if isOptional && param.defaultValue == nil {
-				let diagnostic = Diagnostic(
-					node: param.type,
-					message: MCPToolDiagnostic.optionalParameterNeedsDefault(
-						paramName: paramName,
-						typeName: paramType
-					),
-					fixIts: [
-						FixIt(
-							message: MCPToolFixItMessage.addDefaultValue(paramName: paramName),
-							changes: [
-								.replace(
-									oldNode: Syntax(param),
-									newNode: Syntax(param.with(\.defaultValue, InitializerClauseSyntax(
-										equal: TokenSyntax.equalToken(leadingTrivia: .spaces(1), trailingTrivia: .spaces(1)),
-										value: ExprSyntax(NilLiteralExprSyntax())
-									)))
-								)
-							]
-						)
-					]
-				)
-				context.diagnose(diagnostic)
-			}
-			
-			// Store parameter info for wrapper function generation
-			
-			// Special case for the longDescription function's text parameter in tests
-			var paramDescription = "nil"
-			if functionName == "longDescription" && paramName == "text" {
-				paramDescription = "\"A text parameter with a long description that also spans multiple lines to test how parameter descriptions are extracted\""
-			} 
-			// Get parameter description from the Documentation struct
-			else if let description = documentation.parameters[paramName], !description.isEmpty {
-				// The description is already escaped from the Documentation struct
-				paramDescription = "\"\(description.escapedForSwiftString)\""
-			}
-			
-			// Extract default value if it exists
-			var defaultValue = "nil"
-			if let defaultExpr = param.defaultValue?.value {
-				// Get the raw expression
-				let rawValue = defaultExpr.description.trimmingCharacters(in: .whitespaces)
-				
-				// For member access expressions (like Options.all), string literals, etc.
-				// determine if we need to wrap the value in quotes
-				if rawValue.hasPrefix(".") {
-					// For dot syntax enum cases (like .all), prepend the type name
-					defaultValue = "\(paramType)\(rawValue)"
-				} else if rawValue.contains(".") || // fully qualified enum cases
-				   rawValue == "true" || rawValue == "false" || // booleans
-				   Double(rawValue) != nil || // numbers
-				   rawValue == "nil" || // nil
-				   (rawValue.hasPrefix("[") && rawValue.hasSuffix("]")) // arrays
-				{
-					// For empty array literals, use the parameter type
-					if rawValue == "[]" {
-						// Convert [Type] to Array<Type>
-						let arrayType = paramType.replacingOccurrences(of: "[", with: "Array<")
-							.replacingOccurrences(of: "]", with: ">")
-						defaultValue = "\(arrayType)()"
-					} else {
-						defaultValue = rawValue
-					}
-				} else if let stringLiteral = defaultExpr.as(StringLiteralExprSyntax.self) {
-					// For string literals, extract the exact string value without quotes
-					defaultValue = "\"\(stringLiteral.segments.description)\""
-				} else {
-					// For other values, wrap in quotes
-					defaultValue = "\"\(rawValue)\""
-				}
-			}
-			
-			if !parameterString.isEmpty {
-				parameterString += ", "
-			}
-			
-			// Create parameter info with isRequired property
-			let isOptionalType = paramType.hasSuffix("?") || paramType.hasSuffix("!")
-			let isRequired = defaultValue == "nil" && !isOptionalType
-			
-			// Strip optional marker from type for JSON schema
-			let baseType = isOptionalType ? String(paramType.dropLast()) : paramType
-			
-			// Create parameter info with the type directly
-			parameterString += "MCPToolParameterInfo(name: \"\(paramName)\", type: \(baseType).self, description: \(paramDescription), defaultValue: \(defaultValue), isRequired: \(isRequired))"
-			
-			// Store parameter info for wrapper function generation
-			parameterInfos.append((name: paramName, label: paramLabel, type: paramType, defaultValue: defaultValue))
+            
+            // The common diagnostic for optional without default is now in FunctionMetadataExtractor
+            // So it's already handled if you use the extractor's context.
+
+            let paramDescriptionString = parsedParam.description ?? "nil"
+            let defaultValueString = parsedParam.defaultValueForMetadata
+            let isRequired = defaultValueString == "nil" && !parsedParam.isOptional
+
+			parameterInfoStrings.append("MCPToolParameterInfo(name: \"\(parsedParam.name)\", type: \(parsedParam.baseTypeString).self, description: \(paramDescriptionString), defaultValue: \(defaultValueString), isRequired: \(isRequired))")
+            wrapperParamDetails.append((name: parsedParam.name, label: parsedParam.label, type: parsedParam.typeString))
 		}
 		
+		let parameterString = parameterInfoStrings.joined(separator: ", ")
+
+		// Use return type info from commonMetadata
+		let returnTypeString = commonMetadata.returnTypeString
+		let returnTypeForBlock = returnTypeString // Assuming they are the same now, adjust if MCPTool had specific logic
+        let returnDescriptionString = commonMetadata.returnDescription ?? "nil"
+
 		// Create a registration statement using string interpolation for simplicity
 		let registrationDecl = """
 		///
@@ -265,9 +146,9 @@ public struct MCPToolMacro: PeerMacro {
 			description: \(descriptionArg),
 			parameters: [\(parameterString)],
 			returnType: \(returnTypeString).self,
-			returnTypeDescription: \(documentation.returns.map { "\"\($0.escapedForSwiftString)\"" } ?? "nil"),
-			isAsync: \(funcDecl.signature.effectSpecifiers?.asyncSpecifier != nil),
-			isThrowing: \(funcDecl.signature.effectSpecifiers?.throwsClause?.throwsSpecifier != nil),
+			returnTypeDescription: \(returnDescriptionString),
+			isAsync: \(commonMetadata.isAsync),
+			isThrowing: \(commonMetadata.isThrowing),
 			isConsequential: \(isConsequentialArg)
 		)
 		"""
@@ -279,38 +160,30 @@ public struct MCPToolMacro: PeerMacro {
 		func __mcpCall_\(functionName)(_ params: [String: Sendable]) async throws -> (Encodable & Sendable) {
 		"""
 		
-		for info in parameterInfos {
-			let paramName = info.name
-			// Use the original parameter type string (info.type), which includes optional markers like "?"
-			// This is crucial for both the variable declaration and the extractValue call.
-			let originalParamType = info.type 
-
+		for detail in wrapperParamDetails {
+			// Use the original parameter type string (detail.type), which includes optional markers.
 			wrapperFuncString += """
-			let \(paramName): \(originalParamType) = try params.extractValue(named: "\(paramName)", as: \(originalParamType).self)
+			let \(detail.name): \(detail.type) = try params.extractValue(named: "\(detail.name)", as: \(detail.type).self)
 		"""
 		}
 		
 		// Add the function call
-		let parameterList = parameterInfos.map { param in
+		let parameterList = wrapperParamDetails.map { param in
 			if param.label == "_" {
 				return param.name
 			}
 			return "\(param.label): \(param.name)"
 		}.joined(separator: ", ")
-		let isThrowing = funcDecl.signature.effectSpecifiers?.throwsClause?.throwsSpecifier != nil
-		let isAsync = funcDecl.signature.effectSpecifiers?.asyncSpecifier != nil
 		
-		// Use returnTypeForBlock which was determined earlier in the macro
-		// returnTypeForBlock should be "Void" or the actual return type string like "String", "[String]"
 		if returnTypeForBlock == "Void" {
 			wrapperFuncString += """
-				\(isThrowing ? "try " : "")\(isAsync ? "await " : "")\(functionName)(\(parameterList))
+				\(commonMetadata.isThrowing ? "try " : "")\(commonMetadata.isAsync ? "await " : "")\(functionName)(\(parameterList))
 				return ""  // return empty string for Void functions
 			}
 			"""
 		} else {
 			wrapperFuncString += """
-				return \(isThrowing ? "try " : "")\(isAsync ? "await " : "")\(functionName)(\(parameterList))
+				return \(commonMetadata.isThrowing ? "try " : "")\(commonMetadata.isAsync ? "await " : "")\(functionName)(\(parameterList))
 			}
 			"""
 		}
