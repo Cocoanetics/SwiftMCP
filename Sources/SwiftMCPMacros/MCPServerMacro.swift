@@ -239,28 +239,37 @@ public var mcpResourceTemplates: [MCPResourceTemplate] {
 /// Retrieves a resource by its URI
 /// - Parameter uri: The URI of the resource to retrieve
 /// - Returns: The resource content if found
-/// - Throws: An error if the resource cannot be accessed
+/// - Throws: An error if the resource cannot be accessed or is not found
 public func getResource(uri: URL) async throws -> [MCPResourceContent] {
    // Try to match against resource templates
    for metadata in mcpResourceMetadata {
       if uri.matches(template: metadata.uriTemplate) {
          // Extract variables after confirming match
          let params = uri.extractTemplateVariables(from: metadata.uriTemplate) ?? [:]
+         // Enrich arguments. This can throw if required params are missing or types are wrong for a TEMPLATE.
          let enrichedParams = try metadata.enrichArguments(params)
-         // Call the appropriate wrapper method
+         
+         // Call the appropriate wrapper method for the matched template
          switch metadata.functionName {
 \(resourceSwitchCases)
          default:
-            // This case should ideally not be hit if mcpResources covers all functionNames in mcpResourceMetadata
-            // and resourceSwitchCases are generated from mcpResources.
+            // This case should ideally not be hit if mcpResourceMetadata covers all functionNames
+            // and resourceSwitchCases are generated correctly.
+            // If it is hit, it means a template was matched by URI but no corresponding function case exists.
+            // This is an internal inconsistency, but we'll treat it as notFound for robustness.
             break 
          }
       }
    }
    
-   // If no template matched, directly try to get it as a non-template resource.
-   // The getNonTemplateResource method is responsible for throwing .notFound if it can't handle the URI.
-   return try await getNonTemplateResource(uri: uri)
+   // If no template matched or fell through. Calling getNonTemplateResource for URI
+   let nonTemplateContents = try await getNonTemplateResource(uri: uri)
+   if !nonTemplateContents.isEmpty {
+      return nonTemplateContents
+   }
+
+   // If getNonTemplateResource returned empty. THROWING notFound for URI
+   throw MCPResourceError.notFound(uri: uri.absoluteString)
 }
 """
 			declarations.append(DeclSyntax(stringLiteral: getResourceMethod))

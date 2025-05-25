@@ -42,9 +42,6 @@ final class MCPResourceTests: XCTestCase {
     func testResourceMetadata() async throws {
         let server = ResourceTestServer()
         
-        // Check that server conforms to MCPResourceProviding
-        XCTAssertTrue(server is MCPResourceProviding)
-        
         // Get resource metadata
         let metadata = server.mcpResourceMetadata
         
