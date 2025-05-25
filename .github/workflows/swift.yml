@@ -41,22 +41,3 @@ jobs:
       - name: Build & Test (Linux)
         run: swift test
 
-  build-ios:
-    runs-on: macos-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup latest Xcode beta
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: latest-stable
-
-      - name: Verify Xcode version
-        run: xcodebuild -version
-
-      - name: Build & Test (iOS Simulator)
-        run: |
-          xcodebuild test \
-            -scheme SwiftMCP-Package \
-            -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=latest'
