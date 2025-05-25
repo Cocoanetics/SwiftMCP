@@ -279,12 +279,6 @@ public struct MCPToolMacro: PeerMacro {
 		func __mcpCall_\(functionName)(_ params: [String: Sendable]) async throws -> (Encodable & Sendable) {
 		"""
 		
-		// Add the print statement to the generated function body
-		wrapperFuncString += """
-		
-		print("__mcpCall_\(functionName): received params: \\(String(describing: params))")
-		"""
-		
 		for info in parameterInfos {
 			let paramName = info.name
 			// Use the original parameter type string (info.type), which includes optional markers like "?"

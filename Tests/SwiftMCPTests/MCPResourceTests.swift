@@ -2,6 +2,13 @@ import XCTest
 import SwiftMCP
 @testable import SwiftMCPMacros
 
+// Define the enum for temperature settings
+public enum Temp: String, CaseIterable, Sendable {
+    case warm
+    case hot
+    case cold
+}
+
 /// Test server with resource functions
 @MCPServer(name: "ResourceTestServer", version: "1.0")
 actor ResourceTestServer {
@@ -35,6 +42,21 @@ actor ResourceTestServer {
     func getFileList() -> [String] {
         return ["file1.txt", "file2.txt", "file3.txt"]
     }
+
+    /// Gets a temperature status based on an enum parameter
+    /// - Parameter status_value: The temperature setting (e.g., warm, hot, cold)
+    /// - Returns: A string describing the temperature status
+	@MCPResource("test://temperature/{status}")
+	func getTemperatureStatus(status: Temp) -> String {
+		switch status {
+			case .warm:
+				return "The temperature is pleasantly warm."
+			case .hot:
+				return "It's quite hot!"
+			case .cold:
+				return "Brrr, it's cold."
+		}
+	}
 }
 
 final class MCPResourceTests: XCTestCase {
@@ -45,8 +67,8 @@ final class MCPResourceTests: XCTestCase {
         // Get resource metadata
         let metadata = server.mcpResourceMetadata
         
-        // Should have 4 resources
-        XCTAssertEqual(metadata.count, 4)
+        // Should have 5 resources now (added getTemperatureStatus)
+        XCTAssertEqual(metadata.count, 5)
         
         // Check getConfig metadata
         let configMeta = metadata.first { $0.name == "getConfig" }
@@ -68,13 +90,24 @@ final class MCPResourceTests: XCTestCase {
         XCTAssertEqual(localizedMeta?.uriTemplate, "users://{user_id}/profile/localized?locale={lang}")
         XCTAssertEqual(localizedMeta?.parameters.count, 2)
         XCTAssertTrue(localizedMeta?.parameters.first { $0.name == "lang" }?.isOptional ?? false)
+        
+        // Check getTemperatureStatus metadata
+        let tempMeta = metadata.first { $0.name == "getTemperatureStatus" }
+        XCTAssertNotNil(tempMeta)
+        XCTAssertEqual(tempMeta?.uriTemplate, "test://temperature/{status}")
+        XCTAssertEqual(tempMeta?.parameters.count, 1)
+        XCTAssertEqual(tempMeta?.parameters.first?.name, "status")
+        XCTAssertTrue(tempMeta?.parameters.first?.type == Temp.self)
     }
     
     func testResourceTemplates() async throws {
         let server = ResourceTestServer()
         
         let templates = await server.mcpResourceTemplates
-        XCTAssertEqual(templates.count, 2)
+        // users://{user_id}/profile
+        // users://{user_id}/profile/localized?locale={lang}
+        // test://temperature/{status_value}
+        XCTAssertEqual(templates.count, 3) // Updated count
         
         // Check that templates have correct structure
         for template in templates {
@@ -157,29 +190,48 @@ final class MCPResourceTests: XCTestCase {
         XCTAssertTrue(text.contains("file2.txt"))
         XCTAssertTrue(text.contains("file3.txt"))
     }
+
+    func testResourceWithEnumParameter() async throws {
+        let server = ResourceTestServer()
+
+        // Test with 'warm'
+        let warmURL = URL(string: "test://temperature/warm")!
+        let warmResources = try await server.getResource(uri: warmURL)
+        XCTAssertEqual(warmResources.count, 1)
+        XCTAssertEqual(warmResources.first?.text, "The temperature is pleasantly warm.")
+
+        // Test with 'hot'
+        let hotURL = URL(string: "test://temperature/hot")!
+        let hotResources = try await server.getResource(uri: hotURL)
+        XCTAssertEqual(hotResources.count, 1)
+        XCTAssertEqual(hotResources.first?.text, "It's quite hot!")
+
+        // Test with 'cold'
+        let coldURL = URL(string: "test://temperature/cold")!
+        let coldResources = try await server.getResource(uri: coldURL)
+        XCTAssertEqual(coldResources.count, 1)
+        XCTAssertEqual(coldResources.first?.text, "Brrr, it's cold.")
+
+        // Test with an invalid enum string value
+        let invalidEnumURL = URL(string: "test://temperature/freezing")!
+        do {
+            _ = try await server.getResource(uri: invalidEnumURL)
+            XCTFail("Should have thrown error for invalid enum value")
+        } catch MCPToolError.invalidEnumValue(let parameterName, _, let actualValue) {
+            // This is the expected error from extractValue for enums if the string doesn't match a case
+            XCTAssertEqual(parameterName, "status")
+            XCTAssertEqual(actualValue, "freezing")
+        } catch {
+            XCTFail("Wrong error type for invalid enum value: \(error)")
+        }
+    }
     
     func testURLTemplateExtraction() {
         // Test path variables
         let url1 = URL(string: "users://123/profile")!
         let template1 = "users://{user_id}/profile"
         
-        print("URL1 scheme: \(url1.scheme ?? "nil")")
-        print("URL1 host: \(url1.host ?? "nil")")
-        print("URL1 path: \(url1.path)")
-        print("URL1 absoluteString: \(url1.absoluteString)")
-        
-        if let templateURL1 = URL(string: template1) {
-            print("Template1 scheme: \(templateURL1.scheme ?? "nil")")
-            print("Template1 host: \(templateURL1.host ?? "nil")")
-            print("Template1 path: \(templateURL1.path)")
-        } else {
-            print("Failed to create URL from template: \(template1)")
-        }
-        
         let vars1 = url1.extractTemplateVariables(from: template1)
-        print("Template: \(template1)")
-        print("URL: \(url1)")
-        print("Variables: \(String(describing: vars1))")
         XCTAssertNotNil(vars1)
         XCTAssertEqual(vars1?["user_id"], "123")
         
@@ -187,9 +239,6 @@ final class MCPResourceTests: XCTestCase {
         let url2 = URL(string: "users://456/profile/localized?locale=fr")!
         let template2 = "users://{user_id}/profile/localized?locale={lang}"
         let vars2 = url2.extractTemplateVariables(from: template2)
-        print("Template: \(template2)")
-        print("URL: \(url2)")
-        print("Variables: \(String(describing: vars2))")
         XCTAssertNotNil(vars2)
         XCTAssertEqual(vars2?["user_id"], "456")
         XCTAssertEqual(vars2?["lang"], "fr")
