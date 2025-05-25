@@ -179,8 +179,6 @@ func testArrayDefaultValue() throws {
         throw TestError("Could not find arrayDefault function")
     }
     
-	print(arrayDefaultTool.inputSchema)
-	
     if case .object(let object) = arrayDefaultTool.inputSchema {
 		if case .array = object.properties["values"] {
             // Parameter 'values' should have a default value of [1, 2, 3]

@@ -246,6 +246,9 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 			return
 		}
 		
+		// Send Accepted first
+		await sendResponseAsync(channel: channel, status: .accepted)
+		
 		do {
 			let decoder = JSONDecoder()
 			decoder.dateDecodingStrategy = .iso8601
@@ -256,9 +259,6 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 			}
 			
 			let request = try decoder.decode(JSONRPCRequest.self, from: body)
-			
-			// Send Accepted first
-			await sendResponseAsync(channel: channel, status: .accepted)
 			
 			// Handle the response with client ID
 			transport.handleJSONRPCRequest(request, from: clientId)

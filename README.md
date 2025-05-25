@@ -99,6 +99,44 @@ The macros in this repository provide functionality for defining and exposing to
 
 * `@MCPServer`: This macro is used to define a class or actor as an MCP server. It extracts documentation comments to describe the class, parameters, and return values. An example of its usage can be seen in the `Demos/SwiftMCPDemo/Calculator.swift` file, where the `Calculator` actor is annotated with `@MCPServer(name: "SwiftMCP Demo")`.
 * `@MCPTool`: This macro is used to define functions within an MCP server that can be called as tools. It also extracts documentation comments to describe the function, parameters, and return values. Examples of its usage can be seen in the `Demos/SwiftMCPDemo/Calculator.swift` file, where various functions such as `add`, `subtract`, `testArray`, `multiply`, `divide`, `greet`, `ping`, and `noop` are annotated with `@MCPTool`.
+* `@MCPResource`: This macro is used to expose read-only data through URI templates. Resources allow clients to access data using structured URIs with path and query parameters. The macro automatically generates the necessary infrastructure to match URIs against templates and extract parameters.
+
+### Using @MCPResource
+
+The `@MCPResource` macro allows you to expose functions as resources that can be accessed via URI patterns:
+
+```swift
+@MCPServer(name: "ResourceServer")
+actor ResourceServer {
+    /// Get user profile by ID
+    @MCPResource("users://{user_id}/profile")
+    func getUserProfile(user_id: Int) -> String {
+        return "Profile for user \(user_id)"
+    }
+    
+    /// Search users with pagination
+    @MCPResource("users://search?q={query}&page={page}", mimeType: "application/json")
+    func searchUsers(query: String, page: Int = 1) -> String {
+        return """
+        {"query": "\(query)", "page": \(page), "results": [...]}
+        """
+    }
+}
+```
+
+Key features:
+- **URI Templates**: Define patterns with placeholders in curly braces `{param}`
+- **Path Parameters**: Extract values from the URI path (e.g., `/users/{id}`)
+- **Query Parameters**: Extract values from query strings (e.g., `?page={page}`)
+- **Optional Parameters**: Support default values for optional parameters
+- **MIME Types**: Optionally specify content type with `mimeType` parameter
+- **Type Safety**: Parameters are automatically converted to the correct Swift types
+
+The server automatically provides:
+- Resource discovery through `mcpResourceTemplates`
+- URI matching and parameter extraction
+- Type conversion and validation
+- Error handling for missing or invalid parameters
 
 These macros help in automatically generating the necessary metadata and documentation for the MCP server and its tools, making it easier to expose them for JSON-RPC communication and integration with AI models.
 

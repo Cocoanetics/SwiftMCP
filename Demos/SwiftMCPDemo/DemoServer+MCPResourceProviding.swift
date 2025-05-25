@@ -1,20 +1,27 @@
-//
-//  DemoServer+MCPResourceProviding.swift
-//  SwiftMCP
-//
-//  Created by Oliver Drobnik on 03.04.25.
-//
+////
+////  DemoServer+MCPResourceProviding.swift
+////  SwiftMCP
+////
+////  Created by Oliver Drobnik on 03.04.25.
+////
 
 import Foundation
 import SwiftMCP
 
-extension DemoServer: MCPResourceProviding
+extension DemoServer
 {
     /// Returns an array of all MCP resources defined in this type
-    var mcpResources: [MCPResource] {
+    var mcpResources: [any MCPResource] {
+        get async {
+			return await getDynamicFileResources()
+        }
+    }
+    
+    /// Returns dynamic file-based resources from Downloads folder
+    private func getDynamicFileResources() async -> [MCPResource] {
         // Get the Downloads folder URL
         guard let downloadsURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first else {
-			logToStderr("Could not get Downloads folder URL")
+            logToStderr("Could not get Downloads folder URL")
             return []
         }
         
@@ -59,29 +66,19 @@ extension DemoServer: MCPResourceProviding
                 )
             }
         } catch {
-
-			logToStderr("Error listing files in Downloads folder: \(error.localizedDescription)")
+            logToStderr("Error listing files in Downloads folder: \(error.localizedDescription)")
             return []
         }
     }
     
-    /// Gets a resource by URI
-    /// - Parameter uri: The URI of the resource to get
-    /// - Returns: The resource content, or an empty array if the resource doesn't exist
-    /// - Throws: MCPResourceError if there's an error getting the resource
-    func getResource(uri: URL) throws -> [MCPResourceContent] {
-        // Check if the file exists
-        guard FileManager.default.fileExists(atPath: uri.path) else {
-            return []
-        }
-        
-        // Get the resource content
-        return try [FileResourceContent.from(fileURL: uri)]
-    }
-	
-	var mcpResourceTemplates: [MCPResourceTemplate] {
-		get async {
+    /// Override to handle file-based resources by reading actual file content
+    public func getNonTemplateResource(uri: URL) async throws -> [MCPResourceContent] {
+		// Check if the file exists
+		guard FileManager.default.fileExists(atPath: uri.path) else {
 			return []
 		}
-	}
+		
+		// Get the resource content
+		return try [FileResourceContent.from(fileURL: uri)]
+    }
 }

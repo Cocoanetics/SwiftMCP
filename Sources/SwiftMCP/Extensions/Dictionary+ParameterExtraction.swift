@@ -394,7 +394,7 @@ public extension Dictionary where Key == String, Value == Sendable {
         if let floatType = Element.self as? any BinaryFloatingPoint.Type {
             return try extractNumberArray(named: name, as: floatType) as! [Element]
         }
-
+		
         return try extractArray(named: name, elementType: Element.self)
     }
 
@@ -559,5 +559,90 @@ public extension Dictionary where Key == String, Value == Sendable {
             expectedType: "URL",
             actualType: String(describing: Swift.type(of: anyValue))
         )
+    }
+}
+
+// MARK: - String-based parameter extraction for resources
+
+extension Dictionary where Key == String, Value == String {
+    
+    /// Extracts a value from string dictionary and converts it to the specified type
+    /// This is used for resource parameters that come from URI strings
+    public func extractValueFromString<T>(named name: String, as type: T.Type = T.self) throws -> T {
+        guard let stringValue = self[name] else {
+            throw MCPResourceError.missingParameter(name: name)
+        }
+        
+        // Handle different types
+        if let losslessType = T.self as? LosslessStringConvertible.Type {
+            guard let value = losslessType.init(stringValue) as? T else {
+                throw MCPResourceError.typeMismatch(parameter: name, expectedType: String(describing: T.self), actualValue: stringValue)
+            }
+            return value
+        } else if T.self == String.self {
+            return stringValue as! T
+        } else if T.self == Date.self {
+            // Try to parse as ISO8601 date
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = formatter.date(from: stringValue) {
+                return date as! T
+            }
+            // Try without fractional seconds
+            formatter.formatOptions = [.withInternetDateTime]
+            if let date = formatter.date(from: stringValue) {
+                return date as! T
+            }
+            throw MCPResourceError.typeMismatch(parameter: name, expectedType: "Date", actualValue: stringValue)
+        } else if T.self == URL.self {
+            guard let url = URL(string: stringValue) else {
+                throw MCPResourceError.typeMismatch(parameter: name, expectedType: "URL", actualValue: stringValue)
+            }
+            return url as! T
+        } else {
+            // For other types, we can't decode from JSON in string format
+            // This is a limitation for resources - complex types should be passed as simple values
+            throw MCPResourceError.typeMismatch(parameter: name, expectedType: String(describing: T.self), actualValue: stringValue)
+        }
+    }
+    
+    /// Extracts a value from string dictionary with a default value
+    public func extractValueFromString<T>(named name: String, as type: T.Type = T.self, defaultValue: T) throws -> T {
+        if self[name] == nil {
+            return defaultValue
+        }
+        return try extractValueFromString(named: name, as: type)
+    }
+    
+    /// Extracts an optional value from string dictionary
+    public func extractValueFromString<T>(named name: String, as type: T?.Type) throws -> T? {
+        guard self[name] != nil else {
+            return nil
+        }
+        return try extractValueFromString(named: name, as: T.self)
+    }
+    
+    /// Extracts an array value from string dictionary
+    public func extractValueFromString<Element>(named name: String, as type: [Element].Type) throws -> [Element] {
+        guard let stringValue = self[name] else {
+            throw MCPResourceError.missingParameter(name: name)
+        }
+        
+        // For resources, arrays should be passed as comma-separated values
+        if Element.self == String.self {
+            let components = stringValue.split(separator: ",").map { String($0.trimmingCharacters(in: .whitespaces)) }
+            return components as! [Element]
+        } else if Element.self == Int.self {
+            let components = stringValue.split(separator: ",").map { String($0.trimmingCharacters(in: .whitespaces)) }
+            return try components.map { str in
+                guard let value = Int(str) else {
+                    throw MCPResourceError.typeMismatch(parameter: name, expectedType: "Int", actualValue: str)
+                }
+                return value
+            } as! [Element]
+        } else {
+            // For other types, arrays aren't supported in URI parameters
+            throw MCPResourceError.typeMismatch(parameter: name, expectedType: String(describing: [Element].self), actualValue: stringValue)
+        }
     }
 } 
