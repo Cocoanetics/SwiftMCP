@@ -27,11 +27,19 @@ struct ParsedParameter {
     let label: String
     let typeSyntax: TypeSyntax
     let typeString: String
-    let baseTypeString: String // Type string without optional marker (e.g., "String", "Int")
-    let isOptional: Bool
+    let baseTypeString: String // Type string without optional markers
     let defaultValueClause: InitializerClauseSyntax?
-    let defaultValueForMetadata: String // String representation for metadata (e.g., "0", "\\"text\\"", "nil", "MyEnum.value")
-    let description: String? // From documentation, already escaped for Swift string
+    let defaultValueForMetadata: String // The value to use in metadata (e.g., "nil", "42", "\"hello\"")
+    let description: String? // Documentation description
+    let isOptionalType: Bool // Whether the parameter type is optional
+    
+    /// Creates MCPParameterInfo from this parsed parameter
+    func toMCPParameterInfo() -> String {
+        let descriptionString = description ?? "nil"
+        // A parameter is required if it has no default value AND is not optional
+        let isRequired = defaultValueClause == nil && !isOptionalType
+        return "MCPParameterInfo(name: \"\(name)\", type: \(baseTypeString).self, description: \(descriptionString), defaultValue: \(defaultValueForMetadata), isRequired: \(isRequired))"
+    }
 }
 
 /// Holds common metadata extracted from a function declaration.
@@ -132,10 +140,10 @@ struct FunctionMetadataExtractor {
                 typeSyntax: paramTypeSyntax,
                 typeString: paramTypeString,
                 baseTypeString: baseTypeString,
-                isOptional: isOptionalType,
                 defaultValueClause: defaultValueClause,
                 defaultValueForMetadata: defaultValueForMetadata,
-                description: paramDocDescription
+                description: paramDocDescription,
+                isOptionalType: isOptionalType
             ))
         }
 
@@ -178,17 +186,11 @@ struct FunctionMetadataExtractor {
         } else if rawValue.hasPrefix(".") { // Enum case like .someCase
             return "\(paramTypeString)\(rawValue)"
         } else if expr.is(ArrayExprSyntax.self) && rawValue == "[]" {
-             // For empty array literals, use the parameter type to construct Array<Type>()
+             // For empty array literals, we need to cast them to the correct type
             if isArray {
-                 // paramTypeString here is the base type like "MyType" if original was "[MyType]?"
-                 // or "String" if original was "[String]".
-                 // This logic might need refinement if paramTypeString is already "Array<Foo>"
-                if paramTypeString.hasPrefix("Array<") || paramTypeString.hasPrefix("Dictionary<") {
-                    return "\(paramTypeString)()"
-                } else {
-                    // Assuming it's like "String" for "[String]"
-                    return "Array<\(paramTypeString)>()"
-                }
+                 // paramTypeString here should be the full array type like "[String]" or "Array<String>"
+                 // We need to cast the empty array to the correct type
+                return "[] as \(paramTypeString)"
             } else {
                  // Fallback for non-array types with "[]" - should be caught by compiler
                 return "[]"

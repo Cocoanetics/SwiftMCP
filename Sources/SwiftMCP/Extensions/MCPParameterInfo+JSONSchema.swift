@@ -1,5 +1,5 @@
 //
-//  MCPToolParameterInfo+JSONSchema.swift
+//  MCPParameterInfo+JSONSchema.swift
 //  SwiftMCP
 //
 //  Created by Oliver Drobnik on 18.03.25.
@@ -15,7 +15,7 @@ extension Array: ArraySchemaBridge {
 	static var elementType: Any.Type { Element.self }
 }
 
-extension MCPToolParameterInfo {
+extension MCPParameterInfo {
 	
 	public var schema: JSONSchema {
 		// If this is a SchemaRepresentable type, use its schema

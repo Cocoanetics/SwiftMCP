@@ -2,29 +2,14 @@ import Foundation
 
 /// Metadata about a resource function
 public struct MCPResourceMetadata: Sendable {
+    /// The common function metadata
+    public let functionMetadata: MCPFunctionMetadata
+    
     /// The URI template of the resource
     public let uriTemplate: String
     
     /// The name of the function (for internal dispatching)
     public let functionName: String
-    
-    /// The display name of the resource (defaults to function name, can be overridden)
-    public let name: String
-    
-    /// A description of the resource
-    public let description: String?
-    
-    /// The parameters of the function
-    public let parameters: [MCPResourceParameterInfo]
-    
-    /// The return type of the function, if any
-    public let returnType: Any.Type?
-    
-    /// Whether the function is asynchronous
-    public let isAsync: Bool
-    
-    /// Whether the function can throw errors
-    public let isThrowing: Bool
     
     /// The MIME type of the resource (optional)
     public let mimeType: String?
@@ -48,22 +33,32 @@ public struct MCPResourceMetadata: Sendable {
         functionName: String,
         name: String,
         description: String? = nil,
-        parameters: [MCPResourceParameterInfo],
-        returnType: Any.Type? = nil,
+        parameters: [MCPParameterInfo],
+        returnType: Sendable.Type? = nil,
         isAsync: Bool = false,
         isThrowing: Bool = false,
         mimeType: String? = nil
     ) {
+        self.functionMetadata = MCPFunctionMetadata(
+            name: name,
+            description: description,
+            parameters: parameters,
+            returnType: returnType,
+            isAsync: isAsync,
+            isThrowing: isThrowing
+        )
         self.uriTemplate = uriTemplate
         self.functionName = functionName
-        self.name = name
-        self.description = description
-        self.parameters = parameters
-        self.returnType = returnType
-        self.isAsync = isAsync
-        self.isThrowing = isThrowing
         self.mimeType = mimeType
     }
+    
+    // Convenience accessors for common properties
+    public var name: String { functionMetadata.name }
+    public var description: String? { functionMetadata.description }
+    public var parameters: [MCPParameterInfo] { functionMetadata.parameters }
+    public var returnType: Sendable.Type? { functionMetadata.returnType }
+    public var isAsync: Bool { functionMetadata.isAsync }
+    public var isThrowing: Bool { functionMetadata.isThrowing }
     
     /// Converts metadata to MCPResourceTemplate
     public func toResourceTemplate() -> SimpleResourceTemplate {
@@ -77,17 +72,7 @@ public struct MCPResourceMetadata: Sendable {
     
     /// Enriches a dictionary of arguments with default values and throws if a required parameter is missing
     public func enrichArguments(_ arguments: [String: Sendable]) throws -> [String: Sendable] {
-        var enrichedArguments = arguments
-        for param in parameters {
-            if enrichedArguments[param.name] == nil {
-                if let defaultValue = param.defaultValue {
-                    enrichedArguments[param.name] = defaultValue
-                } else if !param.isOptional {
-                    throw MCPResourceError.missingParameter(name: param.name)
-                }
-            }
-        }
-        return enrichedArguments
+        return try functionMetadata.enrichArguments(arguments)
     }
 }
 
