@@ -103,16 +103,19 @@ public struct MCPResourceMacro: PeerMacro {
         
         let returnTypeString = commonMetadata.returnTypeString
 
+        let returnDescriptionString = commonMetadata.returnDescription ?? "nil"
+        
         // Generate the metadata variable
         let metadataDeclaration = """
 /// Metadata for the \(functionName) resource
 nonisolated private let __mcpResourceMetadata_\(functionName) = MCPResourceMetadata(
    uriTemplate: "\(template)",
-   functionName: "\(functionName)",
    name: "\(resourceName)",
+   functionName: "\(functionName)",
    description: \(descriptionArg),
    parameters: [\(parameterInfoStrings.joined(separator: ", "))],
    returnType: \(returnTypeString).self,
+   returnTypeDescription: \(returnDescriptionString),
    isAsync: \(commonMetadata.isAsync),
    isThrowing: \(commonMetadata.isThrowing),
    mimeType: \(mimeTypeArg)

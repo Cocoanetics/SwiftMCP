@@ -254,7 +254,7 @@ public func getResource(uri: URL) async throws -> [MCPResourceContent] {
          let enrichedParams = try metadata.enrichArguments(sendableParams)
          
          // Call the appropriate wrapper method for the matched template
-         switch metadata.functionName {
+         switch metadata.functionMetadata.name {
 \(resourceSwitchCases)
          default:
             // This case should ideally not be hit if mcpResourceMetadata covers all functionNames

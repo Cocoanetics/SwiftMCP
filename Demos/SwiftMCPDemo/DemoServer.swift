@@ -145,7 +145,7 @@ actor DemoServer {
 	}
 	
 	/// Returns a list of available features
-	@MCPResource("features://list")
+	@MCPResource("features://list", name: "Features.list")
 	func getFeatureList() -> [String] {
 		return ["math", "date", "greet", "file"]
 	}

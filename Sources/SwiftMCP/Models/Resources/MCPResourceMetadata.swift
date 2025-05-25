@@ -8,8 +8,8 @@ public struct MCPResourceMetadata: Sendable {
     /// The URI template of the resource
     public let uriTemplate: String
     
-    /// The name of the function (for internal dispatching)
-    public let functionName: String
+    /// The display name of the resource
+    public let name: String
     
     /// The MIME type of the resource (optional)
     public let mimeType: String?
@@ -19,41 +19,43 @@ public struct MCPResourceMetadata: Sendable {
      
      - Parameters:
        - uriTemplate: The URI template of the resource
+       - name: The display name of the resource (overrides function name if different)
        - functionName: The name of the function (for dispatching)
-       - name: The display name of the resource
        - description: A description of the resource
        - parameters: The parameters of the function
        - returnType: The return type of the function, if any
+       - returnTypeDescription: A description of what the function returns
        - isAsync: Whether the function is asynchronous
        - isThrowing: Whether the function can throw errors
        - mimeType: The MIME type of the resource
      */
     public init(
         uriTemplate: String,
+        name: String? = nil,
         functionName: String,
-        name: String,
         description: String? = nil,
         parameters: [MCPParameterInfo],
         returnType: Sendable.Type? = nil,
+        returnTypeDescription: String? = nil,
         isAsync: Bool = false,
         isThrowing: Bool = false,
         mimeType: String? = nil
     ) {
+        self.name = name ?? functionName
         self.functionMetadata = MCPFunctionMetadata(
-            name: name,
+            name: functionName,
             description: description,
             parameters: parameters,
             returnType: returnType,
+            returnTypeDescription: returnTypeDescription,
             isAsync: isAsync,
             isThrowing: isThrowing
         )
         self.uriTemplate = uriTemplate
-        self.functionName = functionName
         self.mimeType = mimeType
     }
     
     // Convenience accessors for common properties
-    public var name: String { functionMetadata.name }
     public var description: String? { functionMetadata.description }
     public var parameters: [MCPParameterInfo] { functionMetadata.parameters }
     public var returnType: Sendable.Type? { functionMetadata.returnType }
