@@ -81,10 +81,13 @@ public macro Schema() = #externalMacro(module: "SwiftMCPMacros", type: "SchemaMa
 /// Apply this macro to functions that should be exposed as MCP resources.
 /// It will generate metadata about the function's parameters, return type, and URI template.
 ///
-/// Example:
+/// Example usage:
 /// ```swift
 /// @MCPResource("users://{user_id}/profile?locale={lang}")
 /// func getUserProfile(user_id: Int, lang: String = "en") -> ProfileResource
+/// 
+/// @MCPResource(["users://{user_id}/profile", "users://{user_id}"])
+/// func getUserProfile(user_id: Int, lang: String = "en") -> ProfileResource
 /// ```
 @attached(peer, names: prefixed(__mcpResourceMetadata_), prefixed(__mcpResourceCall_))
-public macro MCPResource(_ template: String, name: String? = nil, mimeType: String? = nil) = #externalMacro(module: "SwiftMCPMacros", type: "MCPResourceMacro")
+public macro MCPResource<T>(_ template: T, name: String? = nil, mimeType: String? = nil) = #externalMacro(module: "SwiftMCPMacros", type: "MCPResourceMacro")

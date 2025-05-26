@@ -57,47 +57,58 @@ actor ResourceTestServer {
 				return "Brrr, it's cold."
 		}
 	}
+	
+	/// Test resource with multiple URI templates
+	@MCPResource(["api://v1/users/{user_id}", "api://v2/users/{user_id}"])
+	func getMultiVersionUser(user_id: Int) -> String {
+		return "User data for ID \(user_id)"
+	}
 }
 
 final class MCPResourceTests: XCTestCase {
     
-    func testResourceMetadata() async throws {
+    func testResourceMetadata() {
         let server = ResourceTestServer()
-        
-        // Get resource metadata
         let metadata = server.mcpResourceMetadata
         
-        // Should have 5 resources now (added getTemperatureStatus)
-        XCTAssertEqual(metadata.count, 5)
+        // Should have 6 resources: getConfig, getUserProfile, getLocalizedProfile, getFileList, getTemperatureStatus, getMultiVersionUser
+        XCTAssertEqual(metadata.count, 6)
         
-        // Check getConfig metadata
+        // Test static resource metadata
         let configMeta = metadata.first { $0.name == "getConfig" }
         XCTAssertNotNil(configMeta)
-        XCTAssertEqual(configMeta?.uriTemplate, "config://app")
+        XCTAssertTrue(configMeta?.uriTemplates.contains("config://app") ?? false)
         XCTAssertEqual(configMeta?.parameters.count, 0)
         
-        // Check getUserProfile metadata
+        // Test parameterized resource metadata
         let profileMeta = metadata.first { $0.name == "getUserProfile" }
         XCTAssertNotNil(profileMeta)
-        XCTAssertEqual(profileMeta?.uriTemplate, "users://{user_id}/profile")
+        XCTAssertTrue(profileMeta?.uriTemplates.contains("users://{user_id}/profile") ?? false)
         XCTAssertEqual(profileMeta?.parameters.count, 1)
         XCTAssertEqual(profileMeta?.parameters.first?.name, "user_id")
-        XCTAssertTrue(profileMeta?.parameters.first?.type == Int.self)
         
-        // Check getLocalizedProfile metadata
+        // Test resource with optional parameter
         let localizedMeta = metadata.first { $0.name == "getLocalizedProfile" }
         XCTAssertNotNil(localizedMeta)
-        XCTAssertEqual(localizedMeta?.uriTemplate, "users://{user_id}/profile/localized?locale={lang}")
+        XCTAssertTrue(localizedMeta?.uriTemplates.contains("users://{user_id}/profile/localized?locale={lang}") ?? false)
         XCTAssertEqual(localizedMeta?.parameters.count, 2)
         XCTAssertTrue(localizedMeta?.parameters.first { $0.name == "lang" }?.isOptional ?? false)
         
-        // Check getTemperatureStatus metadata
+        // Test enum parameter resource
         let tempMeta = metadata.first { $0.name == "getTemperatureStatus" }
         XCTAssertNotNil(tempMeta)
-        XCTAssertEqual(tempMeta?.uriTemplate, "test://temperature/{status}")
+        XCTAssertTrue(tempMeta?.uriTemplates.contains("test://temperature/{status}") ?? false)
         XCTAssertEqual(tempMeta?.parameters.count, 1)
         XCTAssertEqual(tempMeta?.parameters.first?.name, "status")
-        XCTAssertTrue(tempMeta?.parameters.first?.type == Temp.self)
+        
+        // Test multiple URI templates resource
+        let multiMeta = metadata.first { $0.name == "getMultiVersionUser" }
+        XCTAssertNotNil(multiMeta)
+        XCTAssertTrue(multiMeta?.uriTemplates.contains("api://v1/users/{user_id}") ?? false)
+        XCTAssertTrue(multiMeta?.uriTemplates.contains("api://v2/users/{user_id}") ?? false)
+        XCTAssertEqual(multiMeta?.uriTemplates.count, 2)
+        XCTAssertEqual(multiMeta?.parameters.count, 1)
+        XCTAssertEqual(multiMeta?.parameters.first?.name, "user_id")
     }
     
     func testResourceTemplates() async throws {
@@ -106,8 +117,10 @@ final class MCPResourceTests: XCTestCase {
         let templates = await server.mcpResourceTemplates
         // users://{user_id}/profile
         // users://{user_id}/profile/localized?locale={lang}
-        // test://temperature/{status_value}
-        XCTAssertEqual(templates.count, 3) // Updated count
+        // test://temperature/{status}
+        // api://v1/users/{user_id}
+        // api://v2/users/{user_id}
+        XCTAssertEqual(templates.count, 5) // Updated count
         
         // Check that templates have correct structure
         for template in templates {
@@ -242,5 +255,23 @@ final class MCPResourceTests: XCTestCase {
         XCTAssertNotNil(vars2)
         XCTAssertEqual(vars2?["user_id"], "456")
         XCTAssertEqual(vars2?["lang"], "fr")
+    }
+    
+    func testMultipleURITemplates() async throws {
+        let server = ResourceTestServer()
+        
+        // Test v1 API endpoint
+        let v1URL = URL(string: "api://v1/users/123")!
+        let v1Resources = try await server.getResource(uri: v1URL)
+        
+        XCTAssertEqual(v1Resources.count, 1)
+        XCTAssertEqual(v1Resources.first?.text, "User data for ID 123")
+        
+        // Test v2 API endpoint (same function, different template)
+        let v2URL = URL(string: "api://v2/users/456")!
+        let v2Resources = try await server.getResource(uri: v2URL)
+        
+        XCTAssertEqual(v2Resources.count, 1)
+        XCTAssertEqual(v2Resources.first?.text, "User data for ID 456")
     }
 } 

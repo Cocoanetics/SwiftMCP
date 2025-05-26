@@ -80,11 +80,12 @@ extension MCPResourceProviding {
 			return metadata
 		}
 		
-		return array.map { metadata in
-			
-			let url = URL(string: metadata.uriTemplate)!
-			
-			return SimpleResource(uri: url, name: metadata.name, description: metadata.description, mimeType: metadata.mimeType)
+		// Create individual resources for each URI template
+		return array.flatMap { metadata in
+			metadata.uriTemplates.compactMap { template in
+				guard let url = URL(string: template) else { return nil }
+				return SimpleResource(uri: url, name: metadata.name, description: metadata.description, mimeType: metadata.mimeType)
+			}
 		}
 	}
 	

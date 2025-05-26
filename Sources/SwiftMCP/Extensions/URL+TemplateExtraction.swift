@@ -132,10 +132,10 @@ private struct RFC6570TemplateExtractor {
 			}
 		}
 		
-		// Both should be at the end, or URL can have trailing content that matches empty variables
+		// Both should be at the end for a valid match
 		if templateIndex == templateBase.endIndex {
-			// Template is fully processed
-			return true
+			// Template is fully processed - URL should also be fully processed
+			return urlIndex == urlBase.endIndex
 		}
 		
 		// If there are remaining template characters, they should only be literal characters that match the URL

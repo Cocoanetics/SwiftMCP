@@ -92,17 +92,18 @@ final class MCPResourceDemoTests: XCTestCase {
     
     func testDemoResourceMetadata() async throws {
         let server = DemoResourceTestServer()
-        
         let metadata = server.mcpResourceMetadata
+        
+        // Should have 6 resources
         XCTAssertEqual(metadata.count, 6)
         
         // Verify each resource is properly registered
-        XCTAssertNotNil(metadata.first { $0.uriTemplate == "server://info" })
-        XCTAssertNotNil(metadata.first { $0.uriTemplate == "users://profile/{user_id}" })
-        XCTAssertNotNil(metadata.first { $0.uriTemplate == "users://search?q={query}&page={page}&limit={limit}" })
-        XCTAssertNotNil(metadata.first { $0.uriTemplate == "metrics://system" })
-        XCTAssertNotNil(metadata.first { $0.uriTemplate == "features://{feature_name}/enabled" })
-        XCTAssertNotNil(metadata.first { $0.uriTemplate == "config://{env}" })
+        XCTAssertNotNil(metadata.first { $0.uriTemplates.contains("server://info") })
+        XCTAssertNotNil(metadata.first { $0.uriTemplates.contains("users://profile/{user_id}") })
+        XCTAssertNotNil(metadata.first { $0.uriTemplates.contains("users://search?q={query}&page={page}&limit={limit}") })
+        XCTAssertNotNil(metadata.first { $0.uriTemplates.contains("metrics://system") })
+        XCTAssertNotNil(metadata.first { $0.uriTemplates.contains("features://{feature_name}/enabled") })
+        XCTAssertNotNil(metadata.first { $0.uriTemplates.contains("config://{env}") })
     }
     
     func testStaticResource() async throws {

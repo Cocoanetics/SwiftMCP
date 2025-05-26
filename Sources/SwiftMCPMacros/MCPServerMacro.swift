@@ -219,7 +219,7 @@ nonisolated public var mcpResourceMetadata: [MCPResourceMetadata] {
 /// Returns resource templates (resources with parameters)
 public var mcpResourceTemplates: [MCPResourceTemplate] {
    get async {
-      return mcpResourceMetadata.filter { !$0.parameters.isEmpty }.map { $0.toResourceTemplate() }
+      return mcpResourceMetadata.filter { !$0.parameters.isEmpty }.flatMap { $0.toResourceTemplates() }
    }
 }
 """
@@ -229,7 +229,7 @@ public var mcpResourceTemplates: [MCPResourceTemplate] {
 			var resourceSwitchCases = ""
 			for (index, funcName) in mcpResources.enumerated() {
 				resourceSwitchCases += "         case \"\(funcName)\":\n"
-				resourceSwitchCases += "            return try await __mcpResourceCall_\(funcName)(enrichedParams, requestedUri: uri, overrideMimeType: metadata.mimeType)"
+				resourceSwitchCases += "            return try await __mcpResourceCall_\(funcName)(enrichedParams, requestedUri: uri, overrideMimeType: match.metadata.mimeType)"
 				if index < mcpResources.count - 1 {
 					resourceSwitchCases += "\n"
 				}
@@ -241,28 +241,39 @@ public var mcpResourceTemplates: [MCPResourceTemplate] {
 /// - Returns: The resource content if found
 /// - Throws: An error if the resource cannot be accessed or is not found
 public func getResource(uri: URL) async throws -> [MCPResourceContent] {
-   // Try to match against resource templates
+   // Find the best matching template across all resources
+   var bestMatch: (metadata: MCPResourceMetadata, template: String, paramCount: Int)?
+   
    for metadata in mcpResourceMetadata {
-      if uri.matches(template: metadata.uriTemplate) {
-         // Extract variables after confirming match
-         let params = uri.extractTemplateVariables(from: metadata.uriTemplate) ?? [:]
-         // Convert [String: String] to [String: Sendable]
-         let sendableParams: [String: Sendable] = params.reduce(into: [:]) { result, pair in
-            result[pair.key] = pair.value as Sendable
+      for template in metadata.uriTemplates {
+         if let params = uri.extractTemplateVariables(from: template) {
+            let paramCount = params.count
+            if bestMatch == nil || paramCount > bestMatch!.paramCount {
+               bestMatch = (metadata, template, paramCount)
+            }
          }
-         // Enrich arguments. This can throw if required params are missing or types are wrong for a TEMPLATE.
-         let enrichedParams = try metadata.enrichArguments(sendableParams)
-         
-         // Call the appropriate wrapper method for the matched template
-         switch metadata.functionMetadata.name {
+      }
+   }
+   
+   // If we found a match, use it
+   if let match = bestMatch {
+      let params = uri.extractTemplateVariables(from: match.template) ?? [:]
+      // Convert [String: String] to [String: Sendable]
+      let sendableParams: [String: Sendable] = params.reduce(into: [:]) { result, pair in
+         result[pair.key] = pair.value as Sendable
+      }
+      // Enrich arguments. This can throw if required params are missing or types are wrong for a TEMPLATE.
+      let enrichedParams = try match.metadata.enrichArguments(sendableParams)
+      
+      // Call the appropriate wrapper method for the matched template
+      switch match.metadata.functionMetadata.name {
 \(resourceSwitchCases)
-         default:
-            // This case should ideally not be hit if mcpResourceMetadata covers all functionNames
-            // and resourceSwitchCases are generated correctly.
-            // If it is hit, it means a template was matched by URI but no corresponding function case exists.
-            // This is an internal inconsistency, but we'll treat it as notFound for robustness.
-            break 
-         }
+      default:
+         // This case should ideally not be hit if mcpResourceMetadata covers all functionNames
+         // and resourceSwitchCases are generated correctly.
+         // If it is hit, it means a template was matched by URI but no corresponding function case exists.
+         // This is an internal inconsistency, but we'll treat it as notFound for robustness.
+         break 
       }
    }
    

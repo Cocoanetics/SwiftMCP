@@ -31,29 +31,56 @@ public struct MCPResourceMacro: PeerMacro {
 
         let functionName = commonMetadata.functionName
 
-        guard let argList = node.arguments?.as(LabeledExprListSyntax.self),
-              let firstTemplateArg = argList.first(where: { $0.label == nil }),
-              let stringLiteralTemplate = firstTemplateArg.expression.as(StringLiteralExprSyntax.self)
-        else {
+        // Extract templates from the macro arguments
+        var templates: [String] = []
+        
+        guard let argList = node.arguments?.as(LabeledExprListSyntax.self) else {
             let diag = Diagnostic(node: Syntax(node), message: MCPResourceDiagnostic.requiresStringLiteral)
             context.diagnose(diag)
             return []
         }
-        let template = stringLiteralTemplate.segments.description
         
-        // Validate the URI template according to RFC 6570
-        let validationResult = URITemplateValidator.validate(template)
-        if let validationError = validationResult.error {
-            let diag = Diagnostic(
-                node: Syntax(stringLiteralTemplate),
-                message: validationError
-            )
-            context.diagnose(diag)
-            // Continue processing even with validation errors for better developer experience
+        // Process all unlabeled arguments as templates
+        for arg in argList {
+            if arg.label == nil {
+                if let stringLiteral = arg.expression.as(StringLiteralExprSyntax.self) {
+                    let template = stringLiteral.segments.description
+                    templates.append(template)
+                } else if let arrayExpr = arg.expression.as(ArrayExprSyntax.self) {
+                    // Handle array of templates
+                    for element in arrayExpr.elements {
+                        if let stringLiteral = element.expression.as(StringLiteralExprSyntax.self) {
+                            let template = stringLiteral.segments.description
+                            templates.append(template)
+                        }
+                    }
+                }
+            }
         }
         
-        // Extract variables using the validator (which properly handles RFC 6570 syntax)
-        let placeholders = validationResult.variables
+        if templates.isEmpty {
+            let diag = Diagnostic(node: Syntax(node), message: MCPResourceDiagnostic.requiresStringLiteral)
+            context.diagnose(diag)
+            return []
+        }
+        
+        // Validate all templates and collect all variables
+        var allPlaceholders: Set<String> = []
+        for template in templates {
+            let validationResult = URITemplateValidator.validate(template)
+            if let validationError = validationResult.error {
+                let diag = Diagnostic(
+                    node: Syntax(node),
+                    message: validationError
+                )
+                context.diagnose(diag)
+                // Continue processing even with validation errors for better developer experience
+            }
+            
+            // Extract variables using the validator (which properly handles RFC 6570 syntax)
+            let placeholders = validationResult.variables
+            allPlaceholders.formUnion(placeholders)
+        }
 
         var descriptionArg = "nil"
         if !commonMetadata.documentation.description.isEmpty {
@@ -89,7 +116,7 @@ public struct MCPResourceMacro: PeerMacro {
             wrapperParamDetails.append((name: parsedParam.name, label: parsedParam.label, type: parsedParam.typeString))
         }
 
-        for ph in placeholders {
+        for ph in allPlaceholders {
             if !functionParamNames.contains(ph) {
                 let diag = Diagnostic(node: Syntax(node), message: MCPResourceDiagnostic.missingParameterForPlaceholder(placeholder: ph))
                 context.diagnose(diag)
@@ -100,7 +127,7 @@ public struct MCPResourceMacro: PeerMacro {
             // Find the parameter metadata
             guard let paramMeta = commonMetadata.parameters.first(where: { $0.name == funcParamName }) else { continue }
             // Only require a placeholder if the parameter does NOT have a default value
-            if !placeholders.contains(funcParamName) && paramMeta.defaultValueClause == nil {
+            if !allPlaceholders.contains(funcParamName) && paramMeta.defaultValueClause == nil {
                 let originalParamSyntax = paramMeta.funcParam
                 let diag = Diagnostic(
                     node: Syntax(originalParamSyntax),
@@ -114,11 +141,14 @@ public struct MCPResourceMacro: PeerMacro {
 
         let returnDescriptionString = commonMetadata.returnDescription ?? "nil"
         
+        // Generate the Set of templates for the metadata
+        let templatesSetString = "[\(templates.map { "\"\($0)\"" }.joined(separator: ", "))]"
+        
         // Generate the metadata variable
         let metadataDeclaration = """
 /// Metadata for the \(functionName) resource
 nonisolated private let __mcpResourceMetadata_\(functionName) = MCPResourceMetadata(
-   uriTemplate: "\(template)",
+   uriTemplates: Set(\(templatesSetString)),
    name: "\(resourceName)",
    functionName: "\(functionName)",
    description: \(descriptionArg),

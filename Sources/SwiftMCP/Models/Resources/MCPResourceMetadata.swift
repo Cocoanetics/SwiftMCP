@@ -5,8 +5,8 @@ public struct MCPResourceMetadata: Sendable {
     /// The common function metadata
     public let functionMetadata: MCPFunctionMetadata
     
-    /// The URI template of the resource
-    public let uriTemplate: String
+    /// The URI templates of the resource
+    public let uriTemplates: Set<String>
     
     /// The display name of the resource
     public let name: String
@@ -18,7 +18,7 @@ public struct MCPResourceMetadata: Sendable {
      Creates a new MCPResourceMetadata instance.
      
      - Parameters:
-       - uriTemplate: The URI template of the resource
+       - uriTemplates: The URI templates of the resource
        - name: The display name of the resource (overrides function name if different)
        - functionName: The name of the function (for dispatching)
        - description: A description of the resource
@@ -30,7 +30,7 @@ public struct MCPResourceMetadata: Sendable {
        - mimeType: The MIME type of the resource
      */
     public init(
-        uriTemplate: String,
+        uriTemplates: Set<String>,
         name: String? = nil,
         functionName: String,
         description: String? = nil,
@@ -51,7 +51,7 @@ public struct MCPResourceMetadata: Sendable {
             isAsync: isAsync,
             isThrowing: isThrowing
         )
-        self.uriTemplate = uriTemplate
+        self.uriTemplates = uriTemplates
         self.mimeType = mimeType
     }
     
@@ -63,19 +63,40 @@ public struct MCPResourceMetadata: Sendable {
     public var isAsync: Bool { functionMetadata.isAsync }
     public var isThrowing: Bool { functionMetadata.isThrowing }
     
-    /// Converts metadata to MCPResourceTemplate
-    public func toResourceTemplate() -> SimpleResourceTemplate {
-        SimpleResourceTemplate(
-            uriTemplate: uriTemplate,
-            name: name,
-            description: description,
-            mimeType: mimeType
-        )
+    /// Converts metadata to MCPResourceTemplate array (one for each URI template)
+    public func toResourceTemplates() -> [SimpleResourceTemplate] {
+        return uriTemplates.map { template in
+            SimpleResourceTemplate(
+                uriTemplate: template,
+                name: name,
+                description: description,
+                mimeType: mimeType
+            )
+        }
     }
     
     /// Enriches a dictionary of arguments with default values and throws if a required parameter is missing
     public func enrichArguments(_ arguments: [String: Sendable]) throws -> [String: Sendable] {
         return try functionMetadata.enrichArguments(arguments)
+    }
+    
+    /// Finds the best matching URI template for a given URL
+    /// Returns the template that matches the most parameters
+    public func bestMatchingTemplate(for url: URL) -> String? {
+        var bestTemplate: String?
+        var maxParameterCount = -1
+        
+        for template in uriTemplates {
+            if let variables = url.extractTemplateVariables(from: template) {
+                let parameterCount = variables.count
+                if parameterCount > maxParameterCount {
+                    maxParameterCount = parameterCount
+                    bestTemplate = template
+                }
+            }
+        }
+        
+        return bestTemplate
     }
 }
 
