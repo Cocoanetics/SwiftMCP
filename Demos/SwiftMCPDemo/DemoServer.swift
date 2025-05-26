@@ -139,7 +139,7 @@ actor DemoServer {
 	///   - query: The search query
 	///   - page: The page number (default: 1)
 	///   - limit: The number of results per page (default: 10)
-	@MCPResource("users://search?q={query}&page={?page}&limit={?limit}")
+	@MCPResource("users://search?q={query}")
 	func searchUsers(query: String, page: Int = 1, limit: Int = 10) async throws -> String {
 		return "Results for query '\(query)' (page \(page), limit \(limit))"
 	}

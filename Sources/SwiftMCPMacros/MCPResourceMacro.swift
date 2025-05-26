@@ -97,10 +97,13 @@ public struct MCPResourceMacro: PeerMacro {
         }
 
         for funcParamName in functionParamNames {
-            if !placeholders.contains(funcParamName) {
-                let originalParamSyntax = commonMetadata.parameters.first(where: { $0.name == funcParamName })?.funcParam
+            // Find the parameter metadata
+            guard let paramMeta = commonMetadata.parameters.first(where: { $0.name == funcParamName }) else { continue }
+            // Only require a placeholder if the parameter does NOT have a default value
+            if !placeholders.contains(funcParamName) && paramMeta.defaultValueClause == nil {
+                let originalParamSyntax = paramMeta.funcParam
                 let diag = Diagnostic(
-                    node: originalParamSyntax != nil ? Syntax(originalParamSyntax!) : Syntax(funcDecl.name),
+                    node: Syntax(originalParamSyntax),
                     message: MCPResourceDiagnostic.unknownPlaceholder(parameterName: funcParamName)
                 )
                 context.diagnose(diag)
