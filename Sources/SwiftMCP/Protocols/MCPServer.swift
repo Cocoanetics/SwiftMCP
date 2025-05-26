@@ -79,6 +79,9 @@ public extension MCPServer {
                 
             case "notifications/initialized":
                 return nil
+				
+			case "notifications/cancelled":
+				return nil
                 
             case "ping":
                 return createPingResponse(id: request.id ?? 0)
@@ -99,7 +102,11 @@ public extension MCPServer {
                 return await handleToolCall(request)
                 
             default:
-                return nil
+                // Respond with JSON-RPC error for method not found
+                return JSONRPCErrorResponse(
+                    id: request.id,
+                    error: .init(code: -32601, message: "Method not found")
+                )
         }
     }
     
@@ -268,22 +275,25 @@ public extension MCPServer {
 	 - Parameter id: The request ID to include in the response
 	 - Returns: A JSON-RPC message containing the resources list
 	 */
-        func createResourcesListResponse(id: Int) async -> JSONRPCMessage {
-
-                guard let resourceProvider = self as? MCPResourceProviding else
-                {
-                        var response = JSONRPCResponse()
-                        response.id = id
-                        response.result = [
-                                "content": [
-                                        ["type": "text", "text": "Server does not provide any resources"]
+	func createResourcesListResponse(id: Int) async -> JSONRPCMessage {
+		
+		guard let resourceProvider = self as? MCPResourceProviding else
+		{
+			var response = JSONRPCResponse()
+			response.id = id
+			response.result = [
+				"content": [
+					["type": "text", "text": "Server does not provide any resources"]
 				],
 				"isError": true
 			]
 			return response
 		}
 		
-                let resourceDicts = await resourceProvider.mcpResources.map { resource -> [String: Any] in
+		/// get resources from templates that have no parameters plus developer provided array
+		let resources = resourceProvider.mcpStaticResources + (await resourceProvider.mcpResources)
+		
+		let resourceDicts = resources.map { resource -> [String: Any] in
 			return [
 				"uri": resource.uri.absoluteString,
 				"name": resource.name,
@@ -292,9 +302,9 @@ public extension MCPServer {
 			]
 		}
 		
-                let response = JSONRPCResponse(id: id, result: ["resources": AnyCodable(resourceDicts)])
-                return response
-        }
+		let response = JSONRPCResponse(id: id, result: ["resources": AnyCodable(resourceDicts)])
+		return response
+	}
     
     /**
      Creates a response for a resource read request.
@@ -304,41 +314,41 @@ public extension MCPServer {
        - request: The original JSON-RPC request
      - Returns: A JSON-RPC message containing the resource content or an error
      */
-        func createResourcesReadResponse(id: Int, request: JSONRPCRequest) async -> JSONRPCMessage {
-
-                guard let resourceProvider = self as? MCPResourceProviding else
-                {
-                        var response = JSONRPCResponse()
-                        response.id = id
-                        response.result = [
-                                "content": [
-                                        ["type": "text", "text": "Server does not provide any resources"]
+	func createResourcesReadResponse(id: Int, request: JSONRPCRequest) async -> JSONRPCMessage {
+		
+		guard let resourceProvider = self as? MCPResourceProviding else
+		{
+			var response = JSONRPCResponse()
+			response.id = id
+			response.result = [
+				"content": [
+					["type": "text", "text": "Server does not provide any resources"]
 				],
 				"isError": true
 			]
 			return response
 		}
 		
-		   // Extract the URI from the request params
-		   guard let uriString = request.params?["uri"]?.value as? String,
-				 let uri = URL(string: uriString) else {
-			  return JSONRPCErrorResponse(id: id, error: .init(code: -32602, message: "Invalid or missing URI parameter"))
-		   }
-		   
-                   do {
-                           // Try to get the resource content
-                          let resourceContentArray = try await resourceProvider.getResource(uri: uri)
-			   
-			   if !resourceContentArray.isEmpty
-			   {
-				   return JSONRPCResponse(id: id, result: ["contents": AnyCodable(resourceContentArray)])
-			   } else {
-				   return JSONRPCErrorResponse(id: id, error: .init(code: -32001, message: "Resource not found: \(uri.absoluteString)"))
-			   }
-		   } catch {
-			   return JSONRPCErrorResponse(id: id, error: .init(code: -32000, message: "Error getting resource: \(error.localizedDescription)"))
-		   }
-	   }
+		// Extract the URI from the request params
+		guard let uriString = request.params?["uri"]?.value as? String,
+				  let uri = URL(string: uriString) else {
+				return JSONRPCErrorResponse(id: id, error: .init(code: -32602, message: "Invalid or missing URI parameter"))
+			}
+			
+			do {
+				// Try to get the resource content
+				let resourceContentArray = try await resourceProvider.getResource(uri: uri)
+				
+				if !resourceContentArray.isEmpty
+				{
+					return JSONRPCResponse(id: id, result: ["contents": AnyCodable(resourceContentArray)])
+				} else {
+					return JSONRPCErrorResponse(id: id, error: .init(code: -32001, message: "Resource not found: \(uri.absoluteString)"))
+				}
+			} catch {
+				return JSONRPCErrorResponse(id: id, error: .init(code: -32000, message: "Error getting resource: \(error.localizedDescription)"))
+			}
+		}
     
     /**
      Creates a response listing all available resource templates.

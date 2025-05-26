@@ -46,8 +46,8 @@ public macro MCPTool(description: String? = nil, isConsequential: Bool = true) =
 ///     }
 /// }
 /// ```
-@attached(member, names: named(callTool), named(mcpToolMetadata), named(__mcpServerName), named(__mcpServerVersion), named(__mcpServerDescription))
-@attached(extension, conformances: MCPServer, MCPToolProviding)
+@attached(member, names: named(callTool), named(mcpToolMetadata), named(__mcpServerName), named(__mcpServerVersion), named(__mcpServerDescription), named(mcpResourceMetadata), named(mcpResources), named(mcpStaticResources), named(mcpResourceTemplates), named(getResource))
+@attached(extension, conformances: MCPServer, MCPToolProviding, MCPResourceProviding)
 public macro MCPServer(name: String? = nil, version: String? = nil) = #externalMacro(module: "SwiftMCPMacros", type: "MCPServerMacro")
 
 /// A macro that generates schema metadata for a struct.
@@ -75,3 +75,19 @@ public macro MCPServer(name: String? = nil, version: String? = nil) = #externalM
 @attached(member, names: named(schemaMetadata))
 @attached(extension, conformances: SchemaRepresentable)
 public macro Schema() = #externalMacro(module: "SwiftMCPMacros", type: "SchemaMacro")
+
+/// Macro for validating resource functions against a URI template.
+/// 
+/// Apply this macro to functions that should be exposed as MCP resources.
+/// It will generate metadata about the function's parameters, return type, and URI template.
+///
+/// Example usage:
+/// ```swift
+/// @MCPResource("users://{user_id}/profile?locale={lang}")
+/// func getUserProfile(user_id: Int, lang: String = "en") -> ProfileResource
+/// 
+/// @MCPResource(["users://{user_id}/profile", "users://{user_id}"])
+/// func getUserProfile(user_id: Int, lang: String = "en") -> ProfileResource
+/// ```
+@attached(peer, names: prefixed(__mcpResourceMetadata_), prefixed(__mcpResourceCall_))
+public macro MCPResource<T>(_ template: T, name: String? = nil, mimeType: String? = nil) = #externalMacro(module: "SwiftMCPMacros", type: "MCPResourceMacro")

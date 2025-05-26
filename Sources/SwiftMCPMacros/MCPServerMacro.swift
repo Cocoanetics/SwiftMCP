@@ -123,6 +123,23 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
 			}
 		}
 		
+		// Find all functions with the MCPResource macro
+		var mcpResources: [String] = []
+		
+		for member in declaration.memberBlock.members {
+			if let funcDecl = member.decl.as(FunctionDeclSyntax.self) {
+				// Check if the function has the MCPResource macro
+				for attribute in funcDecl.attributes {
+					if let identifierAttr = attribute.as(AttributeSyntax.self),
+					   let identifier = identifierAttr.attributeName.as(IdentifierTypeSyntax.self),
+					   identifier.name.text == "MCPResource" {
+						mcpResources.append(funcDecl.name.text)
+						break
+					}
+				}
+			}
+		}
+		
 		var declarations: [DeclSyntax] = [
 			DeclSyntax(stringLiteral: nameProperty),
 			DeclSyntax(stringLiteral: versionProperty),
@@ -182,6 +199,97 @@ nonisolated public var mcpToolMetadata: [MCPToolMetadata] {
 			declarations.append(DeclSyntax(stringLiteral: metadataProperty))
 		}
 		
+		// Add resource-related properties and methods if there are MCPResources defined
+		if !mcpResources.isEmpty {
+			// Add mcpResourceMetadata property
+			let resourceMetadataArray = mcpResources.map { "__mcpResourceMetadata_\($0)" }.joined(separator: ", ")
+			let resourceMetadataProperty = """
+/// Returns an array of all available resource metadata
+nonisolated public var mcpResourceMetadata: [MCPResourceMetadata] {
+   return [\(resourceMetadataArray)]
+}
+"""
+			declarations.append(DeclSyntax(stringLiteral: resourceMetadataProperty))
+			
+			// Note: mcpResources should be implemented by the developer to combine
+			// mcpStaticResources with any dynamic resources they want to provide
+			
+			// Add mcpResourceTemplates property (only for resources with parameters)
+			let mcpResourceTemplatesProperty = """
+/// Returns resource templates (resources with parameters)
+public var mcpResourceTemplates: [MCPResourceTemplate] {
+   get async {
+      return mcpResourceMetadata.filter { !$0.parameters.isEmpty }.flatMap { $0.toResourceTemplates() }
+   }
+}
+"""
+			declarations.append(DeclSyntax(stringLiteral: mcpResourceTemplatesProperty))
+			
+			// Add getResource method
+			var resourceSwitchCases = ""
+			for (index, funcName) in mcpResources.enumerated() {
+				resourceSwitchCases += "         case \"\(funcName)\":\n"
+				resourceSwitchCases += "            return try await __mcpResourceCall_\(funcName)(enrichedParams, requestedUri: uri, overrideMimeType: match.metadata.mimeType)"
+				if index < mcpResources.count - 1 {
+					resourceSwitchCases += "\n"
+				}
+			}
+			
+			let getResourceMethod = """
+/// Retrieves a resource by its URI
+/// - Parameter uri: The URI of the resource to retrieve
+/// - Returns: The resource content if found
+/// - Throws: An error if the resource cannot be accessed or is not found
+public func getResource(uri: URL) async throws -> [MCPResourceContent] {
+   // Find the best matching template across all resources
+   var bestMatch: (metadata: MCPResourceMetadata, template: String, paramCount: Int)?
+   
+   for metadata in mcpResourceMetadata {
+      for template in metadata.uriTemplates {
+         if let params = uri.extractTemplateVariables(from: template) {
+            let paramCount = params.count
+            if bestMatch == nil || paramCount > bestMatch!.paramCount {
+               bestMatch = (metadata, template, paramCount)
+            }
+         }
+      }
+   }
+   
+   // If we found a match, use it
+   if let match = bestMatch {
+      let params = uri.extractTemplateVariables(from: match.template) ?? [:]
+      // Convert [String: String] to [String: Sendable]
+      let sendableParams: [String: Sendable] = params.reduce(into: [:]) { result, pair in
+         result[pair.key] = pair.value as Sendable
+      }
+      // Enrich arguments. This can throw if required params are missing or types are wrong for a TEMPLATE.
+      let enrichedParams = try match.metadata.enrichArguments(sendableParams)
+      
+      // Call the appropriate wrapper method for the matched template
+      switch match.metadata.functionMetadata.name {
+\(resourceSwitchCases)
+      default:
+         // This case should ideally not be hit if mcpResourceMetadata covers all functionNames
+         // and resourceSwitchCases are generated correctly.
+         // If it is hit, it means a template was matched by URI but no corresponding function case exists.
+         // This is an internal inconsistency, but we'll treat it as notFound for robustness.
+         break 
+      }
+   }
+   
+   // If no template matched or fell through. Calling getNonTemplateResource for URI
+   let nonTemplateContents = try await getNonTemplateResource(uri: uri)
+   if !nonTemplateContents.isEmpty {
+      return nonTemplateContents
+   }
+
+   // If getNonTemplateResource returned empty. THROWING notFound for URI
+   throw MCPResourceError.notFound(uri: uri.absoluteString)
+}
+"""
+			declarations.append(DeclSyntax(stringLiteral: getResourceMethod))
+		}
+		
 		return declarations
 	}
 	
@@ -226,9 +334,30 @@ nonisolated public var mcpToolMetadata: [MCPToolMetadata] {
 			}
 		}
 		
+		// Check if the declaration has any MCPResource functions
+		var hasMCPResources = false
+		for member in declaration.memberBlock.members {
+			if let funcDecl = member.decl.as(FunctionDeclSyntax.self) {
+				for attribute in funcDecl.attributes {
+					if let identifierAttr = attribute.as(AttributeSyntax.self),
+					   let identifier = identifierAttr.attributeName.as(IdentifierTypeSyntax.self),
+					   identifier.name.text == "MCPResource" {
+						hasMCPResources = true
+						break
+					}
+				}
+				if hasMCPResources { break }
+			}
+		}
+		
 		// Check if the declaration already conforms to MCPToolProviding
 		let alreadyConformsToToolProviding = inheritedTypes.contains { type in
 			type.type.trimmedDescription == "MCPToolProviding"
+		}
+		
+		// Check if the declaration already conforms to MCPResourceProviding
+		let alreadyConformsToResourceProviding = inheritedTypes.contains { type in
+			type.type.trimmedDescription == "MCPResourceProviding"
 		}
 		
 		// Determine which protocols need to be added
@@ -242,6 +371,10 @@ nonisolated public var mcpToolMetadata: [MCPToolMetadata] {
 			protocolsToAdd.append("MCPToolProviding")
 		}
 		
+		if hasMCPResources && !alreadyConformsToResourceProviding {
+			protocolsToAdd.append("MCPResourceProviding")
+		}
+		
 		// If we have protocols to add, create a single extension with all needed conformances
 		if !protocolsToAdd.isEmpty {
 			let protocolList = protocolsToAdd.joined(separator: ", ")
@@ -250,5 +383,14 @@ nonisolated public var mcpToolMetadata: [MCPToolMetadata] {
 		}
 		
 		return []
+	}
+	
+	public static func expansion(
+		of node: AttributeSyntax,
+		providingMembersOf declaration: some DeclGroupSyntax,
+		conformingTo protocols: [TypeSyntax],
+		in context: some MacroExpansionContext
+	) throws -> [DeclSyntax] {
+		try expansion(of: node, providingMembersOf: declaration, in: context)
 	}
 }

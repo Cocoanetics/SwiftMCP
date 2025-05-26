@@ -9,26 +9,8 @@ import Foundation
 
 /// Metadata about a tool function
 public struct MCPToolMetadata: Sendable {
-    /// The name of the function
-    public let name: String
-    
-    /// The parameters of the function
-    public let parameters: [MCPToolParameterInfo]
-    
-    /// The return type of the function, if any
-    public let returnType: Any.Type?
-    
-    /// A description of what the function returns
-    public let returnTypeDescription: String?
-    
-    /// Whether the function is asynchronous
-    public let isAsync: Bool
-    
-    /// Whether the function can throw errors
-    public let isThrowing: Bool
-    
-    /// A description of the function's purpose
-    public let description: String?
+    /// The common function metadata
+    public let functionMetadata: MCPFunctionMetadata
     
     /// Whether the function's actions are consequential (defaults to true)
     public let isConsequential: Bool
@@ -46,14 +28,39 @@ public struct MCPToolMetadata: Sendable {
        - isThrowing: Whether the function can throw errors
        - isConsequential: Whether the function's actions are consequential
      */
-    public init(name: String, description: String? = nil, parameters: [MCPToolParameterInfo], returnType: Any.Type? = nil, returnTypeDescription: String? = nil, isAsync: Bool = false, isThrowing: Bool = false, isConsequential: Bool = true) {
-        self.name = name
-        self.description = description
-        self.parameters = parameters
-        self.returnType = returnType
-        self.returnTypeDescription = returnTypeDescription
-        self.isAsync = isAsync
-        self.isThrowing = isThrowing
+    public init(
+        name: String,
+        description: String? = nil,
+        parameters: [MCPParameterInfo],
+        returnType: Sendable.Type? = nil,
+        returnTypeDescription: String? = nil,
+        isAsync: Bool = false,
+        isThrowing: Bool = false,
+        isConsequential: Bool = true
+    ) {
+        self.functionMetadata = MCPFunctionMetadata(
+            name: name,
+            description: description,
+            parameters: parameters,
+            returnType: returnType,
+            returnTypeDescription: returnTypeDescription,
+            isAsync: isAsync,
+            isThrowing: isThrowing
+        )
         self.isConsequential = isConsequential
+    }
+    
+    // Convenience accessors for common properties
+    public var name: String { functionMetadata.name }
+    public var description: String? { functionMetadata.description }
+    public var parameters: [MCPParameterInfo] { functionMetadata.parameters }
+    public var returnType: Sendable.Type? { functionMetadata.returnType }
+    public var returnTypeDescription: String? { functionMetadata.returnTypeDescription }
+    public var isAsync: Bool { functionMetadata.isAsync }
+    public var isThrowing: Bool { functionMetadata.isThrowing }
+    
+    /// Enriches a dictionary of arguments with default values and throws if a required parameter is missing
+    public func enrichArguments(_ arguments: [String: Sendable]) throws -> [String: Sendable] {
+        return try functionMetadata.enrichArguments(arguments)
     }
 } 
