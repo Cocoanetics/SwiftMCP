@@ -149,5 +149,25 @@ actor DemoServer {
 	func getFeatureList() -> [String] {
 		return ["math", "date", "greet", "file"]
 	}
+	
+	// Example enum that is only CaseIterable
+	enum Color: CaseIterable {
+		case red
+		case green
+		case blue
+	}
+	
+	/// Returns a message for the selected color
+	@MCPResource("color://message?color={color}")
+	func getColorMessage(color: Color) -> String {
+		switch color {
+			case .red:
+				return "You selected RED!"
+			case .green:
+				return "You selected GREEN!"
+			case .blue:
+				return "You selected BLUE!"
+		}
+	}
 }
 
