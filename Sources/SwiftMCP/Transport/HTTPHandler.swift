@@ -438,17 +438,26 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 		let bodyData = Data(buffer: body)
 		
 		do {
-			guard let toolProvider = transport.server as? MCPToolProviding else {
-				throw MCPToolError.unknownTool(name: toolName)
-			}
-			
 			// Parse request body as JSON dictionary
 			guard let arguments = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Sendable] else {
 				throw MCPToolError.invalidJSONDictionary
 			}
 			
-			// Call the tool
-			let result = try await toolProvider.callTool(toolName, arguments: arguments)
+			// Try to call as a tool first
+			let result: Encodable & Sendable
+			
+			if let toolProvider = transport.server as? MCPToolProviding,
+			   toolProvider.mcpToolMetadata.contains(where: { $0.name == toolName }) {
+				// Call as a tool function
+				result = try await toolProvider.callTool(toolName, arguments: arguments)
+			} else if let resourceProvider = transport.server as? MCPResourceProviding,
+					  resourceProvider.mcpResourceMetadata.contains(where: { $0.name == toolName }) {
+				// Call as a resource function
+				result = try await resourceProvider.callResourceAsFunction(toolName, arguments: arguments)
+			} else {
+				// Function not found
+				throw MCPToolError.unknownTool(name: toolName)
+			}
 			
 			// Convert MCPResourceContent to OpenAIFileResponse if applicable
 			let responseToEncode: Encodable

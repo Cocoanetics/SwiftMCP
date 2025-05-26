@@ -105,11 +105,37 @@ struct OpenAPISpec: Codable {
             )
         ]
         
-        // Create paths from server tools
+        // Create paths from server tools and resources
         let rootPath = server.serverName.asModelName
         var paths: [String: PathItem] = [:]
         
-        for metadata in (server as? MCPToolProviding)?.mcpToolMetadata ?? [] {
+        // Combine MCPTool and MCPResource functions as tools
+        var allToolMetadata: [MCPToolMetadata] = []
+        
+        // Add MCPTool functions
+        if let toolProvider = server as? MCPToolProviding {
+            allToolMetadata.append(contentsOf: toolProvider.mcpToolMetadata)
+        }
+        
+        // Add MCPResource functions converted to tools
+        if let resourceProvider = server as? MCPResourceProviding {
+            let resourceAsTools = resourceProvider.mcpResourceMetadata.map { resourceMeta in
+                MCPToolMetadata(
+                    name: resourceMeta.name,
+                    description: resourceMeta.description,
+                    parameters: resourceMeta.parameters,
+                    returnType: resourceMeta.returnType,
+                    returnTypeDescription: resourceMeta.returnTypeDescription,
+                    isAsync: resourceMeta.isAsync,
+                    isThrowing: resourceMeta.isThrowing,
+                    isConsequential: false // Resources are generally not consequential
+                )
+            }
+            allToolMetadata.append(contentsOf: resourceAsTools)
+        }
+        
+        // Generate OpenAPI paths for all tools
+        for metadata in allToolMetadata {
             let pathKey = "/\(rootPath)/\(metadata.name)"
             
             // Create response schema based on return type

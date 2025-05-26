@@ -225,15 +225,71 @@ public var mcpResourceTemplates: [MCPResourceTemplate] {
 """
 			declarations.append(DeclSyntax(stringLiteral: mcpResourceTemplatesProperty))
 			
-			// Add getResource method
-			var resourceSwitchCases = ""
+			// Add internal helper method for calling resource functions
+			var resourceFunctionSwitchCases = ""
 			for (index, funcName) in mcpResources.enumerated() {
-				resourceSwitchCases += "         case \"\(funcName)\":\n"
-				resourceSwitchCases += "            return try await __mcpResourceCall_\(funcName)(enrichedParams, requestedUri: uri, overrideMimeType: match.metadata.mimeType)"
+				resourceFunctionSwitchCases += "      case \"\(funcName)\":\n"
+				resourceFunctionSwitchCases += "         return try await __mcpResourceCall_\(funcName)(enrichedArguments, requestedUri: requestedUri, overrideMimeType: overrideMimeType)"
 				if index < mcpResources.count - 1 {
-					resourceSwitchCases += "\n"
+					resourceFunctionSwitchCases += "\n"
 				}
 			}
+			
+			let internalCallResourceMethod = """
+/// Internal helper method for calling resource functions directly
+/// - Parameters:
+///   - name: The name of the resource function to call
+///   - enrichedArguments: Pre-enriched arguments to pass to the resource function
+///   - requestedUri: The URI that was requested (for context)
+///   - overrideMimeType: Optional MIME type override
+/// - Returns: The resource content from the function call
+/// - Throws: MCPResourceError if the resource function doesn't exist or cannot be called
+internal func __callResourceFunction(_ name: String, enrichedArguments: [String: Sendable], requestedUri: URL, overrideMimeType: String?) async throws -> [MCPResourceContent] {
+   // Call the appropriate wrapper method based on the resource name
+   switch name {
+\(resourceFunctionSwitchCases)
+      default:
+         throw MCPResourceError.notFound(uri: requestedUri.absoluteString)
+   }
+}
+"""
+			declarations.append(DeclSyntax(stringLiteral: internalCallResourceMethod))
+			
+			// Add callResourceAsFunction method that works like callTool - calls functions directly
+			var directCallSwitchCases = ""
+			for (index, funcName) in mcpResources.enumerated() {
+				directCallSwitchCases += "      case \"\(funcName)\":\n"
+				directCallSwitchCases += "         return try await __mcpDirectCall_\(funcName)(enrichedArguments)"
+				if index < mcpResources.count - 1 {
+					directCallSwitchCases += "\n"
+				}
+			}
+			
+			let callResourceAsFunctionMethod = """
+/// Calls a resource function by name with the provided arguments (for OpenAPI support)
+/// - Parameters:
+///   - name: The name of the resource function to call
+///   - arguments: The arguments to pass to the resource function
+/// - Returns: The result of the resource function execution
+/// - Throws: An error if the resource function doesn't exist or cannot be called
+public func callResourceAsFunction(_ name: String, arguments: [String: Sendable]) async throws -> Encodable & Sendable {
+   // Find the resource metadata by name
+   guard let metadata = mcpResourceMetadata.first(where: { $0.name == name }) else {
+      throw MCPResourceError.notFound(uri: "function://\\(name)")
+   }
+   
+   // Enrich arguments with default values using the same logic as tools
+   let enrichedArguments = try metadata.enrichArguments(arguments)
+   
+   // Call the appropriate wrapper method based on the resource name
+   switch name {
+\(directCallSwitchCases)
+      default:
+         throw MCPResourceError.notFound(uri: "function://\\(name)")
+   }
+}
+"""
+			declarations.append(DeclSyntax(stringLiteral: callResourceAsFunctionMethod))
 			
 			let getResourceMethod = """
 /// Retrieves a resource by its URI
@@ -265,19 +321,11 @@ public func getResource(uri: URL) async throws -> [MCPResourceContent] {
       // Enrich arguments. This can throw if required params are missing or types are wrong for a TEMPLATE.
       let enrichedParams = try match.metadata.enrichArguments(sendableParams)
       
-      // Call the appropriate wrapper method for the matched template
-      switch match.metadata.functionMetadata.name {
-\(resourceSwitchCases)
-      default:
-         // This case should ideally not be hit if mcpResourceMetadata covers all functionNames
-         // and resourceSwitchCases are generated correctly.
-         // If it is hit, it means a template was matched by URI but no corresponding function case exists.
-         // This is an internal inconsistency, but we'll treat it as notFound for robustness.
-         break 
-      }
+      // Call the internal helper method
+      return try await __callResourceFunction(match.metadata.functionMetadata.name, enrichedArguments: enrichedParams, requestedUri: uri, overrideMimeType: match.metadata.mimeType)
    }
    
-   // If no template matched or fell through. Calling getNonTemplateResource for URI
+   // If no template matched. Calling getNonTemplateResource for URI
    let nonTemplateContents = try await getNonTemplateResource(uri: uri)
    if !nonTemplateContents.isEmpty {
       return nonTemplateContents

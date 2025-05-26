@@ -25,6 +25,14 @@ public protocol MCPResourceProviding {
 	var mcpResourceTemplates: [MCPResourceTemplate] { get async }
 	
 	/**
+	 The resource metadata available on this server.
+	 
+	 Resource metadata contains information about resource functions including their
+	 parameters, return types, and other metadata needed for OpenAPI generation.
+	 */
+	var mcpResourceMetadata: [MCPResourceMetadata] { get }
+	
+	/**
 	 Retrieves a resource by its URI.
 	 
 	 - Parameter uri: The URI of the resource to retrieve
@@ -32,6 +40,17 @@ public protocol MCPResourceProviding {
 	 - Throws: An error if the resource cannot be accessed
 	 */
 	func getResource(uri: URL) async throws -> [MCPResourceContent]
+	
+	/**
+	 Calls a resource function by name with the provided arguments (for OpenAPI support).
+	 
+	 - Parameters:
+	   - name: The name of the resource function to call
+	   - arguments: The arguments to pass to the resource function
+	 - Returns: The result of the resource function execution
+	 - Throws: An error if the resource function doesn't exist or cannot be called
+	 */
+	func callResourceAsFunction(_ name: String, arguments: [String: Sendable]) async throws -> Encodable & Sendable
 	
 	/**
 	 Handles non-template resources (e.g., file-based resources).
@@ -43,6 +62,8 @@ public protocol MCPResourceProviding {
 	 - Throws: An error if the resource cannot be accessed
 	 */
 	func getNonTemplateResource(uri: URL) async throws -> [MCPResourceContent]
+	
+
 }
 
 
@@ -87,6 +108,17 @@ extension MCPResourceProviding {
 				return SimpleResource(uri: url, name: metadata.name, description: metadata.description, mimeType: metadata.mimeType)
 			}
 		}
+	}
+	
+	/// Default implementation of mcpResourceMetadata - returns empty array
+	/// This should be overridden by the MCPServerMacro
+	public var mcpResourceMetadata: [MCPResourceMetadata] {
+		return []
+	}
+	
+	public func callResourceAsFunction(_ name: String, arguments: [String: Sendable]) async throws -> Encodable & Sendable {
+		// Default implementation throws an error - this should be overridden by the macro
+		throw MCPResourceError.notFound(uri: "function://\(name)")
 	}
 	
 	public func getNonTemplateResource(uri: URL) async throws -> [MCPResourceContent] {
