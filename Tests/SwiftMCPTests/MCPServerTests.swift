@@ -246,3 +246,24 @@ func testDefaultNameAndVersion() async throws {
     #expect(name == "DefaultNameCalculator", "Server name should match class name")
     #expect(version == "1.0", "Server version should be default value")
 }
+
+@Test
+func testUnknownMethodReturnsMethodNotFoundError() async throws {
+    let calculator = Calculator()
+    
+    // Create a request with an unknown method
+    let request = JSONRPCRequest(
+        jsonrpc: "2.0",
+        id: 99,
+        method: "unknown_method",
+        params: [:]
+    )
+    
+    // Handle the request
+    let response = unwrap(await calculator.handleRequest(request) as? JSONRPCErrorResponse)
+    
+    #expect(response.jsonrpc == "2.0")
+    #expect(response.id == 99)
+    #expect(response.error.code == -32601)
+    #expect(response.error.message == "Method not found")
+}

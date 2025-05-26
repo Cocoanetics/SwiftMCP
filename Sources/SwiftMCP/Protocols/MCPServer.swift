@@ -102,7 +102,11 @@ public extension MCPServer {
                 return await handleToolCall(request)
                 
             default:
-                return nil
+                // Respond with JSON-RPC error for method not found
+                return JSONRPCErrorResponse(
+                    id: request.id,
+                    error: .init(code: -32601, message: "Method not found")
+                )
         }
     }
     
