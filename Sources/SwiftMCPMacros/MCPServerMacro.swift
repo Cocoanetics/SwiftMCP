@@ -264,7 +264,7 @@ internal func __callResourceFunction(_ name: String, enrichedArguments: [String:
 /// - Throws: An error if the resource function doesn't exist or cannot be called
 public func callResourceAsFunction(_ name: String, arguments: [String: Sendable]) async throws -> Encodable & Sendable {
    // Find the resource metadata by name
-   guard let metadata = mcpResourceMetadata.first(where: { $0.name == name }) else {
+   guard let metadata = mcpResourceMetadata.first(where: { $0.functionMetadata.name == name }) else {
       throw MCPResourceError.notFound(uri: "function://\\(name)")
    }
    
