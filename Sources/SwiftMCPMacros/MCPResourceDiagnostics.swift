@@ -11,6 +11,7 @@ enum MCPResourceDiagnostic: DiagnosticMessage {
     case missingParameterForPlaceholder(placeholder: String) // E001
     case unknownPlaceholder(parameterName: String) // E002
     case optionalParameterNeedsDefault(paramName: String) // E003
+    case invalidURITemplate(reason: String) // E004
 
     var message: String {
         switch self {
@@ -24,6 +25,8 @@ enum MCPResourceDiagnostic: DiagnosticMessage {
             return "Unknown placeholder '{\(name)}' – not present in template"
         case .optionalParameterNeedsDefault(let name):
             return "Optional parameter '\(name)' requires a default value"
+        case .invalidURITemplate(let reason):
+            return "Invalid URI template: \(reason)"
         }
     }
 
@@ -37,6 +40,8 @@ enum MCPResourceDiagnostic: DiagnosticMessage {
             return MessageID(domain: "SwiftMCP", id: "E002")
         case .optionalParameterNeedsDefault:
             return MessageID(domain: "SwiftMCP", id: "E003")
+        case .invalidURITemplate:
+            return MessageID(domain: "SwiftMCP", id: "E004")
         case .onlyFunctions:
             return MessageID(domain: "SwiftMCP", id: "OnlyFunctions")
         case .requiresStringLiteral:

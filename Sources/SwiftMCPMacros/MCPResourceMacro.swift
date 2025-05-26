@@ -41,13 +41,19 @@ public struct MCPResourceMacro: PeerMacro {
         }
         let template = stringLiteralTemplate.segments.description
         
-        let placeholderRegex = try NSRegularExpression(pattern: "\\{([^}]+)\\}")
-        let nsTemplate = template as NSString
-        let matches = placeholderRegex.matches(in: template, range: NSRange(location: 0, length: nsTemplate.length))
-        var placeholders: [String] = []
-        for m in matches {
-            placeholders.append(nsTemplate.substring(with: m.range(at: 1)))
+        // Validate the URI template according to RFC 6570
+        let validationResult = URITemplateValidator.validate(template)
+        if let validationError = validationResult.error {
+            let diag = Diagnostic(
+                node: Syntax(stringLiteralTemplate),
+                message: validationError
+            )
+            context.diagnose(diag)
+            // Continue processing even with validation errors for better developer experience
         }
+        
+        // Extract variables using the validator (which properly handles RFC 6570 syntax)
+        let placeholders = validationResult.variables
 
         var descriptionArg = "nil"
         if !commonMetadata.documentation.description.isEmpty {
