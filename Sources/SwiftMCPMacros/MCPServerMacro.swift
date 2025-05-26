@@ -255,16 +255,6 @@ internal func __callResourceFunction(_ name: String, enrichedArguments: [String:
 """
 			declarations.append(DeclSyntax(stringLiteral: internalCallResourceMethod))
 			
-			// Add callResourceAsFunction method that works like callTool - calls functions directly
-			var directCallSwitchCases = ""
-			for (index, funcName) in mcpResources.enumerated() {
-				directCallSwitchCases += "      case \"\(funcName)\":\n"
-				directCallSwitchCases += "         return try await __mcpDirectCall_\(funcName)(enrichedArguments)"
-				if index < mcpResources.count - 1 {
-					directCallSwitchCases += "\n"
-				}
-			}
-			
 			let callResourceAsFunctionMethod = """
 /// Calls a resource function by name with the provided arguments (for OpenAPI support)
 /// - Parameters:
@@ -281,12 +271,19 @@ public func callResourceAsFunction(_ name: String, arguments: [String: Sendable]
    // Enrich arguments with default values using the same logic as tools
    let enrichedArguments = try metadata.enrichArguments(arguments)
    
-   // Call the appropriate wrapper method based on the resource name
-   switch name {
-\(directCallSwitchCases)
-      default:
-         throw MCPResourceError.notFound(uri: "function://\\(name)")
+   // Get the first template (we know there's at least one since this is a function resource)
+   guard let template = metadata.uriTemplates.first else {
+      throw MCPResourceError.notFound(uri: "function://\\(name)")
    }
+   
+   // Construct URI from template and parameters
+   let constructedUri = try template.constructURI(with: enrichedArguments)
+   
+   // Call the existing resource wrapper method
+   let resourceContents = try await __callResourceFunction(metadata.functionMetadata.name, enrichedArguments: enrichedArguments, requestedUri: constructedUri, overrideMimeType: metadata.mimeType)
+   
+   // Return the first content's text or an empty string if no content
+   return resourceContents.first?.text ?? ""
 }
 """
 			declarations.append(DeclSyntax(stringLiteral: callResourceAsFunctionMethod))

@@ -120,11 +120,12 @@ struct OpenAPISpec: Codable {
         // Add MCPResource functions converted to tools
         if let resourceProvider = server as? MCPResourceProviding {
             let resourceAsTools = resourceProvider.mcpResourceMetadata.map { resourceMeta in
-                MCPToolMetadata(
-                    name: resourceMeta.name,
+
+                return MCPToolMetadata(
+                    name: resourceMeta.functionName,
                     description: resourceMeta.description,
                     parameters: resourceMeta.parameters,
-                    returnType: resourceMeta.returnType,
+                    returnType: OpenAIFileResponse.self,
                     returnTypeDescription: resourceMeta.returnTypeDescription,
                     isAsync: resourceMeta.isAsync,
                     isThrowing: resourceMeta.isThrowing,
@@ -151,14 +152,14 @@ struct OpenAPISpec: Codable {
                 let returnType = metadata.returnType!
                 
                 // Check if the type provides its own schema
-				if returnType is any MCPResourceContent.Type || returnType is [any MCPResourceContent].Type {
-					responseSchema = OpenAIFileResponse.schemaMetadata.schema
+                if returnType is any MCPResourceContent.Type || returnType is [any MCPResourceContent].Type {
+                    responseSchema = OpenAIFileResponse.schemaMetadata.schema
                     responseDescription = metadata.returnTypeDescription ?? "A file response containing name, mime type, and base64-encoded content"
                 } else if let schemaType = returnType as? any SchemaRepresentable.Type {
-					responseSchema = schemaType.schemaMetadata.schema
+                    responseSchema = schemaType.schemaMetadata.schema
                     responseDescription = metadata.returnTypeDescription ?? "A structured response"
                 } else if let caseIterableType = returnType as? any CaseIterable.Type {
-					responseSchema = .enum(values: caseIterableType.caseLabels, description: metadata.returnTypeDescription)
+                    responseSchema = .enum(values: caseIterableType.caseLabels, description: metadata.returnTypeDescription)
                     responseDescription = metadata.returnTypeDescription ?? "An enumerated value"
                 } else if let arrayType = returnType as? any ArrayWithSchemaRepresentableElements.Type {
                     responseSchema = arrayType.schema(description: metadata.returnTypeDescription)
@@ -176,7 +177,7 @@ struct OpenAPISpec: Codable {
                     } else if elementType == Bool.self {
                         itemSchema = .boolean()
                     } else if let schemaType = elementType as? any SchemaRepresentable.Type {
-						itemSchema = schemaType.schemaMetadata.schema
+                        itemSchema = schemaType.schemaMetadata.schema
                     } else if let caseIterableType = elementType as? any CaseIterable.Type {
                         itemSchema = .enum(values: caseIterableType.caseLabels)
                     } else {

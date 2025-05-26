@@ -89,5 +89,5 @@ public macro Schema() = #externalMacro(module: "SwiftMCPMacros", type: "SchemaMa
 /// @MCPResource(["users://{user_id}/profile", "users://{user_id}"])
 /// func getUserProfile(user_id: Int, lang: String = "en") -> ProfileResource
 /// ```
-@attached(peer, names: prefixed(__mcpResourceMetadata_), prefixed(__mcpResourceCall_), prefixed(__mcpDirectCall_))
+@attached(peer, names: prefixed(__mcpResourceMetadata_), prefixed(__mcpResourceCall_))
 public macro MCPResource<T>(_ template: T, name: String? = nil, mimeType: String? = nil) = #externalMacro(module: "SwiftMCPMacros", type: "MCPResourceMacro")

@@ -17,6 +17,9 @@ public enum MCPResourceError: LocalizedError {
     /// Internal execution error
     case executionError(underlying: Error)
     
+    /// Invalid URI template
+    case invalidTemplate(template: String)
+    
     public var errorDescription: String? {
         switch self {
         case .notFound(let uri):
@@ -29,6 +32,8 @@ public enum MCPResourceError: LocalizedError {
             return "Parameter '\(parameter)' type mismatch: expected \(expectedType), got '\(actualValue)'"
         case .executionError(let error):
             return "Resource execution error: \(error.localizedDescription)"
+        case .invalidTemplate(let template):
+            return "Invalid URI template: \(template)"
         }
     }
 } 
