@@ -122,7 +122,7 @@ struct OpenAPISpec: Codable {
             let resourceAsTools = resourceProvider.mcpResourceMetadata.map { resourceMeta in
 
                 return MCPToolMetadata(
-                    name: resourceMeta.functionName,
+                    name: resourceMeta.functionMetadata.name,
                     description: resourceMeta.description,
                     parameters: resourceMeta.parameters,
                     returnType: OpenAIFileResponse.self,
