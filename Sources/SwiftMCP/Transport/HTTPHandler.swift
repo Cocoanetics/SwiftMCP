@@ -92,6 +92,9 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 					await self.handleSimpleResponse(channel: channel, head: head, body: body)
 				}
 				
+			case (.GET, let path) where path.hasPrefix("/mcp"):
+				handleSSE(context: context, head: head, body: body, sendEndpoint: false)
+				
 			// SSE Endpoint
 				
 			case (.GET, let path) where path.hasPrefix("/sse"):
@@ -197,6 +200,14 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 		do {
 			let decoder = JSONDecoder()
 			decoder.dateDecodingStrategy = .iso8601
+			
+			// First check if it's an empty result from ping, this would fail for a request where method is required
+			if let empty = try? decoder.decode(JSONRPCEmptyResponse.self, from: body), empty.result == [:] {
+				// Empty ping response - send 202 Accepted
+				await sendResponseAsync(channel: channel, status: .accepted, headers: headers, body: nil)
+				return
+			}
+			
 			let request = try decoder.decode(JSONRPCRequest.self, from: body)
 
 			// Call the server handler (assume async)
@@ -231,15 +242,15 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 			headers.add(name: "Content-Type", value: "application/json")
 			headers.add(name: "Access-Control-Allow-Origin", value: "*")
 			
-			await sendResponseAsync(channel: channel, status: .ok, headers: headers, body: buffer)
-		}
-		catch
-		{
+			await sendResponseAsync(channel: channel, status: status, headers: headers, body: buffer)
+		} catch {
 			logger.error("Error encoding response: \(error.localizedDescription)")
+			// Don't try to send another response here - encoding failures should be handled at a higher level
+			// The channel may already have started writing the response
 		}
 	}
 	
-	private func handleSSE(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?) {
+	private func handleSSE(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?, sendEndpoint: Bool = true) {
 		
 		precondition(head.method == .GET)
 		
@@ -271,14 +282,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 		logger.info("Registering SSE channel for client \(clientId)")
 		transport.registerSSEChannel(context.channel, id: UUID(uuidString: clientId)!)
 		
-		// Then send endpoint event with client ID in URL
-		guard let endpointUrl = self.endpointUrl(from: head, clientId: clientId) else {
-			logger.error("Failed to construct endpoint URL")
-			context.close(promise: nil)
-			return
-		}
-		
-		// Set up SSE response headers
+		// Set up SSE response headers (ALWAYS send these for any SSE request)
 		var headers = HTTPHeaders()
 		headers.add(name: "Content-Type", value: "text/event-stream")
 		headers.add(name: "Cache-Control", value: "no-cache")
@@ -294,9 +298,18 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 		context.write(wrapOutboundOut(.head(response)), promise: nil)
 		context.flush()
 		
-		logger.info("Sending endpoint event with URL: \(endpointUrl)")
-		let message = SSEMessage(name: "endpoint", data: endpointUrl.absoluteString)
-		context.channel.sendSSE(message)
+		// Conditionally send endpoint event (only for old protocol)
+		if sendEndpoint {
+			guard let endpointUrl = self.endpointUrl(from: head, clientId: clientId) else {
+				logger.error("Failed to construct endpoint URL")
+				context.close(promise: nil)
+				return
+			}
+			
+			logger.info("Sending endpoint event with URL: \(endpointUrl)")
+			let message = SSEMessage(name: "endpoint", data: endpointUrl.absoluteString)
+			context.channel.sendSSE(message)
+		}
 		
 		logger.info("SSE connection setup complete for client \(clientId)")
 	}

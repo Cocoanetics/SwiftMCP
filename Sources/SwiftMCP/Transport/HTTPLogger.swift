@@ -31,7 +31,7 @@ final class HTTPLogger: ChannelDuplexHandler, @unchecked Sendable {
 			switch reqPart {
 			case .head(let head):
 				// Check if this is an SSE connection
-				if head.uri.hasPrefix("/sse") {
+					if head.uri.hasPrefix("/sse") || head.uri.hasPrefix("/mpc") && head.method == .GET {
 					isSSEConnection = true
 				}
 				
