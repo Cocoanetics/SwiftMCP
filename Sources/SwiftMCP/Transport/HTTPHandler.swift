@@ -159,9 +159,13 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 	private func handleSimpleResponse(channel: Channel, head: HTTPRequestHead, body: ByteBuffer?) async {
 		precondition(head.method == .POST)
 
+		// Extract or generate client ID
+		let clientId = head.headers["Mcp-Session-Id"].first ?? UUID().uuidString
+		
 		var headers = HTTPHeaders()
 		headers.add(name: "Content-Type", value: "application/json")
 		headers.add(name: "Access-Control-Allow-Origin", value: "*")
+		headers.add(name: "Mcp-Session-Id", value: clientId)
 
 		// Validate Accept header
 		let acceptHeader = head.headers["accept"].first ?? ""
@@ -186,7 +190,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 		// Validate token
 		if case .unauthorized(let message) = transport.authorizationHandler(token) {
 			let errorMessage = JSONRPCErrorResponse(error: .init(code: 401, message: "Unauthorized: \(message)"))
-			await sendJSONResponse(channel: channel, status: .unauthorized, json: errorMessage)
+			await sendJSONResponse(channel: channel, status: .unauthorized, json: errorMessage, sessionId: clientId)
 			return
 		}
 
@@ -203,7 +207,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 			
 			// First check if it's an empty result from ping, this would fail for a request where method is required
 			if let empty = try? decoder.decode(JSONRPCEmptyResponse.self, from: body), empty.result == [:] {
-				// Empty ping response - send 202 Accepted
+				// Empty ping response - send 202 Accepted with client ID
 				await sendResponseAsync(channel: channel, status: .accepted, headers: headers, body: nil)
 				return
 			}
@@ -218,18 +222,19 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 			}
 
 			print(response)
-			await sendJSONResponse(channel: channel, status: .ok, json: response)
+			await sendJSONResponse(channel: channel, status: .ok, json: response, sessionId: clientId)
 		} catch {
 			logger.error("Failed to decode or handle JSON-RPC message: \(error)")
 			let response = JSONRPCErrorResponse(error: .init(code: -32600, message: "Invalid Request: \(error)"))
-			await sendJSONResponse(channel: channel, status: .badRequest, json: response)
+			await sendJSONResponse(channel: channel, status: .badRequest, json: response, sessionId: clientId)
 		}
 	}
 	
 	private func sendJSONResponse<T: Encodable>(
 		channel: Channel,
 		status: HTTPResponseStatus,
-		json: T
+		json: T,
+		sessionId: String? = nil
 	) async {
 		do {
 			let encoder = JSONEncoder()
@@ -241,6 +246,9 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 			var headers = HTTPHeaders()
 			headers.add(name: "Content-Type", value: "application/json")
 			headers.add(name: "Access-Control-Allow-Origin", value: "*")
+			if let sessionId = sessionId {
+				headers.add(name: "Mcp-Session-Id", value: sessionId)
+			}
 			
 			await sendResponseAsync(channel: channel, status: status, headers: headers, body: buffer)
 		} catch {
@@ -254,6 +262,10 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 		
 		precondition(head.method == .GET)
 		
+		// Extract or generate session/client ID (they are the same thing)
+		let sessionId = head.headers["Mcp-Session-Id"].first ?? UUID().uuidString
+		let clientId = sessionId  // Client ID and session ID are the same
+		
 		// Validate SSE headers
 		let acceptHeader = head.headers["accept"].first ?? ""
 		
@@ -266,16 +278,15 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 		let remoteAddress = context.channel.remoteAddress?.description ?? "unknown"
 		let userAgent = head.headers["user-agent"].first ?? "unknown"
 		
-		// Generate client ID
-		let clientId = UUID().uuidString
 		self.clientId = clientId
 		
 		logger.info("""
 			SSE connection attempt:
-			- Client ID: \(clientId)
+			- Client/Session ID: \(clientId)
 			- Remote: \(remoteAddress)
 			- User-Agent: \(userAgent)
 			- Accept: \(acceptHeader)
+			- Protocol: \(sendEndpoint ? "Old (HTTP+SSE)" : "New (Streamable HTTP)")
 			""")
 		
 		// Register the channel with client ID
@@ -289,6 +300,11 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 		headers.add(name: "Connection", value: "keep-alive")
 		headers.add(name: "Access-Control-Allow-Methods", value: "GET")
 		headers.add(name: "Access-Control-Allow-Headers", value: "*")
+		
+		// Include session ID in response headers for new protocol
+		if !sendEndpoint {
+			headers.add(name: "Mcp-Session-Id", value: sessionId)
+		}
 		
 		let response = HTTPResponseHead(version: head.version,
 									 status: .ok,
