@@ -78,11 +78,19 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 		
 		let serverPath = "/\(transport.server.serverName.asModelName)"
 		
+		let channel = context.channel
+		
 		switch (head.method, head.uri) {
 				
 			// Handle all OPTIONS requests in one case
 			case (.OPTIONS, _):
 				handleOPTIONS(channel: context.channel, head: head)
+
+			// Streamable HTTP Endpoint
+			case (.POST, let path) where path.hasPrefix("/mcp"):
+				Task {
+					await self.handleSimpleResponse(channel: channel, head: head, body: body)
+				}
 				
 			// SSE Endpoint
 				
@@ -142,6 +150,92 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 				// Fallback for unknown endpoints
 			default:
 				sendResponse(channel: context.channel, status: .notFound)
+		}
+	}
+	
+	private func handleSimpleResponse(channel: Channel, head: HTTPRequestHead, body: ByteBuffer?) async {
+		precondition(head.method == .POST)
+
+		var headers = HTTPHeaders()
+		headers.add(name: "Content-Type", value: "application/json")
+		headers.add(name: "Access-Control-Allow-Origin", value: "*")
+
+		// Validate Accept header
+		let acceptHeader = head.headers["accept"].first ?? ""
+		guard acceptHeader.lowercased().contains("application/json") else {
+			logger.warning("Rejected non-json request (Accept: \(acceptHeader))")
+			let buffer = channel.allocator.buffer(string: "Client must accept application/json.")
+			await sendResponseAsync(channel: channel, status: .badRequest, headers: headers, body: buffer)
+			return
+		}
+		
+		// Check authorization if handler is set
+		var token: String?
+		
+		// First try to get token from Authorization header
+		if let authHeader = head.headers["Authorization"].first {
+			let parts = authHeader.split(separator: " ")
+			if parts.count == 2 && parts[0].lowercased() == "bearer" {
+				token = String(parts[1])
+			}
+		}
+		
+		// Validate token
+		if case .unauthorized(let message) = transport.authorizationHandler(token) {
+			let errorMessage = JSONRPCErrorResponse(error: .init(code: 401, message: "Unauthorized: \(message)"))
+			await sendJSONResponse(channel: channel, status: .unauthorized, json: errorMessage)
+			return
+		}
+
+		guard let body = body else {
+			logger.error("POST /mcp received no body.")
+			let buffer = channel.allocator.buffer(string: "Request body required.")
+			await sendResponseAsync(channel: channel, status: .badRequest, headers: headers, body: buffer)
+			return
+		}
+
+		do {
+			let decoder = JSONDecoder()
+			decoder.dateDecodingStrategy = .iso8601
+			let request = try decoder.decode(JSONRPCRequest.self, from: body)
+
+			// Call the server handler (assume async)
+			guard let response = await transport.server.handleRequest(request) else {
+				// No response to send (e.g., notification)
+				await sendResponseAsync(channel: channel, status: .accepted, headers: headers, body: nil)
+				return
+			}
+
+			print(response)
+			await sendJSONResponse(channel: channel, status: .ok, json: response)
+		} catch {
+			logger.error("Failed to decode or handle JSON-RPC message: \(error)")
+			let response = JSONRPCErrorResponse(error: .init(code: -32600, message: "Invalid Request: \(error)"))
+			await sendJSONResponse(channel: channel, status: .badRequest, json: response)
+		}
+	}
+	
+	private func sendJSONResponse<T: Encodable>(
+		channel: Channel,
+		status: HTTPResponseStatus,
+		json: T
+	) async {
+		do {
+			let encoder = JSONEncoder()
+			encoder.dateEncodingStrategy = .iso8601WithTimeZone
+			let jsonData = try encoder.encode(json)
+			var buffer = channel.allocator.buffer(capacity: jsonData.count)
+			buffer.writeBytes(jsonData)
+			
+			var headers = HTTPHeaders()
+			headers.add(name: "Content-Type", value: "application/json")
+			headers.add(name: "Access-Control-Allow-Origin", value: "*")
+			
+			await sendResponseAsync(channel: channel, status: .ok, headers: headers, body: buffer)
+		}
+		catch
+		{
+			logger.error("Error encoding response: \(error.localizedDescription)")
 		}
 	}
 	
@@ -270,12 +364,15 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 	}
 	
 	/// Async version of sendResponse that works with Channel instead of ChannelHandlerContext
-	private func sendResponseAsync(channel: Channel, status: HTTPResponseStatus, headers: HTTPHeaders? = nil) async {
+	private func sendResponseAsync(channel: Channel, status: HTTPResponseStatus, headers: HTTPHeaders? = nil, body: ByteBuffer? = nil) async {
 		let response = HTTPResponseHead(version: .http1_1,
 									 status: status,
 									 headers: headers ?? HTTPHeaders())
 		
 		_ = channel.write(HTTPServerResponsePart.head(response))
+		if let body = body {
+			_ = channel.write(HTTPServerResponsePart.body(.byteBuffer(body)))
+		}
 		_ = channel.write(HTTPServerResponsePart.end(nil))
 		channel.flush()
 	}
@@ -519,27 +616,6 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 		}
 	}
 
-	/// Async version of sendResponse that works with Channel instead of ChannelHandlerContext
-	private func sendResponseAsync(channel: Channel, status: HTTPResponseStatus, headers: HTTPHeaders? = nil, body: ByteBuffer? = nil) async {
-		var responseHeaders = headers ?? HTTPHeaders()
-		
-		if body != nil {
-			responseHeaders.add(name: "Content-Type", value: "application/json")
-		}
-		
-		responseHeaders.add(name: "Access-Control-Allow-Origin", value: "*")
-		
-		let head = HTTPResponseHead(version: .http1_1, status: status, headers: responseHeaders)
-		_ = channel.write(HTTPServerResponsePart.head(head))
-		
-		if let body = body {
-			_ = channel.write(HTTPServerResponsePart.body(.byteBuffer(body)))
-		}
-		
-		_ = channel.write(HTTPServerResponsePart.end(nil))
-		channel.flush()
-	}
-	
 	// MARK: - Helpers
 	
 	fileprivate func endpointUrl(from head: HTTPRequestHead, clientId: String) -> URL? {
