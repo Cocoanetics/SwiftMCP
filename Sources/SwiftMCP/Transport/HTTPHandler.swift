@@ -189,7 +189,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 		
 		// Validate token
 		if case .unauthorized(let message) = transport.authorizationHandler(token) {
-			let errorMessage = JSONRPCErrorResponse(error: .init(code: 401, message: "Unauthorized: \(message)"))
+			let errorMessage = JSONRPCErrorResponse(id: nil, error: .init(code: 401, message: "Unauthorized: \(message)"))
 			await sendJSONResponse(channel: channel, status: .unauthorized, json: errorMessage, sessionId: clientId)
 			return
 		}
@@ -212,7 +212,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 				return
 			}
 			
-			let request = try decoder.decode(JSONRPCRequest.self, from: body)
+			let request = try decoder.decode(JSONRPCMessage.self, from: body)
 
 			// Call the server handler (assume async)
 			guard let response = await transport.server.handleRequest(request) else {
@@ -225,7 +225,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 			await sendJSONResponse(channel: channel, status: .ok, json: response, sessionId: clientId)
 		} catch {
 			logger.error("Failed to decode or handle JSON-RPC message: \(error)")
-			let response = JSONRPCErrorResponse(error: .init(code: -32600, message: "Invalid Request: \(error)"))
+			let response = JSONRPCErrorResponse(id: nil, error: .init(code: -32600, message: "Invalid Request: \(error)"))
 			await sendJSONResponse(channel: channel, status: .badRequest, json: response, sessionId: clientId)
 		}
 	}
@@ -354,7 +354,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 		
 		// Validate token
 		if case .unauthorized(let message) = transport.authorizationHandler(token) {
-			let errorMessage = JSONRPCErrorResponse(error: .init(code: 401, message: "Unauthorized: \(message)"))
+			let errorMessage = JSONRPCErrorResponse(id: nil, error: .init(code: 401, message: "Unauthorized: \(message)"))
 			
 			let data = try! JSONEncoder().encode(errorMessage)
 			let errorResponse = String(data: data, encoding: .utf8)!
@@ -381,7 +381,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 				return
 			}
 			
-			let request = try decoder.decode(JSONRPCRequest.self, from: body)
+			let request = try decoder.decode(JSONRPCMessage.self, from: body)
 			
 			// Handle the response with client ID
 			transport.handleJSONRPCRequest(request, from: clientId)

@@ -68,14 +68,15 @@ public extension MCPServer {
      */
     func handleRequest(_ request: JSONRPCMessage) async -> JSONRPCMessage? {
 		
-		guard let request = request as? JSONRPCRequest else {
+		guard case .request(let requestData) = request else {
 			return nil
 		}
 		
         // Prepare the response based on the method
-        switch request.method {
+        switch requestData.method {
             case "initialize":
-                return createInitializeResponse(id: request.id ?? 0)
+                let initResponse = createInitializeResponse(id: requestData.id ?? 0)
+                return .initializeResponse(initResponse)
                 
             case "notifications/initialized":
                 return nil
@@ -84,29 +85,37 @@ public extension MCPServer {
 				return nil
                 
             case "ping":
-                return createPingResponse(id: request.id ?? 0)
+                let pingResponse = createPingResponse(id: requestData.id ?? 0)
+                return .response(pingResponse)
                 
             case "tools/list":
-                return createToolsListResponse(id: request.id ?? 0)
+                let toolsResponse = createToolsListResponse(id: requestData.id ?? 0)
+                return .response(toolsResponse)
                 
             case "resources/list":
-                return await createResourcesListResponse(id: request.id ?? 0)
+                let resourcesResponse = await createResourcesListResponse(id: requestData.id ?? 0)
+                return .response(resourcesResponse)
                 
             case "resources/templates/list":
-                return await createResourceTemplatesListResponse(id: request.id ?? 0)
+                let templatesResponse = await createResourceTemplatesListResponse(id: requestData.id ?? 0)
+                return templatesResponse
                 
             case "resources/read":
-                return await createResourcesReadResponse(id: request.id ?? 0, request: request)
+                return await createResourcesReadResponse(id: requestData.id ?? 0, request: requestData)
                 
             case "tools/call":
-                return await handleToolCall(request)
+                if let toolResponse = await handleToolCall(requestData) {
+                    return .response(toolResponse)
+                }
+                return nil
                 
             default:
                 // Respond with JSON-RPC error for method not found
-                return JSONRPCErrorResponse(
-                    id: request.id,
+                let errorResponse = JSONRPCMessage.JSONRPCErrorResponseData(
+                    id: requestData.id,
                     error: .init(code: -32601, message: "Method not found")
                 )
+                return .errorResponse(errorResponse)
         }
     }
     
@@ -152,7 +161,7 @@ public extension MCPServer {
      - Parameter request: The JSON-RPC request containing the tool call details
      - Returns: A JSON-RPC message containing the tool execution result
      */
-    private func handleToolCall(_ request: JSONRPCRequest) async -> JSONRPCResponse? {
+    private func handleToolCall(_ request: JSONRPCMessage.JSONRPCRequestData) async -> JSONRPCMessage.JSONRPCResponseData? {
 		
 		guard let toolProvider = self as? MCPToolProviding else {
 			return nil
@@ -275,7 +284,7 @@ public extension MCPServer {
 	 - Parameter id: The request ID to include in the response
 	 - Returns: A JSON-RPC message containing the resources list
 	 */
-	func createResourcesListResponse(id: Int) async -> JSONRPCMessage {
+	func createResourcesListResponse(id: Int) async -> JSONRPCMessage.JSONRPCResponseData {
 		
 		guard let resourceProvider = self as? MCPResourceProviding else
 		{
@@ -314,7 +323,7 @@ public extension MCPServer {
        - request: The original JSON-RPC request
      - Returns: A JSON-RPC message containing the resource content or an error
      */
-	func createResourcesReadResponse(id: Int, request: JSONRPCRequest) async -> JSONRPCMessage {
+	func createResourcesReadResponse(id: Int, request: JSONRPCMessage.JSONRPCRequestData) async -> JSONRPCMessage {
 		
 		guard let resourceProvider = self as? MCPResourceProviding else
 		{
@@ -326,13 +335,14 @@ public extension MCPServer {
 				],
 				"isError": true
 			]
-			return response
+			return .response(response)
 		}
 		
 		// Extract the URI from the request params
 		guard let uriString = request.params?["uri"]?.value as? String,
 				  let uri = URL(string: uriString) else {
-				return JSONRPCErrorResponse(id: id, error: .init(code: -32602, message: "Invalid or missing URI parameter"))
+				let errorResponse = JSONRPCErrorResponse(id: id, error: .init(code: -32602, message: "Invalid or missing URI parameter"))
+				return .errorResponse(errorResponse)
 			}
 			
 			do {
@@ -341,12 +351,15 @@ public extension MCPServer {
 				
 				if !resourceContentArray.isEmpty
 				{
-					return JSONRPCResponse(id: id, result: ["contents": AnyCodable(resourceContentArray)])
+					let response = JSONRPCResponse(id: id, result: ["contents": AnyCodable(resourceContentArray)])
+					return .response(response)
 				} else {
-					return JSONRPCErrorResponse(id: id, error: .init(code: -32001, message: "Resource not found: \(uri.absoluteString)"))
+					let errorResponse = JSONRPCErrorResponse(id: id, error: .init(code: -32001, message: "Resource not found: \(uri.absoluteString)"))
+					return .errorResponse(errorResponse)
 				}
 			} catch {
-				return JSONRPCErrorResponse(id: id, error: .init(code: -32000, message: "Error getting resource: \(error.localizedDescription)"))
+				let errorResponse = JSONRPCErrorResponse(id: id, error: .init(code: -32000, message: "Error getting resource: \(error.localizedDescription)"))
+				return .errorResponse(errorResponse)
 			}
 		}
     
@@ -368,7 +381,7 @@ public extension MCPServer {
 				],
 				"isError": true
 			]
-			return response
+			return .response(response)
 		}
 		
                 let templates = await resourceProvider.mcpResourceTemplates
@@ -378,7 +391,7 @@ public extension MCPServer {
         response.result = [
             "resourceTemplates": AnyCodable(templates)
         ]
-        return response
+        return .response(response)
     }
     
     /**

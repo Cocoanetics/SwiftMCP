@@ -8,15 +8,33 @@ func testInitializeRequest() async throws {
     let calculator = Calculator()
     
     // Create a request
-    let request = JSONRPCRequest(
-        jsonrpc: "2.0",
+    let request = JSONRPCMessage.request(
         id: 1,
         method: "initialize",
-        params: [:]
+        params: [
+            "protocolVersion": AnyCodable("2024-11-05"),
+            "capabilities": AnyCodable([
+                "experimental": [:],
+                "resources": ["listChanged": false],
+                "tools": ["listChanged": false]
+            ] as [String: Any]),
+            "clientInfo": AnyCodable([
+                "name": "TestClient",
+                "version": "1.0"
+            ] as [String: Any])
+        ]
     )
     
     // Handle the request
-    let response = unwrap(await calculator.handleRequest(request) as? JSONRPCInitializeResponse)
+    guard let message = await calculator.handleRequest(request) else {
+        #expect(Bool(false), "Expected a response message")
+        return
+    }
+    
+    guard case .initializeResponse(let response) = message else {
+        #expect(Bool(false), "Expected initializeResponse case")
+        return
+    }
     
     #expect(response.jsonrpc == "2.0")
     #expect(response.id == 1)
@@ -52,16 +70,21 @@ func testToolsListRequest() async throws {
     let calculator = Calculator()
     
     // Create a request
-    let request = JSONRPCRequest(
-        jsonrpc: "2.0",
+    let request = JSONRPCMessage.request(
         id: 2,
         method: "tools/list",
         params: [:]
     )
     
     // Handle the request
-    let response = unwrap(await calculator.handleRequest(request) as? JSONRPCResponse)
-    
+    guard let message = await calculator.handleRequest(request) else {
+        #expect(Bool(false), "Expected a response message")
+        return
+    }
+    guard case .response(let response) = message else {
+        #expect(Bool(false), "Expected response case")
+        return
+    }
     #expect(response.jsonrpc == "2.0")
     #expect(response.id == 2)
     #expect(response.result != nil)
@@ -87,8 +110,7 @@ func testToolCallRequest() async throws {
     let calculator = Calculator()
     
     // Create a request
-    let request = JSONRPCRequest(
-        jsonrpc: "2.0",
+    let request = JSONRPCMessage.request(
         id: 3,
         method: "tools/call",
         params: [
@@ -101,8 +123,14 @@ func testToolCallRequest() async throws {
     )
     
     // Handle the request
-    let response = unwrap(await calculator.handleRequest(request) as? JSONRPCResponse)
-    
+    guard let message = await calculator.handleRequest(request) else {
+        #expect(Bool(false), "Expected a response message")
+        return
+    }
+    guard case .response(let response) = message else {
+        #expect(Bool(false), "Expected response case")
+        return
+    }
     #expect(response.jsonrpc == "2.0")
     #expect(response.id == 3)
     #expect(response.result != nil)
@@ -125,8 +153,7 @@ func testToolCallRequestWithError() async throws {
     let calculator = Calculator()
     
     // Create a request with an unknown tool
-    let request = JSONRPCRequest(
-        jsonrpc: "2.0",
+    let request = JSONRPCMessage.request(
         id: 4,
         method: "tools/call",
         params: [
@@ -136,8 +163,14 @@ func testToolCallRequestWithError() async throws {
     )
     
     // Handle the request
-    let response = unwrap(await calculator.handleRequest(request) as? JSONRPCResponse)
-    
+    guard let message = await calculator.handleRequest(request) else {
+        #expect(Bool(false), "Expected a response message")
+        return
+    }
+    guard case .response(let response) = message else {
+        #expect(Bool(false), "Expected response case")
+        return
+    }
     #expect(response.jsonrpc == "2.0")
     #expect(response.id == 4)
     #expect(response.result != nil)
@@ -168,8 +201,7 @@ func testToolCallRequestWithInvalidArgument() async throws {
     let calculator = Calculator()
     
     // Create a request with an invalid argument type
-    let request = JSONRPCRequest(
-        jsonrpc: "2.0",
+    let request = JSONRPCMessage.request(
         id: 5,
         method: "tools/call",
         params: [
@@ -182,8 +214,14 @@ func testToolCallRequestWithInvalidArgument() async throws {
     )
     
     // Handle the request
-    let response = unwrap(await calculator.handleRequest(request) as? JSONRPCResponse)
-    
+    guard let message = await calculator.handleRequest(request) else {
+        #expect(Bool(false), "Expected a response message")
+        return
+    }
+    guard case .response(let response) = message else {
+        #expect(Bool(false), "Expected response case")
+        return
+    }
     #expect(response.jsonrpc == "2.0")
     #expect(response.id == 5)
     #expect(response.result != nil)
@@ -252,16 +290,21 @@ func testUnknownMethodReturnsMethodNotFoundError() async throws {
     let calculator = Calculator()
     
     // Create a request with an unknown method
-    let request = JSONRPCRequest(
-        jsonrpc: "2.0",
+    let request = JSONRPCMessage.request(
         id: 99,
         method: "unknown_method",
         params: [:]
     )
     
     // Handle the request
-    let response = unwrap(await calculator.handleRequest(request) as? JSONRPCErrorResponse)
-    
+    guard let message = await calculator.handleRequest(request) else {
+        #expect(Bool(false), "Expected a response message")
+        return
+    }
+    guard case .errorResponse(let response) = message else {
+        #expect(Bool(false), "Expected errorResponse case")
+        return
+    }
     #expect(response.jsonrpc == "2.0")
     #expect(response.id == 99)
     #expect(response.error.code == -32601)

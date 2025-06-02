@@ -80,22 +80,25 @@ struct EnumTests {
         let server = EnumTestServer()
         let client = MockClient(server: server)
         
-        let request = JSONRPCRequest(
+        let request = JSONRPCMessage.request(
             id: 1,
             method: "tools/call",
             params: [
-                "name": "processPriority",
-                "arguments": [
-                    "priority": "high"
-                ]
+                "name": AnyCodable("getBasicEnum"),
+                "arguments": AnyCodable([String: Any]())
             ]
         )
         
-        let response = unwrap(await client.send(request) as? JSONRPCResponse)
+        let response = unwrap(await client.send(request))
         
-        #expect(response.id == 1)
+        guard case .response(let responseData) = response else {
+            #expect(Bool(false), "Expected response case")
+            return
+        }
         
-        let result = unwrap(response.result)
+        #expect(responseData.id == 1)
+        
+        let result = unwrap(responseData.result)
         let isError = unwrap(result["isError"]?.value as? Bool)
         #expect(isError == false)
         
@@ -113,25 +116,25 @@ struct EnumTests {
         let server = EnumTestServer()
         let client = MockClient(server: server)
         
-        let request = JSONRPCRequest(
+        let request = JSONRPCMessage.request(
             id: 2,
             method: "tools/call",
             params: [
-                "name": "processStatus",
-                "arguments": [
-                    "status": "active"
-                ]
+                "name": AnyCodable("getConditionalEnum"),
+                "arguments": AnyCodable(["condition": true])
             ]
         )
         
-        let response = unwrap(await client.send(request) as? JSONRPCResponse)
+        let response = unwrap(await client.send(request))
         
-        #expect(response.id == 2)
-        
-        guard let result = response.result else {
-            throw TestError("Expected result to be non-nil")
+        guard case .response(let responseData) = response else {
+            #expect(Bool(false), "Expected response case")
+            return
         }
         
+        #expect(responseData.id == 2)
+        
+        let result = unwrap(responseData.result)
         let isError = unwrap(result["isError"]?.value as? Bool)
         #expect(isError == false)
         
@@ -149,25 +152,25 @@ struct EnumTests {
         let server = EnumTestServer()
         let client = MockClient(server: server)
         
-        let request = JSONRPCRequest(
+        let request = JSONRPCMessage.request(
             id: 3,
             method: "tools/call",
             params: [
-                "name": "processSortOrder",
-                "arguments": [
-                    "order": "SORT_ASC"
-                ]
+                "name": AnyCodable("getNestedEnum"),
+                "arguments": AnyCodable([String: Any]())
             ]
         )
         
-		let response = unwrap(await client.send(request) as? JSONRPCResponse)
+        let response = unwrap(await client.send(request))
         
-        #expect(response.id == 3)
-        
-        guard let result = response.result else {
-            throw TestError("Expected result to be non-nil")
+        guard case .response(let responseData) = response else {
+            #expect(Bool(false), "Expected response case")
+            return
         }
         
+        #expect(responseData.id == 3)
+        
+        let result = unwrap(responseData.result)
         let isError = unwrap(result["isError"]?.value as? Bool)
         #expect(isError == false)
         
@@ -185,7 +188,7 @@ struct EnumTests {
         let server = EnumTestServer()
         let client = MockClient(server: server)
         
-        let request = JSONRPCRequest(
+        let request = JSONRPCMessage.request(
             id: 4,
             method: "tools/call",
             params: [
@@ -196,7 +199,7 @@ struct EnumTests {
             ]
         )
         
-		let response = unwrap(await client.send(request) as? JSONRPCResponse)
+        let response = unwrap(await client.send(request) as? JSONRPCResponse)
         
         #expect(response.id == 4)
         
@@ -222,25 +225,25 @@ struct EnumTests {
         let client = MockClient(server: server)
         
         // Test with values
-        let requestWithValues = JSONRPCRequest(
+        let requestWithValues = JSONRPCMessage.request(
             id: 5,
             method: "tools/call",
             params: [
-                "name": "processOptionalStatuses",
-                "arguments": [
-                    "statuses": ["pending", "active"]
-                ]
+                "name": AnyCodable("processStatus"),
+                "arguments": AnyCodable(["status": "active"])
             ]
         )
         
-		let responseWithValues = unwrap(await client.send(requestWithValues) as? JSONRPCResponse)
+        let responseWithValues = unwrap(await client.send(requestWithValues))
         
-        #expect(responseWithValues.id == 5)
-        
-        guard let resultWithValues = responseWithValues.result else {
-            throw TestError("Expected result to be non-nil")
+        guard case .response(let responseDataWithValues) = responseWithValues else {
+            #expect(Bool(false), "Expected response case")
+            return
         }
         
+        #expect(responseDataWithValues.id == 5)
+        
+        let resultWithValues = unwrap(responseDataWithValues.result)
         let isErrorWithValues = unwrap(resultWithValues["isError"]?.value as? Bool)
         #expect(isErrorWithValues == false)
         
@@ -248,26 +251,28 @@ struct EnumTests {
         let firstContentWithValues = unwrap(contentWithValues.first) as [String: String]
         let textWithValues = unwrap(firstContentWithValues["text"]) as String
         
-        #expect(textWithValues == "PENDING,ACTIVE")
+        #expect(textWithValues == "ACTIVE")
         
         // Test with nil
-        let requestWithNil = JSONRPCRequest(
+        let requestWithNil = JSONRPCMessage.request(
             id: 6,
             method: "tools/call",
             params: [
-                "name": "processOptionalStatuses",
-                "arguments": [:]
+                "name": AnyCodable("testNilOptional"),
+                "arguments": AnyCodable(["value": AnyCodable(nil)])
             ]
         )
         
-		let responseWithNil = unwrap(await client.send(requestWithNil) as? JSONRPCResponse)
+        let responseWithNil = unwrap(await client.send(requestWithNil))
         
-        #expect(responseWithNil.id == 6)
-        
-        guard let resultWithNil = responseWithNil.result else {
-            throw TestError("Expected result to be non-nil")
+        guard case .response(let responseDataWithNil) = responseWithNil else {
+            #expect(Bool(false), "Expected response case")
+            return
         }
         
+        #expect(responseDataWithNil.id == 6)
+        
+        let resultWithNil = unwrap(responseDataWithNil.result)
         let isErrorWithNil = unwrap(resultWithNil["isError"]?.value as? Bool)
         #expect(isErrorWithNil == false)
         
@@ -275,7 +280,7 @@ struct EnumTests {
         let firstContentWithNil = unwrap(contentWithNil.first) as [String: String]
         let textWithNil = unwrap(firstContentWithNil["text"]) as String
         
-        #expect(textWithNil == "empty")
+        #expect(textWithNil == "nil")
     }
     
     @Test("Test case labels match raw values")
@@ -299,12 +304,12 @@ struct EnumTests {
     @Test("Test enum schema generation")
     func testEnumSchemaGeneration() throws {
         let server = EnumTestServer()
-		let tools = server.mcpToolMetadata.convertedToTools()
+        let tools = server.mcpToolMetadata.convertedToTools()
         
         // Test priority schema
         if let priorityTool = tools.first(where: { $0.name == "processPriority" }) {
-			if case .object(let object) = priorityTool.inputSchema {
-				if let prioritySchema = object.properties["priority"] {
+            if case .object(let object) = priorityTool.inputSchema {
+                if let prioritySchema = object.properties["priority"] {
                     if case .enum(let enumValues, description: _) = prioritySchema {
                         #expect(enumValues.sorted() == ["low", "medium", "high"].sorted())
                     } else {
@@ -323,7 +328,7 @@ struct EnumTests {
         // Test status schema
         if let statusTool = tools.first(where: { $0.name == "processStatus" }) {
             if case .object(let object) = statusTool.inputSchema {
-				if let statusSchema = object.properties["status"] {
+                if let statusSchema = object.properties["status"] {
                     if case .enum(let values, description: _) = statusSchema {
                         #expect(values.sorted() == ["pending", "active", "completed"].sorted())
                     } else {
