@@ -424,7 +424,7 @@ public extension MCPServer {
 					"uriTemplate": template.uriTemplate,
 					"name": template.name,
 					"description": template.description,
-					"mimeType": template.mimeType
+					"mimeType": template.mimeType ?? "text/plain"
 				]
 			})
 		])
