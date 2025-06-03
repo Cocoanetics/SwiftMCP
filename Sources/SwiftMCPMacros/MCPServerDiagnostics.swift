@@ -11,7 +11,7 @@ import SwiftSyntaxMacros
  including errors and warnings related to server declarations.
  */
 enum MCPServerDiagnostic: DiagnosticMessage {
-/// Error when the macro is applied to a non-class declaration
+    /// Error when the macro is applied to a non-class declaration
     case requiresReferenceType(typeName: String)
 
     var message: String {

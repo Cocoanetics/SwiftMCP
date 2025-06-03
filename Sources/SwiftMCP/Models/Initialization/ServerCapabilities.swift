@@ -15,27 +15,27 @@ import Foundation
 /// These capabilities are communicated to clients during initialization to inform them
 /// about what functionalities are available on the server.
 public struct ServerCapabilities: Codable, Sendable {
-/// Experimental, non-standard capabilities that the server supports.
+    /// Experimental, non-standard capabilities that the server supports.
     public var experimental: [String: AnyCodable] = [:]
 
-/// Present if the server supports sending log messages to the client.
+    /// Present if the server supports sending log messages to the client.
     public var logging: AnyCodable?
 
-/// Present if the server supports argument autocompletion suggestions.
+    /// Present if the server supports argument autocompletion suggestions.
     public var completions: AnyCodable?
 
-/// Present if the server offers any prompt templates.
+    /// Present if the server offers any prompt templates.
     public var prompts: PromptsCapabilities?
 
-/// Present if the server offers any resources to read.
+    /// Present if the server offers any resources to read.
     public var resources: ResourcesCapabilities?
 
-/// Present if the server offers any tools to call.
+    /// Present if the server offers any tools to call.
     public var tools: ToolsCapabilities?
 
-/// Capabilities related to prompt templates.
+    /// Capabilities related to prompt templates.
     public struct PromptsCapabilities: Codable, Sendable {
-/// Whether this server supports notifications for changes to the prompt list.
+        /// Whether this server supports notifications for changes to the prompt list.
         public var listChanged: Bool?
 
         public init(listChanged: Bool? = nil) {
@@ -43,12 +43,12 @@ public struct ServerCapabilities: Codable, Sendable {
         }
     }
 
-/// Capabilities related to resources.
+    /// Capabilities related to resources.
     public struct ResourcesCapabilities: Codable, Sendable {
-/// Whether this server supports subscribing to resource updates.
+        /// Whether this server supports subscribing to resource updates.
         public var subscribe: Bool?
 
-/// Whether this server supports notifications for changes to the resource list.
+        /// Whether this server supports notifications for changes to the resource list.
         public var listChanged: Bool?
 
         public init(subscribe: Bool? = nil, listChanged: Bool? = nil) {
@@ -57,9 +57,9 @@ public struct ServerCapabilities: Codable, Sendable {
         }
     }
 
-/// Capabilities related to tools.
+    /// Capabilities related to tools.
     public struct ToolsCapabilities: Codable, Sendable {
-/// Whether this server supports notifications for changes to the tool list.
+        /// Whether this server supports notifications for changes to the tool list.
         public var listChanged: Bool?
 
         public init(listChanged: Bool? = nil) {

@@ -74,7 +74,7 @@ public extension MCPServer {
      */
     func handleMessage(_ message: JSONRPCMessage) async -> JSONRPCMessage? {
 
-// First switch on message type
+        // First switch on message type
         switch message {
             case .request(let requestData):
                 return await handleRequest(requestData)
@@ -97,7 +97,7 @@ public extension MCPServer {
      - Returns: A response message if one should be sent, nil otherwise
      */
     private func handleRequest(_ requestData: JSONRPCMessage.JSONRPCRequestData) async -> JSONRPCMessage? {
-// Prepare the response based on the method
+        // Prepare the response based on the method
         switch requestData.method {
             case "initialize":
                 return createInitializeResponse(id: requestData.id)
@@ -121,7 +121,7 @@ public extension MCPServer {
                 return await handleToolCall(requestData)
 
             default:
-// Respond with JSON-RPC error for method not found
+                // Respond with JSON-RPC error for method not found
                 return JSONRPCMessage.errorResponse(id: requestData.id, error: .init(code: -32601, message: "Method not found"))
         }
     }
@@ -135,15 +135,15 @@ public extension MCPServer {
     private func handleNotification(_ notificationData: JSONRPCMessage.JSONRPCNotificationData) async -> JSONRPCMessage? {
         switch notificationData.method {
             case "notifications/initialized":
-// Client has completed initialization
+                // Client has completed initialization
                 return nil
 
             case "notifications/cancelled":
-// Client has cancelled a request
+                // Client has cancelled a request
                 return nil
 
             default:
-// Unknown notification - log it but don't respond
+                // Unknown notification - log it but don't respond
                 return nil
         }
     }
@@ -155,8 +155,8 @@ public extension MCPServer {
      - Returns: Always returns nil since we don't currently respond to responses
      */
     private func handleResponse(_ responseData: JSONRPCMessage.JSONRPCResponseData) async -> JSONRPCMessage? {
-// In a typical server scenario, we don't usually respond to responses
-// This could be extended for scenarios where the server also acts as a client
+        // In a typical server scenario, we don't usually respond to responses
+        // This could be extended for scenarios where the server also acts as a client
         return nil
     }
 
@@ -167,8 +167,8 @@ public extension MCPServer {
      - Returns: Always returns nil since we don't currently respond to error responses
      */
     private func handleErrorResponse(_ errorResponseData: JSONRPCMessage.JSONRPCErrorResponseData) async -> JSONRPCMessage? {
-// In a typical server scenario, we don't usually respond to error responses
-// This could be extended for scenarios where the server also acts as a client
+        // In a typical server scenario, we don't usually respond to error responses
+        // This could be extended for scenarios where the server also acts as a client
         return nil
     }
 
@@ -206,13 +206,13 @@ public extension MCPServer {
         )
 
         do {
-        let encoder = DictionaryEncoder()
-        let resultDict = try encoder.encode(result)
-        return JSONRPCMessage.response(id: id, result: resultDict)
-    } catch {
-// Fallback to empty response if encoding fails
-        return JSONRPCMessage.response(id: id, result: [:])
-    }
+            let encoder = DictionaryEncoder()
+            let resultDict = try encoder.encode(result)
+            return JSONRPCMessage.response(id: id, result: resultDict)
+        } catch {
+            // Fallback to empty response if encoding fails
+            return JSONRPCMessage.response(id: id, result: [:])
+        }
     }
 
 /**
@@ -224,58 +224,58 @@ public extension MCPServer {
     private func handleToolCall(_ request: JSONRPCMessage.JSONRPCRequestData) async -> JSONRPCMessage? {
 
         guard let toolProvider = self as? MCPToolProviding else {
-        return nil
-    }
+            return nil
+        }
 
         guard let params = request.params,
               let toolName = params["name"]?.value as? String else {
-// Invalid request: missing tool name
-        return nil
-    }
+            // Invalid request: missing tool name
+            return nil
+        }
 
-// Extract arguments from the request
+        // Extract arguments from the request
         let arguments = (params["arguments"]?.value as? [String: Sendable]) ?? [:]
 
-// Call the appropriate wrapper method based on the tool name
+        // Call the appropriate wrapper method based on the tool name
         do {
-        let result = try await toolProvider.callTool(toolName, arguments: arguments)
+            let result = try await toolProvider.callTool(toolName, arguments: arguments)
 
-        let content: [String: Codable]
+            let content: [String: Codable]
 
-        if let resource = result as? MCPResourceContent {
-// Handle MCPResourceContent type
-            content = [
+            if let resource = result as? MCPResourceContent {
+                // Handle MCPResourceContent type
+                content = [
 					"type": "resource",
 					"resource": resource
 				]
-        } else {
-            let encoder = JSONEncoder()
+            } else {
+                let encoder = JSONEncoder()
 
-// Create ISO8601 formatter with timezone
-            encoder.dateEncodingStrategy = .iso8601WithTimeZone
+                // Create ISO8601 formatter with timezone
+                encoder.dateEncodingStrategy = .iso8601WithTimeZone
 
-            let jsonData = try encoder.encode(result)
-            let responseText = String(data: jsonData, encoding: .utf8) ?? ""
+                let jsonData = try encoder.encode(result)
+                let responseText = String(data: jsonData, encoding: .utf8) ?? ""
 
-            content = [
+                content = [
 					"type": "text",
 					"text": responseText.removingQuotes
 				]
-        }
+            }
 
-        return JSONRPCMessage.response(id: request.id, result: [
+            return JSONRPCMessage.response(id: request.id, result: [
                 "content": [content],
                 "isError": false
             ])
 
-    } catch {
-        return JSONRPCMessage.response(id: request.id, result: [
+        } catch {
+            return JSONRPCMessage.response(id: request.id, result: [
                 "content": [
                     ["type": "text", "text": error.localizedDescription]
                 ],
                 "isError": true
             ])
-    }
+        }
     }
 
 /**
@@ -299,7 +299,7 @@ public extension MCPServer {
         Mirror(reflecting: self).children.first(where: { $0.label == "__mcpServerDescription" })?.value as? String
     }
 
-// MARK: - List Responses
+    // MARK: - List Responses
 
 /**
 	 Creates a response listing all available tools.
@@ -311,13 +311,13 @@ public extension MCPServer {
 
         guard let toolProvider = self as? MCPToolProviding else
 		{
-        return JSONRPCMessage.response(id: id, result: [
+            return JSONRPCMessage.response(id: id, result: [
 				"content": [
 					["type": "text", "text": "Server does not provide any tools"]
 				],
 				"isError": true
 			])
-    }
+        }
 
         return JSONRPCMessage.response(id: id, result: [
 			"tools": AnyCodable(toolProvider.mcpToolMetadata.convertedToTools())
@@ -334,25 +334,25 @@ public extension MCPServer {
 
         guard let resourceProvider = self as? MCPResourceProviding else
 		{
-        return JSONRPCMessage.response(id: id, result: [
+            return JSONRPCMessage.response(id: id, result: [
 				"content": [
 					["type": "text", "text": "Server does not provide any resources"]
 				],
 				"isError": true
 			])
-    }
+        }
 
-/// get resources from templates that have no parameters plus developer provided array
+        /// get resources from templates that have no parameters plus developer provided array
         let resources = resourceProvider.mcpStaticResources + (await resourceProvider.mcpResources)
 
         let resourceDicts = resources.map { resource -> [String: Any] in
-        return [
+            return [
 				"uri": resource.uri.absoluteString,
 				"name": resource.name,
 				"description": resource.description,
 				"mimeType": resource.mimeType
 			]
-    }
+        }
 
         return JSONRPCMessage.response(id: id, result: ["resources": AnyCodable(resourceDicts)])
     }
@@ -369,33 +369,33 @@ public extension MCPServer {
 
         guard let resourceProvider = self as? MCPResourceProviding else
 		{
-        return JSONRPCMessage.response(id: id, result: [
+            return JSONRPCMessage.response(id: id, result: [
 				"content": [
 					["type": "text", "text": "Server does not provide any resources"]
 				],
 				"isError": true
 			])
-    }
+        }
 
-// Extract the URI from the request params
+        // Extract the URI from the request params
         guard let uriString = request.params?["uri"]?.value as? String,
 				  let uri = URL(string: uriString) else {
-        return JSONRPCMessage.errorResponse(id: id, error: .init(code: -32602, message: "Invalid or missing URI parameter"))
-    }
+            return JSONRPCMessage.errorResponse(id: id, error: .init(code: -32602, message: "Invalid or missing URI parameter"))
+        }
 
         do {
-// Try to get the resource content
-        let resourceContentArray = try await resourceProvider.getResource(uri: uri)
+            // Try to get the resource content
+            let resourceContentArray = try await resourceProvider.getResource(uri: uri)
 
-        if !resourceContentArray.isEmpty
+            if !resourceContentArray.isEmpty
 				{
-            return JSONRPCMessage.response(id: id, result: ["contents": AnyCodable(resourceContentArray)])
-        } else {
-            return JSONRPCMessage.errorResponse(id: id, error: .init(code: -32001, message: "Resource not found: \(uri.absoluteString)"))
+                return JSONRPCMessage.response(id: id, result: ["contents": AnyCodable(resourceContentArray)])
+            } else {
+                return JSONRPCMessage.errorResponse(id: id, error: .init(code: -32001, message: "Resource not found: \(uri.absoluteString)"))
+            }
+        } catch {
+            return JSONRPCMessage.errorResponse(id: id, error: .init(code: -32000, message: "Error getting resource: \(error.localizedDescription)"))
         }
-    } catch {
-        return JSONRPCMessage.errorResponse(id: id, error: .init(code: -32000, message: "Error getting resource: \(error.localizedDescription)"))
-    }
     }
 
 /**
@@ -408,25 +408,25 @@ public extension MCPServer {
 
         guard let resourceProvider = self as? MCPResourceProviding else
 		{
-        return JSONRPCMessage.response(id: id, result: [
+            return JSONRPCMessage.response(id: id, result: [
 				"content": [
 					["type": "text", "text": "Server does not provide any resource templates"]
 				],
 				"isError": true
 			])
-    }
+        }
 
         let templates = await resourceProvider.mcpResourceTemplates
 
         return JSONRPCMessage.response(id: id, result: [
 			"resourceTemplates": AnyCodable(templates.map { template in
-        [
+            [
 					"uriTemplate": template.uriTemplate,
 					"name": template.name,
 					"description": template.description,
 					"mimeType": template.mimeType ?? "text/plain"
 				]
-    })
+        })
 		])
     }
 
@@ -440,7 +440,7 @@ public extension MCPServer {
         return JSONRPCMessage.response(id: id, result: [:])
     }
 
-// MARK: - Internal Helpers
+    // MARK: - Internal Helpers
 
 /**
 	 Provides metadata for a function annotated with `@MCPTool`.
@@ -455,12 +455,12 @@ public extension MCPServer {
 	{
         let metadataKey = "__mcpMetadata_\(toolName)"
 
-// Find the metadata for the function using reflection
+        // Find the metadata for the function using reflection
         let mirror = Mirror(reflecting: self)
         guard let child = mirror.children.first(where: { $0.label == metadataKey }),
 			  let metadata = child.value as? MCPToolMetadata else {
-        return nil
-    }
+            return nil
+        }
 
         return metadata
     }

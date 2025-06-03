@@ -32,22 +32,22 @@ extension Array where Element == String {
 	 This allows for customization of how enum cases are represented in MCP tools.
 	 */
     public init?<T>(caseLabelsFrom type: T.Type) {
-// Check if T conforms to CaseIterable at runtime.
+        // Check if T conforms to CaseIterable at runtime.
         guard let caseIterableType = type as? any CaseIterable.Type else {
-        return nil
-    }
+            return nil
+        }
 
         let cases = caseIterableType.allCases
         self = cases.map { caseValue in
-        let description = String(describing: caseValue)
+            let description = String(describing: caseValue)
 
-// trim off associated value if any
-        if let parenIndex = description.firstIndex(of: "(") {
-            return String(description[..<parenIndex])
+            // trim off associated value if any
+            if let parenIndex = description.firstIndex(of: "(") {
+                return String(description[..<parenIndex])
+            }
+
+            return description
         }
-
-        return description
-    }
     }
 }
 
@@ -55,14 +55,14 @@ extension CaseIterable
 {
     static var caseLabels: [String] {
         return self.allCases.map { caseValue in
-        let description = String(describing: caseValue)
+            let description = String(describing: caseValue)
 
-// trim off associated value if any
-        if let parenIndex = description.firstIndex(of: "(") {
-            return String(description[..<parenIndex])
+            // trim off associated value if any
+            if let parenIndex = description.firstIndex(of: "(") {
+                return String(description[..<parenIndex])
+            }
+
+            return description
         }
-
-        return description
-    }
     }
 }

@@ -1,25 +1,25 @@
 import Foundation
 
 extension URL {
-/// Extracts named variables from a URL based on an RFC 6570 URI template
-/// - Parameter template: RFC 6570 compliant URI template
-/// - Returns: Dictionary of variable names and their values, or nil if URL doesn't match template pattern
+    /// Extracts named variables from a URL based on an RFC 6570 URI template
+    /// - Parameter template: RFC 6570 compliant URI template
+    /// - Returns: Dictionary of variable names and their values, or nil if URL doesn't match template pattern
     public func extractTemplateVariables(from template: String) -> [String: String]? {
         let extractor = RFC6570TemplateExtractor(template: template, url: self)
         return extractor.extract()
     }
 
-/// Returns true if the URL matches the given RFC 6570 template
+    /// Returns true if the URL matches the given RFC 6570 template
     public func matches(template: String) -> Bool {
         return self.extractTemplateVariables(from: template) != nil
     }
 }
 
 extension String {
-/// Constructs a URI from an RFC 6570 template and parameters
-/// - Parameter parameters: Dictionary of parameter names and their values
-/// - Returns: Constructed URL
-/// - Throws: An error if the template cannot be processed or required parameters are missing
+    /// Constructs a URI from an RFC 6570 template and parameters
+    /// - Parameter parameters: Dictionary of parameter names and their values
+    /// - Returns: Constructed URL
+    /// - Throws: An error if the template cannot be processed or required parameters are missing
     public func constructURI(with parameters: [String: Sendable]) throws -> URL {
         let constructor = RFC6570TemplateConstructor(template: self, parameters: parameters)
         return try constructor.construct()
@@ -41,16 +41,16 @@ private struct RFC6570TemplateConstructor {
     func construct() throws -> URL {
         var result = template
 
-// Find all expressions in the template
+        // Find all expressions in the template
         let expressionPattern = #"\{[^}]+\}"#
         guard let regex = try? NSRegularExpression(pattern: expressionPattern) else {
-        throw MCPResourceError.invalidTemplate(template: template)
-    }
+            throw MCPResourceError.invalidTemplate(template: template)
+        }
 
         let templateRange = NSRange(location: 0, length: template.utf16.count)
         let matches = regex.matches(in: template, range: templateRange)
 
-// Process matches in reverse order to maintain string indices
+        // Process matches in reverse order to maintain string indices
         for match in matches.reversed() {
             let matchRange = match.range
             guard let swiftRange = Range(matchRange, in: template) else { continue }
@@ -62,12 +62,12 @@ private struct RFC6570TemplateConstructor {
             result = result.replacingCharacters(in: swiftRange, with: replacement)
         }
 
-// Clean up empty query parameters
+        // Clean up empty query parameters
         result = cleanupEmptyQueryParameters(result)
 
         guard let url = URL(string: result) else {
-        throw MCPResourceError.invalidTemplate(template: template)
-    }
+            throw MCPResourceError.invalidTemplate(template: template)
+        }
 
         return url
     }
@@ -76,7 +76,7 @@ private struct RFC6570TemplateConstructor {
         var expr = expression
         var operatorType: ExpressionOperator = .simple
 
-// Check for operator prefix
+        // Check for operator prefix
         if let firstChar = expr.first {
             switch firstChar {
                 case "+":
@@ -105,7 +105,7 @@ private struct RFC6570TemplateConstructor {
             }
         }
 
-// Parse variables
+        // Parse variables
         let variableSpecs = expr.split(separator: ",").compactMap { parseVariableSpec(String($0)) }
 
         return try constructForOperator(operatorType, variables: variableSpecs)
@@ -117,13 +117,13 @@ private struct RFC6570TemplateConstructor {
         var name = spec
         var modifier: VariableModifier = .none
 
-// Check for explode modifier
+        // Check for explode modifier
         if name.hasSuffix("*") {
             modifier = .explode
             name = String(name.dropLast())
         }
 
-// Check for prefix modifier
+        // Check for prefix modifier
         if let colonIndex = name.lastIndex(of: ":") {
             let prefixPart = name[name.index(after: colonIndex)...]
             if let prefixLength = Int(prefixPart), prefixLength > 0 {
@@ -159,76 +159,76 @@ private struct RFC6570TemplateConstructor {
 
     private func constructSimple(variables: [VariableSpec]) throws -> String {
         let values = variables.compactMap { variable -> String? in
-        guard let value = getParameterValue(for: variable.name) else { return nil }
-        return encodeValue(value, for: variable, allowReserved: false)
-    }
+            guard let value = getParameterValue(for: variable.name) else { return nil }
+            return encodeValue(value, for: variable, allowReserved: false)
+        }
         return values.joined(separator: ",")
     }
 
     private func constructReserved(variables: [VariableSpec]) throws -> String {
         let values = variables.compactMap { variable -> String? in
-        guard let value = getParameterValue(for: variable.name) else { return nil }
-        return encodeValue(value, for: variable, allowReserved: true)
-    }
+            guard let value = getParameterValue(for: variable.name) else { return nil }
+            return encodeValue(value, for: variable, allowReserved: true)
+        }
         return values.joined(separator: ",")
     }
 
     private func constructFragment(variables: [VariableSpec]) throws -> String {
         let values = variables.compactMap { variable -> String? in
-        guard let value = getParameterValue(for: variable.name) else { return nil }
-        return encodeValue(value, for: variable, allowReserved: true)
-    }
+            guard let value = getParameterValue(for: variable.name) else { return nil }
+            return encodeValue(value, for: variable, allowReserved: true)
+        }
         return values.isEmpty ? "" : "#" + values.joined(separator: ",")
     }
 
     private func constructLabel(variables: [VariableSpec]) throws -> String {
         let values = variables.compactMap { variable -> String? in
-        guard let value = getParameterValue(for: variable.name) else { return nil }
-        return encodeValue(value, for: variable, allowReserved: false)
-    }
+            guard let value = getParameterValue(for: variable.name) else { return nil }
+            return encodeValue(value, for: variable, allowReserved: false)
+        }
         return values.isEmpty ? "" : "." + values.joined(separator: ".")
     }
 
     private func constructPathSegment(variables: [VariableSpec]) throws -> String {
         let values = variables.compactMap { variable -> String? in
-        guard let value = getParameterValue(for: variable.name) else { return nil }
-// For path segments, comma-separated values should become slash-separated
-        if value.contains(",") {
-            let segments = value.split(separator: ",").map { segment in
-            encodeValue(String(segment.trimmingCharacters(in: .whitespaces)), for: variable, allowReserved: false)
+            guard let value = getParameterValue(for: variable.name) else { return nil }
+            // For path segments, comma-separated values should become slash-separated
+            if value.contains(",") {
+                let segments = value.split(separator: ",").map { segment in
+                    encodeValue(String(segment.trimmingCharacters(in: .whitespaces)), for: variable, allowReserved: false)
+                }
+                return segments.joined(separator: "/")
+            } else {
+                return encodeValue(value, for: variable, allowReserved: false)
+            }
         }
-            return segments.joined(separator: "/")
-        } else {
-            return encodeValue(value, for: variable, allowReserved: false)
-        }
-    }
         return values.isEmpty ? "" : "/" + values.joined(separator: "/")
     }
 
     private func constructPathStyle(variables: [VariableSpec]) throws -> String {
         let values = variables.compactMap { variable -> String? in
-        guard let value = getParameterValue(for: variable.name) else { return nil }
-        let encodedValue = encodeValue(value, for: variable, allowReserved: false)
-        return ";\(variable.name)=\(encodedValue)"
-    }
+            guard let value = getParameterValue(for: variable.name) else { return nil }
+            let encodedValue = encodeValue(value, for: variable, allowReserved: false)
+            return ";\(variable.name)=\(encodedValue)"
+        }
         return values.joined(separator: "")
     }
 
     private func constructQuery(variables: [VariableSpec]) throws -> String {
         let values = variables.compactMap { variable -> String? in
-        guard let value = getParameterValue(for: variable.name), !value.isEmpty else { return nil }
-        let encodedValue = encodeValue(value, for: variable, allowReserved: false)
-        return "\(variable.name)=\(encodedValue)"
-    }
+            guard let value = getParameterValue(for: variable.name), !value.isEmpty else { return nil }
+            let encodedValue = encodeValue(value, for: variable, allowReserved: false)
+            return "\(variable.name)=\(encodedValue)"
+        }
         return values.isEmpty ? "" : "?" + values.joined(separator: "&")
     }
 
     private func constructQueryContinuation(variables: [VariableSpec]) throws -> String {
         let values = variables.compactMap { variable -> String? in
-        guard let value = getParameterValue(for: variable.name), !value.isEmpty else { return nil }
-        let encodedValue = encodeValue(value, for: variable, allowReserved: false)
-        return "\(variable.name)=\(encodedValue)"
-    }
+            guard let value = getParameterValue(for: variable.name), !value.isEmpty else { return nil }
+            let encodedValue = encodeValue(value, for: variable, allowReserved: false)
+            return "\(variable.name)=\(encodedValue)"
+        }
         return values.isEmpty ? "" : "&" + values.joined(separator: "&")
     }
 
@@ -238,24 +238,24 @@ private struct RFC6570TemplateConstructor {
     }
 
     private func cleanupEmptyQueryParameters(_ urlString: String) -> String {
-// Remove empty query parameters like "?param=" or "&param="
+        // Remove empty query parameters like "?param=" or "&param="
         var result = urlString
 
-// Pattern to match empty query parameters
+        // Pattern to match empty query parameters
         let emptyParamPattern = #"[?&][^=&]+=$"#
         if let regex = try? NSRegularExpression(pattern: emptyParamPattern) {
             let range = NSRange(location: 0, length: result.utf16.count)
             result = regex.stringByReplacingMatches(in: result, range: range, withTemplate: "")
         }
 
-// Pattern to match empty query parameters in the middle
+        // Pattern to match empty query parameters in the middle
         let emptyParamMiddlePattern = #"[?&][^=&]+=&"#
         if let regex = try? NSRegularExpression(pattern: emptyParamMiddlePattern) {
             let range = NSRange(location: 0, length: result.utf16.count)
             result = regex.stringByReplacingMatches(in: result, range: range, withTemplate: "&")
         }
 
-// Clean up trailing ? or & if all parameters were removed
+        // Clean up trailing ? or & if all parameters were removed
         if result.hasSuffix("?") || result.hasSuffix("&") {
             result = String(result.dropLast())
         }
@@ -266,18 +266,18 @@ private struct RFC6570TemplateConstructor {
     private func encodeValue(_ value: String, for variable: VariableSpec, allowReserved: Bool) -> String {
         var result = value
 
-// Apply prefix modifier if present
+        // Apply prefix modifier if present
         if case .prefix(let length) = variable.modifier {
             result = String(result.prefix(length))
         }
 
-// URL encode the value
+        // URL encode the value
         let allowedCharacters: CharacterSet
         if allowReserved {
-// For reserved expansion, allow more characters
+            // For reserved expansion, allow more characters
             allowedCharacters = CharacterSet.urlQueryAllowed.union(CharacterSet(charactersIn: ":/?#[]@!$&'()*+,;="))
         } else {
-// For simple expansion, encode more strictly
+            // For simple expansion, encode more strictly
             allowedCharacters = CharacterSet.urlQueryAllowed.subtracting(CharacterSet(charactersIn: ":/?#[]@!$&'()*+,;="))
         }
 
@@ -298,103 +298,103 @@ private struct RFC6570TemplateExtractor {
     }
 
     func extract() -> [String: String]? {
-// Split URL and template into components for easier matching
+        // Split URL and template into components for easier matching
         let urlString = url.absoluteString
 
-// Handle different parts of the URL separately
+        // Handle different parts of the URL separately
         return extractFromComponents(urlString: urlString, template: template)
     }
 
     private func extractFromComponents(urlString: String, template: String) -> [String: String]? {
         var variables: [String: String] = [:]
 
-// First, handle query and fragment expressions that are part of the template structure
+        // First, handle query and fragment expressions that are part of the template structure
         var processedTemplate = template
         var processedURL = urlString
 
-// Handle fragment expressions like {#var}
+        // Handle fragment expressions like {#var}
         if let fragmentMatch = extractFragmentExpression(template: template, url: urlString, variables: &variables) {
             processedTemplate = fragmentMatch.remainingTemplate
             processedURL = fragmentMatch.remainingURL
         }
 
-// Handle query expressions like {?var} and {&var}
+        // Handle query expressions like {?var} and {&var}
         if let queryMatch = extractQueryExpressions(template: processedTemplate, url: processedURL, variables: &variables) {
             processedTemplate = queryMatch.remainingTemplate
             processedURL = queryMatch.remainingURL
         }
 
-// Now handle the base URL (everything before query/fragment)
+        // Now handle the base URL (everything before query/fragment)
         let templateParts = processedTemplate.split(separator: "?", maxSplits: 1)
         let urlParts = processedURL.split(separator: "?", maxSplits: 1)
 
         let templateBase = String(templateParts[0])
         let urlBase = String(urlParts[0])
 
-// Extract from base URL (path part)
+        // Extract from base URL (path part)
         guard extractFromBase(urlBase: urlBase, templateBase: templateBase, variables: &variables) else {
-        return nil
-    }
+            return nil
+        }
 
-// Handle any remaining literal query parameters
+        // Handle any remaining literal query parameters
         if templateParts.count > 1 && urlParts.count > 1 {
             let templateQuery = String(templateParts[1])
             let urlQuery = String(urlParts[1])
             guard extractFromQuery(urlQuery: urlQuery, templateQuery: templateQuery, variables: &variables) else {
-            return nil
-        }
+                return nil
+            }
         }
 
         return variables
     }
 
     private func extractFromBase(urlBase: String, templateBase: String, variables: inout [String: String]) -> Bool {
-// Handle different expression types in the base URL
+        // Handle different expression types in the base URL
         var templateIndex = templateBase.startIndex
         var urlIndex = urlBase.startIndex
 
         while templateIndex < templateBase.endIndex {
             if templateBase[templateIndex] == "{" {
-// Find the closing brace
+                // Find the closing brace
                 guard let closingBrace = templateBase[templateIndex...].firstIndex(of: "}") else {
-                return false
-            }
+                    return false
+                }
 
                 let expressionContent = String(templateBase[templateBase.index(after: templateIndex)..<closingBrace])
 
-// Determine the literal substring that follows this expression, until next expression or end
+                // Determine the literal substring that follows this expression, until next expression or end
                 let followingLiteral: String = {
-                let nextIndex = templateBase.index(after: closingBrace)
-                guard nextIndex < templateBase.endIndex else { return "" }
-                let rest = templateBase[nextIndex...]
-                if let nextBrace = rest.firstIndex(of: "{") {
-                    return String(rest[..<nextBrace])
-                } else {
-                    return String(rest)
-                }
-            }()
+                    let nextIndex = templateBase.index(after: closingBrace)
+                    guard nextIndex < templateBase.endIndex else { return "" }
+                    let rest = templateBase[nextIndex...]
+                    if let nextBrace = rest.firstIndex(of: "{") {
+                        return String(rest[..<nextBrace])
+                    } else {
+                        return String(rest)
+                    }
+                }()
 
-// Parse the expression and extract values for all variables
+                // Parse the expression and extract values for all variables
                 guard let extractedVariables = extractAllVariablesFromExpression(
 					expression: expressionContent,
 					fromURL: urlBase,
 					startingAt: urlIndex,
 					followingLiteral: followingLiteral
 				) else {
-                return false
-            }
+                    return false
+                }
 
-// Add all extracted variables
+                // Add all extracted variables
                 for (name, value) in extractedVariables.variables {
                     variables[name] = value
                 }
 
-// Move indices
+                // Move indices
                 templateIndex = templateBase.index(after: closingBrace)
                 urlIndex = urlBase.index(urlIndex, offsetBy: extractedVariables.consumedLength)
 
             } else {
-// Literal character - must match exactly
+                // Literal character - must match exactly
                 guard urlIndex < urlBase.endIndex else { return false }
                 if templateBase[templateIndex] != urlBase[urlIndex] {
                     return false
@@ -404,13 +404,13 @@ private struct RFC6570TemplateExtractor {
             }
         }
 
-// Both should be at the end for a valid match
+        // Both should be at the end for a valid match
         if templateIndex == templateBase.endIndex {
-// Template is fully processed - URL should also be fully processed
+            // Template is fully processed - URL should also be fully processed
             return urlIndex == urlBase.endIndex
         }
 
-// If there are remaining template characters, they should only be literal characters that match the URL
+        // If there are remaining template characters, they should only be literal characters that match the URL
         while templateIndex < templateBase.endIndex && urlIndex < urlBase.endIndex {
             if templateBase[templateIndex] != urlBase[urlIndex] {
                 return false
@@ -429,7 +429,7 @@ private struct RFC6570TemplateExtractor {
 		followingLiteral: String
 	) -> (variables: [String: String], consumedLength: Int)? {
 
-// Parse the expression
+        // Parse the expression
         let (operatorType, variableSpecs) = parseExpression(expression)
 
         guard !variableSpecs.isEmpty else { return nil }
@@ -451,7 +451,7 @@ private struct RFC6570TemplateExtractor {
                 }
                 return nil
             case .fragment:
-// Fragments are handled separately in extractFragmentExpression
+                // Fragments are handled separately in extractFragmentExpression
                 return nil
         }
     }
@@ -478,7 +478,7 @@ private struct RFC6570TemplateExtractor {
 
         var result: [String: String] = [:]
 
-// Handle multiple variables (comma-separated)
+        // Handle multiple variables (comma-separated)
         if variables.count > 1 && value.contains(",") {
             let values = value.split(separator: ",").map(String.init)
             for (index, variable) in variables.enumerated() {
@@ -490,7 +490,7 @@ private struct RFC6570TemplateExtractor {
                 result[firstVariable.name] = value
             }
 
-// Always return a result, even for empty values
+        // Always return a result, even for empty values
         return (result, value.count)
     }
 
@@ -501,14 +501,14 @@ private struct RFC6570TemplateExtractor {
 		followingLiteral: String
 	) -> (variables: [String: String], consumedLength: Int)? {
 
-// Allow "/"; stop only at query or fragment delimiters
+        // Allow "/"; stop only at query or fragment delimiters
         let allowedChars = CharacterSet(charactersIn: "#?").inverted
         var currentIndex = startIndex
         var value = ""
 
         while currentIndex < url.endIndex {
             let char = url[currentIndex]
-// Stop when the remaining URL matches the literal that follows the expression
+            // Stop when the remaining URL matches the literal that follows the expression
             if !followingLiteral.isEmpty {
                 let remaining = url[currentIndex...]
                 if remaining.hasPrefix(followingLiteral) {
@@ -523,27 +523,27 @@ private struct RFC6570TemplateExtractor {
             }
         }
 
-// Handle explode modifier (dot-separated → comma list)
+        // Handle explode modifier (dot-separated → comma list)
         if variables.count == 1, let first = variables.first, case .explode = first.modifier {
             value = value.replacingOccurrences(of: ".", with: ",")
         }
 
-// Keep track of how many characters we already consumed from the URL
-// *before* we potentially strip a leading slash.  We will still advance
-// the URL index by this amount, so downstream parsing stays aligned.
+        // Keep track of how many characters we already consumed from the URL
+        // *before* we potentially strip a leading slash.  We will still advance
+        // the URL index by this amount, so downstream parsing stays aligned.
         let consumedLength = value.count
 
-// If the reserved expression appears directly after the host (e.g.
-// "http://example.com{+path}") the leading "/" acts only as a path
-// separator and should not be part of the variable's value.  Remove it
-// when there is exactly one variable in the expression.
+        // If the reserved expression appears directly after the host (e.g.
+        // "http://example.com{+path}") the leading "/" acts only as a path
+        // separator and should not be part of the variable's value.  Remove it
+        // when there is exactly one variable in the expression.
         if variables.count == 1 && value.hasPrefix("/") {
             value.removeFirst()
         }
 
         var result: [String: String] = [:]
 
-// Handle multiple variables (comma-separated)
+        // Handle multiple variables (comma-separated)
         if variables.count > 1 && value.contains(",") {
             let values = value.split(separator: ",").map(String.init)
             for (index, variable) in variables.enumerated() {
@@ -564,10 +564,10 @@ private struct RFC6570TemplateExtractor {
 		startingAt startIndex: String.Index
 	) -> (variables: [String: String], consumedLength: Int)? {
 
-// Label expansion starts with a dot
+        // Label expansion starts with a dot
         guard startIndex < url.endIndex && url[startIndex] == "." else {
-        return nil
-    }
+            return nil
+        }
 
         var currentIndex = url.index(after: startIndex) // Skip the dot
         var consumedLength = 1
@@ -586,14 +586,14 @@ private struct RFC6570TemplateExtractor {
             }
         }
 
-// Handle explode modifier (dot-separated → comma list)
+        // Handle explode modifier (dot-separated → comma list)
         if variables.count == 1, let first = variables.first, case .explode = first.modifier {
             value = value.replacingOccurrences(of: ".", with: ",")
         }
 
         var result: [String: String] = [:]
 
-// Handle multiple variables (dot-separated)
+        // Handle multiple variables (dot-separated)
         if variables.count > 1 && value.contains(".") {
             let values = value.split(separator: ".").map(String.init)
             for (index, variable) in variables.enumerated() {
@@ -614,16 +614,16 @@ private struct RFC6570TemplateExtractor {
 		startingAt startIndex: String.Index
 	) -> (variables: [String: String], consumedLength: Int)? {
 
-// Path segment expansion starts with a slash
+        // Path segment expansion starts with a slash
         guard startIndex < url.endIndex && url[startIndex] == "/" else {
-        return nil
-    }
+            return nil
+        }
 
         var currentIndex = url.index(after: startIndex) // Skip the initial slash
         var consumedLength = 1
         var result: [String: String] = [:]
 
-// Special-case: single variable with explode modifier → gather all remaining segments
+        // Special-case: single variable with explode modifier → gather all remaining segments
         if variables.count == 1, let first = variables.first, case .explode = first.modifier {
             var segValue = ""
             while currentIndex < url.endIndex {
@@ -645,26 +645,26 @@ private struct RFC6570TemplateExtractor {
             return (result, consumedLength)
         }
 
-// For multiple variables, each gets its own path segment
+        // For multiple variables, each gets its own path segment
         for (index, variable) in variables.enumerated() {
             var segmentValue = ""
 
-// Extract until next slash or end of string
+            // Extract until next slash or end of string
             while currentIndex < url.endIndex {
                 let char = url[currentIndex]
                 if char == "/" {
-// Found next segment separator
+                    // Found next segment separator
                     if index < variables.count - 1 {
-// Not the last variable, consume the slash and continue
+                        // Not the last variable, consume the slash and continue
                         currentIndex = url.index(after: currentIndex)
                         consumedLength += 1
                         break
                     } else {
-// Last variable, don't consume the slash
+                        // Last variable, don't consume the slash
                         break
                     }
                 } else if CharacterSet(charactersIn: "?#").contains(char.unicodeScalars.first!) {
-// Found query or fragment, stop
+                        // Found query or fragment, stop
                         break
                     } else {
                         segmentValue.append(char)
@@ -675,7 +675,7 @@ private struct RFC6570TemplateExtractor {
 
             result[variable.name] = segmentValue
 
-// If we've reached the end of the URL and there are more variables, stop
+            // If we've reached the end of the URL and there are more variables, stop
             if currentIndex >= url.endIndex && index < variables.count - 1 {
                 break
             }
@@ -694,18 +694,18 @@ private struct RFC6570TemplateExtractor {
         var consumedLength = 0
         var result: [String: String] = [:]
 
-// Extract all path-style parameters like ;id=123;name=john
+        // Extract all path-style parameters like ;id=123;name=john
         for variable in variables {
-// Look for ;variableName=value
+            // Look for ;variableName=value
             guard currentIndex < url.endIndex && url[currentIndex] == ";" else {
-// If we can't find the expected parameter, this might be optional
-            continue
-        }
+                // If we can't find the expected parameter, this might be optional
+                continue
+            }
 
             var paramIndex = url.index(after: currentIndex) // Skip the ;
             consumedLength += 1
 
-// Extract parameter name
+            // Extract parameter name
             var paramName = ""
             while paramIndex < url.endIndex && url[paramIndex] != "=" && url[paramIndex] != ";" {
                 paramName.append(url[paramIndex])
@@ -713,14 +713,14 @@ private struct RFC6570TemplateExtractor {
                 consumedLength += 1
             }
 
-// Check if this matches our expected variable
+            // Check if this matches our expected variable
             if paramName == variable.name {
                 var value = ""
                 if paramIndex < url.endIndex && url[paramIndex] == "=" {
                     paramIndex = url.index(after: paramIndex) // Skip the =
                     consumedLength += 1
 
-// Extract value until ; or end
+                    // Extract value until ; or end
                     while paramIndex < url.endIndex && url[paramIndex] != ";" && url[paramIndex] != "?" && url[paramIndex] != "#" {
                         value.append(url[paramIndex])
                         paramIndex = url.index(after: paramIndex)
@@ -731,11 +731,11 @@ private struct RFC6570TemplateExtractor {
                 result[variable.name] = value
                 currentIndex = paramIndex
             } else {
-// This parameter doesn't match, backtrack
+                // This parameter doesn't match, backtrack
                 currentIndex = url.index(after: currentIndex)
                 consumedLength = 1
 
-// Skip to the next semicolon or end
+                // Skip to the next semicolon or end
                 while currentIndex < url.endIndex && url[currentIndex] != ";" && url[currentIndex] != "?" && url[currentIndex] != "#" {
                     currentIndex = url.index(after: currentIndex)
                     consumedLength += 1
@@ -752,7 +752,7 @@ private struct RFC6570TemplateExtractor {
 		startingAt startIndex: String.Index
 	) -> (variableName: String, value: String, consumedLength: Int)? {
 
-// Parse the expression
+        // Parse the expression
         let (operatorType, variables) = parseExpression(expression)
 
         guard !variables.isEmpty else { return nil }
@@ -771,7 +771,7 @@ private struct RFC6570TemplateExtractor {
             case .query, .queryContinuation:
                 return extractQueryVariable(variables: variables, fromURL: url, startingAt: startIndex)
             case .fragment:
-// Fragments are handled separately in extractFragmentExpression
+                // Fragments are handled separately in extractFragmentExpression
                 return nil
         }
     }
@@ -796,11 +796,11 @@ private struct RFC6570TemplateExtractor {
             }
         }
 
-// Handle multiple variables (comma-separated)
+        // Handle multiple variables (comma-separated)
         if variables.count > 1 && value.contains(",") {
             let values = value.split(separator: ",").map(String.init)
-// For now, return the first variable with the first value
-// In a complete implementation, we'd need to return all variables
+            // For now, return the first variable with the first value
+            // In a complete implementation, we'd need to return all variables
             if let firstVariable = variables.first, !values.isEmpty {
                 return (firstVariable.name, values[0], value.count)
             }
@@ -830,7 +830,7 @@ private struct RFC6570TemplateExtractor {
             }
         }
 
-// Remove leading slash if template did not include one
+        // Remove leading slash if template did not include one
         var consumedLength = value.count
         if value.hasPrefix("/") {
             value.removeFirst()
@@ -847,10 +847,10 @@ private struct RFC6570TemplateExtractor {
 		startingAt startIndex: String.Index
 	) -> (variableName: String, value: String, consumedLength: Int)? {
 
-// Label expansion starts with a dot
+        // Label expansion starts with a dot
         guard startIndex < url.endIndex && url[startIndex] == "." else {
-        return nil
-    }
+            return nil
+        }
 
         var currentIndex = url.index(after: startIndex) // Skip the dot
         var consumedLength = 1
@@ -869,12 +869,12 @@ private struct RFC6570TemplateExtractor {
             }
         }
 
-// Handle explode modifier (dot-separated → comma list)
+        // Handle explode modifier (dot-separated → comma list)
         if variables.count == 1, let first = variables.first, case .explode = first.modifier {
             value = value.replacingOccurrences(of: ".", with: ",")
         }
 
-// Handle multiple variables (dot-separated)
+        // Handle multiple variables (dot-separated)
         if variables.count > 1 && value.contains(".") {
             let values = value.split(separator: ".").map(String.init)
             if let firstVariable = variables.first, !values.isEmpty {
@@ -892,10 +892,10 @@ private struct RFC6570TemplateExtractor {
 		startingAt startIndex: String.Index
 	) -> (variableName: String, value: String, consumedLength: Int)? {
 
-// Path segment expansion starts with a slash
+        // Path segment expansion starts with a slash
         guard startIndex < url.endIndex && url[startIndex] == "/" else {
-        return nil
-    }
+            return nil
+        }
 
         var currentIndex = url.index(after: startIndex) // Skip the slash
         var consumedLength = 1
@@ -914,7 +914,7 @@ private struct RFC6570TemplateExtractor {
             }
         }
 
-// Handle multiple variables (slash-separated)
+        // Handle multiple variables (slash-separated)
         if variables.count > 1 && value.contains("/") {
             let values = value.split(separator: "/").map(String.init)
             if let firstVariable = variables.first, !values.isEmpty {
@@ -932,15 +932,15 @@ private struct RFC6570TemplateExtractor {
 		startingAt startIndex: String.Index
 	) -> (variableName: String, value: String, consumedLength: Int)? {
 
-// Path style parameters start with ; and are in format ;name=value
+        // Path style parameters start with ; and are in format ;name=value
         guard startIndex < url.endIndex && url[startIndex] == ";" else {
-        return nil
-    }
+            return nil
+        }
 
         var currentIndex = url.index(after: startIndex) // Skip the ;
         var consumedLength = 1
 
-// Find the parameter name
+        // Find the parameter name
         var paramName = ""
         while currentIndex < url.endIndex && url[currentIndex] != "=" && url[currentIndex] != ";" {
             paramName.append(url[currentIndex])
@@ -948,17 +948,17 @@ private struct RFC6570TemplateExtractor {
             consumedLength += 1
         }
 
-// Check if this matches one of our variables
+        // Check if this matches one of our variables
         guard variables.contains(where: { $0.name == paramName }) else {
-        return nil
-    }
+            return nil
+        }
 
         var value = ""
         if currentIndex < url.endIndex && url[currentIndex] == "=" {
             currentIndex = url.index(after: currentIndex) // Skip the =
             consumedLength += 1
 
-// Extract value until ; or end
+            // Extract value until ; or end
             while currentIndex < url.endIndex && url[currentIndex] != ";" && url[currentIndex] != "?" && url[currentIndex] != "#" {
                 value.append(url[currentIndex])
                 currentIndex = url.index(after: currentIndex)
@@ -975,17 +975,17 @@ private struct RFC6570TemplateExtractor {
 		startingAt startIndex: String.Index
 	) -> (variableName: String, value: String, consumedLength: Int)? {
 
-// Query parameters are in format ?name=value or &name=value
+        // Query parameters are in format ?name=value or &name=value
         var currentIndex = startIndex
         var consumedLength = 0
 
-// Skip ? or &
+        // Skip ? or &
         if currentIndex < url.endIndex && (url[currentIndex] == "?" || url[currentIndex] == "&") {
             currentIndex = url.index(after: currentIndex)
             consumedLength += 1
         }
 
-// Find parameter name
+        // Find parameter name
         var paramName = ""
         while currentIndex < url.endIndex && url[currentIndex] != "=" && url[currentIndex] != "&" {
             paramName.append(url[currentIndex])
@@ -993,17 +993,17 @@ private struct RFC6570TemplateExtractor {
             consumedLength += 1
         }
 
-// Check if this matches one of our variables
+        // Check if this matches one of our variables
         guard variables.contains(where: { $0.name == paramName }) else {
-        return nil
-    }
+            return nil
+        }
 
         var value = ""
         if currentIndex < url.endIndex && url[currentIndex] == "=" {
             currentIndex = url.index(after: currentIndex) // Skip the =
             consumedLength += 1
 
-// Extract value until & or end
+            // Extract value until & or end
             while currentIndex < url.endIndex && url[currentIndex] != "&" && url[currentIndex] != "#" {
                 value.append(url[currentIndex])
                 currentIndex = url.index(after: currentIndex)
@@ -1011,7 +1011,7 @@ private struct RFC6570TemplateExtractor {
             }
         }
 
-// URL decode the value
+        // URL decode the value
         let decodedValue = value.removingPercentEncoding ?? value
 
         return (paramName, decodedValue, consumedLength)
@@ -1019,28 +1019,28 @@ private struct RFC6570TemplateExtractor {
 
     private func extractFromQuery(urlQuery: String?, templateQuery: String, variables: inout [String: String]) -> Bool {
         guard let urlQuery = urlQuery else {
-// No query in URL, but template expects one - this might be okay for optional parameters
-        return true
-    }
+            // No query in URL, but template expects one - this might be okay for optional parameters
+            return true
+        }
 
-// Parse query parameters from both template and URL
+        // Parse query parameters from both template and URL
         let templateParams = parseQueryParameters(templateQuery)
         let urlParams = parseQueryParameters(urlQuery)
 
-// Match template parameters
+        // Match template parameters
         for (key, templateValue) in templateParams {
             if templateValue.hasPrefix("{") && templateValue.hasSuffix("}") {
-// This is a variable
+                // This is a variable
                 let varName = String(templateValue.dropFirst().dropLast())
                 if let actualValue = urlParams[key] {
                     variables[varName] = actualValue
                 }
-// Missing parameters are okay for optional query params
+            // Missing parameters are okay for optional query params
             } else {
-// This is a literal value - must match exactly
+                // This is a literal value - must match exactly
                 guard urlParams[key] == templateValue else {
-                return false
-            }
+                    return false
+                }
             }
         }
 
@@ -1048,7 +1048,7 @@ private struct RFC6570TemplateExtractor {
     }
 
     private func extractFromFragment(urlFragment: String, templateFragment: String, variables: inout [String: String]) -> Bool {
-// Handle fragment expressions like {#var}
+        // Handle fragment expressions like {#var}
         if templateFragment.hasPrefix("{#") && templateFragment.hasSuffix("}") {
             let varName = String(templateFragment.dropFirst(2).dropLast())
             variables[varName] = urlFragment
@@ -1063,7 +1063,7 @@ private struct RFC6570TemplateExtractor {
         var expr = expression
         var operatorType: ExpressionOperator = .simple
 
-// Check for operator prefix
+        // Check for operator prefix
         if let firstChar = expr.first {
             switch firstChar {
                 case "+":
@@ -1092,7 +1092,7 @@ private struct RFC6570TemplateExtractor {
             }
         }
 
-// Parse variables
+        // Parse variables
         let variableSpecs = expr.split(separator: ",").compactMap { parseVariableSpec(String($0)) }
 
         return (operatorType, variableSpecs)
@@ -1104,13 +1104,13 @@ private struct RFC6570TemplateExtractor {
         var name = spec
         var modifier: VariableModifier = .none
 
-// Check for explode modifier
+        // Check for explode modifier
         if name.hasSuffix("*") {
             modifier = .explode
             name = String(name.dropLast())
         }
 
-// Check for prefix modifier
+        // Check for prefix modifier
         if let colonIndex = name.lastIndex(of: ":") {
             let prefixPart = name[name.index(after: colonIndex)...]
             if let prefixLength = Int(prefixPart), prefixLength > 0 {
@@ -1124,7 +1124,7 @@ private struct RFC6570TemplateExtractor {
     }
 
     private func extractQueryExpressions(template: String, url: String, variables: inout [String: String]) -> (remainingTemplate: String, remainingURL: String)? {
-// Look for query expressions like {?var} or {&var}
+        // Look for query expressions like {?var} or {&var}
         let queryPattern = #"\{[\?&][^}]+\}"#
         guard let regex = try? NSRegularExpression(pattern: queryPattern) else { return nil }
 
@@ -1139,38 +1139,38 @@ private struct RFC6570TemplateExtractor {
         let urlParts = url.split(separator: "?", maxSplits: 1)
         let urlQuery = urlParts.count > 1 ? String(urlParts[1]) : ""
 
-// Parse URL query parameters
+        // Parse URL query parameters
         let urlParams = parseQueryParameters(urlQuery)
 
-// Process each query expression
+        // Process each query expression
         for match in matches.reversed() { // Process in reverse to maintain string indices
             let matchRange = match.range
             let expressionString = String(template[Range(matchRange, in: template)!])
 
-// Remove the braces and get the content
+            // Remove the braces and get the content
             let content = String(expressionString.dropFirst().dropLast())
             let (_, variableSpecs) = parseExpression(content)
 
-// Extract variables from URL query parameters
+            // Extract variables from URL query parameters
             for variable in variableSpecs {
                 if let value = urlParams[variable.name] {
                     variables[variable.name] = value
                 }
             }
 
-// Remove the expression from the template
+            // Remove the expression from the template
             remainingTemplate = String(remainingTemplate[..<Range(matchRange, in: remainingTemplate)!.lowerBound]) +
 							   String(remainingTemplate[Range(matchRange, in: remainingTemplate)!.upperBound...])
         }
 
-// Remove query part from URL since we've processed it
+        // Remove query part from URL since we've processed it
         let remainingURL = String(urlParts[0])
 
         return (remainingTemplate, remainingURL)
     }
 
     private func extractFragmentExpression(template: String, url: String, variables: inout [String: String]) -> (remainingTemplate: String, remainingURL: String)? {
-// Look for fragment expressions like {#var}
+        // Look for fragment expressions like {#var}
         let fragmentPattern = #"\{#[^}]+\}"#
         guard let regex = try? NSRegularExpression(pattern: fragmentPattern) else { return nil }
 
@@ -1180,17 +1180,17 @@ private struct RFC6570TemplateExtractor {
         let matchRange = match.range
         let expressionString = String(template[Range(matchRange, in: template)!])
 
-// Remove the braces and get the content
+        // Remove the braces and get the content
         let content = String(expressionString.dropFirst().dropLast())
         let (_, variableSpecs) = parseExpression(content)
 
-// Extract fragment from URL
+        // Extract fragment from URL
         let urlParts = url.split(separator: "#", maxSplits: 1)
         if urlParts.count > 1, let variable = variableSpecs.first {
             variables[variable.name] = String(urlParts[1])
         }
 
-// Remove the expression from template and fragment from URL
+        // Remove the expression from template and fragment from URL
         let remainingTemplate = String(template[..<Range(matchRange, in: template)!.lowerBound]) +
 							   String(template[Range(matchRange, in: template)!.upperBound...])
         let remainingURL = String(urlParts[0])

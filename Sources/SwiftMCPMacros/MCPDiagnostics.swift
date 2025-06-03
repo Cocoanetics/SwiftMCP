@@ -18,19 +18,19 @@ import SwiftSyntaxMacros
  including errors and warnings related to function declarations.
  */
 enum MCPToolDiagnostic: DiagnosticMessage {
-/// Error when the macro is applied to a non-function declaration
+    /// Error when the macro is applied to a non-function declaration
     case onlyFunctions
 
-/// Warning when a function is missing a description
+    /// Warning when a function is missing a description
     case missingDescription(functionName: String)
 
-/// Error when a parameter has an unsupported default value type
+    /// Error when a parameter has an unsupported default value type
     case invalidDefaultValueType(paramName: String, typeName: String)
 
-/// Error when a parameter has an unsupported closure type
+    /// Error when a parameter has an unsupported closure type
     case closureTypeNotSupported(paramName: String, typeName: String)
 
-/// Error when an optional parameter is missing a default value
+    /// Error when an optional parameter is missing a default value
     case optionalParameterNeedsDefault(paramName: String, typeName: String)
 
     var message: String {

@@ -2,22 +2,22 @@ import Foundation
 
 /// Information about a function parameter
 public struct MCPParameterInfo: Sendable {
-/// The name of the parameter
+    /// The name of the parameter
     public let name: String
 
-/// The type of the parameter
+    /// The type of the parameter
     public let type: Sendable.Type
 
-/// An optional description of the parameter
+    /// An optional description of the parameter
     public let description: String?
 
-/// An optional default value for the parameter
+    /// An optional default value for the parameter
     public let defaultValue: Sendable?
 
-/// Whether the parameter is required (no default value)
+    /// Whether the parameter is required (no default value)
     public let isRequired: Bool
 
-/// Whether the parameter is optional (has a default value)
+    /// Whether the parameter is optional (has a default value)
     public var isOptional: Bool {
         return !isRequired
     }

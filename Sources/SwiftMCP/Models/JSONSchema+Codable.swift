@@ -11,23 +11,23 @@ import Foundation
  Extension to make JSONSchema conform to Codable
  */
 extension JSONSchema: Codable {
-/// Coding keys for JSONSchema encoding and decoding
+    /// Coding keys for JSONSchema encoding and decoding
     private enum CodingKeys: String, CodingKey {
-/// The type of the schema (string, number, boolean, array, or object)
+        /// The type of the schema (string, number, boolean, array, or object)
         case type
-/// The properties of an object schema
+        /// The properties of an object schema
         case properties
-/// The required properties of an object schema
+        /// The required properties of an object schema
         case required
-/// A description of the schema
+        /// A description of the schema
         case description
-/// The schema for array items
+        /// The schema for array items
         case items
-/// The possible values for an enum schema
+        /// The possible values for an enum schema
         case enumValues = "enum"
-/// The format of the content
+        /// The format of the content
         case format
-/// If additional properties are allowed (optional, needed for structured responses, not for MCP)
+        /// If additional properties are allowed (optional, needed for structured responses, not for MCP)
         case additionalProperties
     }
 
@@ -136,9 +136,9 @@ extension JSONSchema: Codable {
  Used for encoding and decoding dynamic property names in JSON schemas.
  */
 private struct AnyCodingKey: CodingKey {
-/// The string value of the coding key
+    /// The string value of the coding key
     var stringValue: String
-/// The integer value of the coding key, if any
+    /// The integer value of the coding key, if any
     var intValue: Int?
 
 /**

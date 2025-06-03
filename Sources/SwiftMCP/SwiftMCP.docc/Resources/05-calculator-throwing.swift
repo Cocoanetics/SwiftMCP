@@ -10,8 +10,8 @@ struct Calculator {
     @MCPTool(description: "Greets a person by name")
     func greet(name: String) throws -> String {
         guard name.count >= 2 else {
-        throw GreetingError.nameTooShort
-    }
+            throw GreetingError.nameTooShort
+        }
         return "Hello, \(name)!"
     }
 } 

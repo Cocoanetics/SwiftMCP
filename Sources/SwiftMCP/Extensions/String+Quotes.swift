@@ -11,8 +11,8 @@ public extension String {
     var removingQuotes: String {
 
         guard first == "\"" && last == "\"" else {
-        return self
-    }
+            return self
+        }
 
         return String(dropFirst().dropLast())
     }

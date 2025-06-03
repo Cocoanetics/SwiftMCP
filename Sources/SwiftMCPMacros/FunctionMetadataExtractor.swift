@@ -33,10 +33,10 @@ struct ParsedParameter {
     let description: String? // Documentation description
     let isOptionalType: Bool // Whether the parameter type is optional
 
-/// Creates MCPParameterInfo from this parsed parameter
+    /// Creates MCPParameterInfo from this parsed parameter
     func toMCPParameterInfo() -> String {
         let descriptionString = description ?? "nil"
-// A parameter is required if it has no default value AND is not optional
+        // A parameter is required if it has no default value AND is not optional
         let isRequired = defaultValueClause == nil && !isOptionalType
         return "MCPParameterInfo(name: \"\(name)\", type: \(baseTypeString).self, description: \(descriptionString), defaultValue: \(defaultValueForMetadata), isRequired: \(isRequired))"
     }
@@ -113,7 +113,7 @@ struct FunctionMetadataExtractor {
                 isArray: paramTypeSyntax.is(ArrayTypeSyntax.self) || paramTypeString.hasPrefix("[") 
             )
 
-// Common diagnostic for optional parameters needing default values
+            // Common diagnostic for optional parameters needing default values
             if isOptionalType && defaultValueClause == nil {
                 let diagnostic = Diagnostic(
                     node: Syntax(paramTypeSyntax),
@@ -186,19 +186,19 @@ struct FunctionMetadataExtractor {
                 } else if rawValue.hasPrefix(".") { // Enum case like .someCase
                         return "\(paramTypeString)\(rawValue)"
                     } else if expr.is(ArrayExprSyntax.self) && rawValue == "[]" {
-// For empty array literals, we need to cast them to the correct type
+                            // For empty array literals, we need to cast them to the correct type
                             if isArray {
-// paramTypeString here should be the full array type like "[String]" or "Array<String>"
-// We need to cast the empty array to the correct type
+                                // paramTypeString here should be the full array type like "[String]" or "Array<String>"
+                                // We need to cast the empty array to the correct type
                                 return "[] as \(paramTypeString)"
                             } else {
-// Fallback for non-array types with "[]" - should be caught by compiler
+                                // Fallback for non-array types with "[]" - should be caught by compiler
                                 return "[]"
                             }
                         }
-// For other complex expressions (e.g., fully qualified enum, function calls, other literals)
-// we return their verbatim string representation.
-// This includes cases like `MyEnum.value`, `[1, 2]`, `["a": 1]`.
+        // For other complex expressions (e.g., fully qualified enum, function calls, other literals)
+        // we return their verbatim string representation.
+        // This includes cases like `MyEnum.value`, `[1, 2]`, `["a": 1]`.
         return rawValue
     }
 } 

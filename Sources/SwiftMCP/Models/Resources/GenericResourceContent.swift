@@ -14,9 +14,9 @@ public struct GenericResourceContent: MCPResourceContent {
         self.blob = blob
     }
 
-/// Converts any resource result to an array of MCPResourceContent
+    /// Converts any resource result to an array of MCPResourceContent
     public static func fromResult(_ result: Any, uri: URL, mimeType: String?) -> [MCPResourceContent] {
-// If already MCPResourceContent
+        // If already MCPResourceContent
         if let resourceContent = result as? MCPResourceContent {
             return [resourceContent]
         } else if let resourceArray = result as? [MCPResourceContent] {
@@ -38,7 +38,7 @@ public struct GenericResourceContent: MCPResourceContent {
                                             let text = String(describing: dict)
                                             return [GenericResourceContent(uri: uri, mimeType: mimeType ?? "text/plain", text: text)]
                                         } else if let encodable = result as? Encodable {
-// Try to encode to JSON string
+                                                // Try to encode to JSON string
                                                 let encoder = JSONEncoder()
                                                 encoder.outputFormatting = .prettyPrinted
                                                 if let data = try? encoder.encode(AnyEncodable(encodable)),
@@ -46,7 +46,7 @@ public struct GenericResourceContent: MCPResourceContent {
                                                     return [GenericResourceContent(uri: uri, mimeType: mimeType ?? "application/json", text: json)]
                                                 }
                                             }
-// Fallback: use String(describing:)
+        // Fallback: use String(describing:)
         let text = String(describing: result)
         return [GenericResourceContent(uri: uri, mimeType: mimeType ?? "text/plain", text: text)]
     }

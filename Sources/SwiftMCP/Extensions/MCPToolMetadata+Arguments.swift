@@ -24,7 +24,7 @@ extension MCPToolMetadata {
     public func enrichArguments(_ arguments: [String: Sendable], functionName: String? = nil) throws -> [String: Sendable] {
         var enrichedArguments = arguments
 
-// Add default values for missing parameters
+        // Add default values for missing parameters
         for param in parameters {
             if enrichedArguments[param.name] == nil {
                 if let defaultValue = param.defaultValue {

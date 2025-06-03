@@ -11,10 +11,10 @@ import Foundation
 /// Contents of a File to be returned by a tool call
 @Schema
 public struct FileContent: Codable, Sendable {
-/// The name of the file
+    /// The name of the file
     public let name: String
 
-/// The MIME type of the file
+    /// The MIME type of the file
     public let mimeType: String
 
 /**

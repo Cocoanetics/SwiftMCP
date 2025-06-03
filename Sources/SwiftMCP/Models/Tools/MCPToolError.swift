@@ -2,19 +2,19 @@ import Foundation
 
 /// Errors that can occur when calling a tool
 public enum MCPToolError: Error {
-/// The tool with the given name doesn't exist
+    /// The tool with the given name doesn't exist
     case unknownTool(name: String)
 
-/// An argument couldn't be cast to the correct type
+    /// An argument couldn't be cast to the correct type
     case invalidArgumentType(parameterName: String, expectedType: String, actualType: String)
 
-/// An argument couldn't be cast to the correct type
+    /// An argument couldn't be cast to the correct type
     case invalidEnumValue(parameterName: String, expectedValues: [String], actualValue: String)
 
-/// The input is not a valid JSON dictionary
+    /// The input is not a valid JSON dictionary
     case invalidJSONDictionary
 
-/// A required parameter is missing
+    /// A required parameter is missing
     case missingRequiredParameter(parameterName: String)
 }
 

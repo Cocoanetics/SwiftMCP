@@ -10,13 +10,13 @@ import Foundation
 
 /// Metadata about a SchemaRepresentable struct
 public struct SchemaMetadata: Sendable {
-/// The name of the type
+    /// The name of the type
     public let name: String
 
-/// The parameters of the function
+    /// The parameters of the function
     public let parameters: [SchemaPropertyInfo]
 
-/// A description of the function's purpose
+    /// A description of the function's purpose
     public let description: String?
 
 /**
@@ -33,9 +33,9 @@ public struct SchemaMetadata: Sendable {
         self.parameters = parameters
     }
 
-/// Converts this schema metadata to a JSON Schema representation
+    /// Converts this schema metadata to a JSON Schema representation
     public var schema: JSONSchema {
-// Convert parameters to properties
+        // Convert parameters to properties
         var properties: [String: JSONSchema] = [:]
         var required: [String] = []
 

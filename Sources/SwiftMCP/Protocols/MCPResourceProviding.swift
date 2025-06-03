@@ -69,61 +69,61 @@ public protocol MCPResourceProviding {
 
 extension MCPResourceProviding {
 
-/// Returns an array of all MCP resources defined in this type
+    /// Returns an array of all MCP resources defined in this type
     public var mcpResources: [any MCPResource] {
 		get async {
         return []
     }
     }
 
-/// Resource templates with zero parameters are listed together with mcpResources
+    /// Resource templates with zero parameters are listed together with mcpResources
     var mcpStaticResources: [MCPResource]
 	{
-// Find the resources without parameters
+        // Find the resources without parameters
         let mirror = Mirror(reflecting: self)
 
         let array: [MCPResourceMetadata] = mirror.children.compactMap { child in
 
-        guard let label = child.label,
+            guard let label = child.label,
 					label.hasPrefix("__mcpResourceMetadata_") else {
-        return nil
-    }
+                return nil
+            }
 
-        guard let metadata = child.value as? MCPResourceMetadata else {
-        return nil
-    }
+            guard let metadata = child.value as? MCPResourceMetadata else {
+                return nil
+            }
 
-        guard metadata.parameters.isEmpty else
+            guard metadata.parameters.isEmpty else
 			{
-        return nil
-    }
+                return nil
+            }
 
-        return metadata
-    }
+            return metadata
+        }
 
-// Create individual resources for each URI template
+        // Create individual resources for each URI template
         return array.flatMap { metadata in
-        metadata.uriTemplates.compactMap { template in
-        guard let url = URL(string: template) else { return nil }
-        return SimpleResource(uri: url, name: metadata.name, description: metadata.description, mimeType: metadata.mimeType)
-    }
-    }
+            metadata.uriTemplates.compactMap { template in
+                guard let url = URL(string: template) else { return nil }
+                return SimpleResource(uri: url, name: metadata.name, description: metadata.description, mimeType: metadata.mimeType)
+            }
+        }
     }
 
-/// Default implementation of mcpResourceMetadata - returns empty array
-/// This should be overridden by the MCPServerMacro
+    /// Default implementation of mcpResourceMetadata - returns empty array
+    /// This should be overridden by the MCPServerMacro
     public var mcpResourceMetadata: [MCPResourceMetadata] {
         return []
     }
 
     public func callResourceAsFunction(_ name: String, arguments: [String: Sendable]) async throws -> Encodable & Sendable {
-// Default implementation throws an error - this should be overridden by the macro
+        // Default implementation throws an error - this should be overridden by the macro
         throw MCPResourceError.notFound(uri: "function://\(name)")
     }
 
     public func getNonTemplateResource(uri: URL) async throws -> [MCPResourceContent] {
-// Default implementation: returns an empty array, indicating no non-template resource found by default.
-// Implementers should override this to provide specific non-template resource handling.
+        // Default implementation: returns an empty array, indicating no non-template resource found by default.
+        // Implementers should override this to provide specific non-template resource handling.
         return []
     }
 }

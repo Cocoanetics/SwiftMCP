@@ -1,8 +1,8 @@
 import Foundation
 
 extension BinaryInteger {
-/// Attempts to convert the given value to `Self`.
-/// Returns `nil` if the conversion is not possible.
+    /// Attempts to convert the given value to `Self`.
+    /// Returns `nil` if the conversion is not possible.
     static func convert(from value: Any) -> Self? {
         if let this = value as? Self {
             return this

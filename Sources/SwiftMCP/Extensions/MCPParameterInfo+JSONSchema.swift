@@ -18,17 +18,17 @@ extension Array: ArraySchemaBridge {
 extension MCPParameterInfo {
 
     public var schema: JSONSchema {
-// If this is a SchemaRepresentable type, use its schema
+        // If this is a SchemaRepresentable type, use its schema
         if let schemaType = type as? any SchemaRepresentable.Type {
             return schemaType.schemaMetadata.schema
         }
 
-// If this is a CaseIterable type, return a string schema with enum values
+        // If this is a CaseIterable type, return a string schema with enum values
         if let caseIterableType = type as? any CaseIterable.Type {
             return JSONSchema.enum(values: caseIterableType.caseLabels, description: description)
         }
 
-// Handle array types
+        // Handle array types
         if let arrayType = type as? ArrayWithSchemaRepresentableElements.Type {
 
             return arrayType.schema(description: description)
@@ -40,7 +40,7 @@ extension MCPParameterInfo {
         }
 
         if let arrayBridge = type as? ArraySchemaBridge.Type {
-// Get the element type from the array
+            // Get the element type from the array
             let type = arrayBridge.elementType
 
             let schema: JSONSchema
@@ -58,7 +58,7 @@ extension MCPParameterInfo {
             return JSONSchema.array(items: schema, description: description)
         }
 
-// Handle basic types
+        // Handle basic types
         switch type {
             case is Int.Type, is Double.Type:
                 return JSONSchema.number(description: description)

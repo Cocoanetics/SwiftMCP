@@ -18,12 +18,12 @@ struct SSEMessage: LosslessStringConvertible {
         self.data = data
     }
 
-/// Creates an SSE message from a string representation
-/// Expects format:
-/// [event: name\n]
-/// data: content\n\n
+    /// Creates an SSE message from a string representation
+    /// Expects format:
+    /// [event: name\n]
+    /// data: content\n\n
     init?(_ description: String) {
-// Split the message into lines
+        // Split the message into lines
         let lines = description.split(separator: "\n", omittingEmptySubsequences: false)
         var name: String? = nil
         var data: String? = nil
@@ -36,16 +36,16 @@ struct SSEMessage: LosslessStringConvertible {
                 }
         }
 
-// Data field is required
+        // Data field is required
         guard let data = data else {
-        return nil
-    }
+            return nil
+        }
 
         self.name = name
         self.data = data
     }
 
-/// Returns the string representation of the message in SSE format
+    /// Returns the string representation of the message in SSE format
     var description: String {
         var message = ""
         if let name = name {

@@ -9,13 +9,13 @@ import Foundation
 
 /// Represents a tool that can be used by an AI model
 public struct MCPTool: Sendable {
-/// The name of the tool
+    /// The name of the tool
     public let name: String
 
-/// An optional description of the tool
+    /// An optional description of the tool
     public let description: String?
 
-/// The JSON schema defining the tool's input parameters
+    /// The JSON schema defining the tool's input parameters
     public let inputSchema: JSONSchema
 
 /**
@@ -37,7 +37,7 @@ public struct MCPTool: Sendable {
  Extension to make MCPTool conform to Codable
  */
 extension MCPTool: Codable {
-// MARK: - Codable Implementation
+    // MARK: - Codable Implementation
 
     private enum CodingKeys: String, CodingKey {
         case name

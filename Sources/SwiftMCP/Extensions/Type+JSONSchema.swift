@@ -2,7 +2,7 @@ import Foundation
 
 /// Protocol for types that can be converted to JSON Schema types
 public protocol JSONSchemaTypeConvertible {
-/// The JSON Schema representation for this type
+    /// The JSON Schema representation for this type
     static func jsonSchema(description: String?) -> JSONSchema
 }
 

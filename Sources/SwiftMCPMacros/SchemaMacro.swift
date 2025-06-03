@@ -63,27 +63,27 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
         providingMembersOf declaration: some DeclGroupSyntax,
         in context: some MacroExpansionContext
     ) throws -> [DeclSyntax] {
-// Handle struct declarations
+        // Handle struct declarations
         guard let structDecl = declaration.as(StructDeclSyntax.self) else {
-        let diagnostic = Diagnostic(node: node, message: SchemaDiagnostic.onlyStructs)
-        context.diagnose(diagnostic)
-        return []
-    }
+            let diagnostic = Diagnostic(node: node, message: SchemaDiagnostic.onlyStructs)
+            context.diagnose(diagnostic)
+            return []
+        }
 
-// Extract struct name
+        // Extract struct name
         let structName = structDecl.name.text
 
-// Extract property descriptions from documentation
+        // Extract property descriptions from documentation
         let documentation = Documentation(from: structDecl.leadingTrivia.description)
 
-// Extract property information
+        // Extract property information
         var propertyString = ""
         var propertyInfos: [(name: String, type: String, defaultValue: String?)] = []
 
-// Process all members including nested structs
+        // Process all members including nested structs
         for member in structDecl.memberBlock.members {
             if let property = member.decl.as(VariableDeclSyntax.self) {
-// Process regular property
+                // Process regular property
                 let (propertyStr, propertyInfo) = try processProperty(
                     property: property,
                     documentation: documentation,
@@ -96,13 +96,13 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
                 propertyString += propertyStr
                 propertyInfos.append(propertyInfo)
             } else if let nestedStruct = member.decl.as(StructDeclSyntax.self) {
-// Process nested struct
+                    // Process nested struct
                     let nestedSchema = try processNestedStruct(nestedStruct, context: context)
                     propertyString += nestedSchema
                 }
         }
 
-// Create a registration statement
+        // Create a registration statement
         let registrationDecl = """
         /// generated
         public static let schemaMetadata = SchemaMetadata(name: "\(structName)", description: \(documentation.description.isEmpty ? "nil" : "\"\(documentation.description.escapedForSwiftString)\""), parameters: [\(propertyString)])
@@ -118,18 +118,18 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
         conformingTo protocols: [TypeSyntax],
         in context: some MacroExpansionContext
     ) throws -> [ExtensionDeclSyntax] {
-// Check if the declaration already conforms to SchemaRepresentable
+        // Check if the declaration already conforms to SchemaRepresentable
         let inheritedTypes = declaration.inheritanceClause?.inheritedTypes ?? []
         let alreadyConformsToSchemaRepresentable = inheritedTypes.contains { type in
-        type.type.trimmedDescription == "SchemaRepresentable"
-    }
+            type.type.trimmedDescription == "SchemaRepresentable"
+        }
 
-// If it already conforms, don't add the conformance again
+        // If it already conforms, don't add the conformance again
         if alreadyConformsToSchemaRepresentable {
             return []
         }
 
-// Create an extension that adds the SchemaRepresentable protocol conformance
+        // Create an extension that adds the SchemaRepresentable protocol conformance
         let extensionDecl = try ExtensionDeclSyntax("extension \(type): SchemaRepresentable {}")
 
         return [extensionDecl]
@@ -140,23 +140,23 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
         documentation: Documentation,
         context: MacroExpansionContext
     ) throws -> (String, (name: String, type: String, defaultValue: String?)) {
-// Get the property name and type
+        // Get the property name and type
         let propertyName = property.bindings.first?.pattern.as(IdentifierPatternSyntax.self)?.identifier.text ?? ""
         let propertyType = property.bindings.first?.typeAnnotation?.type.description.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) ?? ""
 
-// Get property description from property's documentation
+        // Get property description from property's documentation
         var propertyDescription = "nil"
         let propertyDoc = Documentation(from: property.leadingTrivia.description)
         if !propertyDoc.description.isEmpty {
             propertyDescription = "\"\(propertyDoc.description.escapedForSwiftString)\""
         }
 
-// Check for default value
+        // Check for default value
         var defaultValue = "nil"
         if let initializer = property.bindings.first?.initializer {
             let rawValue = initializer.value.description.trimmingCharacters(in: CharacterSet.whitespaces)
 
-// Handle different types of default values
+            // Handle different types of default values
             if rawValue.hasPrefix(".") {
                 defaultValue = "\(propertyType)\(rawValue)"
             } else if rawValue.contains(".") || 
@@ -172,61 +172,61 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
                     }
         }
 
-// Create property info with isRequired property
+        // Create property info with isRequired property
         let isOptionalType = propertyType.hasSuffix("?") || propertyType.hasSuffix("!")
         let isRequired = defaultValue == "nil" && !isOptionalType
 
-// Strip optional marker from type for JSON schema
+        // Strip optional marker from type for JSON schema
         let baseType = isOptionalType ? String(propertyType.dropLast()) : propertyType
 
-// Get the coding key raw value if available, otherwise use property name
+        // Get the coding key raw value if available, otherwise use property name
         let schemaName = getCodingKeyRawValue(for: propertyName, in: Syntax(property)) ?? propertyName
 
-// Create parameter info with the type directly
+        // Create parameter info with the type directly
         let propertyStr = "SchemaPropertyInfo(name: \"\(schemaName)\", type: \(baseType).self, description: \(propertyDescription), defaultValue: \(defaultValue) as Sendable?, isRequired: \(isRequired))"
 
         return (propertyStr, (name: propertyName, type: propertyType, defaultValue: defaultValue))
     }
 
-/// Gets the raw value from CodingKeys enum for a given property name
+    /// Gets the raw value from CodingKeys enum for a given property name
     private static func getCodingKeyRawValue(for propertyName: String, in parent: Syntax?) -> String? {
-// Traverse up until we find the struct declaration
+        // Traverse up until we find the struct declaration
         var currentParent = parent
         while let current = currentParent {
             if let structDecl = current.as(StructDeclSyntax.self) {
-// Look for CodingKeys enum in the struct members
+                // Look for CodingKeys enum in the struct members
                 for member in structDecl.memberBlock.members {
                     guard let enumDecl = member.decl.as(EnumDeclSyntax.self),
                           enumDecl.name.text == "CodingKeys",
                           enumDecl.modifiers.contains(where: { $0.name.text == "private" }) else {
-                    continue
-                }
+                        continue
+                    }
 
-// Get all inherited types as strings
+                    // Get all inherited types as strings
                     let inheritedTypeDescriptions = enumDecl.inheritanceClause?.inheritedTypes.map { 
-                    $0.type.description.trimmingCharacters(in: .whitespacesAndNewlines) 
-                } ?? []
+                        $0.type.description.trimmingCharacters(in: .whitespacesAndNewlines) 
+                    } ?? []
 
                     guard inheritedTypeDescriptions.contains("String"),
                           inheritedTypeDescriptions.contains("CodingKey") else {
-                    continue
-                }
+                        continue
+                    }
 
-// Found CodingKeys enum, look for the case matching our property
+                    // Found CodingKeys enum, look for the case matching our property
                     for member in enumDecl.memberBlock.members {
                         guard let enumCase = member.decl.as(EnumCaseDeclSyntax.self) else { continue }
 
                         for element in enumCase.elements {
                             if element.name.text == propertyName {
-// Found matching case, check for raw value
+                                // Found matching case, check for raw value
                                 if let rawValue = element.rawValue?.value {
-// Handle string literal
+                                    // Handle string literal
                                     if let stringLiteral = rawValue.as(StringLiteralExprSyntax.self) {
                                         return stringLiteral.segments.description
                                             .trimmingCharacters(in: .init(charactersIn: "\""))
                                     }
                                 }
-// If no raw value, use the case name
+                                // If no raw value, use the case name
                                 return element.name.text
                             }
                         }
@@ -248,7 +248,7 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
 
         var propertyString = ""
 
-// Process properties of nested struct
+        // Process properties of nested struct
         for member in structDecl.memberBlock.members {
             if let property = member.decl.as(VariableDeclSyntax.self) {
                 let (propertyStr, _) = try processProperty(
@@ -264,7 +264,7 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
             }
         }
 
-// Create metadata for nested struct
+        // Create metadata for nested struct
         return """
         , SchemaPropertyInfo(
             name: "\(structName)",
