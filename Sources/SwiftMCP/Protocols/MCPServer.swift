@@ -75,7 +75,7 @@ public extension MCPServer {
         // Prepare the response based on the method
         switch requestData.method {
             case "initialize":
-                let initResponse = createInitializeResponse(id: requestData.id ?? 0)
+                let initResponse = createInitializeResponse(id: requestData.id)
                 return .response(initResponse)
                 
             case "notifications/initialized":
@@ -85,23 +85,23 @@ public extension MCPServer {
 				return nil
                 
             case "ping":
-                let pingResponse = createPingResponse(id: requestData.id ?? 0)
+                let pingResponse = createPingResponse(id: requestData.id)
                 return .response(pingResponse)
                 
             case "tools/list":
-                let toolsResponse = createToolsListResponse(id: requestData.id ?? 0)
+                let toolsResponse = createToolsListResponse(id: requestData.id)
                 return .response(toolsResponse)
                 
             case "resources/list":
-                let resourcesResponse = await createResourcesListResponse(id: requestData.id ?? 0)
+                let resourcesResponse = await createResourcesListResponse(id: requestData.id)
                 return .response(resourcesResponse)
                 
             case "resources/templates/list":
-                let templatesResponse = await createResourceTemplatesListResponse(id: requestData.id ?? 0)
+                let templatesResponse = await createResourceTemplatesListResponse(id: requestData.id)
                 return templatesResponse
                 
             case "resources/read":
-                return await createResourcesReadResponse(id: requestData.id ?? 0, request: requestData)
+                return await createResourcesReadResponse(id: requestData.id, request: requestData)
                 
             case "tools/call":
                 if let toolResponse = await handleToolCall(requestData) {
@@ -210,24 +210,19 @@ public extension MCPServer {
 				]
 			}
 			
-            var response = JSONRPCResponse()
-            response.id = request.id
-			
-            response.result = [
+            let response = JSONRPCResponse(id: request.id, result: [
                 "content": [content],
                 "isError": false
-            ]
+            ])
             return response
             
         } catch {
-            var response = JSONRPCResponse()
-            response.id = request.id
-            response.result = [
+            let response = JSONRPCResponse(id: request.id, result: [
                 "content": [
                     ["type": "text", "text": error.localizedDescription]
                 ],
                 "isError": true
-            ]
+            ])
             return response
         }
     }
@@ -265,24 +260,17 @@ public extension MCPServer {
 		
 		guard let toolProvider = self as? MCPToolProviding else
 		{
-			var response = JSONRPCResponse()
-			response.id = id
-			response.result = [
+			return JSONRPCResponse(id: id, result: [
 				"content": [
 					["type": "text", "text": "Server does not provide any tools"]
 				],
 				"isError": true
-			]
-			return response
+			])
 		}
 		
-		var response = JSONRPCResponse()
-		response.id = id
-		response.result = [
+		return JSONRPCResponse(id: id, result: [
 			"tools": AnyCodable(toolProvider.mcpToolMetadata.convertedToTools())
-		]
-		
-		return response
+		])
 	}
 	
 	/**
@@ -295,15 +283,12 @@ public extension MCPServer {
 		
 		guard let resourceProvider = self as? MCPResourceProviding else
 		{
-			var response = JSONRPCResponse()
-			response.id = id
-			response.result = [
+			return JSONRPCResponse(id: id, result: [
 				"content": [
 					["type": "text", "text": "Server does not provide any resources"]
 				],
 				"isError": true
-			]
-			return response
+			])
 		}
 		
 		/// get resources from templates that have no parameters plus developer provided array
@@ -334,14 +319,12 @@ public extension MCPServer {
 		
 		guard let resourceProvider = self as? MCPResourceProviding else
 		{
-			var response = JSONRPCResponse()
-			response.id = id
-			response.result = [
+			let response = JSONRPCResponse(id: id, result: [
 				"content": [
 					["type": "text", "text": "Server does not provide any resources"]
 				],
 				"isError": true
-			]
+			])
 			return .response(response)
 		}
 		
@@ -374,44 +357,44 @@ public extension MCPServer {
      Creates a response listing all available resource templates.
      
      - Parameter id: The request ID to include in the response
-     - Returns: A JSON-RPC message containing the resource templates list
+     - Returns: A JSON-RPC response containing the resource templates list
      */
     func createResourceTemplatesListResponse(id: Int) async -> JSONRPCMessage {
-
-                guard let resourceProvider = self as? MCPResourceProviding else
-                {
-                        var response = JSONRPCResponse()
-                        response.id = id
-                        response.result = [
-                                "content": [
-                                        ["type": "text", "text": "Server does not provide any resources"]
+		
+		guard let resourceProvider = self as? MCPResourceProviding else
+		{
+			let response = JSONRPCResponse(id: id, result: [
+				"content": [
+					["type": "text", "text": "Server does not provide any resource templates"]
 				],
 				"isError": true
-			]
+			])
 			return .response(response)
 		}
 		
-                let templates = await resourceProvider.mcpResourceTemplates
-        
-        var response = JSONRPCResponse()
-        response.id = id
-        response.result = [
-            "resourceTemplates": AnyCodable(templates)
-        ]
-        return .response(response)
-    }
+		let templates = await resourceProvider.mcpResourceTemplates
+
+		let response = JSONRPCResponse(id: id, result: [
+			"resourceTemplates": AnyCodable(templates.map { template in
+				[
+					"uriTemplate": template.uriTemplate,
+					"name": template.name,
+					"description": template.description,
+					"mimeType": template.mimeType
+				]
+			})
+		])
+		return .response(response)
+	}
     
     /**
-     Creates a response to a ping request.
+     Creates a ping response with empty result.
      
      - Parameter id: The request ID to include in the response
-     - Returns: A JSON-RPC message acknowledging the ping
+     - Returns: A JSON-RPC response for ping
      */
     func createPingResponse(id: Int) -> JSONRPCResponse {
-        var response = JSONRPCResponse()
-        response.id = id
-        response.result = [:]
-        return response
+        return JSONRPCResponse(id: id, result: [:])
     }
     
 	// MARK: - Internal Helpers
