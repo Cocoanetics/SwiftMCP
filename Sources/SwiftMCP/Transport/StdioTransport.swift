@@ -70,7 +70,7 @@ public final class StdioTransport: Transport, @unchecked Sendable {
 						let request = try decoder.decode(JSONRPCMessage.self, from: data)
 
 						// Handle the request.
-						if let response = await server.handleRequest(request) {
+						if let response = await server.handleMessage(request) {
 							let data = try JSONEncoder().encode(response)
 							guard let json = String(data: data, encoding: .utf8) else {
 								logger.error("Failed to encode response as UTF-8")
@@ -114,7 +114,7 @@ public final class StdioTransport: Transport, @unchecked Sendable {
 				let request = try decoder.decode(JSONRPCMessage.self, from: data)
 
 				// Handle the request.
-				if let response = await server.handleRequest(request) {
+				if let response = await server.handleMessage(request) {
 					let data = try JSONEncoder().encode(response)
 					guard let json = String(data: data, encoding: .utf8) else {
 						logger.error("Failed to encode response as UTF-8")

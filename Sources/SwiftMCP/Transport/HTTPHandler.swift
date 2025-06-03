@@ -218,7 +218,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 			}
 
 			// Call the server handler (assume async)
-			guard let response = await transport.server.handleRequest(request) else {
+			guard let response = await transport.server.handleMessage(request) else {
 				// No response to send (e.g., notification)
 				await sendResponseAsync(channel: channel, status: .accepted, headers: headers, body: nil)
 				return

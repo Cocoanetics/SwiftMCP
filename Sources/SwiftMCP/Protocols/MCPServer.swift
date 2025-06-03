@@ -40,20 +40,26 @@ public protocol MCPServer {
     var serverDescription: String? { get }
     
     /**
-     Handles a JSON-RPC request and generates an appropriate response.
+     Handles a JSON-RPC message and generates an appropriate response.
      
-     - Parameter request: The JSON-RPC request to handle
+     - Parameter message: The JSON-RPC message to handle
      - Returns: A response message if one should be sent, nil otherwise
      */
-    func handleRequest(_ request: JSONRPCMessage) async -> JSONRPCMessage?
+    func handleMessage(_ message: JSONRPCMessage) async -> JSONRPCMessage?
 }
 
 // MARK: - Default Implementations
 public extension MCPServer {
     /**
-     Default implementation for handling JSON-RPC requests.
+     Default implementation for handling JSON-RPC messages.
      
-     This implementation supports the following methods:
+     This implementation supports the following message types:
+     - request: Handles various JSON-RPC requests
+     - notification: Handles notifications (no response expected)
+     - response: Handles responses from other parties
+     - errorResponse: Handles error responses
+     
+     For requests, it supports these methods:
      - initialize: Server initialization
      - notifications/initialized: Client initialization notification
      - ping: Server health check
@@ -63,25 +69,38 @@ public extension MCPServer {
      - resources/read: Read a specific resource
      - tools/call: Execute a tool
      
-     - Parameter request: The JSON-RPC request to handle
+     - Parameter message: The JSON-RPC message to handle
      - Returns: A response message if one should be sent, nil otherwise
      */
-    func handleRequest(_ request: JSONRPCMessage) async -> JSONRPCMessage? {
-		
-		guard case .request(let requestData) = request else {
-			return nil
-		}
-		
+    func handleMessage(_ message: JSONRPCMessage) async -> JSONRPCMessage? {
+        
+        // First switch on message type
+        switch message {
+            case .request(let requestData):
+                return await handleRequest(requestData)
+                
+            case .notification(let notificationData):
+                return await handleNotification(notificationData)
+                
+            case .response(let responseData):
+                return await handleResponse(responseData)
+                
+            case .errorResponse(let errorResponseData):
+                return await handleErrorResponse(errorResponseData)
+        }
+    }
+    
+    /**
+     Handles JSON-RPC requests that expect responses.
+     
+     - Parameter requestData: The request data
+     - Returns: A response message if one should be sent, nil otherwise
+     */
+    private func handleRequest(_ requestData: JSONRPCMessage.JSONRPCRequestData) async -> JSONRPCMessage? {
         // Prepare the response based on the method
         switch requestData.method {
             case "initialize":
                 return createInitializeResponse(id: requestData.id)
-                
-            case "notifications/initialized":
-                return nil
-				
-			case "notifications/cancelled":
-				return nil
                 
             case "ping":
                 return createPingResponse(id: requestData.id)
@@ -105,6 +124,52 @@ public extension MCPServer {
                 // Respond with JSON-RPC error for method not found
                 return JSONRPCMessage.errorResponse(id: requestData.id, error: .init(code: -32601, message: "Method not found"))
         }
+    }
+    
+    /**
+     Handles JSON-RPC notifications (no response expected).
+     
+     - Parameter notificationData: The notification data
+     - Returns: Always returns nil since notifications don't expect responses
+     */
+    private func handleNotification(_ notificationData: JSONRPCMessage.JSONRPCNotificationData) async -> JSONRPCMessage? {
+        switch notificationData.method {
+        case "notifications/initialized":
+            // Client has completed initialization
+            return nil
+            
+        case "notifications/cancelled":
+            // Client has cancelled a request
+            return nil
+            
+        default:
+            // Unknown notification - log it but don't respond
+            return nil
+        }
+    }
+    
+    /**
+     Handles JSON-RPC responses from other parties.
+     
+     - Parameter responseData: The response data
+     - Returns: Always returns nil since we don't currently respond to responses
+     */
+    private func handleResponse(_ responseData: JSONRPCMessage.JSONRPCResponseData) async -> JSONRPCMessage? {
+        // In a typical server scenario, we don't usually respond to responses
+        // This could be extended for scenarios where the server also acts as a client
+        return nil
+    }
+    
+    /**
+     Handles JSON-RPC error responses from other parties.
+     
+     - Parameter errorResponseData: The error response data
+     - Returns: Always returns nil since we don't currently respond to error responses
+     */
+    private func handleErrorResponse(_ errorResponseData: JSONRPCMessage.JSONRPCErrorResponseData) async -> JSONRPCMessage? {
+        // In a typical server scenario, we don't usually respond to error responses
+        // This could be extended for scenarios where the server also acts as a client
+        return nil
     }
     
     /**

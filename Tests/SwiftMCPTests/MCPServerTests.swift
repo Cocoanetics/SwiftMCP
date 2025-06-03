@@ -26,7 +26,7 @@ func testInitializeRequest() async throws {
     )
     
     // Handle the request
-    guard let message = await calculator.handleRequest(request) else {
+    guard let message = await calculator.handleMessage(request) else {
         #expect(Bool(false), "Expected a response message")
         return
     }
@@ -95,7 +95,7 @@ func testToolsListRequest() async throws {
     )
     
     // Handle the request
-    guard let message = await calculator.handleRequest(request) else {
+    guard let message = await calculator.handleMessage(request) else {
         #expect(Bool(false), "Expected a response message")
         return
     }
@@ -141,7 +141,7 @@ func testToolCallRequest() async throws {
     )
     
     // Handle the request
-    guard let message = await calculator.handleRequest(request) else {
+    guard let message = await calculator.handleMessage(request) else {
         #expect(Bool(false), "Expected a response message")
         return
     }
@@ -181,7 +181,7 @@ func testToolCallRequestWithError() async throws {
     )
     
     // Handle the request
-    guard let message = await calculator.handleRequest(request) else {
+    guard let message = await calculator.handleMessage(request) else {
         #expect(Bool(false), "Expected a response message")
         return
     }
@@ -232,7 +232,7 @@ func testToolCallRequestWithInvalidArgument() async throws {
     )
     
     // Handle the request
-    guard let message = await calculator.handleRequest(request) else {
+    guard let message = await calculator.handleMessage(request) else {
         #expect(Bool(false), "Expected a response message")
         return
     }
@@ -339,7 +339,7 @@ func testUnknownMethodReturnsMethodNotFoundError() async throws {
     )
     
     // Handle the request
-    guard let message = await calculator.handleRequest(request) else {
+    guard let message = await calculator.handleMessage(request) else {
         #expect(Bool(false), "Expected a response message")
         return
     }

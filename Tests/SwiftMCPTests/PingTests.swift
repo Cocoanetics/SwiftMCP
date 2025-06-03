@@ -15,7 +15,7 @@ func testPingRequest() async throws {
     )
     
     // Handle the request
-    guard let message = await calculator.handleRequest(pingRequest) else {
+    guard let message = await calculator.handleMessage(pingRequest) else {
         #expect(Bool(false), "Expected a response message")
         return
     }

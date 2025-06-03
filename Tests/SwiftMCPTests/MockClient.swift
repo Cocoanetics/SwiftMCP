@@ -11,7 +11,7 @@ class MockClient {
     
     func send(_ request: JSONRPCMessage) async -> JSONRPCMessage? {
 		
-		let response = await server.handleRequest(request)
+		let response = await server.handleMessage(request)
 		
 		return response
     }
