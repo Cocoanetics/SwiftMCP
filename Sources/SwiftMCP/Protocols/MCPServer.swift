@@ -76,7 +76,7 @@ public extension MCPServer {
         switch requestData.method {
             case "initialize":
                 let initResponse = createInitializeResponse(id: requestData.id ?? 0)
-                return .initializeResponse(initResponse)
+                return .response(initResponse)
                 
             case "notifications/initialized":
                 return nil
@@ -130,30 +130,37 @@ public extension MCPServer {
      - Parameter id: The request ID to include in the response
      - Returns: A JSON-RPC message containing the initialization response
      */
-        func createInitializeResponse(id: Int) -> JSONRPCInitializeResponse {
-                var capabilities = ServerCapabilities()
+    func createInitializeResponse(id: Int) -> JSONRPCResponse {
+        var capabilities = ServerCapabilities()
 
-                if self is MCPToolProviding {
-                        capabilities.tools = .init(listChanged: false)
-                }
-
-                if self is MCPResourceProviding {
-                        capabilities.resources = .init(listChanged: false)
-                }
-
-                let serverInfo = JSONRPCInitializeResponse.InitializeResult.ServerInfo(
-                        name: serverName,
-                        version: serverVersion
-                )
-
-                let result = JSONRPCInitializeResponse.InitializeResult(
-                        protocolVersion: "2024-11-05",
-                        capabilities: capabilities,
-                        serverInfo: serverInfo
-                )
-
-                return JSONRPCInitializeResponse(id: id, result: result)
+        if self is MCPToolProviding {
+            capabilities.tools = .init(listChanged: false)
         }
+
+        if self is MCPResourceProviding {
+            capabilities.resources = .init(listChanged: false)
+        }
+
+        let serverInfo = InitializeResult.ServerInfo(
+            name: serverName,
+            version: serverVersion
+        )
+
+        let result = InitializeResult(
+            protocolVersion: "2024-11-05",
+            capabilities: capabilities,
+            serverInfo: serverInfo
+        )
+
+        do {
+            let encoder = DictionaryEncoder()
+            let resultDict = try encoder.encode(result)
+            return JSONRPCResponse(id: id, result: resultDict)
+        } catch {
+            // Fallback to empty response if encoding fails
+            return JSONRPCResponse(id: id, result: [:])
+        }
+    }
     
     /**
      Handles a tool execution request.

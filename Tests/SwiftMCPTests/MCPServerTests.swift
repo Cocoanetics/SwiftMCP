@@ -31,8 +31,8 @@ func testInitializeRequest() async throws {
         return
     }
     
-    guard case .initializeResponse(let response) = message else {
-        #expect(Bool(false), "Expected initializeResponse case")
+    guard case .response(let response) = message else {
+        #expect(Bool(false), "Expected response case")
         return
     }
     
@@ -45,24 +45,42 @@ func testInitializeRequest() async throws {
         throw TestError("Result is missing")
     }
 
-    #expect(result.protocolVersion == "2024-11-05")
+    // Extract protocolVersion from the dictionary
+    guard let protocolVersion = result["protocolVersion"]?.value as? String else {
+        throw TestError("protocolVersion not found")
+    }
+    #expect(protocolVersion == "2024-11-05")
 
     // Extract the server capabilities
-    let capabilities = result.capabilities
+    guard let capabilitiesDict = result["capabilities"]?.value as? [String: Any] else {
+        throw TestError("capabilities not found")
+    }
 
-    // Verify the capabilities
-    #expect(capabilities.experimental.isEmpty, "Experimental should be empty")
+    // Verify the capabilities - check if experimental is empty or doesn't exist
+    let experimental = capabilitiesDict["experimental"] as? [String: Any] ?? [:]
+    #expect(experimental.isEmpty, "Experimental should be empty")
 
     // Check tools capabilities
-    guard let tools = capabilities.tools else {
+    guard let toolsDict = capabilitiesDict["tools"] as? [String: Any] else {
         throw TestError("Tools capabilities not found")
     }
-    #expect(tools.listChanged == false, "Tools listChanged should be false")
+    guard let listChanged = toolsDict["listChanged"] as? Bool else {
+        throw TestError("listChanged not found in tools capabilities")
+    }
+    #expect(listChanged == false, "Tools listChanged should be false")
 
     // Check server info
-    let serverInfo = result.serverInfo
-    #expect(!serverInfo.name.isEmpty)
-    #expect(!serverInfo.version.isEmpty)
+    guard let serverInfoDict = result["serverInfo"]?.value as? [String: Any] else {
+        throw TestError("serverInfo not found")
+    }
+    guard let name = serverInfoDict["name"] as? String else {
+        throw TestError("server name not found")
+    }
+    guard let version = serverInfoDict["version"] as? String else {
+        throw TestError("server version not found")
+    }
+    #expect(!name.isEmpty)
+    #expect(!version.isEmpty)
 }
 
 @Test
@@ -259,8 +277,16 @@ func testCustomNameAndVersion() async throws {
     guard let result = response.result else {
         throw TestError("Failed to extract result from response")
     }
-    let name = result.serverInfo.name
-    let version = result.serverInfo.version
+    
+    guard let serverInfoDict = result["serverInfo"]?.value as? [String: Any] else {
+        throw TestError("serverInfo not found")
+    }
+    guard let name = serverInfoDict["name"] as? String else {
+        throw TestError("server name not found")
+    }
+    guard let version = serverInfoDict["version"] as? String else {
+        throw TestError("server version not found")
+    }
 
     #expect(name == "CustomCalculator", "Server name should match specified name")
     #expect(version == "2.0", "Server version should match specified version")
@@ -278,8 +304,16 @@ func testDefaultNameAndVersion() async throws {
     guard let result = response.result else {
         throw TestError("Failed to extract result from response")
     }
-    let name = result.serverInfo.name
-    let version = result.serverInfo.version
+    
+    guard let serverInfoDict = result["serverInfo"]?.value as? [String: Any] else {
+        throw TestError("serverInfo not found")
+    }
+    guard let name = serverInfoDict["name"] as? String else {
+        throw TestError("server name not found")
+    }
+    guard let version = serverInfoDict["version"] as? String else {
+        throw TestError("server version not found")
+    }
 
     #expect(name == "DefaultNameCalculator", "Server name should match class name")
     #expect(version == "1.0", "Server version should be default value")

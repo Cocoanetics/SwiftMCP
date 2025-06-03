@@ -17,7 +17,6 @@ public enum JSONRPCMessage: Codable, Sendable {
     case response(JSONRPCResponseData)
     case errorResponse(JSONRPCErrorResponseData)
     case emptyResponse(JSONRPCEmptyResponseData)
-    case initializeResponse(JSONRPCInitializeResponseData)
     
     // MARK: - Data Structures
     
@@ -113,60 +112,6 @@ public enum JSONRPCMessage: Codable, Sendable {
         }
     }
     
-    /// Data structure for JSON-RPC initialization responses
-    public struct JSONRPCInitializeResponseData: Codable, Sendable {
-        /// The JSON-RPC protocol version, always "2.0"
-        public var jsonrpc: String = "2.0"
-        
-        /// The unique identifier for the response
-        public var id: Int?
-        
-        /// The result of the initialize call
-        public var result: InitializeResult?
-        
-        /// The error if the initialize call failed
-        public var error: JSONRPCErrorResponseData.ErrorPayload?
-        
-        /// The result structure for initialize
-        public struct InitializeResult: Codable, Sendable {
-            /// The protocol version supported by the server
-            public let protocolVersion: String
-            
-            /// The server's capabilities
-            public let capabilities: ServerCapabilities
-            
-            /// Information about the server
-            public let serverInfo: ServerInfo
-            
-            /// Server information structure
-            public struct ServerInfo: Codable, Sendable {
-                /// The name of the server
-                public let name: String
-                
-                /// The version of the server
-                public let version: String
-                
-                public init(name: String, version: String) {
-                    self.name = name
-                    self.version = version
-                }
-            }
-            
-            public init(protocolVersion: String, capabilities: ServerCapabilities, serverInfo: ServerInfo) {
-                self.protocolVersion = protocolVersion
-                self.capabilities = capabilities
-                self.serverInfo = serverInfo
-            }
-        }
-        
-        public init(jsonrpc: String = "2.0", id: Int?, result: InitializeResult? = nil, error: JSONRPCErrorResponseData.ErrorPayload? = nil) {
-            self.jsonrpc = jsonrpc
-            self.id = id
-            self.result = result
-            self.error = error
-        }
-    }
-    
     // MARK: - Computed Properties
     
     /// The JSON-RPC protocol version, typically "2.0"
@@ -176,7 +121,6 @@ public enum JSONRPCMessage: Codable, Sendable {
         case .response(let data): return data.jsonrpc
         case .errorResponse(let data): return data.jsonrpc
         case .emptyResponse(let data): return data.jsonrpc
-        case .initializeResponse(let data): return data.jsonrpc
         }
     }
     
@@ -187,7 +131,6 @@ public enum JSONRPCMessage: Codable, Sendable {
         case .response(let data): return data.id
         case .errorResponse(let data): return data.id
         case .emptyResponse(let data): return data.id
-        case .initializeResponse(let data): return data.id
         }
     }
     
@@ -207,10 +150,6 @@ public enum JSONRPCMessage: Codable, Sendable {
     
     public static func emptyResponse(jsonrpc: String = "2.0", id: Int?) -> JSONRPCMessage {
         return .emptyResponse(JSONRPCEmptyResponseData(jsonrpc: jsonrpc, id: id))
-    }
-    
-    public static func initializeResponse(jsonrpc: String = "2.0", id: Int?, result: JSONRPCInitializeResponseData.InitializeResult? = nil, error: JSONRPCErrorResponseData.ErrorPayload? = nil) -> JSONRPCMessage {
-        return .initializeResponse(JSONRPCInitializeResponseData(jsonrpc: jsonrpc, id: id, result: result, error: error))
     }
     
     // MARK: - Codable Implementation
@@ -247,8 +186,7 @@ public enum JSONRPCMessage: Codable, Sendable {
             // Check if it's an initialize response by looking for protocolVersion in the result
             if let resultDict = resultValue.value as? [String: Any],
                let _ = resultDict["protocolVersion"] as? String {
-                let result = try container.decode(JSONRPCInitializeResponseData.InitializeResult.self, forKey: .result)
-                self = .initializeResponse(JSONRPCInitializeResponseData(jsonrpc: jsonrpc, id: id, result: result))
+                throw DecodingError.dataCorrupted(DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Initialize response not supported"))
             } else if let resultDict = resultValue.value as? [String: Any], resultDict.isEmpty {
                 self = .emptyResponse(JSONRPCEmptyResponseData(jsonrpc: jsonrpc, id: id))
             } else {
@@ -284,12 +222,6 @@ public enum JSONRPCMessage: Codable, Sendable {
             try container.encode(data.jsonrpc, forKey: .jsonrpc)
             try container.encodeIfPresent(data.id, forKey: .id)
             try container.encode(data.result, forKey: .result)
-            
-        case .initializeResponse(let data):
-            try container.encode(data.jsonrpc, forKey: .jsonrpc)
-            try container.encodeIfPresent(data.id, forKey: .id)
-            try container.encodeIfPresent(data.result, forKey: .result)
-            try container.encodeIfPresent(data.error, forKey: .error)
         }
     }
 }
@@ -307,9 +239,6 @@ public typealias JSONRPCErrorResponse = JSONRPCMessage.JSONRPCErrorResponseData
 
 /// Backward compatibility alias for JSONRPCEmptyResponseData
 public typealias JSONRPCEmptyResponse = JSONRPCMessage.JSONRPCEmptyResponseData
-
-/// Backward compatibility alias for JSONRPCInitializeResponseData
-public typealias JSONRPCInitializeResponse = JSONRPCMessage.JSONRPCInitializeResponseData
 
 // MARK: - Convenience Extensions for Migration
 
@@ -332,10 +261,5 @@ extension JSONRPCMessage {
     /// Creates an empty response message - convenience for migration
     public static func makeEmptyResponse(jsonrpc: String = "2.0", id: Int?) -> JSONRPCMessage {
         return .emptyResponse(JSONRPCEmptyResponseData(jsonrpc: jsonrpc, id: id))
-    }
-    
-    /// Creates an initialize response message - convenience for migration
-    public static func makeInitializeResponse(jsonrpc: String = "2.0", id: Int?, result: JSONRPCInitializeResponseData.InitializeResult? = nil, error: JSONRPCErrorResponseData.ErrorPayload? = nil) -> JSONRPCMessage {
-        return .initializeResponse(JSONRPCInitializeResponseData(jsonrpc: jsonrpc, id: id, result: result, error: error))
     }
 }
