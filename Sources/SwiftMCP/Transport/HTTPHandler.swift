@@ -604,12 +604,12 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
                 result = try await toolProvider.callTool(toolName, arguments: arguments)
             } else if let resourceProvider = transport.server as? MCPResourceProviding,
 					  resourceProvider.mcpResourceMetadata.contains(where: { $0.functionMetadata.name == toolName }) {
-                    // Call as a resource function
-                    result = try await resourceProvider.callResourceAsFunction(toolName, arguments: arguments)
-                } else {
-                    // Function not found
-                    throw MCPToolError.unknownTool(name: toolName)
-                }
+                // Call as a resource function
+                result = try await resourceProvider.callResourceAsFunction(toolName, arguments: arguments)
+            } else {
+                // Function not found
+                throw MCPToolError.unknownTool(name: toolName)
+            }
 
             // Convert MCPResourceContent to OpenAIFileResponse if applicable
             let responseToEncode: Encodable
@@ -626,20 +626,20 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
             }
 			else if let resourceContentArray = result as? [MCPResourceContent] {
 
-                    let files = resourceContentArray.compactMap { resourceContent in
-                        FileContent(
+                let files = resourceContentArray.compactMap { resourceContent in
+                    FileContent(
 						name: resourceContent.uri.lastPathComponent,
 						mimeType: resourceContent.mimeType ?? "application/octet-stream",
 						content: resourceContent.blob ?? resourceContent.text?.data(using: .utf8) ?? Data()
 					)
-                    }
-
-                    responseToEncode = OpenAIFileResponse(files: files)
                 }
+
+                responseToEncode = OpenAIFileResponse(files: files)
+            }
 			
 			else {
-                    responseToEncode = result
-                }
+                responseToEncode = result
+            }
 
             // Convert result to JSON data
             let encoder = JSONEncoder()
@@ -680,10 +680,10 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
         if let host = head.headers["Host"].first {
             components.host = host
         } else if let remoteAddress = head.headers["X-Forwarded-Host"].first {
-                components.host = remoteAddress
-            } else {
-                components.host = transport.host
-            }
+            components.host = remoteAddress
+        } else {
+            components.host = transport.host
+        }
 
         // Get the scheme from the request headers or connection
         if let proto = head.headers["X-Forwarded-Proto"].first {
@@ -696,13 +696,13 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
         if let port = head.headers["X-Forwarded-Port"].first {
             components.port = Int(port)
         } else if let host = components.host, host.contains(":") {
-                // Extract port from host if present
-                let parts = host.split(separator: ":")
-                components.host = String(parts[0])
-                components.port = Int(parts[1])
-            } else {
-                components.port = transport.port
-            }
+            // Extract port from host if present
+            let parts = host.split(separator: ":")
+            components.host = String(parts[0])
+            components.port = Int(parts[1])
+        } else {
+            components.port = transport.port
+        }
 
         components.path = "/messages/\(clientId)"
 
@@ -711,8 +711,8 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
             components.port = nil
         }
 		else if components.port == 443, components.scheme == "https" {
-                components.port = nil
-            }
+            components.port = nil
+        }
 
         logger.info("Generated endpoint URL: \(components.url?.absoluteString ?? "nil")")
         return components.url

@@ -48,12 +48,12 @@ extension MCPParameterInfo {
             if type == Int.self || type == Double.self {
                 schema = JSONSchema.number()
             } else if type == Bool.self {
-                    schema = JSONSchema.boolean()
-                } else if let schemaType = type as? any SchemaRepresentable.Type {
-                        schema = schemaType.schemaMetadata.schema
-                    } else {
-                        schema = JSONSchema.string()
-                    }
+                schema = JSONSchema.boolean()
+            } else if let schemaType = type as? any SchemaRepresentable.Type {
+                schema = schemaType.schemaMetadata.schema
+            } else {
+                schema = JSONSchema.string()
+            }
 
             return JSONSchema.array(items: schema, description: description)
         }

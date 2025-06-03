@@ -176,26 +176,26 @@ fileprivate func _box<T: Encodable>(_ value: T, encoder: _DictionaryEncoder) thr
     if let date = value as? Date {
         return date.timeIntervalSince1970
     } else if let data = value as? Data {
-            return data.base64EncodedString()
-        } else if let url = value as? URL {
-                return url.absoluteString
-            } else if let decimal = value as? Decimal {
-                    return decimal.description
-                } else if let number = value as? NSNumber {
-                        return number
-                    } else if let string = value as? String {
-                            return string
-                        } else if let bool = value as? Bool {
-                                return bool
-                            } else if let int = value as? Int {
-                                    return int
-                                } else if let double = value as? Double {
-                                        return double
-                                    } else if let float = value as? Float {
-                                            return float
-                                        } else {
-                                            let depthEncoder = _DictionaryEncoder()
-                                            try value.encode(to: depthEncoder)
-                                            return depthEncoder.storage.popContainer()
-                                        }
+        return data.base64EncodedString()
+    } else if let url = value as? URL {
+        return url.absoluteString
+    } else if let decimal = value as? Decimal {
+        return decimal.description
+    } else if let number = value as? NSNumber {
+        return number
+    } else if let string = value as? String {
+        return string
+    } else if let bool = value as? Bool {
+        return bool
+    } else if let int = value as? Int {
+        return int
+    } else if let double = value as? Double {
+        return double
+    } else if let float = value as? Float {
+        return float
+    } else {
+        let depthEncoder = _DictionaryEncoder()
+        try value.encode(to: depthEncoder)
+        return depthEncoder.storage.popContainer()
+    }
 } 

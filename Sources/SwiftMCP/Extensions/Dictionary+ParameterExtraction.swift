@@ -57,74 +57,74 @@ public extension Dictionary where Key == String, Value == Sendable {
             return value
         }
         else if T.self == Bool.self {
-                let boolValue = try extractBool(named: name)
-                return boolValue as! T
-            }
+            let boolValue = try extractBool(named: name)
+            return boolValue as! T
+        }
         else if T.self == Date.self {
-                    // Handle Date type using the new extractDate method
-                    let date = try extractDate(named: name)
-                    return date as! T
-                }
+            // Handle Date type using the new extractDate method
+            let date = try extractDate(named: name)
+            return date as! T
+        }
         else if T.self == URL.self {
-                        // Handle URL type using the new extractURL method
-                        let url = try extractURL(named: name)
-                        return url as! T
-                    }
+            // Handle URL type using the new extractURL method
+            let url = try extractURL(named: name)
+            return url as! T
+        }
         else if let caseType = T.self as? any CaseIterable.Type {
-                            guard let string = anyValue as? String else {
-                                throw MCPToolError.invalidArgumentType(
+            guard let string = anyValue as? String else {
+                throw MCPToolError.invalidArgumentType(
                     parameterName: name,
                     expectedType: "String",
                     actualType: String(describing: Swift.type(of: anyValue))
                 )
-                            }
+            }
 
-                            let caseLabels = caseType.caseLabels
+            let caseLabels = caseType.caseLabels
 
-                            guard let index = caseLabels.firstIndex(of: string) else {
-                                throw MCPToolError.invalidEnumValue(parameterName: name, expectedValues: caseLabels, actualValue: string)
-                            }
+            guard let index = caseLabels.firstIndex(of: string) else {
+                throw MCPToolError.invalidEnumValue(parameterName: name, expectedValues: caseLabels, actualValue: string)
+            }
 
-                            guard let allCases = caseType.allCases as? [T] else {
-                                // This can never happen because the result of CaseIterable is an array of the enum type
-                                preconditionFailure()
-                            }
+            guard let allCases = caseType.allCases as? [T] else {
+                // This can never happen because the result of CaseIterable is an array of the enum type
+                preconditionFailure()
+            }
 
-                            // return the actual enum case value that matches the string label
-                            return allCases[index]
-                        }
+            // return the actual enum case value that matches the string label
+            return allCases[index]
+        }
         else if let schemaType = T.self as? any SchemaRepresentable.Type,
                 let decodableType = schemaType as? Decodable.Type {
-                                if let dict = anyValue as? [String: Any] {
-                                    return try dict.decode(decodableType.self) as! T
-                                } else if let array = anyValue as? [[String: Any]] {
-                                        return try array.decode(decodableType.self) as! T
-                                    } else if let jsonString = anyValue as? String {
-                                            // Handle JSON string using the new decode method
-                                            if let result = try jsonString.decode(decodableType) as? T {
-                                                return result
-                                            } else {
-                                                throw MCPToolError.invalidArgumentType(
+            if let dict = anyValue as? [String: Any] {
+                return try dict.decode(decodableType.self) as! T
+            } else if let array = anyValue as? [[String: Any]] {
+                return try array.decode(decodableType.self) as! T
+            } else if let jsonString = anyValue as? String {
+                // Handle JSON string using the new decode method
+                if let result = try jsonString.decode(decodableType) as? T {
+                    return result
+                } else {
+                    throw MCPToolError.invalidArgumentType(
                         parameterName: name,
                         expectedType: String(describing: T.self),
                         actualType: "Decoded object could not be cast to \(String(describing: T.self))"
                     )
-                                            }
-                                        } else {
-                                            throw MCPToolError.invalidArgumentType(
+                }
+            } else {
+                throw MCPToolError.invalidArgumentType(
                     parameterName: name,
                     expectedType: "Dictionary, Array of Dictionaries, or JSON string",
                     actualType: String(describing: Swift.type(of: anyValue))
                 )
-                                        }
-                            }
+            }
+        }
         else {
-                                throw MCPToolError.invalidArgumentType(
+            throw MCPToolError.invalidArgumentType(
                 parameterName: name,
                 expectedType: String(describing: T.self),
                 actualType: String(describing: Swift.type(of: anyValue))
             )
-                            }
+        }
     }
 
     /// Extracts a parameter of the specified type from the dictionary, returning nil if the parameter is missing or invalid
@@ -155,88 +155,88 @@ public extension Dictionary where Key == String, Value == Sendable {
         if let array = anyValue as? [T] {
             return array
         } else if let caseIterableType = elementType as? any CaseIterable.Type {
-                // Handle arrays of CaseIterable enums like Weekday
-                if let stringArray = anyValue as? [String] {
-                    return try stringArray.map { stringValue in
-                        let caseLabels = caseIterableType.caseLabels
+            // Handle arrays of CaseIterable enums like Weekday
+            if let stringArray = anyValue as? [String] {
+                return try stringArray.map { stringValue in
+                    let caseLabels = caseIterableType.caseLabels
 
-                        guard let index = caseLabels.firstIndex(of: stringValue) else {
-                            throw MCPToolError.invalidEnumValue(
+                    guard let index = caseLabels.firstIndex(of: stringValue) else {
+                        throw MCPToolError.invalidEnumValue(
                             parameterName: name,
                             expectedValues: caseLabels,
                             actualValue: stringValue
                         )
-                        }
-
-                        guard let allCases = caseIterableType.allCases as? [T] else {
-                            // This can never happen because the result of CaseIterable is an array of the enum type
-                            preconditionFailure()
-                        }
-
-                        // Return the actual enum case value that matches the string label
-                        return allCases[index]
                     }
-                } else {
-                    throw MCPToolError.invalidArgumentType(
+
+                    guard let allCases = caseIterableType.allCases as? [T] else {
+                        // This can never happen because the result of CaseIterable is an array of the enum type
+                        preconditionFailure()
+                    }
+
+                    // Return the actual enum case value that matches the string label
+                    return allCases[index]
+                }
+            } else {
+                throw MCPToolError.invalidArgumentType(
                     parameterName: name,
                     expectedType: "Array of Strings",
                     actualType: String(describing: Swift.type(of: anyValue))
                 )
-                }
-            } else if let dictArray = anyValue as? [[String: Any]] {
-                    // For JSON-decodable types, we need to use a generic helper
-                    if let decodableType = elementType as? (any Decodable.Type) {
-                        // Convert array of dictionaries to array of the specified type using JSONSerialization
-                        let decoder = JSONDecoder()
-                        return try dictArray.map { dict in
-                            let data = try JSONSerialization.data(withJSONObject: dict)
-                            // Cast the result back to T after decoding
-                            if let result = try decoder.decode(decodableType, from: data) as? T {
-                                return result
-                            } else {
-                                throw MCPToolError.invalidArgumentType(
+            }
+        } else if let dictArray = anyValue as? [[String: Any]] {
+            // For JSON-decodable types, we need to use a generic helper
+            if let decodableType = elementType as? (any Decodable.Type) {
+                // Convert array of dictionaries to array of the specified type using JSONSerialization
+                let decoder = JSONDecoder()
+                return try dictArray.map { dict in
+                    let data = try JSONSerialization.data(withJSONObject: dict)
+                    // Cast the result back to T after decoding
+                    if let result = try decoder.decode(decodableType, from: data) as? T {
+                        return result
+                    } else {
+                        throw MCPToolError.invalidArgumentType(
                             parameterName: name,
                             expectedType: String(describing: T.self),
                             actualType: "Decoded object could not be cast to \(String(describing: T.self))"
                         )
-                            }
-                        }
-                    } else {
-                        throw MCPToolError.invalidArgumentType(
+                    }
+                }
+            } else {
+                throw MCPToolError.invalidArgumentType(
                     parameterName: name,
                     expectedType: "Array of Decodable objects",
                     actualType: String(describing: Swift.type(of: anyValue))
                 )
-                    }
-                } else if let stringArray = anyValue as? [String],
+            }
+        } else if let stringArray = anyValue as? [String],
                   let decodableType = elementType as? (any Decodable.Type) {
-                        // Handle array of JSON strings
-                        let decoder = JSONDecoder()
-                        return try stringArray.map { jsonString in
-                            guard let data = jsonString.data(using: .utf8) else {
-                                throw MCPToolError.invalidArgumentType(
+            // Handle array of JSON strings
+            let decoder = JSONDecoder()
+            return try stringArray.map { jsonString in
+                guard let data = jsonString.data(using: .utf8) else {
+                    throw MCPToolError.invalidArgumentType(
                         parameterName: name,
                         expectedType: "Valid JSON string",
                         actualType: "Invalid JSON string"
                     )
-                            }
-                            if let result = try decoder.decode(decodableType, from: data) as? T {
-                                return result
-                            } else {
-                                throw MCPToolError.invalidArgumentType(
+                }
+                if let result = try decoder.decode(decodableType, from: data) as? T {
+                    return result
+                } else {
+                    throw MCPToolError.invalidArgumentType(
                         parameterName: name,
                         expectedType: String(describing: T.self),
                         actualType: "Decoded object could not be cast to \(String(describing: T.self))"
                     )
-                            }
-                        }
-                    } else {
-                        throw MCPToolError.invalidArgumentType(
+                }
+            }
+        } else {
+            throw MCPToolError.invalidArgumentType(
                 parameterName: name,
                 expectedType: "Array of \(String(describing: T.self))",
                 actualType: String(describing: Swift.type(of: anyValue))
             )
-                    }
+        }
     }
 
     /// Extracts an optional array of elements of the specified type from the dictionary
@@ -298,23 +298,23 @@ public extension Dictionary where Key == String, Value == Sendable {
         if let array = self[name] as? [N] {
             return array
         } else if let anyArray = self[name] as? [Any] {
-                return try anyArray.map { element in
-                    guard let converted = N.convert(from: element) else {
-                        throw MCPToolError.invalidArgumentType(
+            return try anyArray.map { element in
+                guard let converted = N.convert(from: element) else {
+                    throw MCPToolError.invalidArgumentType(
                         parameterName: name,
                         expectedType: String(describing: N.self),
                         actualType: String(describing: Swift.type(of: element))
                     )
-                    }
-                    return converted
                 }
-            } else {
-                throw MCPToolError.invalidArgumentType(
+                return converted
+            }
+        } else {
+            throw MCPToolError.invalidArgumentType(
                 parameterName: name,
                 expectedType: "Array of \(String(describing: N.self))",
                 actualType: String(describing: Swift.type(of: self[name] ?? "nil"))
             )
-            }
+        }
     }
 
     /// Extracts an array of numeric values of a `BinaryFloatingPoint` type from the dictionary.
@@ -322,23 +322,23 @@ public extension Dictionary where Key == String, Value == Sendable {
         if let array = self[name] as? [N] {
             return array
         } else if let anyArray = self[name] as? [Any] {
-                return try anyArray.map { element in
-                    guard let converted = N.convert(from: element) else {
-                        throw MCPToolError.invalidArgumentType(
+            return try anyArray.map { element in
+                guard let converted = N.convert(from: element) else {
+                    throw MCPToolError.invalidArgumentType(
                         parameterName: name,
                         expectedType: String(describing: N.self),
                         actualType: String(describing: Swift.type(of: element))
                     )
-                    }
-                    return converted
                 }
-            } else {
-                throw MCPToolError.invalidArgumentType(
+                return converted
+            }
+        } else {
+            throw MCPToolError.invalidArgumentType(
                 parameterName: name,
                 expectedType: "Array of \(String(describing: N.self))",
                 actualType: String(describing: Swift.type(of: self[name] ?? "nil"))
             )
-            }
+        }
     }
 
     /// Extracts an optional numeric parameter of a `BinaryInteger` type from the dictionary.
@@ -580,30 +580,30 @@ extension Dictionary where Key == String, Value == String {
             }
             return value
         } else if T.self == String.self {
-                return stringValue as! T
-            } else if T.self == Date.self {
-                    // Try to parse as ISO8601 date
-                    let formatter = ISO8601DateFormatter()
-                    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-                    if let date = formatter.date(from: stringValue) {
-                        return date as! T
-                    }
-                    // Try without fractional seconds
-                    formatter.formatOptions = [.withInternetDateTime]
-                    if let date = formatter.date(from: stringValue) {
-                        return date as! T
-                    }
-                    throw MCPResourceError.typeMismatch(parameter: name, expectedType: "Date", actualValue: stringValue)
-                } else if T.self == URL.self {
-                        guard let url = URL(string: stringValue) else {
-                            throw MCPResourceError.typeMismatch(parameter: name, expectedType: "URL", actualValue: stringValue)
-                        }
-                        return url as! T
-                    } else {
-                        // For other types, we can't decode from JSON in string format
-                        // This is a limitation for resources - complex types should be passed as simple values
-                        throw MCPResourceError.typeMismatch(parameter: name, expectedType: String(describing: T.self), actualValue: stringValue)
-                    }
+            return stringValue as! T
+        } else if T.self == Date.self {
+            // Try to parse as ISO8601 date
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = formatter.date(from: stringValue) {
+                return date as! T
+            }
+            // Try without fractional seconds
+            formatter.formatOptions = [.withInternetDateTime]
+            if let date = formatter.date(from: stringValue) {
+                return date as! T
+            }
+            throw MCPResourceError.typeMismatch(parameter: name, expectedType: "Date", actualValue: stringValue)
+        } else if T.self == URL.self {
+            guard let url = URL(string: stringValue) else {
+                throw MCPResourceError.typeMismatch(parameter: name, expectedType: "URL", actualValue: stringValue)
+            }
+            return url as! T
+        } else {
+            // For other types, we can't decode from JSON in string format
+            // This is a limitation for resources - complex types should be passed as simple values
+            throw MCPResourceError.typeMismatch(parameter: name, expectedType: String(describing: T.self), actualValue: stringValue)
+        }
     }
 
     /// Extracts a value from string dictionary with a default value
@@ -633,16 +633,16 @@ extension Dictionary where Key == String, Value == String {
             let components = stringValue.split(separator: ",").map { String($0.trimmingCharacters(in: .whitespaces)) }
             return components as! [Element]
         } else if Element.self == Int.self {
-                let components = stringValue.split(separator: ",").map { String($0.trimmingCharacters(in: .whitespaces)) }
-                return try components.map { str in
-                    guard let value = Int(str) else {
-                        throw MCPResourceError.typeMismatch(parameter: name, expectedType: "Int", actualValue: str)
-                    }
-                    return value
-                } as! [Element]
-            } else {
-                // For other types, arrays aren't supported in URI parameters
-                throw MCPResourceError.typeMismatch(parameter: name, expectedType: String(describing: [Element].self), actualValue: stringValue)
-            }
+            let components = stringValue.split(separator: ",").map { String($0.trimmingCharacters(in: .whitespaces)) }
+            return try components.map { str in
+                guard let value = Int(str) else {
+                    throw MCPResourceError.typeMismatch(parameter: name, expectedType: "Int", actualValue: str)
+                }
+                return value
+            } as! [Element]
+        } else {
+            // For other types, arrays aren't supported in URI parameters
+            throw MCPResourceError.typeMismatch(parameter: name, expectedType: String(describing: [Element].self), actualValue: stringValue)
+        }
     }
 } 

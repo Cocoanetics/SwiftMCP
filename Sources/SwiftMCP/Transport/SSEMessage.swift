@@ -32,8 +32,8 @@ struct SSEMessage: LosslessStringConvertible {
             if line.starts(with: "event:") {
                 name = String(line.dropFirst(6)).trimmingCharacters(in: .whitespaces)
             } else if line.starts(with: "data:") {
-                    data = String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces)
-                }
+                data = String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+            }
         }
 
         // Data field is required

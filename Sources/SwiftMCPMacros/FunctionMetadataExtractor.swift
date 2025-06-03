@@ -87,15 +87,15 @@ struct FunctionMetadataExtractor {
                 if paramTypeString.hasSuffix("?") {
                     baseTypeString = String(paramTypeString.dropLast())
                 } else if paramTypeString.hasSuffix("!") {
-                        baseTypeString = String(paramTypeString.dropLast())
-                    } else if let optType = paramTypeSyntax.as(OptionalTypeSyntax.self) {
-                            baseTypeString = optType.wrappedType.description.trimmingCharacters(in: .whitespacesAndNewlines)
-                        } else if let iuoType = paramTypeSyntax.as(ImplicitlyUnwrappedOptionalTypeSyntax.self) {
-                                baseTypeString = iuoType.wrappedType.description.trimmingCharacters(in: .whitespacesAndNewlines)
-                            }
+                    baseTypeString = String(paramTypeString.dropLast())
+                } else if let optType = paramTypeSyntax.as(OptionalTypeSyntax.self) {
+                    baseTypeString = optType.wrappedType.description.trimmingCharacters(in: .whitespacesAndNewlines)
+                } else if let iuoType = paramTypeSyntax.as(ImplicitlyUnwrappedOptionalTypeSyntax.self) {
+                    baseTypeString = iuoType.wrappedType.description.trimmingCharacters(in: .whitespacesAndNewlines)
+                }
                 else {
-                                baseTypeString = paramTypeString // Should not happen if isOptional is true
-                            }
+                    baseTypeString = paramTypeString // Should not happen if isOptional is true
+                }
             } else {
                 baseTypeString = paramTypeString
             }
@@ -178,24 +178,24 @@ struct FunctionMetadataExtractor {
         if expr.is(NilLiteralExprSyntax.self) {
             return "nil"
         } else if let stringLiteral = expr.as(StringLiteralExprSyntax.self) {
-                return "\"\(stringLiteral.segments.description.escapedForSwiftString)\""
-            } else if expr.is(BooleanLiteralExprSyntax.self) ||
+            return "\"\(stringLiteral.segments.description.escapedForSwiftString)\""
+        } else if expr.is(BooleanLiteralExprSyntax.self) ||
                   expr.is(IntegerLiteralExprSyntax.self) ||
                   expr.is(FloatLiteralExprSyntax.self) {
-                    return rawValue
-                } else if rawValue.hasPrefix(".") { // Enum case like .someCase
-                        return "\(paramTypeString)\(rawValue)"
-                    } else if expr.is(ArrayExprSyntax.self) && rawValue == "[]" {
-                            // For empty array literals, we need to cast them to the correct type
-                            if isArray {
-                                // paramTypeString here should be the full array type like "[String]" or "Array<String>"
-                                // We need to cast the empty array to the correct type
-                                return "[] as \(paramTypeString)"
-                            } else {
-                                // Fallback for non-array types with "[]" - should be caught by compiler
-                                return "[]"
-                            }
-                        }
+            return rawValue
+        } else if rawValue.hasPrefix(".") { // Enum case like .someCase
+            return "\(paramTypeString)\(rawValue)"
+        } else if expr.is(ArrayExprSyntax.self) && rawValue == "[]" {
+            // For empty array literals, we need to cast them to the correct type
+            if isArray {
+                // paramTypeString here should be the full array type like "[String]" or "Array<String>"
+                // We need to cast the empty array to the correct type
+                return "[] as \(paramTypeString)"
+            } else {
+                // Fallback for non-array types with "[]" - should be caught by compiler
+                return "[]"
+            }
+        }
         // For other complex expressions (e.g., fully qualified enum, function calls, other literals)
         // we return their verbatim string representation.
         // This includes cases like `MyEnum.value`, `[1, 2]`, `["a": 1]`.

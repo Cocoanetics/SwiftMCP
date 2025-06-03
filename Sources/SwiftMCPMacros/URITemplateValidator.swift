@@ -174,15 +174,15 @@ struct URITemplateValidator {
                 braceDepth = 0
 
             } else if char == "}" {
-                    return URITemplateValidationResult(
+                return URITemplateValidationResult(
                     isValid: false,
                     error: .invalidURITemplate(reason: "Unexpected '}' - closing brace without matching opening brace"),
                     level: 0,
                     variables: allVariables
                 )
-                } else {
-                    i = template.index(after: i)
-                }
+            } else {
+                i = template.index(after: i)
+            }
         }
 
         if braceDepth > 0 {

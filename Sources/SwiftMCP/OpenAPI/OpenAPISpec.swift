@@ -156,62 +156,62 @@ struct OpenAPISpec: Codable {
                     responseSchema = OpenAIFileResponse.schemaMetadata.schema
                     responseDescription = metadata.returnTypeDescription ?? "A file response containing name, mime type, and base64-encoded content"
                 } else if let schemaType = returnType as? any SchemaRepresentable.Type {
-                        responseSchema = schemaType.schemaMetadata.schema
-                        responseDescription = metadata.returnTypeDescription ?? "A structured response"
-                    } else if let caseIterableType = returnType as? any CaseIterable.Type {
-                            responseSchema = .enum(values: caseIterableType.caseLabels, description: metadata.returnTypeDescription)
-                            responseDescription = metadata.returnTypeDescription ?? "An enumerated value"
-                        } else if let arrayType = returnType as? any ArrayWithSchemaRepresentableElements.Type {
-                                responseSchema = arrayType.schema(description: metadata.returnTypeDescription)
-                                responseDescription = metadata.returnTypeDescription ?? "An array of structured responses"
-                            } else if let arrayType = returnType as? any ArrayWithCaseIterableElements.Type {
-                                    responseSchema = arrayType.schema(description: metadata.returnTypeDescription)
-                                    responseDescription = metadata.returnTypeDescription ?? "An array of enumerated values"
-                                } else if let arrayBridge = returnType as? ArraySchemaBridge.Type {
-                                        // Get the element type from the array
-                                        let elementType = arrayBridge.elementType
+                    responseSchema = schemaType.schemaMetadata.schema
+                    responseDescription = metadata.returnTypeDescription ?? "A structured response"
+                } else if let caseIterableType = returnType as? any CaseIterable.Type {
+                    responseSchema = .enum(values: caseIterableType.caseLabels, description: metadata.returnTypeDescription)
+                    responseDescription = metadata.returnTypeDescription ?? "An enumerated value"
+                } else if let arrayType = returnType as? any ArrayWithSchemaRepresentableElements.Type {
+                    responseSchema = arrayType.schema(description: metadata.returnTypeDescription)
+                    responseDescription = metadata.returnTypeDescription ?? "An array of structured responses"
+                } else if let arrayType = returnType as? any ArrayWithCaseIterableElements.Type {
+                    responseSchema = arrayType.schema(description: metadata.returnTypeDescription)
+                    responseDescription = metadata.returnTypeDescription ?? "An array of enumerated values"
+                } else if let arrayBridge = returnType as? ArraySchemaBridge.Type {
+                    // Get the element type from the array
+                    let elementType = arrayBridge.elementType
 
-                                        let itemSchema: JSONSchema
-                                        if elementType == Int.self || elementType == Double.self {
-                                            itemSchema = .number()
-                                        } else if elementType == Bool.self {
-                                                itemSchema = .boolean()
-                                            } else if let schemaType = elementType as? any SchemaRepresentable.Type {
-                                                    itemSchema = schemaType.schemaMetadata.schema
-                                                } else if let caseIterableType = elementType as? any CaseIterable.Type {
-                                                        itemSchema = .enum(values: caseIterableType.caseLabels)
-                                                    } else {
-                                                        itemSchema = .string()
-                                                    }
+                    let itemSchema: JSONSchema
+                    if elementType == Int.self || elementType == Double.self {
+                        itemSchema = .number()
+                    } else if elementType == Bool.self {
+                        itemSchema = .boolean()
+                    } else if let schemaType = elementType as? any SchemaRepresentable.Type {
+                        itemSchema = schemaType.schemaMetadata.schema
+                    } else if let caseIterableType = elementType as? any CaseIterable.Type {
+                        itemSchema = .enum(values: caseIterableType.caseLabels)
+                    } else {
+                        itemSchema = .string()
+                    }
 
-                                        responseSchema = .array(items: itemSchema, description: metadata.returnTypeDescription)
-                                        responseDescription = metadata.returnTypeDescription ?? "An array of values"
-                                    } else {
-                                        switch returnType {
-                                            case is Int.Type, is Double.Type:
-                                                responseSchema = .number(description: metadata.returnTypeDescription)
-                                            case is Bool.Type:
-                                                responseSchema = .boolean(description: metadata.returnTypeDescription)
-                                            case is Array<Any>.Type:
-                                                if let elementType = (returnType as? Array<Any>.Type)?.elementType {
-                                                    let itemSchema: JSONSchema
-                                                    switch elementType {
-                                                        case is Int.Type, is Double.Type:
-                                                            itemSchema = .number()
-                                                        case is Bool.Type:
-                                                            itemSchema = .boolean()
-                                                        default:
-                                                            itemSchema = .string()
-                                                    }
-                                                    responseSchema = .array(items: itemSchema, description: metadata.returnTypeDescription)
-                                                } else {
-                                                    responseSchema = .array(items: .string(), description: metadata.returnTypeDescription)
-                                                }
-                                            default:
-                                                responseSchema = .string(description: metadata.returnTypeDescription)
-                                        }
-                                        responseDescription = metadata.returnTypeDescription ?? "The returned value of the tool"
-                                    }
+                    responseSchema = .array(items: itemSchema, description: metadata.returnTypeDescription)
+                    responseDescription = metadata.returnTypeDescription ?? "An array of values"
+                } else {
+                    switch returnType {
+                        case is Int.Type, is Double.Type:
+                            responseSchema = .number(description: metadata.returnTypeDescription)
+                        case is Bool.Type:
+                            responseSchema = .boolean(description: metadata.returnTypeDescription)
+                        case is Array<Any>.Type:
+                            if let elementType = (returnType as? Array<Any>.Type)?.elementType {
+                                let itemSchema: JSONSchema
+                                switch elementType {
+                                    case is Int.Type, is Double.Type:
+                                        itemSchema = .number()
+                                    case is Bool.Type:
+                                        itemSchema = .boolean()
+                                    default:
+                                        itemSchema = .string()
+                                }
+                                responseSchema = .array(items: itemSchema, description: metadata.returnTypeDescription)
+                            } else {
+                                responseSchema = .array(items: .string(), description: metadata.returnTypeDescription)
+                            }
+                        default:
+                            responseSchema = .string(description: metadata.returnTypeDescription)
+                    }
+                    responseDescription = metadata.returnTypeDescription ?? "The returned value of the tool"
+                }
             }
 
             // Create error response schema to match {"error": "error message"}

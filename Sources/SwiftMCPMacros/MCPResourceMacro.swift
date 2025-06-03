@@ -47,14 +47,14 @@ public struct MCPResourceMacro: PeerMacro {
                     let template = stringLiteral.segments.description
                     templates.append(template)
                 } else if let arrayExpr = arg.expression.as(ArrayExprSyntax.self) {
-                        // Handle array of templates
-                        for element in arrayExpr.elements {
-                            if let stringLiteral = element.expression.as(StringLiteralExprSyntax.self) {
-                                let template = stringLiteral.segments.description
-                                templates.append(template)
-                            }
+                    // Handle array of templates
+                    for element in arrayExpr.elements {
+                        if let stringLiteral = element.expression.as(StringLiteralExprSyntax.self) {
+                            let template = stringLiteral.segments.description
+                            templates.append(template)
                         }
                     }
+                }
             }
         }
 
@@ -99,9 +99,9 @@ public struct MCPResourceMacro: PeerMacro {
                     resourceName = stringLiteral.segments.description
                 } else if argument.label?.text == "mimeType", 
                    let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
-                        let stringValue = stringLiteral.segments.description
-                        mimeTypeArg = "\"\(stringValue.escapedForSwiftString)\""
-                    }
+                    let stringValue = stringLiteral.segments.description
+                    mimeTypeArg = "\"\(stringValue.escapedForSwiftString)\""
+                }
             }
         }
 
@@ -190,26 +190,26 @@ nonisolated private let __mcpResourceMetadata_\(functionName) = MCPResourceMetad
                 return [\(concreteResourceContentTypeName)(uri: requestedUri, mimeType: overrideMimeType ?? "text/plain", text: result)]
             """
         } else if returnTypeString == "Data" {
-                returnHandlingCode = """
+            returnHandlingCode = """
                 let result = \(concreteFunctionCall)
                 return [\(concreteResourceContentTypeName)(uri: requestedUri, mimeType: overrideMimeType ?? "application/octet-stream", blob: result)]
             """
-            } else if returnTypeString == "MCPResourceContent" {
-                    returnHandlingCode = """
+        } else if returnTypeString == "MCPResourceContent" {
+            returnHandlingCode = """
                 let result = \(concreteFunctionCall)
                 return [result]
             """
-                } else if returnTypeString == "[MCPResourceContent]" || returnTypeString == "[\(concreteResourceContentTypeName)]" {
-                        returnHandlingCode = """
+        } else if returnTypeString == "[MCPResourceContent]" || returnTypeString == "[\(concreteResourceContentTypeName)]" {
+            returnHandlingCode = """
                 let result = \(concreteFunctionCall)
                 return result
             """
-                    } else {
-                        returnHandlingCode = """
+        } else {
+            returnHandlingCode = """
                 let result = \(concreteFunctionCall)
                 return GenericResourceContent.fromResult(result, uri: requestedUri, mimeType: overrideMimeType)
             """
-                    }
+        }
 
         wrapperMethod += """
         \(returnHandlingCode)

@@ -116,12 +116,12 @@ extension Array: JSONSchemaTypeConvertible {
         if let elementType = Element.self as? any JSONSchemaTypeConvertible.Type {
             elementSchema = elementType.jsonSchema(description: nil)
         } else if let schemaType = Element.self as? any SchemaRepresentable.Type {
-                elementSchema = schemaType.schemaMetadata.schema
-            } else if let caseIterableType = Element.self as? any CaseIterable.Type {
-                    elementSchema = .enum(values: caseIterableType.caseLabels)
-                } else {
-                    elementSchema = .string()
-                }
+            elementSchema = schemaType.schemaMetadata.schema
+        } else if let caseIterableType = Element.self as? any CaseIterable.Type {
+            elementSchema = .enum(values: caseIterableType.caseLabels)
+        } else {
+            elementSchema = .string()
+        }
 
         return .array(items: elementSchema, description: description)
     }
@@ -138,10 +138,10 @@ extension Optional: JSONSchemaTypeConvertible {
         if let wrappedType = Wrapped.self as? any JSONSchemaTypeConvertible.Type {
             return wrappedType.jsonSchema(description: description)
         } else if let schemaType = Wrapped.self as? any SchemaRepresentable.Type {
-                return schemaType.schemaMetadata.schema
-            } else if let caseIterableType = Wrapped.self as? any CaseIterable.Type {
-                    return .enum(values: caseIterableType.caseLabels, description: description)
-                }
+            return schemaType.schemaMetadata.schema
+        } else if let caseIterableType = Wrapped.self as? any CaseIterable.Type {
+            return .enum(values: caseIterableType.caseLabels, description: description)
+        }
         return .string(description: description)
     }
 } 

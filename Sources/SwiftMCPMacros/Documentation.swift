@@ -50,19 +50,19 @@ struct Documentation {
                     line = String(line.dropLast(2)).trimmingCharacters(in: .whitespaces)
                 }
             } else if line.hasSuffix("*/") {
-                    // For multi-line blocks, remove trailing */ and end block
-                    line = String(line.dropLast(2)).trimmingCharacters(in: .whitespaces)
-                    shouldProcessLine = inDocumentationBlock
-                    isDocumentationLine = inDocumentationBlock
-                    inDocumentationBlock = false
-                } else if line.hasPrefix("///") {
-                        line = line.dropFirst(3).trimmingCharacters(in: .whitespaces)
-                        shouldProcessLine = true
-                        isDocumentationLine = true
-                    } else {
-                        shouldProcessLine = inDocumentationBlock
-                        isDocumentationLine = inDocumentationBlock
-                    }
+                // For multi-line blocks, remove trailing */ and end block
+                line = String(line.dropLast(2)).trimmingCharacters(in: .whitespaces)
+                shouldProcessLine = inDocumentationBlock
+                isDocumentationLine = inDocumentationBlock
+                inDocumentationBlock = false
+            } else if line.hasPrefix("///") {
+                line = line.dropFirst(3).trimmingCharacters(in: .whitespaces)
+                shouldProcessLine = true
+                isDocumentationLine = true
+            } else {
+                shouldProcessLine = inDocumentationBlock
+                isDocumentationLine = inDocumentationBlock
+            }
 
             // Skip non-documentation lines
             if !shouldProcessLine {
@@ -174,96 +174,96 @@ struct Documentation {
 				
 				// Check for Returns section
 				else if line.lowercased().hasPrefix("- returns:") {
-                        // Flush any parameter being processed
-                        flushCurrentParameter()
-                        inParametersSection = false
-                        inOtherSection = false
+                    // Flush any parameter being processed
+                    flushCurrentParameter()
+                    inParametersSection = false
+                    inOtherSection = false
 
-                        // Extract the returns description
-                        let returnsDescription = line.dropFirst("- Returns:".count).trimmingCharacters(in: .whitespaces)
-                        returnsLines = [returnsDescription]  // Start fresh with just this line
-                        inReturnsSection = true
-                        continue
-                    }
+                    // Extract the returns description
+                    let returnsDescription = line.dropFirst("- Returns:".count).trimmingCharacters(in: .whitespaces)
+                    returnsLines = [returnsDescription]  // Start fresh with just this line
+                    inReturnsSection = true
+                    continue
+                }
 				
 				// Check for Parameter line (singular)
 				else if let param = parseParameterLine(from: line) {
-                            // Start of a new parameter: flush any previous parameter data.
-                            flushCurrentParameter()
-                            inReturnsSection = false
-                            inParametersSection = false
-                            inOtherSection = false
-                            currentParameterName = param.name
-                            currentParameterLines = [param.description]  // Start fresh with just this description
-                            continue
-                        }
+                    // Start of a new parameter: flush any previous parameter data.
+                    flushCurrentParameter()
+                    inReturnsSection = false
+                    inParametersSection = false
+                    inOtherSection = false
+                    currentParameterName = param.name
+                    currentParameterLines = [param.description]  // Start fresh with just this description
+                    continue
+                }
 				
 				// Check for parameter in Parameters section
 				else if inParametersSection {
-                                // This could be a parameter under the Parameters section
-                                if let param = parseSimpleParameterLine(from: line) {
-                                    // Flush any previous parameter
-                                    flushCurrentParameter()
+                    // This could be a parameter under the Parameters section
+                    if let param = parseSimpleParameterLine(from: line) {
+                        // Flush any previous parameter
+                        flushCurrentParameter()
 
-                                    // Start a new parameter
-                                    currentParameterName = param.name
-                                    currentParameterLines = [param.description]
-                                    continue
-                                }
-                            }
+                        // Start a new parameter
+                        currentParameterName = param.name
+                        currentParameterLines = [param.description]
+                        continue
+                    }
+                }
 				
 				// Any other dash-prefixed line is some other section we don't specifically handle
 				else {
-                                // Flush any parameter being processed
-                                flushCurrentParameter()
-                                inReturnsSection = false
-                                inParametersSection = false
-                                inOtherSection = true
-                                continue
-                            }
+                    // Flush any parameter being processed
+                    flushCurrentParameter()
+                    inReturnsSection = false
+                    inParametersSection = false
+                    inOtherSection = true
+                    continue
+                }
             }
 			// Check for indented parameter in Parameters section (not starting with dash)
 			else if inParametersSection && line.hasPrefix("  ") {
-                    // This could be a continuation of the previous indented parameter
-                    // or a new indented parameter line
-                    let trimmedLine = line.trimmingCharacters(in: .whitespaces)
+                // This could be a continuation of the previous indented parameter
+                // or a new indented parameter line
+                let trimmedLine = line.trimmingCharacters(in: .whitespaces)
 
-                    // Check if this is a new parameter line (starts with a dash)
-                    if trimmedLine.hasPrefix("-") {
-                        // This is a new indented parameter
-                        if let param = parseSimpleParameterLine(from: trimmedLine) {
-                            // Flush any previous parameter
-                            flushCurrentParameter()
+                // Check if this is a new parameter line (starts with a dash)
+                if trimmedLine.hasPrefix("-") {
+                    // This is a new indented parameter
+                    if let param = parseSimpleParameterLine(from: trimmedLine) {
+                        // Flush any previous parameter
+                        flushCurrentParameter()
 
-                            // Start a new parameter
-                            currentParameterName = param.name
-                            currentParameterLines = [param.description]
-                        }
-                    } else if currentParameterName != nil {
-                            // This is a continuation of the previous indented parameter
-                            currentParameterLines.append(trimmedLine)
-                        }
-                    continue
+                        // Start a new parameter
+                        currentParameterName = param.name
+                        currentParameterLines = [param.description]
+                    }
+                } else if currentParameterName != nil {
+                    // This is a continuation of the previous indented parameter
+                    currentParameterLines.append(trimmedLine)
                 }
+                continue
+            }
 			// Handle continuation lines for the current section
 			else {
-                    if currentParameterName != nil {
-                        // If we are in the middle of a parameter, treat the line as a continuation.
-                        // Only add non-empty lines and trim whitespace
-                        let trimmedLine = line.trimmingCharacters(in: .whitespaces)
-                        if !trimmedLine.isEmpty {
-                            currentParameterLines.append(trimmedLine)
-                        }
-                    } else if inReturnsSection && !inOtherSection {
-                            // If we're in the returns section, add to returns lines
-                            returnsLines.append(line)
-                        } else if !inParametersSection && !inOtherSection {
-                                // If we're not in any special section, it belongs to the initial description.
-                                initialDescriptionLines.append(line)
-                            }
-                // If we're in the parameters section but not processing a specific parameter,
-                // or if we're in some other section we don't handle, we ignore the line
+                if currentParameterName != nil {
+                    // If we are in the middle of a parameter, treat the line as a continuation.
+                    // Only add non-empty lines and trim whitespace
+                    let trimmedLine = line.trimmingCharacters(in: .whitespaces)
+                    if !trimmedLine.isEmpty {
+                        currentParameterLines.append(trimmedLine)
+                    }
+                } else if inReturnsSection && !inOtherSection {
+                    // If we're in the returns section, add to returns lines
+                    returnsLines.append(line)
+                } else if !inParametersSection && !inOtherSection {
+                    // If we're not in any special section, it belongs to the initial description.
+                    initialDescriptionLines.append(line)
                 }
+            // If we're in the parameters section but not processing a specific parameter,
+            // or if we're in some other section we don't handle, we ignore the line
+            }
         }
 
         // Flush any parameter still being accumulated.

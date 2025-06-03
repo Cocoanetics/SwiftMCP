@@ -30,8 +30,8 @@ extension MCPToolMetadata {
                 if let defaultValue = param.defaultValue {
                     enrichedArguments[param.name] = defaultValue
                 } else if param.isRequired {
-                        throw MCPToolError.missingRequiredParameter(parameterName: param.name)
-                    }
+                    throw MCPToolError.missingRequiredParameter(parameterName: param.name)
+                }
             }
         }
 

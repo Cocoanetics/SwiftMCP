@@ -20,32 +20,32 @@ public struct GenericResourceContent: MCPResourceContent {
         if let resourceContent = result as? MCPResourceContent {
             return [resourceContent]
         } else if let resourceArray = result as? [MCPResourceContent] {
-                return resourceArray
-            } else if type(of: result) == Void.self {
-                    return []
-                } else if let str = result as? String {
-                        return [GenericResourceContent(uri: uri, mimeType: mimeType ?? "text/plain", text: str)]
-                    } else if let boolVal = result as? Bool {
-                            return [GenericResourceContent(uri: uri, mimeType: mimeType ?? "text/plain", text: String(boolVal))]
-                        } else if let intVal = result as? Int {
-                                return [GenericResourceContent(uri: uri, mimeType: mimeType ?? "text/plain", text: String(intVal))]
-                            } else if let doubleVal = result as? Double {
-                                    return [GenericResourceContent(uri: uri, mimeType: mimeType ?? "text/plain", text: String(doubleVal))]
-                                } else if let arr = result as? [Any] {
-                                        let text = String(describing: arr)
-                                        return [GenericResourceContent(uri: uri, mimeType: mimeType ?? "text/plain", text: text)]
-                                    } else if let dict = result as? [String: Any] {
-                                            let text = String(describing: dict)
-                                            return [GenericResourceContent(uri: uri, mimeType: mimeType ?? "text/plain", text: text)]
-                                        } else if let encodable = result as? Encodable {
-                                                // Try to encode to JSON string
-                                                let encoder = JSONEncoder()
-                                                encoder.outputFormatting = .prettyPrinted
-                                                if let data = try? encoder.encode(AnyEncodable(encodable)),
+            return resourceArray
+        } else if type(of: result) == Void.self {
+            return []
+        } else if let str = result as? String {
+            return [GenericResourceContent(uri: uri, mimeType: mimeType ?? "text/plain", text: str)]
+        } else if let boolVal = result as? Bool {
+            return [GenericResourceContent(uri: uri, mimeType: mimeType ?? "text/plain", text: String(boolVal))]
+        } else if let intVal = result as? Int {
+            return [GenericResourceContent(uri: uri, mimeType: mimeType ?? "text/plain", text: String(intVal))]
+        } else if let doubleVal = result as? Double {
+            return [GenericResourceContent(uri: uri, mimeType: mimeType ?? "text/plain", text: String(doubleVal))]
+        } else if let arr = result as? [Any] {
+            let text = String(describing: arr)
+            return [GenericResourceContent(uri: uri, mimeType: mimeType ?? "text/plain", text: text)]
+        } else if let dict = result as? [String: Any] {
+            let text = String(describing: dict)
+            return [GenericResourceContent(uri: uri, mimeType: mimeType ?? "text/plain", text: text)]
+        } else if let encodable = result as? Encodable {
+            // Try to encode to JSON string
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = .prettyPrinted
+            if let data = try? encoder.encode(AnyEncodable(encodable)),
 			   let json = String(data: data, encoding: .utf8) {
-                                                    return [GenericResourceContent(uri: uri, mimeType: mimeType ?? "application/json", text: json)]
-                                                }
-                                            }
+                return [GenericResourceContent(uri: uri, mimeType: mimeType ?? "application/json", text: json)]
+            }
+        }
         // Fallback: use String(describing:)
         let text = String(describing: result)
         return [GenericResourceContent(uri: uri, mimeType: mimeType ?? "text/plain", text: text)]

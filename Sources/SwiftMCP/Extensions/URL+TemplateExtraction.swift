@@ -487,8 +487,8 @@ private struct RFC6570TemplateExtractor {
                 }
             }
         } else if let firstVariable = variables.first {
-                result[firstVariable.name] = value
-            }
+            result[firstVariable.name] = value
+        }
 
         // Always return a result, even for empty values
         return (result, value.count)
@@ -552,8 +552,8 @@ private struct RFC6570TemplateExtractor {
                 }
             }
         } else if let firstVariable = variables.first {
-                result[firstVariable.name] = value
-            }
+            result[firstVariable.name] = value
+        }
 
         return (result, consumedLength)
     }
@@ -602,8 +602,8 @@ private struct RFC6570TemplateExtractor {
                 }
             }
         } else if let firstVariable = variables.first {
-                result[firstVariable.name] = value
-            }
+            result[firstVariable.name] = value
+        }
 
         return (result, consumedLength)
     }
@@ -664,13 +664,13 @@ private struct RFC6570TemplateExtractor {
                         break
                     }
                 } else if CharacterSet(charactersIn: "?#").contains(char.unicodeScalars.first!) {
-                        // Found query or fragment, stop
-                        break
-                    } else {
-                        segmentValue.append(char)
-                        currentIndex = url.index(after: currentIndex)
-                        consumedLength += 1
-                    }
+                    // Found query or fragment, stop
+                    break
+                } else {
+                    segmentValue.append(char)
+                    currentIndex = url.index(after: currentIndex)
+                    consumedLength += 1
+                }
             }
 
             result[variable.name] = segmentValue
@@ -1054,8 +1054,8 @@ private struct RFC6570TemplateExtractor {
             variables[varName] = urlFragment
             return true
         } else if templateFragment == urlFragment {
-                return true
-            }
+            return true
+        }
         return false
     }
 
@@ -1209,8 +1209,8 @@ private struct RFC6570TemplateExtractor {
                 let value = String(components[1]).removingPercentEncoding ?? String(components[1])
                 params[key] = value
             } else if components.count == 1 {
-                    params[String(components[0])] = ""
-                }
+                params[String(components[0])] = ""
+            }
         }
 
         return params

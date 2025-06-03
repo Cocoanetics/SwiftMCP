@@ -96,10 +96,10 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
                 propertyString += propertyStr
                 propertyInfos.append(propertyInfo)
             } else if let nestedStruct = member.decl.as(StructDeclSyntax.self) {
-                    // Process nested struct
-                    let nestedSchema = try processNestedStruct(nestedStruct, context: context)
-                    propertyString += nestedSchema
-                }
+                // Process nested struct
+                let nestedSchema = try processNestedStruct(nestedStruct, context: context)
+                propertyString += nestedSchema
+            }
         }
 
         // Create a registration statement
@@ -164,12 +164,12 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
                       Double(rawValue) != nil ||
                       rawValue == "nil" ||
                       (rawValue.hasPrefix("[") && rawValue.hasSuffix("]")) {
-                    defaultValue = rawValue
-                } else if let stringLiteral = initializer.value.as(StringLiteralExprSyntax.self) {
-                        defaultValue = "\"\(stringLiteral.segments.description)\""
-                    } else {
-                        defaultValue = "\"\(rawValue)\""
-                    }
+                defaultValue = rawValue
+            } else if let stringLiteral = initializer.value.as(StringLiteralExprSyntax.self) {
+                defaultValue = "\"\(stringLiteral.segments.description)\""
+            } else {
+                defaultValue = "\"\(rawValue)\""
+            }
         }
 
         // Create property info with isRequired property

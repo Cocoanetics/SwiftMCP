@@ -185,21 +185,21 @@ public enum JSONRPCMessage: Codable, Sendable {
                 self = .notification(JSONRPCNotificationData(jsonrpc: jsonrpc, method: method, params: params))
             }
         } else if container.contains(.error) {
-                // This is an error response
-                let error = try container.decode(JSONRPCErrorResponseData.ErrorPayload.self, forKey: .error)
-                self = .errorResponse(JSONRPCErrorResponseData(jsonrpc: jsonrpc, id: id, error: error))
-            } else if container.contains(.result) {
-                    // This is a result response - must have ID
-                    guard let id = id else {
-                        throw DecodingError.dataCorrupted(DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Response missing required id field"))
-                    }
+            // This is an error response
+            let error = try container.decode(JSONRPCErrorResponseData.ErrorPayload.self, forKey: .error)
+            self = .errorResponse(JSONRPCErrorResponseData(jsonrpc: jsonrpc, id: id, error: error))
+        } else if container.contains(.result) {
+            // This is a result response - must have ID
+            guard let id = id else {
+                throw DecodingError.dataCorrupted(DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Response missing required id field"))
+            }
 
-                    // Handle both empty and non-empty result dictionaries as regular responses
-                    let result = try container.decode([String: AnyCodable].self, forKey: .result)
-                    self = .response(JSONRPCResponseData(jsonrpc: jsonrpc, id: id, result: result))
-                } else {
-                    throw DecodingError.dataCorrupted(DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Unable to determine JSON-RPC message type"))
-                }
+            // Handle both empty and non-empty result dictionaries as regular responses
+            let result = try container.decode([String: AnyCodable].self, forKey: .result)
+            self = .response(JSONRPCResponseData(jsonrpc: jsonrpc, id: id, result: result))
+        } else {
+            throw DecodingError.dataCorrupted(DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Unable to determine JSON-RPC message type"))
+        }
     }
 
     public func encode(to encoder: Encoder) throws {

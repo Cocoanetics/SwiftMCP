@@ -83,8 +83,8 @@ public struct MCPToolMacro: PeerMacro {
                     let stringValue = stringLiteral.segments.description
                     descriptionArg = "\"\(stringValue.escapedForSwiftString)\"" // Ensure proper escaping
                 } else if argument.label?.text == "isConsequential", let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
-                        isConsequentialArg = boolLiteral.literal.text
-                    }
+                    isConsequentialArg = boolLiteral.literal.text
+                }
             }
         }
 
