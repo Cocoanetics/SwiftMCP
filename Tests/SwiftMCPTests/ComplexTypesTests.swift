@@ -210,7 +210,7 @@ func testIntArrayProcessing() async throws {
     let server = ComplexTypesServer()
     let client = MockClient(server: server)
     
-    let request = JSONRPCRequest(
+    let request = JSONRPCMessage.request(
         id: 1,
         method: "tools/call",
         params: [
@@ -221,19 +221,19 @@ func testIntArrayProcessing() async throws {
         ]
     )
     
-	let response = unwrap(await client.send(request) as? JSONRPCResponse)
-    
+    let message = await client.send(request)
+    guard case .response(let response) = message else {
+        #expect(Bool(false), "Expected response case")
+        return
+    }
     #expect(response.id == 1)
-    
     let result = unwrap(response.result)
     let isError = unwrap(result["isError"]?.value as? Bool)
     #expect(isError == false)
-    
     let content = unwrap(result["content"]?.value as? [[String: String]])
     let firstContent = unwrap(content.first)
     let type = unwrap(firstContent["type"])
     let text = unwrap(firstContent["text"])
-    
     #expect(type == "text")
     #expect(text == "[2,4,6,8,10]")
 }
@@ -243,32 +243,30 @@ func testOptionalIntArrayProcessing() async throws {
     let server = ComplexTypesServer()
     let client = MockClient(server: server)
     
-    let request = JSONRPCRequest(
+    let request = JSONRPCMessage.request(
         id: 1,
         method: "tools/call",
         params: [
             "name": "processOptionalIntArray",
-            "arguments": [
-                "numbers": [1, 2, 3, 4, 5]
-            ]
+            "arguments": [:]
         ]
     )
     
-    let response = unwrap(await client.send(request) as? JSONRPCResponse)
-    
+    let message = await client.send(request)
+    guard case .response(let response) = message else {
+        #expect(Bool(false), "Expected response case")
+        return
+    }
     #expect(response.id == 1)
-    
     let result = unwrap(response.result)
     let isError = unwrap(result["isError"]?.value as? Bool)
     #expect(isError == false)
-    
     let content = unwrap(result["content"]?.value as? [[String: String]])
     let firstContent = unwrap(content.first)
     let type = unwrap(firstContent["type"])
     let text = unwrap(firstContent["text"])
-    
     #expect(type == "text")
-    #expect(text == "[2,4,6,8,10]")
+    #expect(text == "[]")
 }
 
 @Test("Tests processing of string arrays")
@@ -276,32 +274,164 @@ func testStringArrayProcessing() async throws {
     let server = ComplexTypesServer()
     let client = MockClient(server: server)
     
-    let request = JSONRPCRequest(
+    let request = JSONRPCMessage.request(
         id: 1,
         method: "tools/call",
         params: [
-            "name": AnyCodable("processStringArray"),
-            "arguments": AnyCodable([
+            "name": "processStringArray",
+            "arguments": [
                 "strings": ["hello", "world", "test"]
-            ])
+            ]
         ]
     )
     
-    let response = unwrap(await client.send(request) as? JSONRPCResponse)
-    
+    let message = await client.send(request)
+    guard case .response(let response) = message else {
+        #expect(Bool(false), "Expected response case")
+        return
+    }
     #expect(response.id == 1)
-    
     let result = unwrap(response.result)
     let isError = unwrap(result["isError"]?.value as? Bool)
     #expect(isError == false)
-    
     let content = unwrap(result["content"]?.value as? [[String: String]])
     let firstContent = unwrap(content.first)
     let type = unwrap(firstContent["type"])
     let text = unwrap(firstContent["text"])
-    
     #expect(type == "text")
     #expect(text == "[\"HELLO\",\"WORLD\",\"TEST\"]")
+}
+
+@Test("Tests processing of double arrays")
+func testDoubleArrayProcessing() async throws {
+    let server = ComplexTypesServer()
+    let client = MockClient(server: server)
+    
+    let request = JSONRPCMessage.request(
+        id: 1,
+        method: "tools/call",
+        params: [
+            "name": "processDoubleArray",
+            "arguments": [
+                "numbers": [1.1, 2.2, 3.3]
+            ]
+        ]
+    )
+    
+    let message = await client.send(request)
+    guard case .response(let response) = message else {
+        #expect(Bool(false), "Expected response case")
+        return
+    }
+    #expect(response.id == 1)
+    let result = unwrap(response.result)
+    let isError = unwrap(result["isError"]?.value as? Bool)
+    #expect(isError == false)
+    let content = unwrap(result["content"]?.value as? [[String: String]])
+    let firstContent = unwrap(content.first)
+    let type = unwrap(firstContent["type"])
+    let text = unwrap(firstContent["text"])
+    #expect(type == "text")
+    #expect(text == "[2.2,4.4,6.6]")
+}
+
+@Test("Tests processing of optional double arrays")
+func testOptionalDoubleArrayProcessing() async throws {
+    let server = ComplexTypesServer()
+    let client = MockClient(server: server)
+    
+    let request = JSONRPCMessage.request(
+        id: 1,
+        method: "tools/call",
+        params: [
+            "name": "processOptionalDoubleArray",
+            "arguments": [
+                "numbers": [1.1, 2.2, 3.3]
+            ]
+        ]
+    )
+    
+    let message = await client.send(request)
+    guard case .response(let response) = message else {
+        #expect(Bool(false), "Expected response case")
+        return
+    }
+    #expect(response.id == 1)
+    let result = unwrap(response.result)
+    let isError = unwrap(result["isError"]?.value as? Bool)
+    #expect(isError == false)
+    let content = unwrap(result["content"]?.value as? [[String: String]])
+    let firstContent = unwrap(content.first)
+    let type = unwrap(firstContent["type"])
+    let text = unwrap(firstContent["text"])
+    #expect(type == "text")
+    #expect(text == "[2.2,4.4,6.6]")
+}
+
+@Test("Tests processing of boolean arrays")
+func testBooleanArrayProcessing() async throws {
+    let server = ComplexTypesServer()
+    let client = MockClient(server: server)
+    
+    let request = JSONRPCMessage.request(
+        id: 1,
+        method: "tools/call",
+        params: [
+            "name": "processBooleanArray",
+            "arguments": [
+                "values": [true, false, true]
+            ]
+        ]
+    )
+    
+    let message = await client.send(request)
+    guard case .response(let response) = message else {
+        #expect(Bool(false), "Expected response case")
+        return
+    }
+    #expect(response.id == 1)
+    let result = unwrap(response.result)
+    let isError = unwrap(result["isError"]?.value as? Bool)
+    #expect(isError == false)
+    let content = unwrap(result["content"]?.value as? [[String: String]])
+    let firstContent = unwrap(content.first)
+    let type = unwrap(firstContent["type"])
+    let text = unwrap(firstContent["text"])
+    #expect(type == "text")
+    #expect(text == "[false,true,false]")
+}
+
+@Test("Tests processing of optional boolean arrays")
+func testOptionalBooleanArrayProcessing() async throws {
+    let server = ComplexTypesServer()
+    let client = MockClient(server: server)
+    
+    let request = JSONRPCMessage.request(
+        id: 1,
+        method: "tools/call",
+        params: [
+            "name": "processOptionalBooleanArray",
+            "arguments": [
+                "values": [true, false, true]
+            ]
+        ]
+    )
+    
+    let message = await client.send(request)
+    guard case .response(let response) = message else {
+        #expect(Bool(false), "Expected response case")
+        return
+    }
+    #expect(response.id == 1)
+    let result = unwrap(response.result)
+    let isError = unwrap(result["isError"]?.value as? Bool)
+    #expect(isError == false)
+    let content = unwrap(result["content"]?.value as? [[String: String]])
+    let firstContent = unwrap(content.first)
+    let type = unwrap(firstContent["type"])
+    let text = unwrap(firstContent["text"])
+    #expect(type == "text")
+    #expect(text == "[false,true,false]")
 }
 
 // MARK: - Complex Type Tests
@@ -312,53 +442,55 @@ func testContactInfoProcessing() async throws {
     let client = MockClient(server: server)
     
     // First create a contact
-    let createRequest = JSONRPCRequest(
+    let createRequest = JSONRPCMessage.request(
         id: 1,
         method: "tools/call",
         params: [
-            "name": AnyCodable("createContact"),
-            "arguments": AnyCodable([
+            "name": "createContact",
+            "arguments": [
                 "name": "John Doe",
                 "email": "john@example.com",
                 "phone": "+1234567890",
                 "age": 30,
                 "isActive": true
-            ])
+            ]
         ]
     )
     
-    let createResponse = unwrap(await client.send(createRequest) as? JSONRPCResponse)
-    
+    let createMessage = await client.send(createRequest)
+    guard case .response(let createResponse) = createMessage else {
+        #expect(Bool(false), "Expected response case")
+        return
+    }
     #expect(createResponse.id == 1)
-    
     let createResult = unwrap(createResponse.result)
     let createIsError = unwrap(createResult["isError"]?.value as? Bool)
     #expect(createIsError == false)
-    
     let createContent = unwrap(createResult["content"]?.value as? [[String: String]])
     let createFirstContent = unwrap(createContent.first)
     let createText = unwrap(createFirstContent["text"])
     
     // Now process the contact array
-    let processRequest = JSONRPCRequest(
+    let processRequest = JSONRPCMessage.request(
         id: 1,
         method: "tools/call",
         params: [
-            "name": AnyCodable("processContactArray"),
-            "arguments": AnyCodable([
+            "name": "processContactArray",
+            "arguments": [
                 "contacts": [createText]
-            ])
+            ]
         ]
     )
     
-	let processResponse = unwrap(await client.send(processRequest) as? JSONRPCResponse)
-    
+    let processMessage = await client.send(processRequest)
+    guard case .response(let processResponse) = processMessage else {
+        #expect(Bool(false), "Expected response case")
+        return
+    }
     #expect(processResponse.id == 1)
-    
     let processResult = unwrap(processResponse.result)
     let processIsError = unwrap(processResult["isError"]?.value as? Bool)
     #expect(processIsError == false)
-    
     let processContent = unwrap(processResult["content"]?.value as? [[String: String]])
     let processFirstContent = unwrap(processContent.first)
     let processText = unwrap(processFirstContent["text"])
@@ -380,76 +512,83 @@ func testProfileCreation() async throws {
     let client = MockClient(server: server)
     
     // First create a contact
-    let contactRequest = JSONRPCRequest(
+    let contactRequest = JSONRPCMessage.request(
         id: 1,
         method: "tools/call",
         params: [
-            "name": AnyCodable("createContact"),
-            "arguments": AnyCodable([
+            "name": "createContact",
+            "arguments": [
                 "name": "Jane Doe",
                 "email": "jane@example.com",
                 "phone": "+1987654321",
                 "age": 25,
                 "isActive": true
-            ])
+            ]
         ]
     )
     
-    let contactResponse = unwrap(await client.send(contactRequest) as? JSONRPCResponse)
+    let contactMessage = await client.send(contactRequest)
+    guard case .response(let contactResponse) = contactMessage else {
+        #expect(Bool(false), "Expected response case")
+        return
+    }
     let contactResult = unwrap(contactResponse.result)
     let contactContent = unwrap(contactResult["content"]?.value as? [[String: String]])
     let contactText = unwrap(contactContent.first?["text"])
     
     // Create an address
-    let addressRequest = JSONRPCRequest(
+    let addressRequest = JSONRPCMessage.request(
         id: 1,
         method: "tools/call",
         params: [
-            "name": AnyCodable("createAddress"),
-            "arguments": AnyCodable([
+            "name": "createAddress",
+            "arguments": [
                 "street": "123 Main St",
                 "city": "New York",
                 "postalCode": "10001",
                 "country": "USA"
-            ])
+            ]
         ]
     )
     
-    let addressResponse = unwrap(await client.send(addressRequest) as? JSONRPCResponse)
+    let addressMessage = await client.send(addressRequest)
+    guard case .response(let addressResponse) = addressMessage else {
+        #expect(Bool(false), "Expected response case")
+        return
+    }
     let addressResult = unwrap(addressResponse.result)
     let addressContent = unwrap(addressResult["content"]?.value as? [[String: String]])
     let addressText = unwrap(addressContent.first?["text"])
     
     // Create the profile
-    let profileRequest = JSONRPCRequest(
+    let profileRequest = JSONRPCMessage.request(
         id: 1,
         method: "tools/call",
         params: [
-            "name": AnyCodable("createProfile"),
-            "arguments": AnyCodable([
+            "name": "createProfile",
+            "arguments": [
                 "contact": contactText,
                 "address": addressText,
                 "interests": ["reading", "gaming", "coding"],
                 "scores": [95, 88, 92],
                 "ratings": [4.5, 4.8, 4.2],
                 "activeStatuses": [true, false, true]
-            ])
+            ]
         ]
     )
     
-    let profileResponse = unwrap(await client.send(profileRequest) as? JSONRPCResponse)
-    
+    let profileMessage = await client.send(profileRequest)
+    guard case .response(let profileResponse) = profileMessage else {
+        #expect(Bool(false), "Expected response case")
+        return
+    }
     #expect(profileResponse.id == 1)
-    
     let profileResult = unwrap(profileResponse.result)
     let profileIsError = unwrap(profileResult["isError"]?.value as? Bool)
     #expect(profileIsError == false)
-    
     let profileContent = unwrap(profileResult["content"]?.value as? [[String: String]])
-    let profileText = unwrap(profileContent.first?["text"])
-    
-    // Verify the profile
-    let profile = try JSONDecoder().decode(Profile.self, from: profileText.data(using: .utf8)!)
+    let profileText = unwrap(profileContent.first?["text"] as? String)
+    let profile = try JSONDecoder().decode(Profile.self, from: (profileText as String).data(using: .utf8)!)
     #expect(profile.contact.name == "Jane Doe")
     #expect(profile.contact.email == "jane@example.com")
     #expect(profile.contact.phone == "+1987654321")
@@ -473,7 +612,7 @@ func testOptionalArraysWithNil() async throws {
     let client = MockClient(server: server)
     
     // Test optional int array with nil
-    let intRequest = JSONRPCRequest(
+    let intRequest = JSONRPCMessage.request(
         id: 1,
         method: "tools/call",
         params: [
@@ -482,39 +621,51 @@ func testOptionalArraysWithNil() async throws {
         ]
     )
     
-    let intResponse = unwrap(await client.send(intRequest) as? JSONRPCResponse)
+    let intMessage = await client.send(intRequest)
+    guard case .response(let intResponse) = intMessage else {
+        #expect(Bool(false), "Expected response case")
+        return
+    }
     let intResult = unwrap(intResponse.result)
     let intContent = unwrap(intResult["content"]?.value as? [[String: String]])
     let intText = unwrap(intContent.first?["text"])
     #expect(intText == "[]")
     
     // Test optional string array with nil
-    let stringRequest = JSONRPCRequest(
+    let stringRequest = JSONRPCMessage.request(
         id: 1,
         method: "tools/call",
         params: [
-            "name": AnyCodable("processOptionalStringArray"),
-            "arguments": AnyCodable([:])
+            "name": "processOptionalStringArray",
+            "arguments": [:]
         ]
     )
     
-    let stringResponse = unwrap(await client.send(stringRequest) as? JSONRPCResponse)
+    let stringMessage = await client.send(stringRequest)
+    guard case .response(let stringResponse) = stringMessage else {
+        #expect(Bool(false), "Expected response case")
+        return
+    }
     let stringResult = unwrap(stringResponse.result)
     let stringContent = unwrap(stringResult["content"]?.value as? [[String: String]])
     let stringText = unwrap(stringContent.first?["text"])
     #expect(stringText == "[]")
     
     // Test optional contact array with nil
-    let contactRequest = JSONRPCRequest(
+    let contactRequest = JSONRPCMessage.request(
         id: 1,
         method: "tools/call",
         params: [
-            "name": AnyCodable("processOptionalContactArray"),
-            "arguments": AnyCodable([:])
+            "name": "processOptionalContactArray",
+            "arguments": [:]
         ]
     )
     
-    let contactResponse = unwrap(await client.send(contactRequest) as? JSONRPCResponse)
+    let contactMessage = await client.send(contactRequest)
+    guard case .response(let contactResponse) = contactMessage else {
+        #expect(Bool(false), "Expected response case")
+        return
+    }
     let contactResult = unwrap(contactResponse.result)
     let contactContent = unwrap(contactResult["content"]?.value as? [[String: String]])
     let contactText = unwrap(contactContent.first?["text"])

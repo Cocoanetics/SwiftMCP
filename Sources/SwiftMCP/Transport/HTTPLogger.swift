@@ -31,7 +31,7 @@ final class HTTPLogger: ChannelDuplexHandler, @unchecked Sendable {
 			switch reqPart {
 			case .head(let head):
 				// Check if this is an SSE connection
-				if head.uri.hasPrefix("/sse") {
+				if head.uri.hasPrefix("/sse") || (head.uri.hasPrefix("/mcp") && head.method == .GET) {
 					isSSEConnection = true
 				}
 				
@@ -81,7 +81,7 @@ final class HTTPLogger: ChannelDuplexHandler, @unchecked Sendable {
 					if let str = buffer.getString(at: buffer.readerIndex, length: buffer.readableBytes) {
 						if isSSEConnection {
 							// For SSE, log each message immediately
-							sseLogger.trace("\(str)")
+							sseLogger.trace("SSE: \(str)")
 						} else {
 							currentResponseBody += str
 						}
@@ -115,7 +115,7 @@ final class HTTPLogger: ChannelDuplexHandler, @unchecked Sendable {
 			log += currentRequestBody + "\n"
 		}
 		
-		httpLogger.info("\(log)")
+		httpLogger.trace("\(log)")
 	}
 	
 	private func logCurrentResponse() {
@@ -129,7 +129,7 @@ final class HTTPLogger: ChannelDuplexHandler, @unchecked Sendable {
 			log += currentResponseBody + "\n"
 		}
 		
-		httpLogger.info("\(log)")
+		httpLogger.trace("\(log)")
 	}
 	
 	func handlerAdded(context: ChannelHandlerContext) {

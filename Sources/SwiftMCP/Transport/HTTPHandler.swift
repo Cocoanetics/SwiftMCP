@@ -78,11 +78,22 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 		
 		let serverPath = "/\(transport.server.serverName.asModelName)"
 		
+		let channel = context.channel
+		
 		switch (head.method, head.uri) {
 				
 			// Handle all OPTIONS requests in one case
 			case (.OPTIONS, _):
 				handleOPTIONS(channel: context.channel, head: head)
+
+			// Streamable HTTP Endpoint
+			case (.POST, let path) where path.hasPrefix("/mcp"):
+				Task {
+					await self.handleSimpleResponse(channel: channel, head: head, body: body)
+				}
+				
+			case (.GET, let path) where path.hasPrefix("/mcp"):
+				handleSSE(context: context, head: head, body: body, sendEndpoint: false)
 				
 			// SSE Endpoint
 				
@@ -145,9 +156,187 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 		}
 	}
 	
-	private func handleSSE(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?) {
+	private func handleSimpleResponse(channel: Channel, head: HTTPRequestHead, body: ByteBuffer?) async {
+		precondition(head.method == .POST)
+
+		// Extract or generate client ID
+		let clientId = head.headers["Mcp-Session-Id"].first ?? UUID().uuidString
+		
+		var headers = HTTPHeaders()
+		headers.add(name: "Content-Type", value: "application/json")
+		headers.add(name: "Access-Control-Allow-Origin", value: "*")
+		headers.add(name: "Mcp-Session-Id", value: clientId)
+
+		// Validate Accept header
+		let acceptHeader = head.headers["accept"].first ?? ""
+		guard acceptHeader.lowercased().contains("application/json") else {
+			logger.warning("Rejected non-json request (Accept: \(acceptHeader))")
+			let buffer = channel.allocator.buffer(string: "Client must accept application/json.")
+			await sendResponseAsync(channel: channel, status: .badRequest, headers: headers, body: buffer)
+			return
+		}
+		
+		// Check authorization if handler is set
+		var token: String?
+		
+		// First try to get token from Authorization header
+		if let authHeader = head.headers["Authorization"].first {
+			let parts = authHeader.split(separator: " ")
+			if parts.count == 2 && parts[0].lowercased() == "bearer" {
+				token = String(parts[1])
+			}
+		}
+		
+		// Validate token
+		if case .unauthorized(let message) = transport.authorizationHandler(token) {
+			let errorMessage = JSONRPCMessage.errorResponse(id: nil, error: .init(code: 401, message: "Unauthorized: \(message)"))
+			await sendJSONResponse(channel: channel, status: .unauthorized, json: errorMessage, sessionId: clientId)
+			return
+		}
+
+		guard let body = body else {
+			logger.error("POST /mcp received no body.")
+			let buffer = channel.allocator.buffer(string: "Request body required.")
+			await sendResponseAsync(channel: channel, status: .badRequest, headers: headers, body: buffer)
+			return
+		}
+
+		// Check if client has an active SSE connection
+		let hasSSEConnection = await transport.channelManager.hasActiveConnection(for: clientId)
+		
+		do {
+			let decoder = JSONDecoder()
+			decoder.dateDecodingStrategy = .iso8601
+			
+			// Try to decode as batch first, then fall back to single message
+			if let batchData = try? decoder.decode([JSONRPCMessage].self, from: body) {
+				// Handle batch of messages
+				logger.info("Received batch with \(batchData.count) messages")
+				
+				if hasSSEConnection {
+					// Client has SSE connection - use streaming protocol
+					logger.info("Using streaming protocol (SSE) for batch with \(batchData.count) messages")
+					
+					// Send 202 Accepted immediately
+					await sendResponseAsync(channel: channel, status: .accepted, headers: headers, body: nil)
+					
+					// Process messages and stream responses via SSE
+					for message in batchData {
+						// Check if it's an empty ping response - ignore it
+						if case .response(let responseData) = message,
+						   let result = responseData.result,
+						   result.isEmpty {
+							continue
+						}
+						
+						// Handle via SSE
+						transport.handleJSONRPCRequest(message, from: clientId)
+					}
+				} else {
+					// No SSE connection - use immediate HTTP response
+					logger.info("Using immediate HTTP response for batch with \(batchData.count) messages")
+					var responses: [JSONRPCMessage] = []
+					
+					for message in batchData {
+						// Check if it's an empty ping response - ignore it
+						if case .response(let responseData) = message,
+						   let result = responseData.result,
+						   result.isEmpty {
+							continue
+						}
+						
+						if let response = await transport.server.handleMessage(message) {
+							responses.append(response)
+						}
+					}
+					
+					// Send batch response if any responses were generated
+					if !responses.isEmpty {
+						await sendJSONResponse(channel: channel, status: .ok, json: responses, sessionId: clientId)
+					} else {
+						// No responses to send (e.g., all notifications or empty pings)
+						await sendResponseAsync(channel: channel, status: .accepted, headers: headers, body: nil)
+					}
+				}
+			} else {
+				// Handle single message
+				let request = try decoder.decode(JSONRPCMessage.self, from: body)
+				
+				// Check if it's an empty ping response (regular response with empty result)
+				if case .response(let responseData) = request,
+				   let result = responseData.result,
+				   result.isEmpty {
+					// Empty ping response - send 202 Accepted with client ID
+					await sendResponseAsync(channel: channel, status: .accepted, headers: headers, body: nil)
+					return
+				}
+
+				if hasSSEConnection {
+					// Client has SSE connection - use streaming protocol
+					logger.info("Using streaming protocol (SSE) for single message")
+					
+					// Send 202 Accepted immediately
+					await sendResponseAsync(channel: channel, status: .accepted, headers: headers, body: nil)
+					
+					// Handle via SSE
+					transport.handleJSONRPCRequest(request, from: clientId)
+				} else {
+					// No SSE connection - use immediate HTTP response
+					logger.info("Using immediate HTTP response for single message")
+					
+					// Call the server handler (assume async)
+					guard let response = await transport.server.handleMessage(request) else {
+						// No response to send (e.g., notification)
+						await sendResponseAsync(channel: channel, status: .accepted, headers: headers, body: nil)
+						return
+					}
+
+					print(response)
+					await sendJSONResponse(channel: channel, status: .ok, json: response, sessionId: clientId)
+				}
+			}
+		} catch {
+			logger.error("Failed to decode or handle JSON-RPC message: \(error)")
+			let response = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32600, message: "Invalid Request: \(error)"))
+			await sendJSONResponse(channel: channel, status: .badRequest, json: response, sessionId: clientId)
+		}
+	}
+	
+	private func sendJSONResponse<T: Encodable>(
+		channel: Channel,
+		status: HTTPResponseStatus,
+		json: T,
+		sessionId: String? = nil
+	) async {
+		do {
+			let encoder = JSONEncoder()
+			encoder.dateEncodingStrategy = .iso8601WithTimeZone
+			let jsonData = try encoder.encode(json)
+			var buffer = channel.allocator.buffer(capacity: jsonData.count)
+			buffer.writeBytes(jsonData)
+			
+			var headers = HTTPHeaders()
+			headers.add(name: "Content-Type", value: "application/json")
+			headers.add(name: "Access-Control-Allow-Origin", value: "*")
+			if let sessionId = sessionId {
+				headers.add(name: "Mcp-Session-Id", value: sessionId)
+			}
+			
+			await sendResponseAsync(channel: channel, status: status, headers: headers, body: buffer)
+		} catch {
+			logger.error("Error encoding response: \(error.localizedDescription)")
+			// Don't try to send another response here - encoding failures should be handled at a higher level
+			// The channel may already have started writing the response
+		}
+	}
+	
+	private func handleSSE(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?, sendEndpoint: Bool = true) {
 		
 		precondition(head.method == .GET)
+		
+		// Extract or generate session/client ID (they are the same thing)
+		let sessionId = head.headers["Mcp-Session-Id"].first ?? UUID().uuidString
+		let clientId = sessionId  // Client ID and session ID are the same
 		
 		// Validate SSE headers
 		let acceptHeader = head.headers["accept"].first ?? ""
@@ -161,36 +350,33 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 		let remoteAddress = context.channel.remoteAddress?.description ?? "unknown"
 		let userAgent = head.headers["user-agent"].first ?? "unknown"
 		
-		// Generate client ID
-		let clientId = UUID().uuidString
 		self.clientId = clientId
 		
 		logger.info("""
 			SSE connection attempt:
-			- Client ID: \(clientId)
+			- Client/Session ID: \(clientId)
 			- Remote: \(remoteAddress)
 			- User-Agent: \(userAgent)
 			- Accept: \(acceptHeader)
+			- Protocol: \(sendEndpoint ? "Old (HTTP+SSE)" : "New (Streamable HTTP)")
 			""")
 		
 		// Register the channel with client ID
 		logger.info("Registering SSE channel for client \(clientId)")
 		transport.registerSSEChannel(context.channel, id: UUID(uuidString: clientId)!)
 		
-		// Then send endpoint event with client ID in URL
-		guard let endpointUrl = self.endpointUrl(from: head, clientId: clientId) else {
-			logger.error("Failed to construct endpoint URL")
-			context.close(promise: nil)
-			return
-		}
-		
-		// Set up SSE response headers
+		// Set up SSE response headers (ALWAYS send these for any SSE request)
 		var headers = HTTPHeaders()
 		headers.add(name: "Content-Type", value: "text/event-stream")
 		headers.add(name: "Cache-Control", value: "no-cache")
 		headers.add(name: "Connection", value: "keep-alive")
 		headers.add(name: "Access-Control-Allow-Methods", value: "GET")
 		headers.add(name: "Access-Control-Allow-Headers", value: "*")
+		
+		// Include session ID in response headers for new protocol
+		if !sendEndpoint {
+			headers.add(name: "Mcp-Session-Id", value: sessionId)
+		}
 		
 		let response = HTTPResponseHead(version: head.version,
 									 status: .ok,
@@ -200,9 +386,18 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 		context.write(wrapOutboundOut(.head(response)), promise: nil)
 		context.flush()
 		
-		logger.info("Sending endpoint event with URL: \(endpointUrl)")
-		let message = SSEMessage(name: "endpoint", data: endpointUrl.absoluteString)
-		context.channel.sendSSE(message)
+		// Conditionally send endpoint event (only for old protocol)
+		if sendEndpoint {
+			guard let endpointUrl = self.endpointUrl(from: head, clientId: clientId) else {
+				logger.error("Failed to construct endpoint URL")
+				context.close(promise: nil)
+				return
+			}
+			
+			logger.info("Sending endpoint event with URL: \(endpointUrl)")
+			let message = SSEMessage(name: "endpoint", data: endpointUrl.absoluteString)
+			context.channel.sendSSE(message)
+		}
 		
 		logger.info("SSE connection setup complete for client \(clientId)")
 	}
@@ -231,7 +426,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 		
 		// Validate token
 		if case .unauthorized(let message) = transport.authorizationHandler(token) {
-			let errorMessage = JSONRPCErrorResponse(error: .init(code: 401, message: "Unauthorized: \(message)"))
+			let errorMessage = JSONRPCMessage.errorResponse(id: nil, error: .init(code: 401, message: "Unauthorized: \(message)"))
 			
 			let data = try! JSONEncoder().encode(errorMessage)
 			let errorResponse = String(data: data, encoding: .utf8)!
@@ -253,16 +448,36 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 			let decoder = JSONDecoder()
 			decoder.dateDecodingStrategy = .iso8601
 			
-			// ignore emptey result from ping, this would fail for a request where method is required
-			if let empty = try? decoder.decode(JSONRPCEmptyResponse.self, from: body), empty.result == [:] {
-				return
+			// Try to decode as batch first, then fall back to single message
+			if let batchData = try? decoder.decode([JSONRPCMessage].self, from: body) {
+				// Handle batch of messages
+				logger.info("Received SSE batch with \(batchData.count) messages")
+				
+				for message in batchData {
+					// Check if it's an empty ping response - ignore it
+					if case .response(let responseData) = message,
+					   let result = responseData.result,
+					   result.isEmpty {
+						continue
+					}
+					
+					// Handle each message in the batch with client ID
+					transport.handleJSONRPCRequest(message, from: clientId)
+				}
+			} else {
+				// Handle single message (existing logic)
+				let request = try decoder.decode(JSONRPCMessage.self, from: body)
+				
+				// Check if it's an empty ping response (regular response with empty result) - ignore it
+				if case .response(let responseData) = request,
+				   let result = responseData.result,
+				   result.isEmpty {
+					return
+				}
+
+				// Handle the response with client ID
+				transport.handleJSONRPCRequest(request, from: clientId)
 			}
-			
-			let request = try decoder.decode(JSONRPCRequest.self, from: body)
-			
-			// Handle the response with client ID
-			transport.handleJSONRPCRequest(request, from: clientId)
-			
 		} catch {
 			logger.error("Failed to decode JSON-RPC message: \(error)")
 			await sendResponseAsync(channel: channel, status: .badRequest)
@@ -270,12 +485,15 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 	}
 	
 	/// Async version of sendResponse that works with Channel instead of ChannelHandlerContext
-	private func sendResponseAsync(channel: Channel, status: HTTPResponseStatus, headers: HTTPHeaders? = nil) async {
+	private func sendResponseAsync(channel: Channel, status: HTTPResponseStatus, headers: HTTPHeaders? = nil, body: ByteBuffer? = nil) async {
 		let response = HTTPResponseHead(version: .http1_1,
 									 status: status,
 									 headers: headers ?? HTTPHeaders())
 		
 		_ = channel.write(HTTPServerResponsePart.head(response))
+		if let body = body {
+			_ = channel.write(HTTPServerResponsePart.body(.byteBuffer(body)))
+		}
 		_ = channel.write(HTTPServerResponsePart.end(nil))
 		channel.flush()
 	}
@@ -519,27 +737,6 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 		}
 	}
 
-	/// Async version of sendResponse that works with Channel instead of ChannelHandlerContext
-	private func sendResponseAsync(channel: Channel, status: HTTPResponseStatus, headers: HTTPHeaders? = nil, body: ByteBuffer? = nil) async {
-		var responseHeaders = headers ?? HTTPHeaders()
-		
-		if body != nil {
-			responseHeaders.add(name: "Content-Type", value: "application/json")
-		}
-		
-		responseHeaders.add(name: "Access-Control-Allow-Origin", value: "*")
-		
-		let head = HTTPResponseHead(version: .http1_1, status: status, headers: responseHeaders)
-		_ = channel.write(HTTPServerResponsePart.head(head))
-		
-		if let body = body {
-			_ = channel.write(HTTPServerResponsePart.body(.byteBuffer(body)))
-		}
-		
-		_ = channel.write(HTTPServerResponsePart.end(nil))
-		channel.flush()
-	}
-	
 	// MARK: - Helpers
 	
 	fileprivate func endpointUrl(from head: HTTPRequestHead, clientId: String) -> URL? {

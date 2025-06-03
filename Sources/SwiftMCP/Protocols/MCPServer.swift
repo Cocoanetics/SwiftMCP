@@ -40,20 +40,26 @@ public protocol MCPServer {
     var serverDescription: String? { get }
     
     /**
-     Handles a JSON-RPC request and generates an appropriate response.
+     Handles a JSON-RPC message and generates an appropriate response.
      
-     - Parameter request: The JSON-RPC request to handle
+     - Parameter message: The JSON-RPC message to handle
      - Returns: A response message if one should be sent, nil otherwise
      */
-    func handleRequest(_ request: JSONRPCMessage) async -> JSONRPCMessage?
+    func handleMessage(_ message: JSONRPCMessage) async -> JSONRPCMessage?
 }
 
 // MARK: - Default Implementations
 public extension MCPServer {
     /**
-     Default implementation for handling JSON-RPC requests.
+     Default implementation for handling JSON-RPC messages.
      
-     This implementation supports the following methods:
+     This implementation supports the following message types:
+     - request: Handles various JSON-RPC requests
+     - notification: Handles notifications (no response expected)
+     - response: Handles responses from other parties
+     - errorResponse: Handles error responses
+     
+     For requests, it supports these methods:
      - initialize: Server initialization
      - notifications/initialized: Client initialization notification
      - ping: Server health check
@@ -63,51 +69,107 @@ public extension MCPServer {
      - resources/read: Read a specific resource
      - tools/call: Execute a tool
      
-     - Parameter request: The JSON-RPC request to handle
+     - Parameter message: The JSON-RPC message to handle
      - Returns: A response message if one should be sent, nil otherwise
      */
-    func handleRequest(_ request: JSONRPCMessage) async -> JSONRPCMessage? {
-		
-		guard let request = request as? JSONRPCRequest else {
-			return nil
-		}
-		
-        // Prepare the response based on the method
-        switch request.method {
-            case "initialize":
-                return createInitializeResponse(id: request.id ?? 0)
+    func handleMessage(_ message: JSONRPCMessage) async -> JSONRPCMessage? {
+        
+        // First switch on message type
+        switch message {
+            case .request(let requestData):
+                return await handleRequest(requestData)
                 
-            case "notifications/initialized":
-                return nil
-				
-			case "notifications/cancelled":
-				return nil
+            case .notification(let notificationData):
+                return await handleNotification(notificationData)
+                
+            case .response(let responseData):
+                return await handleResponse(responseData)
+                
+            case .errorResponse(let errorResponseData):
+                return await handleErrorResponse(errorResponseData)
+        }
+    }
+    
+    /**
+     Handles JSON-RPC requests that expect responses.
+     
+     - Parameter requestData: The request data
+     - Returns: A response message if one should be sent, nil otherwise
+     */
+    private func handleRequest(_ requestData: JSONRPCMessage.JSONRPCRequestData) async -> JSONRPCMessage? {
+        // Prepare the response based on the method
+        switch requestData.method {
+            case "initialize":
+                return createInitializeResponse(id: requestData.id)
                 
             case "ping":
-                return createPingResponse(id: request.id ?? 0)
+                return createPingResponse(id: requestData.id)
                 
             case "tools/list":
-                return createToolsListResponse(id: request.id ?? 0)
+                return createToolsListResponse(id: requestData.id)
                 
             case "resources/list":
-                return await createResourcesListResponse(id: request.id ?? 0)
+                return await createResourcesListResponse(id: requestData.id)
                 
             case "resources/templates/list":
-                return await createResourceTemplatesListResponse(id: request.id ?? 0)
+                return await createResourceTemplatesListResponse(id: requestData.id)
                 
             case "resources/read":
-                return await createResourcesReadResponse(id: request.id ?? 0, request: request)
+                return await createResourcesReadResponse(id: requestData.id, request: requestData)
                 
             case "tools/call":
-                return await handleToolCall(request)
+                return await handleToolCall(requestData)
                 
             default:
                 // Respond with JSON-RPC error for method not found
-                return JSONRPCErrorResponse(
-                    id: request.id,
-                    error: .init(code: -32601, message: "Method not found")
-                )
+                return JSONRPCMessage.errorResponse(id: requestData.id, error: .init(code: -32601, message: "Method not found"))
         }
+    }
+    
+    /**
+     Handles JSON-RPC notifications (no response expected).
+     
+     - Parameter notificationData: The notification data
+     - Returns: Always returns nil since notifications don't expect responses
+     */
+    private func handleNotification(_ notificationData: JSONRPCMessage.JSONRPCNotificationData) async -> JSONRPCMessage? {
+        switch notificationData.method {
+        case "notifications/initialized":
+            // Client has completed initialization
+            return nil
+            
+        case "notifications/cancelled":
+            // Client has cancelled a request
+            return nil
+            
+        default:
+            // Unknown notification - log it but don't respond
+            return nil
+        }
+    }
+    
+    /**
+     Handles JSON-RPC responses from other parties.
+     
+     - Parameter responseData: The response data
+     - Returns: Always returns nil since we don't currently respond to responses
+     */
+    private func handleResponse(_ responseData: JSONRPCMessage.JSONRPCResponseData) async -> JSONRPCMessage? {
+        // In a typical server scenario, we don't usually respond to responses
+        // This could be extended for scenarios where the server also acts as a client
+        return nil
+    }
+    
+    /**
+     Handles JSON-RPC error responses from other parties.
+     
+     - Parameter errorResponseData: The error response data
+     - Returns: Always returns nil since we don't currently respond to error responses
+     */
+    private func handleErrorResponse(_ errorResponseData: JSONRPCMessage.JSONRPCErrorResponseData) async -> JSONRPCMessage? {
+        // In a typical server scenario, we don't usually respond to error responses
+        // This could be extended for scenarios where the server also acts as a client
+        return nil
     }
     
     /**
@@ -121,30 +183,37 @@ public extension MCPServer {
      - Parameter id: The request ID to include in the response
      - Returns: A JSON-RPC message containing the initialization response
      */
-        func createInitializeResponse(id: Int) -> JSONRPCInitializeResponse {
-                var capabilities = ServerCapabilities()
+    func createInitializeResponse(id: Int) -> JSONRPCMessage {
+        var capabilities = ServerCapabilities()
 
-                if self is MCPToolProviding {
-                        capabilities.tools = .init(listChanged: false)
-                }
-
-                if self is MCPResourceProviding {
-                        capabilities.resources = .init(listChanged: false)
-                }
-
-                let serverInfo = JSONRPCInitializeResponse.InitializeResult.ServerInfo(
-                        name: serverName,
-                        version: serverVersion
-                )
-
-                let result = JSONRPCInitializeResponse.InitializeResult(
-                        protocolVersion: "2024-11-05",
-                        capabilities: capabilities,
-                        serverInfo: serverInfo
-                )
-
-                return JSONRPCInitializeResponse(id: id, result: result)
+        if self is MCPToolProviding {
+            capabilities.tools = .init(listChanged: false)
         }
+
+        if self is MCPResourceProviding {
+            capabilities.resources = .init(listChanged: false)
+        }
+
+        let serverInfo = InitializeResult.ServerInfo(
+            name: serverName,
+            version: serverVersion
+        )
+
+        let result = InitializeResult(
+            protocolVersion: "2024-11-05",
+            capabilities: capabilities,
+            serverInfo: serverInfo
+        )
+
+        do {
+            let encoder = DictionaryEncoder()
+            let resultDict = try encoder.encode(result)
+            return JSONRPCMessage.response(id: id, result: resultDict)
+        } catch {
+            // Fallback to empty response if encoding fails
+            return JSONRPCMessage.response(id: id, result: [:])
+        }
+    }
     
     /**
      Handles a tool execution request.
@@ -152,7 +221,7 @@ public extension MCPServer {
      - Parameter request: The JSON-RPC request containing the tool call details
      - Returns: A JSON-RPC message containing the tool execution result
      */
-    private func handleToolCall(_ request: JSONRPCRequest) async -> JSONRPCResponse? {
+    private func handleToolCall(_ request: JSONRPCMessage.JSONRPCRequestData) async -> JSONRPCMessage? {
 		
 		guard let toolProvider = self as? MCPToolProviding else {
 			return nil
@@ -194,25 +263,18 @@ public extension MCPServer {
 				]
 			}
 			
-            var response = JSONRPCResponse()
-            response.id = request.id
-			
-            response.result = [
+            return JSONRPCMessage.response(id: request.id, result: [
                 "content": [content],
                 "isError": false
-            ]
-            return response
+            ])
             
         } catch {
-            var response = JSONRPCResponse()
-            response.id = request.id
-            response.result = [
+            return JSONRPCMessage.response(id: request.id, result: [
                 "content": [
                     ["type": "text", "text": error.localizedDescription]
                 ],
                 "isError": true
-            ]
-            return response
+            ])
         }
     }
     
@@ -245,28 +307,21 @@ public extension MCPServer {
 	 - Parameter id: The request ID to include in the response
 	 - Returns: A JSON-RPC message containing the tools list
 	 */
-	private func createToolsListResponse(id: Int) -> JSONRPCResponse {
+	private func createToolsListResponse(id: Int) -> JSONRPCMessage {
 		
 		guard let toolProvider = self as? MCPToolProviding else
 		{
-			var response = JSONRPCResponse()
-			response.id = id
-			response.result = [
+			return JSONRPCMessage.response(id: id, result: [
 				"content": [
 					["type": "text", "text": "Server does not provide any tools"]
 				],
 				"isError": true
-			]
-			return response
+			])
 		}
 		
-		var response = JSONRPCResponse()
-		response.id = id
-		response.result = [
+		return JSONRPCMessage.response(id: id, result: [
 			"tools": AnyCodable(toolProvider.mcpToolMetadata.convertedToTools())
-		]
-		
-		return response
+		])
 	}
 	
 	/**
@@ -279,15 +334,12 @@ public extension MCPServer {
 		
 		guard let resourceProvider = self as? MCPResourceProviding else
 		{
-			var response = JSONRPCResponse()
-			response.id = id
-			response.result = [
+			return JSONRPCMessage.response(id: id, result: [
 				"content": [
 					["type": "text", "text": "Server does not provide any resources"]
 				],
 				"isError": true
-			]
-			return response
+			])
 		}
 		
 		/// get resources from templates that have no parameters plus developer provided array
@@ -302,8 +354,7 @@ public extension MCPServer {
 			]
 		}
 		
-		let response = JSONRPCResponse(id: id, result: ["resources": AnyCodable(resourceDicts)])
-		return response
+		return JSONRPCMessage.response(id: id, result: ["resources": AnyCodable(resourceDicts)])
 	}
     
     /**
@@ -314,25 +365,22 @@ public extension MCPServer {
        - request: The original JSON-RPC request
      - Returns: A JSON-RPC message containing the resource content or an error
      */
-	func createResourcesReadResponse(id: Int, request: JSONRPCRequest) async -> JSONRPCMessage {
+	func createResourcesReadResponse(id: Int, request: JSONRPCMessage.JSONRPCRequestData) async -> JSONRPCMessage {
 		
 		guard let resourceProvider = self as? MCPResourceProviding else
 		{
-			var response = JSONRPCResponse()
-			response.id = id
-			response.result = [
+			return JSONRPCMessage.response(id: id, result: [
 				"content": [
 					["type": "text", "text": "Server does not provide any resources"]
 				],
 				"isError": true
-			]
-			return response
+			])
 		}
 		
 		// Extract the URI from the request params
 		guard let uriString = request.params?["uri"]?.value as? String,
 				  let uri = URL(string: uriString) else {
-				return JSONRPCErrorResponse(id: id, error: .init(code: -32602, message: "Invalid or missing URI parameter"))
+				return JSONRPCMessage.errorResponse(id: id, error: .init(code: -32602, message: "Invalid or missing URI parameter"))
 			}
 			
 			do {
@@ -341,12 +389,12 @@ public extension MCPServer {
 				
 				if !resourceContentArray.isEmpty
 				{
-					return JSONRPCResponse(id: id, result: ["contents": AnyCodable(resourceContentArray)])
+					return JSONRPCMessage.response(id: id, result: ["contents": AnyCodable(resourceContentArray)])
 				} else {
-					return JSONRPCErrorResponse(id: id, error: .init(code: -32001, message: "Resource not found: \(uri.absoluteString)"))
+					return JSONRPCMessage.errorResponse(id: id, error: .init(code: -32001, message: "Resource not found: \(uri.absoluteString)"))
 				}
 			} catch {
-				return JSONRPCErrorResponse(id: id, error: .init(code: -32000, message: "Error getting resource: \(error.localizedDescription)"))
+				return JSONRPCMessage.errorResponse(id: id, error: .init(code: -32000, message: "Error getting resource: \(error.localizedDescription)"))
 			}
 		}
     
@@ -354,44 +402,42 @@ public extension MCPServer {
      Creates a response listing all available resource templates.
      
      - Parameter id: The request ID to include in the response
-     - Returns: A JSON-RPC message containing the resource templates list
+     - Returns: A JSON-RPC response containing the resource templates list
      */
     func createResourceTemplatesListResponse(id: Int) async -> JSONRPCMessage {
-
-                guard let resourceProvider = self as? MCPResourceProviding else
-                {
-                        var response = JSONRPCResponse()
-                        response.id = id
-                        response.result = [
-                                "content": [
-                                        ["type": "text", "text": "Server does not provide any resources"]
+		
+		guard let resourceProvider = self as? MCPResourceProviding else
+		{
+			return JSONRPCMessage.response(id: id, result: [
+				"content": [
+					["type": "text", "text": "Server does not provide any resource templates"]
 				],
 				"isError": true
-			]
-			return response
+			])
 		}
 		
-                let templates = await resourceProvider.mcpResourceTemplates
-        
-        var response = JSONRPCResponse()
-        response.id = id
-        response.result = [
-            "resourceTemplates": AnyCodable(templates)
-        ]
-        return response
-    }
+		let templates = await resourceProvider.mcpResourceTemplates
+
+		return JSONRPCMessage.response(id: id, result: [
+			"resourceTemplates": AnyCodable(templates.map { template in
+				[
+					"uriTemplate": template.uriTemplate,
+					"name": template.name,
+					"description": template.description,
+					"mimeType": template.mimeType ?? "text/plain"
+				]
+			})
+		])
+	}
     
     /**
-     Creates a response to a ping request.
+     Creates a ping response with empty result.
      
      - Parameter id: The request ID to include in the response
-     - Returns: A JSON-RPC message acknowledging the ping
+     - Returns: A JSON-RPC response for ping
      */
-    func createPingResponse(id: Int) -> JSONRPCResponse {
-        var response = JSONRPCResponse()
-        response.id = id
-        response.result = [:]
-        return response
+    func createPingResponse(id: Int) -> JSONRPCMessage {
+        return JSONRPCMessage.response(id: id, result: [:])
     }
     
 	// MARK: - Internal Helpers
