@@ -71,4 +71,13 @@ actor SSEChannelManager {
         }
         sseChannels.removeAll()
     }
+    
+    /// Check if there's an active SSE connection for a given client.
+    /// - Parameter clientIdString: The string representation of the UUID.
+    /// - Returns: True if there's an active channel for this client.
+    func hasActiveConnection(for clientIdString: String) -> Bool {
+        guard let uuid = UUID(uuidString: clientIdString),
+              let channel = sseChannels[uuid] else { return false }
+        return channel.isActive
+    }
 }

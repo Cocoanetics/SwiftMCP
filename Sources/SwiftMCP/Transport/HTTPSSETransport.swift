@@ -32,7 +32,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
 	
 	private let group: EventLoopGroup
 	private var channel: Channel?
-	private let channelManager = SSEChannelManager()
+	internal let channelManager = SSEChannelManager()
 	private var keepAliveTimer: DispatchSourceTimer?
 	
 	/// Flag to determine whether to serve OpenAPI endpoints.
