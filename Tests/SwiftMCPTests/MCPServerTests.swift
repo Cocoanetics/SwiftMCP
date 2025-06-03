@@ -273,8 +273,12 @@ func testCustomNameAndVersion() async throws {
     // Get the response using our test method
     let response = calculator.createInitializeResponse(id: 1)
 
-    // Extract server info from the response using dictionary access
-    guard let result = response.result else {
+    // Extract server info from the response using pattern matching
+    guard case .response(let responseData) = response else {
+        throw TestError("Expected response case")
+    }
+    
+    guard let result = responseData.result else {
         throw TestError("Failed to extract result from response")
     }
     
@@ -287,21 +291,25 @@ func testCustomNameAndVersion() async throws {
     guard let version = serverInfoDict["version"] as? String else {
         throw TestError("server version not found")
     }
-
-    #expect(name == "CustomCalculator", "Server name should match specified name")
-    #expect(version == "2.0", "Server version should match specified version")
+    
+    #expect(name == "CustomCalculator")
+    #expect(version == "2.0")
 }
 
 @Test("Default Name and Version")
 func testDefaultNameAndVersion() async throws {
-    // Create an instance of DefaultNameCalculator
+    // Create an instance that uses defaults
     let calculator = DefaultNameCalculator()
     
     // Get the response using our test method
     let response = calculator.createInitializeResponse(id: 1)
 
-    // Extract server info from the response using dictionary access
-    guard let result = response.result else {
+    // Extract server info from the response using pattern matching
+    guard case .response(let responseData) = response else {
+        throw TestError("Expected response case")
+    }
+    
+    guard let result = responseData.result else {
         throw TestError("Failed to extract result from response")
     }
     
@@ -314,9 +322,9 @@ func testDefaultNameAndVersion() async throws {
     guard let version = serverInfoDict["version"] as? String else {
         throw TestError("server version not found")
     }
-
-    #expect(name == "DefaultNameCalculator", "Server name should match class name")
-    #expect(version == "1.0", "Server version should be default value")
+    
+    #expect(name == "DefaultNameCalculator")
+    #expect(version == "1.0")
 }
 
 @Test
