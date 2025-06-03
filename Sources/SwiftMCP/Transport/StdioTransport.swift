@@ -65,53 +65,41 @@ public final class StdioTransport: Transport, @unchecked Sendable {
 
                 logger.trace("Received input: \(input)")
 
-                let decoder = JSONDecoder()
-                decoder.dateDecodingStrategy = .iso8601
-
-// Try to decode as batch first, then fall back to single message
-                if let batchData = try? decoder.decode([JSONRPCMessage].self, from: data) {
-// Handle batch of messages
-                    logger.trace("Received batch with \(batchData.count) messages")
-                    var responses: [JSONRPCMessage] = []
-
-                    for message in batchData {
-                        if let response = await server.handleMessage(message) {
-                            responses.append(response)
-                        }
+                do {
+                    let messages = try JSONRPCMessage.decodeMessages(from: data)
+                    if messages.count > 1 {
+                        logger.trace("Received batch with \(messages.count) messages")
                     }
 
-// Send batch response if any responses were generated
-                    if !responses.isEmpty {
-                        let responseData = try JSONEncoder().encode(responses)
-                        guard let json = String(data: responseData, encoding: .utf8) else {
-                        logger.error("Failed to encode batch response as UTF-8")
+                    let responses = await server.processBatch(messages)
+
+                    guard !responses.isEmpty else {
+                        logger.trace("Batch contained only notifications, no response sent")
                         continue
                     }
 
-                        guard let outputData = (json + "\n").data(using: .utf8) else { return }
-                        try FileHandle.standardOutput.write(contentsOf: outputData)
-
-                        logger.trace("Sent batch response with \(responses.count) messages: \(json)")
+                    let encoder = JSONEncoder()
+                    let responseData: Data
+                    if responses.count == 1 {
+                        responseData = try encoder.encode(responses[0])
                     } else {
-                        logger.trace("Batch contained only notifications, no response sent")
+                        responseData = try encoder.encode(responses)
                     }
-                } else {
-// Handle single message (existing logic)
-                    let request = try decoder.decode(JSONRPCMessage.self, from: data)
-
-// Handle the request.
-                    if let response = await server.handleMessage(request) {
-                        let responseData = try JSONEncoder().encode(response)
-                        guard let json = String(data: responseData, encoding: .utf8) else {
+                    guard let json = String(data: responseData, encoding: .utf8) else {
                         logger.error("Failed to encode response as UTF-8")
                         continue
                     }
 
-                        guard let outputData = (json + "\n").data(using: .utf8) else { return }
-                        try FileHandle.standardOutput.write(contentsOf: outputData)
+                    guard let outputData = (json + "\n").data(using: .utf8) else { return }
+                    try FileHandle.standardOutput.write(contentsOf: outputData)
 
+                    if responses.count > 1 {
+                        logger.trace("Sent batch response with \(responses.count) messages: \(json)")
+                    } else {
                         logger.trace("Sent response: \(json)")
                     }
+                } catch {
+                    logger.error("Error decoding message: \(error)")
                 }
             } else {
 // If no input is available, sleep briefly and try again.
@@ -140,53 +128,41 @@ public final class StdioTransport: Transport, @unchecked Sendable {
 
                 logger.trace("Received input: \(input)")
 
-                let decoder = JSONDecoder()
-                decoder.dateDecodingStrategy = .iso8601
-
-// Try to decode as batch first, then fall back to single message
-                if let batchData = try? decoder.decode([JSONRPCMessage].self, from: data) {
-// Handle batch of messages
-                    logger.trace("Received batch with \(batchData.count) messages")
-                    var responses: [JSONRPCMessage] = []
-
-                    for message in batchData {
-                        if let response = await server.handleMessage(message) {
-                            responses.append(response)
-                        }
+                do {
+                    let messages = try JSONRPCMessage.decodeMessages(from: data)
+                    if messages.count > 1 {
+                        logger.trace("Received batch with \(messages.count) messages")
                     }
 
-// Send batch response if any responses were generated
-                    if !responses.isEmpty {
-                        let responseData = try JSONEncoder().encode(responses)
-                        guard let json = String(data: responseData, encoding: .utf8) else {
-                        logger.error("Failed to encode batch response as UTF-8")
+                    let responses = await server.processBatch(messages)
+
+                    guard !responses.isEmpty else {
+                        logger.trace("Batch contained only notifications, no response sent")
                         continue
                     }
 
-                        guard let outputData = (json + "\n").data(using: .utf8) else { return }
-                        try FileHandle.standardOutput.write(contentsOf: outputData)
-
-                        logger.trace("Sent batch response with \(responses.count) messages: \(json)")
+                    let encoder = JSONEncoder()
+                    let responseData: Data
+                    if responses.count == 1 {
+                        responseData = try encoder.encode(responses[0])
                     } else {
-                        logger.trace("Batch contained only notifications, no response sent")
+                        responseData = try encoder.encode(responses)
                     }
-                } else {
-// Handle single message (existing logic)
-                    let request = try decoder.decode(JSONRPCMessage.self, from: data)
-
-// Handle the request.
-                    if let response = await server.handleMessage(request) {
-                        let responseData = try JSONEncoder().encode(response)
-                        guard let json = String(data: responseData, encoding: .utf8) else {
+                    guard let json = String(data: responseData, encoding: .utf8) else {
                         logger.error("Failed to encode response as UTF-8")
                         continue
                     }
 
-                        guard let outputData = (json + "\n").data(using: .utf8) else { return }
-                        try FileHandle.standardOutput.write(contentsOf: outputData)
+                    guard let outputData = (json + "\n").data(using: .utf8) else { return }
+                    try FileHandle.standardOutput.write(contentsOf: outputData)
 
+                    if responses.count > 1 {
+                        logger.trace("Sent batch response with \(responses.count) messages: \(json)")
+                    } else {
                         logger.trace("Sent response: \(json)")
                     }
+                } catch {
+                    logger.error("Error decoding message: \(error)")
                 }
             } else {
 // If no input is available, sleep briefly and try again.
@@ -194,6 +170,7 @@ public final class StdioTransport: Transport, @unchecked Sendable {
             }
         }
     }
+
 
 /// Stops the transport.
 ///

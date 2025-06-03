@@ -205,96 +205,45 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
         let hasSSEConnection = await transport.channelManager.hasActiveConnection(for: clientId)
 
         do {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-
-// Try to decode as batch first, then fall back to single message
-        if let batchData = try? decoder.decode([JSONRPCMessage].self, from: body) {
-// Handle batch of messages
-            logger.info("Received batch with \(batchData.count) messages")
+            let messages = try JSONRPCMessage.decodeMessages(from: body)
+            if messages.count > 1 {
+                logger.info("Received batch with \(messages.count) messages")
+            }
 
             if hasSSEConnection {
-// Client has SSE connection - use streaming protocol
-                logger.info("Using streaming protocol (SSE) for batch with \(batchData.count) messages")
+                // Client has SSE connection - use streaming protocol
+                logger.info("Using streaming protocol (SSE) for \(messages.count > 1 ? "batch" : "single message")")
 
-// Send 202 Accepted immediately
+                // Send 202 Accepted immediately
                 await sendResponseAsync(channel: channel, status: .accepted, headers: headers, body: nil)
 
-// Process messages and stream responses via SSE
-                for message in batchData {
-// Check if it's an empty ping response - ignore it
+                // Process messages and stream responses via SSE
+                for message in messages {
+                    // Check if it's an empty ping response - ignore it
                     if case .response(let responseData) = message,
-						   let result = responseData.result,
-						   result.isEmpty {
+                                       let result = responseData.result,
+                                       result.isEmpty {
                         continue
                     }
 
-// Handle via SSE
                     transport.handleJSONRPCRequest(message, from: clientId)
                 }
             } else {
-// No SSE connection - use immediate HTTP response
-                logger.info("Using immediate HTTP response for batch with \(batchData.count) messages")
-                var responses: [JSONRPCMessage] = []
+                // No SSE connection - use immediate HTTP response
+                logger.info("Using immediate HTTP response for \(messages.count > 1 ? "batch" : "single message")")
 
-                for message in batchData {
-// Check if it's an empty ping response - ignore it
-                    if case .response(let responseData) = message,
-						   let result = responseData.result,
-						   result.isEmpty {
-                        continue
-                    }
+                let responses = await transport.server.processBatch(messages, ignoringEmptyResponses: true)
 
-                    if let response = await transport.server.handleMessage(message) {
-                        responses.append(response)
-                    }
-                }
-
-// Send batch response if any responses were generated
                 if !responses.isEmpty {
-                    await sendJSONResponse(channel: channel, status: .ok, json: responses, sessionId: clientId)
+                    if responses.count == 1 {
+                        await sendJSONResponse(channel: channel, status: .ok, json: responses[0], sessionId: clientId)
+                    } else {
+                        await sendJSONResponse(channel: channel, status: .ok, json: responses, sessionId: clientId)
+                    }
                 } else {
-// No responses to send (e.g., all notifications or empty pings)
                     await sendResponseAsync(channel: channel, status: .accepted, headers: headers, body: nil)
                 }
             }
-        } else {
-// Handle single message
-            let request = try decoder.decode(JSONRPCMessage.self, from: body)
-
-// Check if it's an empty ping response (regular response with empty result)
-            if case .response(let responseData) = request,
-				   let result = responseData.result,
-				   result.isEmpty {
-// Empty ping response - send 202 Accepted with client ID
-                await sendResponseAsync(channel: channel, status: .accepted, headers: headers, body: nil)
-                return
-            }
-
-            if hasSSEConnection {
-// Client has SSE connection - use streaming protocol
-                logger.info("Using streaming protocol (SSE) for single message")
-
-// Send 202 Accepted immediately
-                await sendResponseAsync(channel: channel, status: .accepted, headers: headers, body: nil)
-
-// Handle via SSE
-                transport.handleJSONRPCRequest(request, from: clientId)
-            } else {
-// No SSE connection - use immediate HTTP response
-                logger.info("Using immediate HTTP response for single message")
-
-// Call the server handler (assume async)
-                guard let response = await transport.server.handleMessage(request) else {
-// No response to send (e.g., notification)
-                await sendResponseAsync(channel: channel, status: .accepted, headers: headers, body: nil)
-                return
-            }
-
-                print(response)
-                await sendJSONResponse(channel: channel, status: .ok, json: response, sessionId: clientId)
-            }
-        }
     } catch {
         logger.error("Failed to decode or handle JSON-RPC message: \(error)")
         let response = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32600, message: "Invalid Request: \(error)"))
@@ -445,39 +394,22 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
         await sendResponseAsync(channel: channel, status: .accepted)
 
         do {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+            let messages = try JSONRPCMessage.decodeMessages(from: body)
+            if messages.count > 1 {
+                logger.info("Received SSE batch with \(messages.count) messages")
+            }
 
-// Try to decode as batch first, then fall back to single message
-        if let batchData = try? decoder.decode([JSONRPCMessage].self, from: body) {
-// Handle batch of messages
-            logger.info("Received SSE batch with \(batchData.count) messages")
-
-            for message in batchData {
-// Check if it's an empty ping response - ignore it
+            for message in messages {
+                // Check if it's an empty ping response - ignore it
                 if case .response(let responseData) = message,
-					   let result = responseData.result,
-					   result.isEmpty {
+                                   let result = responseData.result,
+                                   result.isEmpty {
                     continue
                 }
 
-// Handle each message in the batch with client ID
+                // Handle each message in the batch with client ID
                 transport.handleJSONRPCRequest(message, from: clientId)
             }
-        } else {
-// Handle single message (existing logic)
-            let request = try decoder.decode(JSONRPCMessage.self, from: body)
-
-// Check if it's an empty ping response (regular response with empty result) - ignore it
-            if case .response(let responseData) = request,
-				   let result = responseData.result,
-				   result.isEmpty {
-                return
-            }
-
-// Handle the response with client ID
-            transport.handleJSONRPCRequest(request, from: clientId)
-        }
     } catch {
         logger.error("Failed to decode JSON-RPC message: \(error)")
         await sendResponseAsync(channel: channel, status: .badRequest)
@@ -487,8 +419,8 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 /// Async version of sendResponse that works with Channel instead of ChannelHandlerContext
     private func sendResponseAsync(channel: Channel, status: HTTPResponseStatus, headers: HTTPHeaders? = nil, body: ByteBuffer? = nil) async {
         let response = HTTPResponseHead(version: .http1_1,
-									 status: status,
-									 headers: headers ?? HTTPHeaders())
+                                                                         status: status,
+                                                                         headers: headers ?? HTTPHeaders())
 
         _ = channel.write(HTTPServerResponsePart.head(response))
         if let body = body {
@@ -497,6 +429,8 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
         _ = channel.write(HTTPServerResponsePart.end(nil))
         channel.flush()
     }
+
+
 
 // MARK: - OpenAPI Handlers
 
