@@ -40,30 +40,30 @@ import Logging
  ```
  */
 public protocol Transport {
-    /**
+/**
      The MCP server instance being exposed by this transport.
      
      This server handles the actual processing of requests and maintains the available tools/functions.
      The transport is responsible for getting requests to and responses from this server instance.
      */
     var server: MCPServer { get }
-    
-    /**
+
+/**
      Logger instance for this transport.
      
      Used to log transport-specific events, errors, and debug information.
      Each transport implementation should use a unique label for its logger.
      */
     var logger: Logger { get }
-    
-    /**
+
+/**
      Initialize a new transport with an MCP server.
      
      - Parameter server: The MCP server to expose through this transport
      */
     init(server: MCPServer)
-    
-    /**
+
+/**
      Start the transport in a non-blocking way.
      
      This method should initialize the transport and make it ready to handle requests,
@@ -78,8 +78,8 @@ public protocol Transport {
                  multiple instances of the transport.
      */
     func start() async throws
-    
-    /**
+
+/**
      Run the transport and block until stopped.
      
      This method should start the transport if it hasn't been started yet and then
@@ -94,8 +94,8 @@ public protocol Transport {
              run until explicitly terminated.
      */
     func run() async throws
-    
-    /**
+
+/**
      Stop the transport gracefully.
      
      This method should:

@@ -13,18 +13,18 @@ public extension BinaryInteger {
         }
         if let floatValue = value as? any BinaryFloatingPoint {
             let doubleValue = Double(floatValue) // Convert to Double for consistent checks
-            // Ensure no precision is lost for integers
+// Ensure no precision is lost for integers
             if doubleValue.truncatingRemainder(dividingBy: 1.0) == 0 {
                 return Self(exactly: doubleValue) // Attempt to initialize from Double
             }
         }
-        // Attempt to convert from String
+// Attempt to convert from String
         if let stringValue = value as? String {
-            // Try initializing from common integer string representations
+// Try initializing from common integer string representations
             if let intVal = Int(stringValue) { return Self(exactly: intVal) }
             if let int64Val = Int64(stringValue) { return Self(exactly: int64Val) }
-            // Add UInt, UInt64 etc. if necessary and if Self supports them
-            // Fallback to a general radix-based init if available and needed, though less common here.
+// Add UInt, UInt64 etc. if necessary and if Self supports them
+// Fallback to a general radix-based init if available and needed, though less common here.
         }
         return nil
     }
@@ -44,10 +44,10 @@ public extension BinaryFloatingPoint {
         if let floatValue = value as? any BinaryFloatingPoint {
             return Self(floatValue) // Direct conversion if T is also some BinaryFloatingPoint
         }
-        // Attempt to convert from String
+// Attempt to convert from String
         if let stringValue = value as? String {
-            // Convert string to Double first, then to Self.
-            // This is a common strategy as Double(String) is robust.
+// Convert string to Double first, then to Self.
+// This is a common strategy as Double(String) is robust.
             if let doubleVal = Double(stringValue) {
                 return Self(doubleVal) // Assumes Self can be initialized from Double
             }

@@ -11,6 +11,6 @@
 ///
 /// To get started, see the ``MCPServer`` protocol and the ``MCPTool`` macro.
 public enum SwiftMCP {
-    /// The current version of the SwiftMCP framework
+/// The current version of the SwiftMCP framework
     public static let version = "1.0.0"
 } 

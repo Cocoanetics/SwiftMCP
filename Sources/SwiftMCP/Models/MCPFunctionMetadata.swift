@@ -2,28 +2,28 @@ import Foundation
 
 /// Common metadata about a function (tool or resource)
 public struct MCPFunctionMetadata: Sendable {
-    /// The name of the function
+/// The name of the function
     public let name: String
-    
-    /// A description of the function's purpose
+
+/// A description of the function's purpose
     public let description: String?
-    
-    /// The parameters of the function
+
+/// The parameters of the function
     public let parameters: [MCPParameterInfo]
-    
-    /// The return type of the function, if any
+
+/// The return type of the function, if any
     public let returnType: Sendable.Type?
-    
-    /// A description of what the function returns
+
+/// A description of what the function returns
     public let returnTypeDescription: String?
-    
-    /// Whether the function is asynchronous
+
+/// Whether the function is asynchronous
     public let isAsync: Bool
-    
-    /// Whether the function can throw errors
+
+/// Whether the function can throw errors
     public let isThrowing: Bool
-    
-    /**
+
+/**
      Creates a new MCPFunctionMetadata instance.
      
      - Parameters:
@@ -52,8 +52,8 @@ public struct MCPFunctionMetadata: Sendable {
         self.isAsync = isAsync
         self.isThrowing = isThrowing
     }
-    
-    /// Enriches a dictionary of arguments with default values and throws if a required parameter is missing
+
+/// Enriches a dictionary of arguments with default values and throws if a required parameter is missing
     public func enrichArguments(_ arguments: [String: Sendable]) throws -> [String: Sendable] {
         var enrichedArguments = arguments
         for param in parameters {
@@ -61,8 +61,8 @@ public struct MCPFunctionMetadata: Sendable {
                 if let defaultValue = param.defaultValue {
                     enrichedArguments[param.name] = defaultValue
                 } else if param.isRequired {
-                    throw MCPToolError.missingRequiredParameter(parameterName: param.name)
-                }
+                        throw MCPToolError.missingRequiredParameter(parameterName: param.name)
+                    }
             }
         }
         return enrichedArguments

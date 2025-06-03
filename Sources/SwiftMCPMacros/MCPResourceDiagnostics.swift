@@ -15,18 +15,18 @@ enum MCPResourceDiagnostic: DiagnosticMessage {
 
     var message: String {
         switch self {
-        case .onlyFunctions:
-            return "The MCPResource macro can only be applied to functions"
-        case .requiresStringLiteral:
-            return "URI template must be string or string array"
-        case .missingParameterForPlaceholder(let ph):
-            return "Missing parameter for placeholder '{\(ph)}'"
-        case .unknownPlaceholder(let name):
-            return "Unknown placeholder '{\(name)}' – not present in template"
-        case .optionalParameterNeedsDefault(let name):
-            return "Optional parameter '\(name)' requires a default value"
-        case .invalidURITemplate(let reason):
-            return "Invalid URI template: \(reason)"
+            case .onlyFunctions:
+                return "The MCPResource macro can only be applied to functions"
+            case .requiresStringLiteral:
+                return "URI template must be string or string array"
+            case .missingParameterForPlaceholder(let ph):
+                return "Missing parameter for placeholder '{\(ph)}'"
+            case .unknownPlaceholder(let name):
+                return "Unknown placeholder '{\(name)}' – not present in template"
+            case .optionalParameterNeedsDefault(let name):
+                return "Optional parameter '\(name)' requires a default value"
+            case .invalidURITemplate(let reason):
+                return "Invalid URI template: \(reason)"
         }
     }
 
@@ -34,18 +34,18 @@ enum MCPResourceDiagnostic: DiagnosticMessage {
 
     var diagnosticID: MessageID {
         switch self {
-        case .missingParameterForPlaceholder:
-            return MessageID(domain: "SwiftMCP", id: "E001")
-        case .unknownPlaceholder:
-            return MessageID(domain: "SwiftMCP", id: "E002")
-        case .optionalParameterNeedsDefault:
-            return MessageID(domain: "SwiftMCP", id: "E003")
-        case .invalidURITemplate:
-            return MessageID(domain: "SwiftMCP", id: "E004")
-        case .onlyFunctions:
-            return MessageID(domain: "SwiftMCP", id: "OnlyFunctions")
-        case .requiresStringLiteral:
-            return MessageID(domain: "SwiftMCP", id: "RequiresStringLiteral")
+            case .missingParameterForPlaceholder:
+                return MessageID(domain: "SwiftMCP", id: "E001")
+            case .unknownPlaceholder:
+                return MessageID(domain: "SwiftMCP", id: "E002")
+            case .optionalParameterNeedsDefault:
+                return MessageID(domain: "SwiftMCP", id: "E003")
+            case .invalidURITemplate:
+                return MessageID(domain: "SwiftMCP", id: "E004")
+            case .onlyFunctions:
+                return MessageID(domain: "SwiftMCP", id: "OnlyFunctions")
+            case .requiresStringLiteral:
+                return MessageID(domain: "SwiftMCP", id: "RequiresStringLiteral")
         }
     }
 }

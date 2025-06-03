@@ -9,13 +9,13 @@ import Foundation
 
 /// Metadata about a tool function
 public struct MCPToolMetadata: Sendable {
-    /// The common function metadata
+/// The common function metadata
     public let functionMetadata: MCPFunctionMetadata
-    
-    /// Whether the function's actions are consequential (defaults to true)
+
+/// Whether the function's actions are consequential (defaults to true)
     public let isConsequential: Bool
-    
-    /**
+
+/**
      Creates a new MCPToolMetadata instance.
      
      - Parameters:
@@ -49,8 +49,8 @@ public struct MCPToolMetadata: Sendable {
         )
         self.isConsequential = isConsequential
     }
-    
-    // Convenience accessors for common properties
+
+// Convenience accessors for common properties
     public var name: String { functionMetadata.name }
     public var description: String? { functionMetadata.description }
     public var parameters: [MCPParameterInfo] { functionMetadata.parameters }
@@ -58,8 +58,8 @@ public struct MCPToolMetadata: Sendable {
     public var returnTypeDescription: String? { functionMetadata.returnTypeDescription }
     public var isAsync: Bool { functionMetadata.isAsync }
     public var isThrowing: Bool { functionMetadata.isThrowing }
-    
-    /// Enriches a dictionary of arguments with default values and throws if a required parameter is missing
+
+/// Enriches a dictionary of arguments with default values and throws if a required parameter is missing
     public func enrichArguments(_ arguments: [String: Sendable]) throws -> [String: Sendable] {
         return try functionMetadata.enrichArguments(arguments)
     }

@@ -8,14 +8,14 @@
 import Foundation
 
 protocol ArrayWithCaseIterableElements {
-	static func schema(description: String?) -> JSONSchema
+    static func schema(description: String?) -> JSONSchema
 }
 
 extension Array: ArrayWithCaseIterableElements where Element: CaseIterable {
-	
-	public static func schema(description: String? = nil) -> JSONSchema {
-		
-		let elementSchema = JSONSchema.enum(values: Element.caseLabels)
-		return .array(items: elementSchema, description: description)
-	}
+
+    public static func schema(description: String? = nil) -> JSONSchema {
+
+        let elementSchema = JSONSchema.enum(values: Element.caseLabels)
+        return .array(items: elementSchema, description: description)
+    }
 }

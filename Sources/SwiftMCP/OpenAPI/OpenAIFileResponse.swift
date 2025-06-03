@@ -10,10 +10,10 @@ import Foundation
 /// One or more files being returned
 @Schema
 public struct OpenAIFileResponse: Codable, Sendable {
-    /// The array of file responses
+/// The array of file responses
     public let openaiFileResponse: [FileContent]
-    
-    /**
+
+/**
      Creates a new collection of file responses
      
      - Parameter files: The array of file responses

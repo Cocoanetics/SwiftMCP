@@ -16,10 +16,10 @@ import SwiftSyntaxMacros
  */
 @main
 public struct SwiftMCPPlugin: CompilerPlugin {
-    /// Public initializer required by the CompilerPlugin protocol
+/// Public initializer required by the CompilerPlugin protocol
     public init() {}
-    
-    /// The macros provided by this plugin
+
+/// The macros provided by this plugin
     public var providingMacros: [Macro.Type] = [
         MCPToolMacro.self,
         MCPServerMacro.self,

@@ -2,19 +2,19 @@ import Foundation
 
 /// Metadata about a resource function
 public struct MCPResourceMetadata: Sendable {
-    /// The common function metadata
+/// The common function metadata
     public let functionMetadata: MCPFunctionMetadata
-    
-    /// The URI templates of the resource
+
+/// The URI templates of the resource
     public let uriTemplates: Set<String>
-    
-    /// The display name of the resource
+
+/// The display name of the resource
     public let name: String
-    
-    /// The MIME type of the resource (optional)
+
+/// The MIME type of the resource (optional)
     public let mimeType: String?
-    
-    /**
+
+/**
      Creates a new MCPResourceMetadata instance.
      
      - Parameters:
@@ -54,38 +54,38 @@ public struct MCPResourceMetadata: Sendable {
         self.uriTemplates = uriTemplates
         self.mimeType = mimeType
     }
-    
-    // Convenience accessors for common properties
+
+// Convenience accessors for common properties
     public var description: String? { functionMetadata.description }
     public var parameters: [MCPParameterInfo] { functionMetadata.parameters }
     public var returnType: Sendable.Type? { functionMetadata.returnType }
     public var returnTypeDescription: String? { functionMetadata.returnTypeDescription }
     public var isAsync: Bool { functionMetadata.isAsync }
     public var isThrowing: Bool { functionMetadata.isThrowing }
-    
-    /// Converts metadata to MCPResourceTemplate array (one for each URI template)
+
+/// Converts metadata to MCPResourceTemplate array (one for each URI template)
     public func toResourceTemplates() -> [SimpleResourceTemplate] {
         return uriTemplates.map { template in
-            SimpleResourceTemplate(
+        SimpleResourceTemplate(
                 uriTemplate: template,
                 name: name,
                 description: description,
                 mimeType: mimeType
             )
-        }
     }
-    
-    /// Enriches a dictionary of arguments with default values and throws if a required parameter is missing
+    }
+
+/// Enriches a dictionary of arguments with default values and throws if a required parameter is missing
     public func enrichArguments(_ arguments: [String: Sendable]) throws -> [String: Sendable] {
         return try functionMetadata.enrichArguments(arguments)
     }
-    
-    /// Finds the best matching URI template for a given URL
-    /// Returns the template that matches the most parameters
+
+/// Finds the best matching URI template for a given URL
+/// Returns the template that matches the most parameters
     public func bestMatchingTemplate(for url: URL) -> String? {
         var bestTemplate: String?
         var maxParameterCount = -1
-        
+
         for template in uriTemplates {
             if let variables = url.extractTemplateVariables(from: template) {
                 let parameterCount = variables.count
@@ -95,7 +95,7 @@ public struct MCPResourceMetadata: Sendable {
                 }
             }
         }
-        
+
         return bestTemplate
     }
 }

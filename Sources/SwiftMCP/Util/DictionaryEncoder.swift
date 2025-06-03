@@ -9,12 +9,12 @@ public class DictionaryEncoder {
         let encoder = _DictionaryEncoder()
         try value.encode(to: encoder)
         guard let dict = encoder.storage.topContainer as? [String: Any] else {
-            throw EncodingError.invalidValue(value, EncodingError.Context(
+        throw EncodingError.invalidValue(value, EncodingError.Context(
                 codingPath: [],
                 debugDescription: "Top-level object did not encode as a dictionary."
             ))
-        }
-        // Convert [String: Any] to [String: AnyCodable]
+    }
+// Convert [String: Any] to [String: AnyCodable]
         return dict.mapValues { AnyCodable($0) }
     }
 }
@@ -84,7 +84,7 @@ fileprivate struct DictionaryKeyedEncodingContainer<K: CodingKey>: KeyedEncoding
     var codingPath: [CodingKey] { encoder.codingPath }
 
     mutating func encodeNil(forKey key: K) { 
-        // Do nothing - omit the key entirely
+// Do nothing - omit the key entirely
     }
 
     mutating func encode<T: Encodable>(_ value: T, forKey key: K) throws {
@@ -128,7 +128,7 @@ fileprivate struct DictionaryUnkeyedEncodingContainer: UnkeyedEncodingContainer 
     var codingPath: [CodingKey] { encoder.codingPath }
     var count: Int { container.count }
 
-    // For arrays, we keep NSNull to preserve structure and indices
+// For arrays, we keep NSNull to preserve structure and indices
     mutating func encodeNil() { container.add(NSNull()) }
 
     mutating func encode<T: Encodable>(_ value: T) throws {
@@ -162,7 +162,7 @@ fileprivate struct DictionarySingleValueEncodingContainer: SingleValueEncodingCo
 
     var codingPath: [CodingKey] { encoder.codingPath }
 
-    // For single values, we encode NSNull (this represents the entire value being nil)
+// For single values, we encode NSNull (this represents the entire value being nil)
     mutating func encodeNil() { encoder.storage.push(container: NSNull()) }
 
     mutating func encode<T: Encodable>(_ value: T) throws {
@@ -176,26 +176,26 @@ fileprivate func _box<T: Encodable>(_ value: T, encoder: _DictionaryEncoder) thr
     if let date = value as? Date {
         return date.timeIntervalSince1970
     } else if let data = value as? Data {
-        return data.base64EncodedString()
-    } else if let url = value as? URL {
-        return url.absoluteString
-    } else if let decimal = value as? Decimal {
-        return decimal.description
-    } else if let number = value as? NSNumber {
-        return number
-    } else if let string = value as? String {
-        return string
-    } else if let bool = value as? Bool {
-        return bool
-    } else if let int = value as? Int {
-        return int
-    } else if let double = value as? Double {
-        return double
-    } else if let float = value as? Float {
-        return float
-    } else {
-        let depthEncoder = _DictionaryEncoder()
-        try value.encode(to: depthEncoder)
-        return depthEncoder.storage.popContainer()
-    }
+            return data.base64EncodedString()
+        } else if let url = value as? URL {
+                return url.absoluteString
+            } else if let decimal = value as? Decimal {
+                    return decimal.description
+                } else if let number = value as? NSNumber {
+                        return number
+                    } else if let string = value as? String {
+                            return string
+                        } else if let bool = value as? Bool {
+                                return bool
+                            } else if let int = value as? Int {
+                                    return int
+                                } else if let double = value as? Double {
+                                        return double
+                                    } else if let float = value as? Float {
+                                            return float
+                                        } else {
+                                            let depthEncoder = _DictionaryEncoder()
+                                            try value.encode(to: depthEncoder)
+                                            return depthEncoder.storage.popContainer()
+                                        }
 } 

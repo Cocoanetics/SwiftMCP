@@ -24,5 +24,5 @@
  */
 public protocol MCPService
 {
-	
+
 }

@@ -21,50 +21,50 @@ public struct MCPResourceMacro: PeerMacro {
         in context: some MacroExpansionContext
     ) throws -> [DeclSyntax] {
         guard let funcDecl = declaration.as(FunctionDeclSyntax.self) else {
-            let diag = Diagnostic(node: Syntax(node), message: MCPResourceDiagnostic.onlyFunctions)
-            context.diagnose(diag)
-            return []
-        }
+        let diag = Diagnostic(node: Syntax(node), message: MCPResourceDiagnostic.onlyFunctions)
+        context.diagnose(diag)
+        return []
+    }
 
         let extractor = FunctionMetadataExtractor(funcDecl: funcDecl, context: context)
         let commonMetadata = try extractor.extract()
 
         let functionName = commonMetadata.functionName
 
-        // Extract templates from the macro arguments
+// Extract templates from the macro arguments
         var templates: [String] = []
-        
+
         guard let argList = node.arguments?.as(LabeledExprListSyntax.self) else {
-            let diag = Diagnostic(node: Syntax(node), message: MCPResourceDiagnostic.requiresStringLiteral)
-            context.diagnose(diag)
-            return []
-        }
-        
-        // Process all unlabeled arguments as templates
+        let diag = Diagnostic(node: Syntax(node), message: MCPResourceDiagnostic.requiresStringLiteral)
+        context.diagnose(diag)
+        return []
+    }
+
+// Process all unlabeled arguments as templates
         for arg in argList {
             if arg.label == nil {
                 if let stringLiteral = arg.expression.as(StringLiteralExprSyntax.self) {
                     let template = stringLiteral.segments.description
                     templates.append(template)
                 } else if let arrayExpr = arg.expression.as(ArrayExprSyntax.self) {
-                    // Handle array of templates
-                    for element in arrayExpr.elements {
-                        if let stringLiteral = element.expression.as(StringLiteralExprSyntax.self) {
-                            let template = stringLiteral.segments.description
-                            templates.append(template)
+// Handle array of templates
+                        for element in arrayExpr.elements {
+                            if let stringLiteral = element.expression.as(StringLiteralExprSyntax.self) {
+                                let template = stringLiteral.segments.description
+                                templates.append(template)
+                            }
                         }
                     }
-                }
             }
         }
-        
+
         if templates.isEmpty {
             let diag = Diagnostic(node: Syntax(node), message: MCPResourceDiagnostic.requiresStringLiteral)
             context.diagnose(diag)
             return []
         }
-        
-        // Validate all templates and collect all variables
+
+// Validate all templates and collect all variables
         var allPlaceholders: Set<String> = []
         for template in templates {
             let validationResult = URITemplateValidator.validate(template)
@@ -74,10 +74,10 @@ public struct MCPResourceMacro: PeerMacro {
                     message: validationError
                 )
                 context.diagnose(diag)
-                // Continue processing even with validation errors for better developer experience
+// Continue processing even with validation errors for better developer experience
             }
-            
-            // Extract variables using the validator (which properly handles RFC 6570 syntax)
+
+// Extract variables using the validator (which properly handles RFC 6570 syntax)
             let placeholders = validationResult.variables
             allPlaceholders.formUnion(placeholders)
         }
@@ -86,7 +86,7 @@ public struct MCPResourceMacro: PeerMacro {
         if !commonMetadata.documentation.description.isEmpty {
             descriptionArg = "\"\(commonMetadata.documentation.description.escapedForSwiftString)\""
         }
-        
+
         var resourceName = functionName
         var mimeTypeArg = "nil"
 
@@ -99,13 +99,13 @@ public struct MCPResourceMacro: PeerMacro {
                     resourceName = stringLiteral.segments.description
                 } else if argument.label?.text == "mimeType", 
                    let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
-                    let stringValue = stringLiteral.segments.description
-                    mimeTypeArg = "\"\(stringValue.escapedForSwiftString)\""
-                }
+                        let stringValue = stringLiteral.segments.description
+                        mimeTypeArg = "\"\(stringValue.escapedForSwiftString)\""
+                    }
             }
         }
 
-        // Generate parameter info strings using the new unified approach
+// Generate parameter info strings using the new unified approach
         var parameterInfoStrings: [String] = []
         var functionParamNames: [String] = []
         var wrapperParamDetails: [(name: String, label: String, type: String)] = []
@@ -124,9 +124,9 @@ public struct MCPResourceMacro: PeerMacro {
         }
 
         for funcParamName in functionParamNames {
-            // Find the parameter metadata
+// Find the parameter metadata
             guard let paramMeta = commonMetadata.parameters.first(where: { $0.name == funcParamName }) else { continue }
-            // Only require a placeholder if the parameter does NOT have a default value
+// Only require a placeholder if the parameter does NOT have a default value
             if !allPlaceholders.contains(funcParamName) && paramMeta.defaultValueClause == nil {
                 let originalParamSyntax = paramMeta.funcParam
                 let diag = Diagnostic(
@@ -136,15 +136,15 @@ public struct MCPResourceMacro: PeerMacro {
                 context.diagnose(diag)
             }
         }
-        
+
         let returnTypeString = commonMetadata.returnTypeString
 
         let returnDescriptionString = commonMetadata.returnDescription ?? "nil"
-        
-        // Generate the Set of templates for the metadata
+
+// Generate the Set of templates for the metadata
         let templatesSetString = "[\(templates.map { "\"\($0)\"" }.joined(separator: ", "))]"
-        
-        // Generate the metadata variable
+
+// Generate the metadata variable
         let metadataDeclaration = """
 /// Metadata for the \(functionName) resource
 nonisolated private let __mcpResourceMetadata_\(functionName) = MCPResourceMetadata(
@@ -160,13 +160,13 @@ nonisolated private let __mcpResourceMetadata_\(functionName) = MCPResourceMetad
    mimeType: \(mimeTypeArg)
 )
 """
-        
+
         let callParameterList = wrapperParamDetails.map { param in
-            if param.label == "_" {
-                return param.name
-            }
-            return "\(param.label): \(param.name)"
-        }.joined(separator: ", ")
+        if param.label == "_" {
+            return param.name
+        }
+        return "\(param.label): \(param.name)"
+    }.joined(separator: ", ")
 
         var wrapperMethod = """
 
@@ -190,26 +190,26 @@ nonisolated private let __mcpResourceMetadata_\(functionName) = MCPResourceMetad
                 return [\(concreteResourceContentTypeName)(uri: requestedUri, mimeType: overrideMimeType ?? "text/plain", text: result)]
             """
         } else if returnTypeString == "Data" {
-            returnHandlingCode = """
+                returnHandlingCode = """
                 let result = \(concreteFunctionCall)
                 return [\(concreteResourceContentTypeName)(uri: requestedUri, mimeType: overrideMimeType ?? "application/octet-stream", blob: result)]
             """
-        } else if returnTypeString == "MCPResourceContent" {
-            returnHandlingCode = """
+            } else if returnTypeString == "MCPResourceContent" {
+                    returnHandlingCode = """
                 let result = \(concreteFunctionCall)
                 return [result]
             """
-        } else if returnTypeString == "[MCPResourceContent]" || returnTypeString == "[\(concreteResourceContentTypeName)]" {
-            returnHandlingCode = """
+                } else if returnTypeString == "[MCPResourceContent]" || returnTypeString == "[\(concreteResourceContentTypeName)]" {
+                        returnHandlingCode = """
                 let result = \(concreteFunctionCall)
                 return result
             """
-        } else {
-            returnHandlingCode = """
+                    } else {
+                        returnHandlingCode = """
                 let result = \(concreteFunctionCall)
                 return GenericResourceContent.fromResult(result, uri: requestedUri, mimeType: overrideMimeType)
             """
-        }
+                    }
 
         wrapperMethod += """
         \(returnHandlingCode)

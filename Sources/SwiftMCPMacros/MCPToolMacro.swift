@@ -45,7 +45,7 @@ import SwiftSyntaxMacros
    * Non-function declarations
  */
 public struct MCPToolMacro: PeerMacro {
-	/**
+/**
 	 Expands the macro to provide peers for the declaration.
 	 
 	 - Parameters:
@@ -55,67 +55,67 @@ public struct MCPToolMacro: PeerMacro {
 	 
 	 - Returns: An array of declaration syntax nodes
 	 */
-	public static func expansion(
+    public static func expansion(
 		of node: AttributeSyntax,
 		providingPeersOf declaration: some DeclSyntaxProtocol,
 		in context: some MacroExpansionContext
 	) throws -> [DeclSyntax] {
-		guard let funcDecl = declaration.as(FunctionDeclSyntax.self) else {
-			// Use the actual diagnostic type defined in your project
-			let diagnostic = Diagnostic(node: Syntax(node), message: MCPToolDiagnostic.onlyFunctions) 
-			context.diagnose(diagnostic)
-			return []
-		}
+        guard let funcDecl = declaration.as(FunctionDeclSyntax.self) else {
+// Use the actual diagnostic type defined in your project
+        let diagnostic = Diagnostic(node: Syntax(node), message: MCPToolDiagnostic.onlyFunctions) 
+        context.diagnose(diagnostic)
+        return []
+    }
 
-		// Use the new extractor
-		let extractor = FunctionMetadataExtractor(funcDecl: funcDecl, context: context)
-		let commonMetadata = try extractor.extract()
+// Use the new extractor
+        let extractor = FunctionMetadataExtractor(funcDecl: funcDecl, context: context)
+        let commonMetadata = try extractor.extract()
 
-		let functionName = commonMetadata.functionName
-		
-		// Extract description from the attribute if provided, otherwise use from documentation
-		var descriptionArg = "nil"
-		var isConsequentialArg = "true"  // Default to true
-		
-		if let arguments = node.arguments?.as(LabeledExprListSyntax.self) {
-			for argument in arguments {
-				if argument.label?.text == "description", let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
-					let stringValue = stringLiteral.segments.description
-					descriptionArg = "\"\(stringValue.escapedForSwiftString)\"" // Ensure proper escaping
-				} else if argument.label?.text == "isConsequential", let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
-					isConsequentialArg = boolLiteral.literal.text
-				}
-			}
-		}
-		
-		// If no description was provided in the attribute, use from commonMetadata
-		if descriptionArg == "nil" {
-            if !commonMetadata.documentation.description.isEmpty {
-                 descriptionArg = "\"\(commonMetadata.documentation.description.escapedForSwiftString)\""
+        let functionName = commonMetadata.functionName
+
+// Extract description from the attribute if provided, otherwise use from documentation
+        var descriptionArg = "nil"
+        var isConsequentialArg = "true"  // Default to true
+
+        if let arguments = node.arguments?.as(LabeledExprListSyntax.self) {
+            for argument in arguments {
+                if argument.label?.text == "description", let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
+                    let stringValue = stringLiteral.segments.description
+                    descriptionArg = "\"\(stringValue.escapedForSwiftString)\"" // Ensure proper escaping
+                } else if argument.label?.text == "isConsequential", let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
+                        isConsequentialArg = boolLiteral.literal.text
+                    }
             }
-		}
-		
-		// If no description was found (neither in attribute nor docs), emit a warning
-		// (The missingDescription test case might need adjustment or specific handling here if it relied on old logic)
-		if descriptionArg == "nil" && functionName != "missingDescription" { // Adjust condition if needed
-			// Use your project's actual diagnostic type
-			let diagnostic = Diagnostic(node: Syntax(funcDecl.name), message: MCPToolDiagnostic.missingDescription(functionName: functionName))
-			context.diagnose(diagnostic)
-		}
-		
-		// Generate parameter info strings using the new unified approach
-		var parameterInfoStrings: [String] = []
-		for parsedParam in commonMetadata.parameters {
-			parameterInfoStrings.append(parsedParam.toMCPParameterInfo())
-		}
-		
-		// Use return type info from commonMetadata
-		let returnTypeString = commonMetadata.returnTypeString
-		let returnTypeForBlock = returnTypeString // Assuming they are the same now, adjust if MCPTool had specific logic
+        }
+
+// If no description was provided in the attribute, use from commonMetadata
+        if descriptionArg == "nil" {
+            if !commonMetadata.documentation.description.isEmpty {
+                descriptionArg = "\"\(commonMetadata.documentation.description.escapedForSwiftString)\""
+            }
+        }
+
+// If no description was found (neither in attribute nor docs), emit a warning
+// (The missingDescription test case might need adjustment or specific handling here if it relied on old logic)
+        if descriptionArg == "nil" && functionName != "missingDescription" { // Adjust condition if needed
+// Use your project's actual diagnostic type
+            let diagnostic = Diagnostic(node: Syntax(funcDecl.name), message: MCPToolDiagnostic.missingDescription(functionName: functionName))
+            context.diagnose(diagnostic)
+        }
+
+// Generate parameter info strings using the new unified approach
+        var parameterInfoStrings: [String] = []
+        for parsedParam in commonMetadata.parameters {
+            parameterInfoStrings.append(parsedParam.toMCPParameterInfo())
+        }
+
+// Use return type info from commonMetadata
+        let returnTypeString = commonMetadata.returnTypeString
+        let returnTypeForBlock = returnTypeString // Assuming they are the same now, adjust if MCPTool had specific logic
         let returnDescriptionString = commonMetadata.returnDescription ?? "nil"
 
-		// Generate the metadata variable
-		let metadataDeclaration = """
+// Generate the metadata variable
+        let metadataDeclaration = """
 /// Metadata for the \(functionName) tool
 nonisolated private let __mcpMetadata_\(functionName) = MCPToolMetadata(
    name: "\(functionName)",
@@ -128,47 +128,47 @@ nonisolated private let __mcpMetadata_\(functionName) = MCPToolMetadata(
    isConsequential: \(isConsequentialArg)
 )
 """
-		
-		// Create the wrapper function that takes a dictionary
-		var wrapperFuncString = """
+
+// Create the wrapper function that takes a dictionary
+        var wrapperFuncString = """
 
 		/// Autogenerated wrapper for \(functionName) that takes a dictionary of parameters
 		func __mcpCall_\(functionName)(_ enrichedArguments: [String: Sendable]) async throws -> (Encodable & Sendable) {
 		"""
-		
-		for detail in commonMetadata.parameters {
-			// Use the original parameter type string (detail.type), which includes optional markers.
-			wrapperFuncString += """
+
+        for detail in commonMetadata.parameters {
+// Use the original parameter type string (detail.type), which includes optional markers.
+            wrapperFuncString += """
 			
 			   let \(detail.name): \(detail.typeString) = try enrichedArguments.extractValue(named: "\(detail.name)", as: \(detail.typeString).self)
 			"""
-		}
-		
-		// Add the function call
-		let parameterList = commonMetadata.parameters.map { param in
-			if param.label == "_" {
-				return param.name
-			} else {
-				return "\(param.label): \(param.name)"
-			}
-		}.joined(separator: ", ")
-		
-		if returnTypeForBlock == "Void" {
-			wrapperFuncString += """
+        }
+
+// Add the function call
+        let parameterList = commonMetadata.parameters.map { param in
+        if param.label == "_" {
+            return param.name
+        } else {
+            return "\(param.label): \(param.name)"
+        }
+    }.joined(separator: ", ")
+
+        if returnTypeForBlock == "Void" {
+            wrapperFuncString += """
 				\(commonMetadata.isThrowing ? "try " : "")\(commonMetadata.isAsync ? "await " : "")\(functionName)(\(parameterList))
 				return ""  // return empty string for Void functions
 			}
 			"""
-		} else {
-			wrapperFuncString += """
+        } else {
+            wrapperFuncString += """
 				return \(commonMetadata.isThrowing ? "try " : "")\(commonMetadata.isAsync ? "await " : "")\(functionName)(\(parameterList))
 			}
 			"""
-		}
-		
-		return [
+        }
+
+        return [
 			DeclSyntax(stringLiteral: metadataDeclaration),
 			DeclSyntax(stringLiteral: wrapperFuncString)
 		]
-	}
+    }
 }

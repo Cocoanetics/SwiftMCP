@@ -16,7 +16,7 @@ import Foundation
  */
 public enum MCPResourceKind
 {
-	case text(String)
-	
-	case data(Data)
+    case text(String)
+
+    case data(Data)
 }

@@ -2,7 +2,7 @@
  A Calculator for simple math operations like addition, subtraction, and more.
  */
 class Calculator {
-    /**
+/**
      Adds two numbers together and returns their sum.
      
      - Parameter a: First number to add

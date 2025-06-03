@@ -5,7 +5,7 @@ import SwiftMCP
  */
 @MCPServer(version: "1.0.0", name: "SwiftMCP Demo")
 class Calculator {
-    /**
+/**
      Adds two numbers together and returns their sum.
      
      - Parameter a: First number to add

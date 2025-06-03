@@ -8,12 +8,12 @@
 import Foundation
 
 public extension String {
-	var removingQuotes: String {
-		
-		guard first == "\"" && last == "\"" else {
-			return self
-		}
-		
-		return String(dropFirst().dropLast())
-	}
+    var removingQuotes: String {
+
+        guard first == "\"" && last == "\"" else {
+        return self
+    }
+
+        return String(dropFirst().dropLast())
+    }
 }

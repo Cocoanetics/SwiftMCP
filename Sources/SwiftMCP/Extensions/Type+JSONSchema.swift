@@ -2,14 +2,14 @@ import Foundation
 
 /// Protocol for types that can be converted to JSON Schema types
 public protocol JSONSchemaTypeConvertible {
-    /// The JSON Schema representation for this type
+/// The JSON Schema representation for this type
     static func jsonSchema(description: String?) -> JSONSchema
 }
 
 // Add automatic conformance for CaseIterable types
 extension CaseIterable {
     public static func jsonSchema(description: String?) -> JSONSchema {
-		.enum(values: caseLabels, description: description)
+        .enum(values: caseLabels, description: description)
     }
 }
 
@@ -112,24 +112,24 @@ extension Data: JSONSchemaTypeConvertible {
 extension Array: JSONSchemaTypeConvertible {
     public static func jsonSchema(description: String?) -> JSONSchema {
         let elementSchema: JSONSchema
-        
+
         if let elementType = Element.self as? any JSONSchemaTypeConvertible.Type {
             elementSchema = elementType.jsonSchema(description: nil)
         } else if let schemaType = Element.self as? any SchemaRepresentable.Type {
-			elementSchema = schemaType.schemaMetadata.schema
-        } else if let caseIterableType = Element.self as? any CaseIterable.Type {
-            elementSchema = .enum(values: caseIterableType.caseLabels)
-        } else {
-            elementSchema = .string()
-        }
-        
+                elementSchema = schemaType.schemaMetadata.schema
+            } else if let caseIterableType = Element.self as? any CaseIterable.Type {
+                    elementSchema = .enum(values: caseIterableType.caseLabels)
+                } else {
+                    elementSchema = .string()
+                }
+
         return .array(items: elementSchema, description: description)
     }
 }
 
 extension Dictionary: JSONSchemaTypeConvertible {
     public static func jsonSchema(description: String?) -> JSONSchema {
-		.object(JSONSchema.Object(properties: [:], required: [], description: description))
+        .object(JSONSchema.Object(properties: [:], required: [], description: description))
     }
 }
 
@@ -138,10 +138,10 @@ extension Optional: JSONSchemaTypeConvertible {
         if let wrappedType = Wrapped.self as? any JSONSchemaTypeConvertible.Type {
             return wrappedType.jsonSchema(description: description)
         } else if let schemaType = Wrapped.self as? any SchemaRepresentable.Type {
-			return schemaType.schemaMetadata.schema
-        } else if let caseIterableType = Wrapped.self as? any CaseIterable.Type {
-            return .enum(values: caseIterableType.caseLabels, description: description)
-        }
+                return schemaType.schemaMetadata.schema
+            } else if let caseIterableType = Wrapped.self as? any CaseIterable.Type {
+                    return .enum(values: caseIterableType.caseLabels, description: description)
+                }
         return .string(description: description)
     }
 } 

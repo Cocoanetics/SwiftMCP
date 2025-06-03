@@ -11,18 +11,18 @@ import Foundation
 /// Contents of a File to be returned by a tool call
 @Schema
 public struct FileContent: Codable, Sendable {
-    /// The name of the file
+/// The name of the file
     public let name: String
-    
-    /// The MIME type of the file
+
+/// The MIME type of the file
     public let mimeType: String
-    
-    /**
+
+/**
 	 The content of the file in base64 encoding
 	 */
     public let content: Data
-	
-    /**
+
+/**
      Creates a new file response
      
      - Parameters:
@@ -35,7 +35,7 @@ public struct FileContent: Codable, Sendable {
         self.mimeType = mimeType
         self.content = content
     }
-    
+
     private enum CodingKeys: String, CodingKey {
         case name
         case mimeType = "mime_type"
