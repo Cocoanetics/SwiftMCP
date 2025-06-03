@@ -205,27 +205,56 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 			let decoder = JSONDecoder()
 			decoder.dateDecodingStrategy = .iso8601
 			
-			// First try to decode as a regular JSONRPCMessage
-			let request = try decoder.decode(JSONRPCMessage.self, from: body)
-			
-			// Check if it's an empty ping response (regular response with empty result)
-			if case .response(let responseData) = request,
-			   let result = responseData.result,
-			   result.isEmpty {
-				// Empty ping response - send 202 Accepted with client ID
-				await sendResponseAsync(channel: channel, status: .accepted, headers: headers, body: nil)
-				return
-			}
+			// Try to decode as batch first, then fall back to single message
+			if let batchData = try? decoder.decode([JSONRPCMessage].self, from: body) {
+				// Handle batch of messages
+				logger.info("Received batch with \(batchData.count) messages")
+				var responses: [JSONRPCMessage] = []
+				
+				for message in batchData {
+					// Check if it's an empty ping response - ignore it
+					if case .response(let responseData) = message,
+					   let result = responseData.result,
+					   result.isEmpty {
+						continue
+					}
+					
+					if let response = await transport.server.handleMessage(message) {
+						responses.append(response)
+					}
+				}
+				
+				// Send batch response if any responses were generated
+				if !responses.isEmpty {
+					print("Batch responses: \(responses)")
+					await sendJSONResponse(channel: channel, status: .ok, json: responses, sessionId: clientId)
+				} else {
+					// No responses to send (e.g., all notifications or empty pings)
+					await sendResponseAsync(channel: channel, status: .accepted, headers: headers, body: nil)
+				}
+			} else {
+				// Handle single message (existing logic)
+				let request = try decoder.decode(JSONRPCMessage.self, from: body)
+				
+				// Check if it's an empty ping response (regular response with empty result)
+				if case .response(let responseData) = request,
+				   let result = responseData.result,
+				   result.isEmpty {
+					// Empty ping response - send 202 Accepted with client ID
+					await sendResponseAsync(channel: channel, status: .accepted, headers: headers, body: nil)
+					return
+				}
 
-			// Call the server handler (assume async)
-			guard let response = await transport.server.handleMessage(request) else {
-				// No response to send (e.g., notification)
-				await sendResponseAsync(channel: channel, status: .accepted, headers: headers, body: nil)
-				return
-			}
+				// Call the server handler (assume async)
+				guard let response = await transport.server.handleMessage(request) else {
+					// No response to send (e.g., notification)
+					await sendResponseAsync(channel: channel, status: .accepted, headers: headers, body: nil)
+					return
+				}
 
-			print(response)
-			await sendJSONResponse(channel: channel, status: .ok, json: response, sessionId: clientId)
+				print(response)
+				await sendJSONResponse(channel: channel, status: .ok, json: response, sessionId: clientId)
+			}
 		} catch {
 			logger.error("Failed to decode or handle JSON-RPC message: \(error)")
 			let response = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32600, message: "Invalid Request: \(error)"))
@@ -379,19 +408,36 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 			let decoder = JSONDecoder()
 			decoder.dateDecodingStrategy = .iso8601
 			
-			// First try to decode as a regular JSONRPCMessage
-			let request = try decoder.decode(JSONRPCMessage.self, from: body)
-			
-			// Check if it's an empty ping response (regular response with empty result) - ignore it
-			if case .response(let responseData) = request,
-			   let result = responseData.result,
-			   result.isEmpty {
-				return
-			}
+			// Try to decode as batch first, then fall back to single message
+			if let batchData = try? decoder.decode([JSONRPCMessage].self, from: body) {
+				// Handle batch of messages
+				logger.info("Received SSE batch with \(batchData.count) messages")
+				
+				for message in batchData {
+					// Check if it's an empty ping response - ignore it
+					if case .response(let responseData) = message,
+					   let result = responseData.result,
+					   result.isEmpty {
+						continue
+					}
+					
+					// Handle each message in the batch with client ID
+					transport.handleJSONRPCRequest(message, from: clientId)
+				}
+			} else {
+				// Handle single message (existing logic)
+				let request = try decoder.decode(JSONRPCMessage.self, from: body)
+				
+				// Check if it's an empty ping response (regular response with empty result) - ignore it
+				if case .response(let responseData) = request,
+				   let result = responseData.result,
+				   result.isEmpty {
+					return
+				}
 
-			// Handle the response with client ID
-			transport.handleJSONRPCRequest(request, from: clientId)
-			
+				// Handle the response with client ID
+				transport.handleJSONRPCRequest(request, from: clientId)
+			}
 		} catch {
 			logger.error("Failed to decode JSON-RPC message: \(error)")
 			await sendResponseAsync(channel: channel, status: .badRequest)
