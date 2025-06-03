@@ -16,7 +16,6 @@ public enum JSONRPCMessage: Codable, Sendable {
     case request(JSONRPCRequestData)
     case response(JSONRPCResponseData)
     case errorResponse(JSONRPCErrorResponseData)
-    case emptyResponse(JSONRPCEmptyResponseData)
     
     // MARK: - Data Structures
     
@@ -95,23 +94,6 @@ public enum JSONRPCMessage: Codable, Sendable {
         }
     }
     
-    /// Data structure for empty JSON-RPC responses (like ping responses)
-    public struct JSONRPCEmptyResponseData: Codable, Sendable {
-        /// The JSON-RPC protocol version, always "2.0"
-        public var jsonrpc: String = "2.0"
-        
-        /// The unique identifier matching the request ID
-        public var id: Int?
-        
-        /// Empty result dictionary
-        public var result: [String: AnyCodable] = [:]
-        
-        public init(jsonrpc: String = "2.0", id: Int?) {
-            self.jsonrpc = jsonrpc
-            self.id = id
-        }
-    }
-    
     // MARK: - Computed Properties
     
     /// The JSON-RPC protocol version, typically "2.0"
@@ -120,7 +102,6 @@ public enum JSONRPCMessage: Codable, Sendable {
         case .request(let data): return data.jsonrpc
         case .response(let data): return data.jsonrpc
         case .errorResponse(let data): return data.jsonrpc
-        case .emptyResponse(let data): return data.jsonrpc
         }
     }
     
@@ -130,7 +111,6 @@ public enum JSONRPCMessage: Codable, Sendable {
         case .request(let data): return data.id
         case .response(let data): return data.id
         case .errorResponse(let data): return data.id
-        case .emptyResponse(let data): return data.id
         }
     }
     
@@ -146,10 +126,6 @@ public enum JSONRPCMessage: Codable, Sendable {
     
     public static func errorResponse(jsonrpc: String = "2.0", id: Int?, error: JSONRPCErrorResponseData.ErrorPayload) -> JSONRPCMessage {
         return .errorResponse(JSONRPCErrorResponseData(jsonrpc: jsonrpc, id: id, error: error))
-    }
-    
-    public static func emptyResponse(jsonrpc: String = "2.0", id: Int?) -> JSONRPCMessage {
-        return .emptyResponse(JSONRPCEmptyResponseData(jsonrpc: jsonrpc, id: id))
     }
     
     // MARK: - Codable Implementation
@@ -187,9 +163,8 @@ public enum JSONRPCMessage: Codable, Sendable {
             if let resultDict = resultValue.value as? [String: Any],
                let _ = resultDict["protocolVersion"] as? String {
                 throw DecodingError.dataCorrupted(DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Initialize response not supported"))
-            } else if let resultDict = resultValue.value as? [String: Any], resultDict.isEmpty {
-                self = .emptyResponse(JSONRPCEmptyResponseData(jsonrpc: jsonrpc, id: id))
             } else {
+                // Handle both empty and non-empty result dictionaries as regular responses
                 let result = try container.decode([String: AnyCodable].self, forKey: .result)
                 self = .response(JSONRPCResponseData(jsonrpc: jsonrpc, id: id, result: result))
             }
@@ -217,11 +192,6 @@ public enum JSONRPCMessage: Codable, Sendable {
             try container.encode(data.jsonrpc, forKey: .jsonrpc)
             try container.encodeIfPresent(data.id, forKey: .id)
             try container.encode(data.error, forKey: .error)
-            
-        case .emptyResponse(let data):
-            try container.encode(data.jsonrpc, forKey: .jsonrpc)
-            try container.encodeIfPresent(data.id, forKey: .id)
-            try container.encode(data.result, forKey: .result)
         }
     }
 }
@@ -237,8 +207,8 @@ public typealias JSONRPCResponse = JSONRPCMessage.JSONRPCResponseData
 /// Backward compatibility alias for JSONRPCErrorResponseData
 public typealias JSONRPCErrorResponse = JSONRPCMessage.JSONRPCErrorResponseData
 
-/// Backward compatibility alias for JSONRPCEmptyResponseData
-public typealias JSONRPCEmptyResponse = JSONRPCMessage.JSONRPCEmptyResponseData
+/// Backward compatibility alias for empty responses (now just regular responses)
+public typealias JSONRPCEmptyResponse = JSONRPCMessage.JSONRPCResponseData
 
 // MARK: - Convenience Extensions for Migration
 
@@ -258,8 +228,8 @@ extension JSONRPCMessage {
         return .errorResponse(JSONRPCErrorResponseData(jsonrpc: jsonrpc, id: id, error: error))
     }
     
-    /// Creates an empty response message - convenience for migration
+    /// Creates an empty response message using regular response with empty result
     public static func makeEmptyResponse(jsonrpc: String = "2.0", id: Int?) -> JSONRPCMessage {
-        return .emptyResponse(JSONRPCEmptyResponseData(jsonrpc: jsonrpc, id: id))
+        return .response(JSONRPCResponseData(jsonrpc: jsonrpc, id: id, result: [:]))
     }
 }

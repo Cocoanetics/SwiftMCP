@@ -205,14 +205,17 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 			let decoder = JSONDecoder()
 			decoder.dateDecodingStrategy = .iso8601
 			
-			// First check if it's an empty result from ping, this would fail for a request where method is required
-			if let empty = try? decoder.decode(JSONRPCEmptyResponse.self, from: body), empty.result == [:] {
+			// First try to decode as a regular JSONRPCMessage
+			let request = try decoder.decode(JSONRPCMessage.self, from: body)
+			
+			// Check if it's an empty ping response (regular response with empty result)
+			if case .response(let responseData) = request,
+			   let result = responseData.result,
+			   result.isEmpty {
 				// Empty ping response - send 202 Accepted with client ID
 				await sendResponseAsync(channel: channel, status: .accepted, headers: headers, body: nil)
 				return
 			}
-			
-			let request = try decoder.decode(JSONRPCMessage.self, from: body)
 
 			// Call the server handler (assume async)
 			guard let response = await transport.server.handleRequest(request) else {
@@ -376,13 +379,16 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 			let decoder = JSONDecoder()
 			decoder.dateDecodingStrategy = .iso8601
 			
-			// ignore emptey result from ping, this would fail for a request where method is required
-			if let empty = try? decoder.decode(JSONRPCEmptyResponse.self, from: body), empty.result == [:] {
-				return
-			}
-			
+			// First try to decode as a regular JSONRPCMessage
 			let request = try decoder.decode(JSONRPCMessage.self, from: body)
 			
+			// Check if it's an empty ping response (regular response with empty result) - ignore it
+			if case .response(let responseData) = request,
+			   let result = responseData.result,
+			   result.isEmpty {
+				return
+			}
+
 			// Handle the response with client ID
 			transport.handleJSONRPCRequest(request, from: clientId)
 			
