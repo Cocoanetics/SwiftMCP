@@ -69,6 +69,9 @@ func testInitializeRequest() async throws {
     }
     #expect(listChanged == false, "Tools listChanged should be false")
 
+    // Ensure completion capability is advertised
+    #expect(capabilitiesDict["completions"] != nil)
+
     // Check server info
     guard let serverInfoDict = result["serverInfo"]?.value as? [String: Any] else {
         throw TestError("serverInfo not found")

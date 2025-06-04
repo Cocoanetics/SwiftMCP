@@ -117,6 +117,9 @@ public extension MCPServer {
             case "resources/read":
                 return await createResourcesReadResponse(id: requestData.id, request: requestData)
 
+            case "completion/complete":
+                return await handleCompletion(requestData)
+
             case "tools/call":
                 return await handleToolCall(requestData)
 
@@ -193,6 +196,9 @@ public extension MCPServer {
         if self is MCPResourceProviding {
             capabilities.resources = .init(listChanged: false)
         }
+
+        // Advertise completion support
+        capabilities.completions = AnyCodable([:])
 
         let serverInfo = InitializeResult.ServerInfo(
             name: serverName,
@@ -276,6 +282,44 @@ public extension MCPServer {
                 "isError": true
             ])
         }
+    }
+
+    /// Handles a completion request for argument autocompletion.
+    private func handleCompletion(_ request: JSONRPCMessage.JSONRPCRequestData) async -> JSONRPCMessage? {
+
+        guard let params = request.params,
+              let refDict = params["ref"]?.value as? [String: Any],
+              let argDict = params["argument"]?.value as? [String: Any],
+              let argName = argDict["name"] as? String else {
+            return JSONRPCMessage.response(id: request.id, result: ["completion": ["values": []]].mapValues { AnyCodable($0) })
+        }
+
+        let prefix = (argDict["value"] as? String) ?? ""
+
+        if let refType = refDict["type"] as? String,
+           refType == "ref/resource",
+           let uri = refDict["uri"] as? String,
+           let resourceProvider = self as? MCPResourceProviding,
+           let metadata = resourceProvider.mcpResourceMetadata.first(where: { $0.uriTemplates.contains(uri) }),
+           let parameter = metadata.parameters.first(where: { $0.name == argName }),
+           let caseType = parameter.type as? any CaseIterable.Type {
+
+            let labels = caseType.caseLabels
+            let lower = prefix.lowercased()
+            let sorted = labels.filter { $0.lowercased().hasPrefix(lower) } + labels.filter { !$0.lowercased().hasPrefix(lower) }
+
+            let result: [String: Any] = [
+                "completion": [
+                    "values": sorted,
+                    "total": sorted.count,
+                    "hasMore": false
+                ]
+            ]
+            return JSONRPCMessage.response(id: request.id, result: result.mapValues { AnyCodable($0) })
+        }
+
+        // Fallback empty response
+        return JSONRPCMessage.response(id: request.id, result: ["completion": ["values": []]].mapValues { AnyCodable($0) })
     }
 
 /**
