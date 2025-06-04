@@ -72,7 +72,8 @@ func __mcpPromptCall_\(functionName)(_ enrichedArguments: [String: Sendable]) as
         }.joined(separator: ", ")
 
         wrapperFunc += """
-        return \(metadata.isThrowing ? "try " : "")\(metadata.isAsync ? "await " : "")\(functionName)(\(parameterList))
+        let result = \(metadata.isThrowing ? "try " : "")\(metadata.isAsync ? "await " : "")\(functionName)(\(parameterList))
+        return PromptMessage.fromResult(result)
 }
 """
 
