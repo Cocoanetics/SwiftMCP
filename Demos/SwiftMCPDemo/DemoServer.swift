@@ -179,8 +179,9 @@ actor DemoServer {
     }
     
     /// A prompt to get a color description
+    /// - parameter color: A color
     @MCPPrompt()
-    func colorPrompt(color: Color) -> [PromptMessage] {
+    func colorPrompt(color: Color) -> String {
         
         let text: String
         
@@ -193,8 +194,7 @@ actor DemoServer {
                 text = "You selected BLUE!"
         }
         
-        let message = PromptMessage(role: .assistant, content: .init(text: text))
-        return [message]
+        return text
     }
 }
 
