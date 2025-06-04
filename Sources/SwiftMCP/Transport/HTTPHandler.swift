@@ -599,13 +599,18 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
             let result: Encodable & Sendable
 
             if let toolProvider = transport.server as? MCPToolProviding,
-			   toolProvider.mcpToolMetadata.contains(where: { $0.name == toolName }) {
+               toolProvider.mcpToolMetadata.contains(where: { $0.name == toolName }) {
                 // Call as a tool function
                 result = try await toolProvider.callTool(toolName, arguments: arguments)
             } else if let resourceProvider = transport.server as? MCPResourceProviding,
-					  resourceProvider.mcpResourceMetadata.contains(where: { $0.functionMetadata.name == toolName }) {
+                      resourceProvider.mcpResourceMetadata.contains(where: { $0.functionMetadata.name == toolName }) {
                 // Call as a resource function
                 result = try await resourceProvider.callResourceAsFunction(toolName, arguments: arguments)
+            } else if let promptProvider = transport.server as? MCPPromptProviding,
+                      promptProvider.mcpPromptMetadata.contains(where: { $0.name == toolName }) {
+                // Call as a prompt function
+                let messages = try await promptProvider.callPrompt(toolName, arguments: arguments)
+                result = messages
             } else {
                 // Function not found
                 throw MCPToolError.unknownTool(name: toolName)
