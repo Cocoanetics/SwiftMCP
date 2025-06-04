@@ -109,7 +109,7 @@ struct OpenAPISpec: Codable {
         let rootPath = server.serverName.asModelName
         var paths: [String: PathItem] = [:]
 
-        // Combine MCPTool and MCPResource functions as tools
+        // Combine MCPTool, MCPResource, and MCPPrompt functions as tools
         var allToolMetadata: [MCPToolMetadata] = []
 
         // Add MCPTool functions
@@ -120,7 +120,6 @@ struct OpenAPISpec: Codable {
         // Add MCPResource functions converted to tools
         if let resourceProvider = server as? MCPResourceProviding {
             let resourceAsTools = resourceProvider.mcpResourceMetadata.map { resourceMeta in
-
                 return MCPToolMetadata(
                     name: resourceMeta.functionMetadata.name,
                     description: resourceMeta.description,
@@ -133,6 +132,23 @@ struct OpenAPISpec: Codable {
                 )
             }
             allToolMetadata.append(contentsOf: resourceAsTools)
+        }
+
+        // Add MCPPrompt functions converted to tools
+        if let promptProvider = server as? MCPPromptProviding {
+            let promptAsTools = promptProvider.mcpPromptMetadata.map { promptMeta in
+                MCPToolMetadata(
+                    name: promptMeta.name,
+                    description: promptMeta.description,
+                    parameters: promptMeta.parameters,
+                    returnType: [PromptMessage].self,
+                    returnTypeDescription: "Array of PromptMessage objects",
+                    isAsync: promptMeta.isAsync,
+                    isThrowing: promptMeta.isThrowing,
+                    isConsequential: false
+                )
+            }
+            allToolMetadata.append(contentsOf: promptAsTools)
         }
 
         // Generate OpenAPI paths for all tools
