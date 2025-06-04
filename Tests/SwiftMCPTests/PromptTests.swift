@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import AnyCodable
 @testable import SwiftMCP
 
 @MCPServer
@@ -90,8 +91,9 @@ func testPromptCallViaMockClient() async throws {
     let result = unwrap(resp.result)
     let messages = unwrap(result["messages"]?.value as? [[String: Any]])
     #expect(messages.count == 1)
-    let text = unwrap(messages.first?["content"] as? [String: Any])
-    #expect((text["text"] as? String)?.contains("excited") == true)
+    let content = unwrap(messages.first?["content"] as? [String: Any])
+    let text = unwrap(content["text"] as? String)
+    #expect(text.contains("excited"))
 }
 
 @Test("Call greet prompt with default mood")
@@ -112,8 +114,9 @@ func testGreetPromptDefaultMood() async throws {
     }
     let result = unwrap(resp.result)
     let messages = unwrap(result["messages"]?.value as? [[String: Any]])
-    let text = unwrap(messages.first?["content"] as? [String: Any])
-    #expect((text["text"] as? String)?.contains("happy") == true)
+    let content = unwrap(messages.first?["content"] as? [String: Any])
+    let text = unwrap(content["text"] as? String)
+    #expect(text.contains("happy"))
 }
 
 @Test("Call ping prompt")
@@ -131,8 +134,9 @@ func testPingPromptViaMockClient() async throws {
     }
     let result = unwrap(resp.result)
     let messages = unwrap(result["messages"]?.value as? [[String: Any]])
-    let text = unwrap(messages.first?["content"] as? [String: Any])
-    #expect(text["text"] as? String == "pong")
+    let content = unwrap(messages.first?["content"] as? [String: Any])
+    let text = unwrap(content["text"] as? String)
+    #expect(text == "pong")
 }
 
 @Test("Prompt enum completion with prefix returns matching items first")
@@ -255,4 +259,28 @@ func testPromptCompletionNonEnumParameter() async throws {
     
     // Should return empty array for non-enum parameter
     #expect(values.isEmpty)
+}
+
+@Test("Direct JSON encoding of PromptMessage")
+func testPromptMessageJSONEncoding() throws {
+    // Create a PromptMessage array like the server would
+    let messages = [PromptMessage(role: .assistant, content: .init(text: "Hello Oliver! Mood: excited"))]
+    
+    // Encode as JSON like it would go over the wire
+    let response = ["description": "greet", "messages": AnyCodable(messages)]
+    let encoder = JSONEncoder()
+    let jsonData = try encoder.encode(response)
+    
+    // Decode back like a client would
+    let decoder = JSONDecoder()
+    let decoded = try decoder.decode([String: AnyCodable].self, from: jsonData)
+    
+    // Now test if we can access it like the test expects
+    if let messagesValue = decoded["messages"]?.value as? [[String: Any]] {
+        if let firstMessage = messagesValue.first {
+            if let content = firstMessage["content"] as? [String: Any] {
+                #expect(content["text"] as? String == "Hello Oliver! Mood: excited")
+            }
+        }
+    }
 }
