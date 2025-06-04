@@ -309,9 +309,28 @@ public extension MCPServer {
 
         do {
             let messages = try await promptProvider.callPrompt(name, arguments: arguments)
-            return JSONRPCMessage.response(id: request.id, result: ["description": name, "messages": messages].mapValues { AnyCodable($0) })
+            // Convert PromptMessage objects to dictionaries for proper JSON encoding
+            let encoder = DictionaryEncoder()
+            let messageDicts = try messages.map { message in
+                let dict = try encoder.encode(message)
+                return convertAnyCodableToAny(dict)
+            }
+            return JSONRPCMessage.response(id: request.id, result: ["description": name, "messages": messageDicts].mapValues { AnyCodable($0) })
         } catch {
             return JSONRPCMessage.errorResponse(id: request.id, error: .init(code: -32000, message: error.localizedDescription))
+        }
+    }
+    
+    /// Converts AnyCodable values to plain Any values recursively
+    private func convertAnyCodableToAny(_ value: Any) -> Any {
+        if let dict = value as? [String: AnyCodable] {
+            return dict.mapValues { convertAnyCodableToAny($0.value) }
+        } else if let array = value as? [AnyCodable] {
+            return array.map { convertAnyCodableToAny($0.value) }
+        } else if let anyCodable = value as? AnyCodable {
+            return convertAnyCodableToAny(anyCodable.value)
+        } else {
+            return value
         }
     }
 
