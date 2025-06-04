@@ -169,5 +169,32 @@ actor DemoServer {
 				return "You selected BLUE!"
 		}
 	}
+    
+    /// A prompt for saying Hello
+    @MCPPrompt()
+    func helloPrompt(name: String) async throws -> [PromptMessage] {
+        
+        let message = PromptMessage(role: .assistant, content: .init(text: "Hello \(name)!"))
+        return [message]
+    }
+    
+    /// A prompt to get a color description
+    @MCPPrompt()
+    func colorPrompt(color: Color) -> [PromptMessage] {
+        
+        let text: String
+        
+        switch color {
+            case .red:
+                text = "You selected RED!"
+            case .green:
+                text = "You selected GREEN!"
+            case .blue:
+                text = "You selected BLUE!"
+        }
+        
+        let message = PromptMessage(role: .assistant, content: .init(text: text))
+        return [message]
+    }
 }
 

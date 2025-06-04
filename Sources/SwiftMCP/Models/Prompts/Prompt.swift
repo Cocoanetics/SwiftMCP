@@ -31,7 +31,7 @@ extension Prompt {
         let args: [[String: AnyCodable]] = arguments.map { param in
             [
                 "name": AnyCodable(param.name),
-                "description": AnyCodable(param.description as Any?),
+                "description": AnyCodable(param.description ?? ""),
                 "required": AnyCodable(param.isRequired)
             ]
         }
