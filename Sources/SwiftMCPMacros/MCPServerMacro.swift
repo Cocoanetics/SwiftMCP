@@ -140,6 +140,22 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
             }
         }
 
+        // Find all functions with the MCPPrompt macro
+        var mcpPrompts: [String] = []
+
+        for member in declaration.memberBlock.members {
+            if let funcDecl = member.decl.as(FunctionDeclSyntax.self) {
+                for attribute in funcDecl.attributes {
+                    if let identifierAttr = attribute.as(AttributeSyntax.self),
+                       let identifier = identifierAttr.attributeName.as(IdentifierTypeSyntax.self),
+                       identifier.name.text == "MCPPrompt" {
+                        mcpPrompts.append(funcDecl.name.text)
+                        break
+                    }
+                }
+            }
+        }
+
         var declarations: [DeclSyntax] = [
 			DeclSyntax(stringLiteral: nameProperty),
 			DeclSyntax(stringLiteral: versionProperty),
@@ -335,6 +351,41 @@ public func getResource(uri: URL) async throws -> [MCPResourceContent] {
             declarations.append(DeclSyntax(stringLiteral: getResourceMethod))
         }
 
+        // Add prompt related properties and methods if there are MCPPrompts defined
+        if !mcpPrompts.isEmpty {
+            let promptMetadataArray = mcpPrompts.map { "__mcpPromptMetadata_\($0)" }.joined(separator: ", ")
+            let promptMetadataProperty = """
+/// Returns an array of all available prompt metadata
+nonisolated public var mcpPromptMetadata: [MCPPromptMetadata] {
+   return [\(promptMetadataArray)]
+}
+"""
+            declarations.append(DeclSyntax(stringLiteral: promptMetadataProperty))
+
+            var promptSwitchCases = ""
+            for (idx, funcName) in mcpPrompts.enumerated() {
+                promptSwitchCases += "      case \"\(funcName)\":\n"
+                promptSwitchCases += "         return try await __mcpPromptCall_\(funcName)(enrichedArguments)"
+                if idx < mcpPrompts.count - 1 { promptSwitchCases += "\n" }
+            }
+
+            let callPromptMethod = """
+/// Calls a prompt by name with the provided arguments
+public func callPrompt(_ name: String, arguments: [String: Sendable]) async throws -> [PromptMessage] {
+   guard let metadata = mcpPromptMetadata.first(where: { $0.name == name }) else {
+      throw MCPToolError.unknownTool(name: name)
+   }
+   let enrichedArguments = try metadata.enrichArguments(arguments)
+   switch name {
+\(promptSwitchCases)
+      default:
+         throw MCPToolError.unknownTool(name: name)
+   }
+}
+"""
+            declarations.append(DeclSyntax(stringLiteral: callPromptMethod))
+        }
+
         return declarations
     }
 
@@ -395,6 +446,22 @@ public func getResource(uri: URL) async throws -> [MCPResourceContent] {
             }
         }
 
+        // Check if the declaration has any MCPPrompt functions
+        var hasMCPPrompts = false
+        for member in declaration.memberBlock.members {
+            if let funcDecl = member.decl.as(FunctionDeclSyntax.self) {
+                for attribute in funcDecl.attributes {
+                    if let identifierAttr = attribute.as(AttributeSyntax.self),
+                       let identifier = identifierAttr.attributeName.as(IdentifierTypeSyntax.self),
+                       identifier.name.text == "MCPPrompt" {
+                        hasMCPPrompts = true
+                        break
+                    }
+                }
+                if hasMCPPrompts { break }
+            }
+        }
+
         // Check if the declaration already conforms to MCPToolProviding
         let alreadyConformsToToolProviding = inheritedTypes.contains { type in
             type.type.trimmedDescription == "MCPToolProviding"
@@ -403,6 +470,11 @@ public func getResource(uri: URL) async throws -> [MCPResourceContent] {
         // Check if the declaration already conforms to MCPResourceProviding
         let alreadyConformsToResourceProviding = inheritedTypes.contains { type in
             type.type.trimmedDescription == "MCPResourceProviding"
+        }
+
+        // Check if already conforms to MCPPromptProviding
+        let alreadyConformsToPromptProviding = inheritedTypes.contains { type in
+            type.type.trimmedDescription == "MCPPromptProviding"
         }
 
         // Determine which protocols need to be added
@@ -418,6 +490,10 @@ public func getResource(uri: URL) async throws -> [MCPResourceContent] {
 
         if hasMCPResources && !alreadyConformsToResourceProviding {
             protocolsToAdd.append("MCPResourceProviding")
+        }
+
+        if hasMCPPrompts && !alreadyConformsToPromptProviding {
+            protocolsToAdd.append("MCPPromptProviding")
         }
 
         // If we have protocols to add, create a single extension with all needed conformances
