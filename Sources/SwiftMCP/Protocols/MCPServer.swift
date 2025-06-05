@@ -332,22 +332,23 @@ public extension MCPServer {
            let uri = refDict["uri"] as? String,
            let resourceProvider = self as? MCPResourceProviding,
            let metadata = resourceProvider.mcpResourceMetadata.first(where: { $0.uriTemplates.contains(uri) }),
-           let parameter = metadata.parameters.first(where: { $0.name == argName }),
-           let caseType = parameter.type as? any CaseIterable.Type {
+           let parameter = metadata.parameters.first(where: { $0.name == argName }) {
 
-            let labels = caseType.caseLabels
-            let lower = prefix.lowercased()
-            let sorted = labels.filter { $0.lowercased().hasPrefix(lower) } + labels.filter { !$0.lowercased().hasPrefix(lower) }
+            let comp: CompleteResult.Completion
+            if let completionProvider = self as? MCPCompletionProviding {
+                comp = await completionProvider.completion(for: parameter, in: .resource(metadata), prefix: prefix)
+            } else {
+                comp = parameter.defaultCompletion(prefix: prefix)
+            }
 
             let result: [String: Any] = [
                 "completion": [
-                    "values": sorted,
-                    "total": sorted.count,
-                    "hasMore": false
+                    "values": comp.values,
+                    "total": comp.total ?? comp.values.count,
+                    "hasMore": comp.hasMore ?? false
                 ]
             ]
             return JSONRPCMessage.response(id: request.id, result: result.mapValues { AnyCodable($0) })
-
         }
 
         if let refType = refDict["type"] as? String,
@@ -355,18 +356,20 @@ public extension MCPServer {
            let name = refDict["name"] as? String,
            let promptProvider = self as? MCPPromptProviding,
            let metadata = promptProvider.mcpPromptMetadata.first(where: { $0.name == name }),
-           let parameter = metadata.parameters.first(where: { $0.name == argName }),
-           let caseType = parameter.type as? any CaseIterable.Type {
+           let parameter = metadata.parameters.first(where: { $0.name == argName }) {
 
-            let labels = caseType.caseLabels
-            let lower = prefix.lowercased()
-            let sorted = labels.filter { $0.lowercased().hasPrefix(lower) } + labels.filter { !$0.lowercased().hasPrefix(lower) }
+            let comp: CompleteResult.Completion
+            if let completionProvider = self as? MCPCompletionProviding {
+                comp = await completionProvider.completion(for: parameter, in: .prompt(metadata), prefix: prefix)
+            } else {
+                comp = parameter.defaultCompletion(prefix: prefix)
+            }
 
             let result: [String: Any] = [
                 "completion": [
-                    "values": sorted,
-                    "total": sorted.count,
-                    "hasMore": false
+                    "values": comp.values,
+                    "total": comp.total ?? comp.values.count,
+                    "hasMore": comp.hasMore ?? false
                 ]
             ]
             return JSONRPCMessage.response(id: request.id, result: result.mapValues { AnyCodable($0) })
