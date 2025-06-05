@@ -158,8 +158,8 @@ actor DemoServer {
 	}
 	
 	/// Returns a message for the selected color
-	@MCPResource("color://message?color={color}")
-	func getColorMessage(color: Color) -> String {
+	@MCPResource("color://message?color={color}&bool={bool}")
+    func getColorMessage(color: Color, bool: Bool) -> String {
 		switch color {
 			case .red:
 				return "You selected RED!"
