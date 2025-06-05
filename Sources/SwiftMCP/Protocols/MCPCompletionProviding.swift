@@ -26,6 +26,7 @@ public protocol MCPCompletionProviding: MCPService {
 public extension MCPCompletionProviding {
     /// Default implementation that mirrors the behaviour of `MCPParameterInfo.defaultCompletion(prefix:)`.
     func completion(for parameter: MCPParameterInfo, in context: MCPCompletionContext, prefix: String) async -> CompleteResult.Completion {
-        return parameter.defaultCompletion(prefix: prefix)
+        let completions = parameter.defaultCompletions.sortedByBestCompletion(prefix: prefix)
+        return CompleteResult.Completion(values: completions, total: completions.count, hasMore: false)
     }
 }

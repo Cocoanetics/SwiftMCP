@@ -4,6 +4,7 @@ import XCTest
 @MCPServer(name: "OpenAPITestServer", version: "1.0")
 class OpenAPITestServer {
     
+    /// A test tool
     @MCPTool
     func testTool(message: String) -> String {
         return "Tool: \(message)"

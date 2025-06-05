@@ -338,7 +338,8 @@ public extension MCPServer {
             if let completionProvider = self as? MCPCompletionProviding {
                 comp = await completionProvider.completion(for: parameter, in: .resource(metadata), prefix: prefix)
             } else {
-                comp = parameter.defaultCompletion(prefix: prefix)
+                let completions = parameter.defaultCompletions.sortedByBestCompletion(prefix: prefix)
+                comp = CompleteResult.Completion(values: completions, total: completions.count, hasMore: false)
             }
 
             let result: [String: Any] = [
@@ -362,7 +363,8 @@ public extension MCPServer {
             if let completionProvider = self as? MCPCompletionProviding {
                 comp = await completionProvider.completion(for: parameter, in: .prompt(metadata), prefix: prefix)
             } else {
-                comp = parameter.defaultCompletion(prefix: prefix)
+                let completions = parameter.defaultCompletions.sortedByBestCompletion(prefix: prefix)
+                comp = CompleteResult.Completion(values: completions, total: completions.count, hasMore: false)
             }
 
             let result: [String: Any] = [

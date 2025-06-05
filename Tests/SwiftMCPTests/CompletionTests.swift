@@ -36,12 +36,14 @@ class CustomCompletionServer: MCPCompletionProviding {
 
     func completion(for parameter: MCPParameterInfo, in context: MCPCompletionContext, prefix: String) async -> CompleteResult.Completion {
         if parameter.name == "color" {
-            let defaults = defaultEnumCompletion(for: parameter, prefix: prefix)?.values ?? []
-            let extra = ["ruby", "rose"].filter { $0.hasPrefix(prefix) }.sortedByBestCompletion(prefix: prefix)
-            let all = extra + defaults
-            return CompleteResult.Completion(values: all, total: all.count, hasMore: false)
+            
+            let completions = parameter.defaultCompletions + ["ruby", "rose"]
+            
+            return CompleteResult.Completion(values: completions.sortedByBestCompletion(prefix: prefix), total: completions.count, hasMore: false)
         }
-        return defaultEnumCompletion(for: parameter, prefix: prefix) ?? CompleteResult.Completion(values: [])
+        
+        let completions = parameter.defaultCompletions
+        return CompleteResult.Completion(values: completions.sortedByBestCompletion(prefix: prefix), total: completions.count, hasMore: false)
     }
 }
 
@@ -79,7 +81,7 @@ func testCustomCompletionProvider() async throws {
         id: 1,
         method: "completion/complete",
         params: [
-            "argument": ["name": "color", "value": "r"],
+            "argument": ["name": "color", "value": "ru"],
             "ref": ["type": "ref/resource", "uri": "color://message?color={color}"]
         ]
     )

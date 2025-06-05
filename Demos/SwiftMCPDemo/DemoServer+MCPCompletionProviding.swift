@@ -20,6 +20,7 @@ extension DemoServer: MCPCompletionProviding {
         }
         
         // return default otherwise
-        return parameter.defaultCompletion(prefix: prefix)
+        let completions = parameter.defaultCompletions.sortedByBestCompletion(prefix: prefix)
+        return CompleteResult.Completion(values: completions, total: completions.count, hasMore: false)
     }
 }
