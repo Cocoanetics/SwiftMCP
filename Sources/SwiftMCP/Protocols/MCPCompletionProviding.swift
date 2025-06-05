@@ -28,9 +28,4 @@ public extension MCPCompletionProviding {
     func completion(for parameter: MCPParameterInfo, in context: MCPCompletionContext, prefix: String) async -> CompleteResult.Completion {
         return parameter.defaultCompletion(prefix: prefix)
     }
-
-    /// Provides completion values for `CaseIterable` enums.
-    func defaultEnumCompletion(for parameter: MCPParameterInfo, prefix: String) -> CompleteResult.Completion? {
-        return parameter.defaultEnumCompletion(prefix: prefix)
-    }
 }
