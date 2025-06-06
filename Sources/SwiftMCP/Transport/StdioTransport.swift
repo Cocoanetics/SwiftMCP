@@ -14,38 +14,38 @@ public final class StdioTransport: Transport, @unchecked Sendable {
     ///
     /// This server handles the actual business logic while the transport handles I/O.
     public let server: MCPServer
-
+    
     /// Logger instance for logging transport activity.
     ///
     /// Used to track input/output operations and error conditions during transport operation.
     public let logger = Logger(label: "com.cocoanetics.SwiftMCP.StdioTransport")
-
+    
     /// Actor to handle running state in a thread-safe manner.
     private actor TransportState {
         var isRunning: Bool = false
-
+        
         func start() {
             isRunning = true
         }
-
+        
         func stop() {
             isRunning = false
         }
-
+        
         func isCurrentlyRunning() -> Bool {
             return isRunning
         }
     }
-
+    
     private let state = TransportState()
-
+    
     /// Initializes a new StdioTransport with the given MCP server.
     ///
     /// - Parameter server: The MCP server to expose over standard input/output.
     public init(server: MCPServer) {
         self.server = server
     }
-
+    
     /// Starts reading from stdin asynchronously in a non-blocking manner.
     ///
     /// This method initiates a background task that processes input continuously until stopped.
@@ -54,53 +54,19 @@ public final class StdioTransport: Transport, @unchecked Sendable {
     /// - Throws: An error if the transport fails to start or process input.
     public func start() async throws {
         await state.start()
-
+        
         // Capture immutable properties in a @Sendable closure.
         Task { @Sendable in
             do {
                 while await state.isCurrentlyRunning() {
                     if let input = readLine(),
-					   !input.isEmpty,
-					   let data = input.data(using: .utf8) {
-
-                        logger.trace("Received input: \(input)")
-
-                        do {
-                            let messages = try JSONRPCMessage.decodeMessages(from: data)
-                            if messages.count > 1 {
-                                logger.trace("Received batch with \(messages.count) messages")
-                            }
-
-                            let responses = await server.processBatch(messages)
-
-                            guard !responses.isEmpty else {
-                                logger.trace("Batch contained only notifications, no response sent")
-                                continue
-                            }
-
-                            let encoder = JSONEncoder()
-                            let responseData: Data
-                            if responses.count == 1 {
-                                responseData = try encoder.encode(responses[0])
-                            } else {
-                                responseData = try encoder.encode(responses)
-                            }
-                            guard let json = String(data: responseData, encoding: .utf8) else {
-                                logger.error("Failed to encode response as UTF-8")
-                                continue
-                            }
-
-                            guard let outputData = (json + "\n").data(using: .utf8) else { return }
-                            try FileHandle.standardOutput.write(contentsOf: outputData)
-
-                            if responses.count > 1 {
-                                logger.trace("Sent batch response with \(responses.count) messages: \(json)")
-                            } else {
-                                logger.trace("Sent response: \(json)")
-                            }
-                        } catch {
-                            logger.error("Error decoding message: \(error)")
-                        }
+                       !input.isEmpty,
+                       let data = input.data(using: .utf8) {
+                        
+                        let string = String(data: data, encoding: .utf8)!
+                        logger.trace( "STDIN:\n\n\(string)")
+                        
+                        try await handleReceived(data)
                     } else {
                         // If no input is available, sleep briefly and try again.
                         try await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
@@ -111,7 +77,7 @@ public final class StdioTransport: Transport, @unchecked Sendable {
             }
         }
     }
-
+    
     /// Runs the transport synchronously and blocks until the transport is stopped.
     ///
     /// This method processes input directly on the calling task and will not return until
@@ -120,57 +86,23 @@ public final class StdioTransport: Transport, @unchecked Sendable {
     /// - Throws: An error if the transport fails to process input.
     public func run() async throws {
         await state.start()
-
+        
         while await state.isCurrentlyRunning() {
             if let input = readLine(),
-			   !input.isEmpty,
-			   let data = input.data(using: .utf8) {
-
-                logger.trace("Received input: \(input)")
-
-                do {
-                    let messages = try JSONRPCMessage.decodeMessages(from: data)
-                    if messages.count > 1 {
-                        logger.trace("Received batch with \(messages.count) messages")
-                    }
-
-                    let responses = await server.processBatch(messages)
-
-                    guard !responses.isEmpty else {
-                        logger.trace("Batch contained only notifications, no response sent")
-                        continue
-                    }
-
-                    let encoder = JSONEncoder()
-                    let responseData: Data
-                    if responses.count == 1 {
-                        responseData = try encoder.encode(responses[0])
-                    } else {
-                        responseData = try encoder.encode(responses)
-                    }
-                    guard let json = String(data: responseData, encoding: .utf8) else {
-                        logger.error("Failed to encode response as UTF-8")
-                        continue
-                    }
-
-                    guard let outputData = (json + "\n").data(using: .utf8) else { return }
-                    try FileHandle.standardOutput.write(contentsOf: outputData)
-
-                    if responses.count > 1 {
-                        logger.trace("Sent batch response with \(responses.count) messages: \(json)")
-                    } else {
-                        logger.trace("Sent response: \(json)")
-                    }
-                } catch {
-                    logger.error("Error decoding message: \(error)")
-                }
+               !input.isEmpty,
+               let data = input.data(using: .utf8) {
+                
+                let string = String(data: data, encoding: .utf8)!
+                logger.trace( "STDIN:\n\n\(string)")
+                
+                try await handleReceived(data)
             } else {
                 // If no input is available, sleep briefly and try again.
                 try await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
             }
         }
     }
-
+    
     /// Stops the transport.
     ///
     /// This method stops processing input from stdin. Any pending input will be discarded.
@@ -178,5 +110,60 @@ public final class StdioTransport: Transport, @unchecked Sendable {
     /// - Throws: An error if the transport fails to stop cleanly.
     public func stop() async throws {
         await state.stop()
+    }
+    
+    // MARK: - Receiving
+    
+    /// handle received data
+    func handleReceived(_ data: Data) async throws
+    {
+        do {
+            let messages = try JSONRPCMessage.decodeMessages(from: data)
+            
+            let responses = await server.processBatch(messages)
+            
+            guard !responses.isEmpty else {
+                return
+            }
+            
+            try await send(responses)
+            
+        } catch {
+            logger.error("Error decoding message: \(error)")
+        }
+    }
+    
+    // MARK: - Sending
+    
+    /// encode and send JSON
+    private func send<T: Encodable>(_ json: T) async throws {
+        
+        let dataToEncode: any Encodable
+        
+        if let array = json as? [any Encodable], array.count == 1 {
+            dataToEncode = array[0]  // send a single JSON dict instead of array
+        } else {
+            dataToEncode = json  // send as is
+        }
+        
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601WithTimeZone
+        
+        let data = try encoder.encode(dataToEncode)
+        
+        try await send(data)
+    }
+    
+    /// send data to the client, specific to JSON
+    func send(_ data: Data) async throws
+    {
+        let string = String(data: data, encoding: .utf8)!
+        logger.trace( "STDOUT:\n\n\(string)")
+        
+        var data = data
+        let nl = "\n".data(using: .utf8)!
+        data.append(nl)
+        
+        try FileHandle.standardOutput.write(contentsOf: data)
     }
 }
