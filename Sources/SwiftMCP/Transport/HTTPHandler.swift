@@ -206,13 +206,8 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 
         do {
             let messages = try JSONRPCMessage.decodeMessages(from: body)
-            if messages.count > 1 {
-                logger.info("Received batch with \(messages.count) messages")
-            }
 
             if hasSSEConnection {
-                // Client has SSE connection - use streaming protocol
-                logger.info("Using streaming protocol (SSE) for \(messages.count > 1 ? "batch" : "single message")")
 
                 // Send 202 Accepted immediately
                 await sendResponseAsync(channel: channel, status: .accepted, headers: headers, body: nil)
@@ -230,37 +225,40 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
                 }
             } else {
                 // No SSE connection - use immediate HTTP response
-                logger.info("Using immediate HTTP response for \(messages.count > 1 ? "batch" : "single message")")
-
                 let responses = await transport.server.processBatch(messages, ignoringEmptyResponses: true)
 
-                if !responses.isEmpty {
-                    if responses.count == 1 {
-                        await sendJSONResponse(channel: channel, status: .ok, json: responses[0], sessionId: clientId)
-                    } else {
-                        await sendJSONResponse(channel: channel, status: .ok, json: responses, sessionId: clientId)
-                    }
+                if responses.isEmpty {
+                    await sendResponseAsync(channel: channel, status: .accepted, headers: headers)
                 } else {
-                    await sendResponseAsync(channel: channel, status: .accepted, headers: headers, body: nil)
+                    await sendJSONResponse(channel: channel, status: .ok, json: responses, sessionId: clientId)
                 }
             }
         } catch {
-            logger.error("Failed to decode or handle JSON-RPC message: \(error)")
-            let response = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32600, message: "Invalid Request: \(error)"))
+            logger.error("Failed to decode JSON-RPC message: \(error)")
+            let response = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32600, message: error.localizedDescription))
             await sendJSONResponse(channel: channel, status: .badRequest, json: response, sessionId: clientId)
         }
     }
 
     private func sendJSONResponse<T: Encodable>(
-		channel: Channel,
-		status: HTTPResponseStatus,
-		json: T,
-		sessionId: String? = nil
-	) async {
+        channel: Channel,
+        status: HTTPResponseStatus,
+        json: T,
+        sessionId: String? = nil
+    ) async {
+        
+        let dataToEncode: any Encodable
+
+        if let array = json as? [any Encodable], array.count == 1 {
+            dataToEncode = array[0]  // send a single JSON dict instead of array
+        } else {
+            dataToEncode = json  // send as is
+        }
+
         do {
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601WithTimeZone
-            let jsonData = try encoder.encode(json)
+            let jsonData = try encoder.encode(dataToEncode)
             var buffer = channel.allocator.buffer(capacity: jsonData.count)
             buffer.writeBytes(jsonData)
 
@@ -274,8 +272,6 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
             await sendResponseAsync(channel: channel, status: status, headers: headers, body: buffer)
         } catch {
             logger.error("Error encoding response: \(error.localizedDescription)")
-        // Don't try to send another response here - encoding failures should be handled at a higher level
-        // The channel may already have started writing the response
         }
     }
 
