@@ -18,10 +18,8 @@ public final class Session: @unchecked Sendable {
     /// Creates a new session.
     /// - Parameters:
     ///   - id: The unique session identifier.
-    ///   - transport: The transport used to deliver data back to the client.
-    public init(id: UUID, transport: (any Transport)? = nil, channel: Channel? = nil) {
+    public init(id: UUID, channel: Channel? = nil) {
         self.id = id
-        self.transport = transport
         self.channel = channel
     }
 

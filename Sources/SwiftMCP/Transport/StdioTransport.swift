@@ -57,7 +57,8 @@ public final class StdioTransport: Transport, @unchecked Sendable {
 
         // Capture immutable properties in a @Sendable closure.
         Task { @Sendable in
-            let session = Session(id: UUID(), transport: self)
+            let session = Session(id: UUID())
+            session.transport = self
             do {
                 try await session.work { _ in
                     while await state.isCurrentlyRunning() {
@@ -90,7 +91,8 @@ public final class StdioTransport: Transport, @unchecked Sendable {
     public func run() async throws {
         await state.start()
 
-        let session = Session(id: UUID(), transport: self)
+        let session = Session(id: UUID())
+        session.transport = self
         try await session.work { _ in
             while await state.isCurrentlyRunning() {
                 if let input = readLine(),

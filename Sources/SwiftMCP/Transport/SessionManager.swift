@@ -10,6 +10,11 @@ import NIO
 
 actor SessionManager {
     private var sessions: [UUID: Session] = [:]
+    private weak var transport: (any Transport)?
+
+    init(transport: (any Transport)? = nil) {
+        self.transport = transport
+    }
 
     /// Returns the current number of active SSE channels.
     var channelCount: Int {
@@ -17,7 +22,7 @@ actor SessionManager {
     }
 
     /// Retrieve or create a session for the given identifier.
-    func session(id: UUID, transport: any Transport) -> Session {
+    func session(id: UUID) -> Session {
         if let existing = sessions[id] {
             if existing.transport == nil {
                 existing.transport = transport
@@ -25,7 +30,8 @@ actor SessionManager {
             return existing
         }
 
-        let session = Session(id: id, transport: transport)
+        let session = Session(id: id)
+        session.transport = transport
         sessions[id] = session
         return session
     }
@@ -35,8 +41,8 @@ actor SessionManager {
     ///   - channel: The channel to register.
     ///   - id: The unique identifier for the channel.
     ///   - transport: Transport associated with the session.
-    func register(channel: Channel, id: UUID, transport: any Transport) {
-        let session = sessions[id] ?? Session(id: id, transport: transport, channel: channel)
+    func register(channel: Channel, id: UUID) {
+        let session = sessions[id] ?? Session(id: id, channel: channel)
         session.channel = channel
         if session.transport == nil {
             session.transport = transport
@@ -79,6 +85,16 @@ actor SessionManager {
                 session.channel = nil
             }
         }
+    }
+
+    /// Close all channels and remove all sessions.
+    func removeAllSessions() {
+        for session in sessions.values {
+            if let channel = session.channel {
+                channel.close(promise: nil)
+            }
+        }
+        sessions.removeAll()
     }
 
     /// Check if there's an active SSE connection for a given session.

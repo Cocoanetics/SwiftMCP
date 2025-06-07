@@ -205,7 +205,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
             let messages = try JSONRPCMessage.decodeMessages(from: body)
 
             let responseHeaders = headers
-            await transport.sessionManager.session(id: sessionID, transport: transport).work { session in
+            await transport.sessionManager.session(id: sessionID).work { session in
                 if session.hasActiveConnection {
 
                     // Send 202 Accepted immediately
@@ -396,7 +396,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
                 logger.info("Received SSE batch with \(messages.count) messages")
             }
 
-            await transport.sessionManager.session(id: sessionID, transport: transport).work { session in
+            await transport.sessionManager.session(id: sessionID).work { session in
                 for message in messages {
                     // Check if it's an empty ping response - ignore it
                     if case .response(let responseData) = message,

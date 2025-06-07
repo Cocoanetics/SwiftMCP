@@ -32,7 +32,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
 
     private let group: EventLoopGroup
     private var channel: Channel?
-    internal let sessionManager = SessionManager()
+    internal lazy var sessionManager = SessionManager(transport: self)
     private var keepAliveTimer: DispatchSourceTimer?
 
     /// Flag to determine whether to serve OpenAPI endpoints.
@@ -151,7 +151,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         logger.info("Stopping server...")
         stopKeepAliveTimer()
 
-        await sessionManager.stopAllChannels()
+        await sessionManager.removeAllSessions()
 
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             group.shutdownGracefully { error in
@@ -210,7 +210,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     /// Handle a JSON-RPC request and send the response through the SSE channels.
     func handleJSONRPCRequest(_ request: JSONRPCMessage, from sessionID: UUID) {
         Task {
-            try await sessionManager.session(id: sessionID, transport: self).work { _ in
+            try await sessionManager.session(id: sessionID).work { _ in
                 guard let response = await server.handleMessage(request) else {
                     // No response to send (e.g., notification)
                     return
@@ -232,7 +232,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     /// Register a new SSE channel.
     func registerSSEChannel(_ channel: Channel, id: UUID) {
         Task {
-            await sessionManager.register(channel: channel, id: id, transport: self)
+            await sessionManager.register(channel: channel, id: id)
             let count = await sessionManager.channelCount
             logger.info("New SSE channel registered (total: \(count))")
         }
@@ -252,7 +252,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     /// Send a message to a specific client.
     func sendSSE(_ message: SSEMessage, to sessionID: UUID) {
         Task {
-            let session = await sessionManager.session(id: sessionID, transport: self)
+            let session = await sessionManager.session(id: sessionID)
             session.sendSSE(message)
         }
     }
