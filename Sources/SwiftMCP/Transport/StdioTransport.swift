@@ -54,22 +54,25 @@ public final class StdioTransport: Transport, @unchecked Sendable {
     /// - Throws: An error if the transport fails to start or process input.
     public func start() async throws {
         await state.start()
-        
+
         // Capture immutable properties in a @Sendable closure.
         Task { @Sendable in
+            let session = Session(id: UUID(), transport: self)
             do {
-                while await state.isCurrentlyRunning() {
-                    if let input = readLine(),
-                       !input.isEmpty,
-                       let data = input.data(using: .utf8) {
-                        
-                        let string = String(data: data, encoding: .utf8)!
-                        logger.trace( "STDIN:\n\n\(string)")
-                        
-                        try await handleReceived(data)
-                    } else {
-                        // If no input is available, sleep briefly and try again.
-                        try await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+                try await session.work { _ in
+                    while await state.isCurrentlyRunning() {
+                        if let input = readLine(),
+                           !input.isEmpty,
+                           let data = input.data(using: .utf8) {
+
+                            let string = String(data: data, encoding: .utf8)!
+                            logger.trace( "STDIN:\n\n\(string)")
+
+                            try await handleReceived(data)
+                        } else {
+                            // If no input is available, sleep briefly and try again.
+                            try await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+                        }
                     }
                 }
             } catch {
@@ -86,19 +89,22 @@ public final class StdioTransport: Transport, @unchecked Sendable {
     /// - Throws: An error if the transport fails to process input.
     public func run() async throws {
         await state.start()
-        
-        while await state.isCurrentlyRunning() {
-            if let input = readLine(),
-               !input.isEmpty,
-               let data = input.data(using: .utf8) {
-                
-                let string = String(data: data, encoding: .utf8)!
-                logger.trace( "STDIN:\n\n\(string)")
-                
-                try await handleReceived(data)
-            } else {
-                // If no input is available, sleep briefly and try again.
-                try await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+
+        let session = Session(id: UUID(), transport: self)
+        try await session.work { _ in
+            while await state.isCurrentlyRunning() {
+                if let input = readLine(),
+                   !input.isEmpty,
+                   let data = input.data(using: .utf8) {
+
+                    let string = String(data: data, encoding: .utf8)!
+                    logger.trace( "STDIN:\n\n\(string)")
+
+                    try await handleReceived(data)
+                } else {
+                    // If no input is available, sleep briefly and try again.
+                    try await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+                }
             }
         }
     }
@@ -119,15 +125,15 @@ public final class StdioTransport: Transport, @unchecked Sendable {
     {
         do {
             let messages = try JSONRPCMessage.decodeMessages(from: data)
-            
+
             let responses = await server.processBatch(messages)
-            
+
             guard !responses.isEmpty else {
                 return
             }
-            
+
             try await send(responses)
-            
+
         } catch {
             logger.error("Error decoding message: \(error)")
         }
@@ -135,35 +141,19 @@ public final class StdioTransport: Transport, @unchecked Sendable {
     
     // MARK: - Sending
     
-    /// encode and send JSON
-    private func send<T: Encodable>(_ json: T) async throws {
-        
-        let dataToEncode: any Encodable
-        
-        if let array = json as? [any Encodable], array.count == 1 {
-            dataToEncode = array[0]  // send a single JSON dict instead of array
-        } else {
-            dataToEncode = json  // send as is
-        }
-        
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601WithTimeZone
-        
-        let data = try encoder.encode(dataToEncode)
-        
-        try await send(data)
-    }
-    
     /// send data to the client, specific to JSON
-    func send(_ data: Data) async throws
+    public func send(_ data: Data) async throws
     {
+        precondition(Session.current != nil)
+        precondition(Session.current.transport === self)
+
         let string = String(data: data, encoding: .utf8)!
-        logger.trace( "STDOUT:\n\n\(string)")
-        
-        var data = data
+        logger.trace("STDOUT:\n\n\(string)")
+
+        var out = data
         let nl = "\n".data(using: .utf8)!
-        data.append(nl)
-        
-        try FileHandle.standardOutput.write(contentsOf: data)
+        out.append(nl)
+
+        try FileHandle.standardOutput.write(contentsOf: out)
     }
 }
