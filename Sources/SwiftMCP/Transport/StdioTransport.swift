@@ -148,6 +148,7 @@ public final class StdioTransport: Transport, @unchecked Sendable {
         
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601WithTimeZone
+        encoder.nonConformingFloatEncodingStrategy = .convertToString(positiveInfinity: "Infinity", negativeInfinity: "-Infinity", nan: "NaN")
         
         let data = try encoder.encode(dataToEncode)
         

@@ -73,252 +73,250 @@ class EnumTestServer {
 
 // MARK: - Tests
 
-@Suite("Enum Tests")
+@Suite("Enum Processing Tests", .tags(.enumType, .unit))
 struct EnumTests {
-    @Test("Test integer raw value enum")
-    func testIntegerRawValueEnum() async throws {
-        let server = EnumTestServer()
-        let client = MockClient(server: server)
-        
-        let request = JSONRPCMessage.request(
-            id: 1,
-            method: "tools/call",
-            params: [
-                "name": "processPriority",
-                "arguments": ["priority": "high"]
-            ]
-        )
-        
-        let response = await client.send(request)
-        guard case .response(let responseData) = response else {
-            print("Actual message: \(String(describing: response))")
-            #expect(Bool(false), "Expected response case")
-            return
-        }
-        
-        #expect(responseData.id == 1)
-        let result = unwrap(responseData.result)
-        let isError = unwrap(result["isError"]?.value as? Bool)
-        #expect(isError == false)
-        let content = unwrap(result["content"]?.value as? [[String: String]])
-        let firstContent = unwrap(content.first) as [String: String]
-        let type = unwrap(firstContent["type"]) as String
-        let text = unwrap(firstContent["text"]) as String
-        #expect(type == "text")
-        #expect(text == "Priority: 2")
-    }
     
-    @Test("Test string raw value enum")
-    func testStringRawValueEnum() async throws {
-        let server = EnumTestServer()
-        let client = MockClient(server: server)
+    @Suite("Raw Value Enum Processing")
+    struct RawValueTests {
         
-        let request = JSONRPCMessage.request(
-            id: 2,
-            method: "tools/call",
-            params: [
-                "name": "processStatus",
-                "arguments": ["status": "active"]
-            ]
-        )
-        
-        let response = await client.send(request)
-        guard case .response(let responseData) = response else {
-            print("Actual message: \(String(describing: response))")
-            #expect(Bool(false), "Expected response case")
-            return
-        }
-        
-        #expect(responseData.id == 2)
-        let result = unwrap(responseData.result)
-        let isError = unwrap(result["isError"]?.value as? Bool)
-        #expect(isError == false)
-        let content = unwrap(result["content"]?.value as? [[String: String]])
-        let firstContent = unwrap(content.first) as [String: String]
-        let type = unwrap(firstContent["type"]) as String
-        let text = unwrap(firstContent["text"]) as String
-        #expect(type == "text")
-        #expect(text == "Status: ACTIVE")
-    }
-    
-    @Test("Test custom string representation enum")
-    func testCustomStringRepresentationEnum() async throws {
-        let server = EnumTestServer()
-        let client = MockClient(server: server)
-        
-        let request = JSONRPCMessage.request(
-            id: 3,
-            method: "tools/call",
-            params: [
-                "name": "processSortOrder",
-                "arguments": ["order": "ascending"]
-            ]
-        )
-        
-        let response = await client.send(request)
-        guard case .response(let responseData) = response else {
-            print("Actual message: \(String(describing: response))")
-            #expect(Bool(false), "Expected response case")
-            return
-        }
-        
-        #expect(responseData.id == 3)
-        let result = unwrap(responseData.result)
-        let content = unwrap(result["content"]?.value as? [[String: String]])
-        let firstContent = unwrap(content.first) as [String: String]
-        let type = unwrap(firstContent["type"]) as String
-        let text = unwrap(firstContent["text"]) as String
-        #expect(type == "text")
-        #expect(text == "Parameter 'order' expected one of [SORT_ASC, SORT_DESC] but received ascending")
-    }
-    
-    @Test("Test array of enums")
-    func testArrayOfEnums() async throws {
-        let server = EnumTestServer()
-        let client = MockClient(server: server)
-        
-        let request = JSONRPCMessage.request(
-            id: 4,
-            method: "tools/call",
-            params: [
-                "name": "processPriorities",
-                "arguments": ["priorities": ["low", "medium", "high"]]
-            ]
-        )
-        
-        let response = await client.send(request)
-        guard case .response(let responseData) = response else {
-            print("Actual message: \(String(describing: response))")
-            #expect(Bool(false), "Expected response case")
-            return
-        }
-        #expect(responseData.id == 4)
-        guard let result = responseData.result else {
-            throw TestError("Expected result to be non-nil")
-        }
-        let isError = unwrap(result["isError"]?.value as? Bool)
-        #expect(isError == false)
-        let content = unwrap(result["content"]?.value as? [[String: String]])
-        let firstContent = unwrap(content.first) as [String: String]
-        let type = unwrap(firstContent["type"]) as String
-        let text = unwrap(firstContent["text"]) as String
-        #expect(type == "text")
-        #expect(text == "0,1,2")
-    }
-    
-    @Test("Test optional array of enums")
-    func testOptionalArrayOfEnums() async throws {
-        let server = EnumTestServer()
-        let client = MockClient(server: server)
-        
-        // Test with values
-        let requestWithValues = JSONRPCMessage.request(
-            id: 5,
-            method: "tools/call",
-            params: [
-                "name": "processStatus",
-                "arguments": ["status": "active"]
-            ]
-        )
-        
-        let responseWithValues = await client.send(requestWithValues)
-        guard case .response(let responseDataWithValues) = responseWithValues else {
-            print("Actual message: \(String(describing: responseWithValues))")
-            #expect(Bool(false), "Expected response case")
-            return
-        }
-        #expect(responseDataWithValues.id == 5)
-        let resultWithValues = unwrap(responseDataWithValues.result)
-        let contentWithValues = unwrap(resultWithValues["content"]?.value as? [[String: String]])
-        let firstContentWithValues = unwrap(contentWithValues.first) as [String: String]
-        let textWithValues = unwrap(firstContentWithValues["text"]) as String
-        #expect(textWithValues == "Status: ACTIVE")
-        
-        // Test with nil
-        let requestWithNil = JSONRPCMessage.request(
-            id: 6,
-            method: "tools/call",
-            params: [
-                "name": "processOptionalStatuses",
-                "arguments": [:]
-            ]
-        )
-        
-        let responseWithNil = await client.send(requestWithNil)
-        guard case .response(let responseDataWithNil) = responseWithNil else {
-            print("Actual message: \(String(describing: responseWithNil))")
-            #expect(Bool(false), "Expected response case")
-            return
-        }
-        #expect(responseDataWithNil.id == 6)
-        let resultWithNil = unwrap(responseDataWithNil.result)
-        let isErrorWithNil = unwrap(resultWithNil["isError"]?.value as? Bool)
-        #expect(isErrorWithNil == false)
-        let contentWithNil = unwrap(resultWithNil["content"]?.value as? [[String: String]])
-        let firstContentWithNil = unwrap(contentWithNil.first) as [String: String]
-        let textWithNil = unwrap(firstContentWithNil["text"]) as String
-        #expect(textWithNil == "empty")
-    }
-    
-    @Test("Test case labels match raw values")
-    func testCaseLabelsMatchRawValues() throws {
-        // Test integer raw values
-        let priorityLabels = Array<String>(caseLabelsFrom: Priority.self)
-        #expect(priorityLabels != nil)
-        #expect(priorityLabels == ["low", "medium", "high"])
-        
-        // Test string raw values
-        let statusLabels = Array<String>(caseLabelsFrom: Status.self)
-        #expect(statusLabels != nil)
-        #expect(statusLabels == ["pending", "active", "completed"])
-        
-        // Test custom string representation
-        let sortOrderLabels = Array<String>(caseLabelsFrom: SortOrder.self)
-        #expect(sortOrderLabels != nil)
-        #expect(sortOrderLabels == ["SORT_ASC", "SORT_DESC"])
-    }
-    
-    @Test("Test enum schema generation")
-    func testEnumSchemaGeneration() throws {
-        let server = EnumTestServer()
-        let tools = server.mcpToolMetadata.convertedToTools()
-        
-        // Test priority schema
-        if let priorityTool = tools.first(where: { $0.name == "processPriority" }) {
-            if case .object(let object) = priorityTool.inputSchema {
-                if let prioritySchema = object.properties["priority"] {
-                    if case .enum(let enumValues, description: _) = prioritySchema {
-                        #expect(enumValues.sorted() == ["low", "medium", "high"].sorted())
-                    } else {
-                        #expect(Bool(false), "Expected string schema with enum values")
-                    }
-                } else {
-                    #expect(Bool(false), "Could not find priority parameter in schema")
-                }
-            } else {
-                #expect(Bool(false), "Expected object schema")
+        @Test("Integer raw value enum processing returns correct value")
+        func integerRawValueEnumProcessing() async throws {
+            let server = EnumTestServer()
+            let client = MockClient(server: server)
+            
+            let request = JSONRPCMessage.request(
+                id: 1,
+                method: "tools/call",
+                params: [
+                    "name": "processPriority",
+                    "arguments": ["priority": "high"]
+                ]
+            )
+            
+            let response = await client.send(request)
+            guard case .response(let responseData) = response else {
+                throw TestError("Expected response case")
             }
-        } else {
-            #expect(Bool(false), "Could not find processPriority tool")
+            
+            #expect(responseData.id == 1)
+            let result = try #require(responseData.result)
+            let isError = try #require(result["isError"]?.value as? Bool)
+            #expect(isError == false)
+            let content = try #require(result["content"]?.value as? [[String: String]])
+            let firstContent = try #require(content.first)
+            let type = try #require(firstContent["type"])
+            let text = try #require(firstContent["text"])
+            #expect(type == "text")
+            #expect(text == "Priority: 2")
         }
         
-        // Test status schema
-        if let statusTool = tools.first(where: { $0.name == "processStatus" }) {
-            if case .object(let object) = statusTool.inputSchema {
-                if let statusSchema = object.properties["status"] {
-                    if case .enum(let values, description: _) = statusSchema {
-                        #expect(values.sorted() == ["pending", "active", "completed"].sorted())
-                    } else {
-                        #expect(Bool(false), "Expected string schema with enum values")
-                    }
-                } else {
-                    #expect(Bool(false), "Could not find status parameter in schema")
-                }
-            } else {
-                #expect(Bool(false), "Expected object schema")
+        @Test("String raw value enum processing returns correct value")
+        func stringRawValueEnumProcessing() async throws {
+            let server = EnumTestServer()
+            let client = MockClient(server: server)
+            
+            let request = JSONRPCMessage.request(
+                id: 2,
+                method: "tools/call",
+                params: [
+                    "name": "processStatus",
+                    "arguments": ["status": "active"]
+                ]
+            )
+            
+            let response = await client.send(request)
+            guard case .response(let responseData) = response else {
+                throw TestError("Expected response case")
             }
-        } else {
-            #expect(Bool(false), "Could not find processStatus tool")
+            
+            #expect(responseData.id == 2)
+            let result = try #require(responseData.result)
+            let isError = try #require(result["isError"]?.value as? Bool)
+            #expect(isError == false)
+            let content = try #require(result["content"]?.value as? [[String: String]])
+            let firstContent = try #require(content.first)
+            let type = try #require(firstContent["type"])
+            let text = try #require(firstContent["text"])
+            #expect(type == "text")
+            #expect(text == "Status: ACTIVE")
         }
     }
+    
+    @Suite("Custom String Representation")
+    struct CustomStringTests {
+        
+        @Test("Custom string representation enum shows proper error message")
+        func customStringRepresentationEnumErrorMessage() async throws {
+            let server = EnumTestServer()
+            let client = MockClient(server: server)
+            
+            let request = JSONRPCMessage.request(
+                id: 3,
+                method: "tools/call",
+                params: [
+                    "name": "processSortOrder",
+                    "arguments": ["order": "ascending"]
+                ]
+            )
+            
+            let response = await client.send(request)
+            guard case .response(let responseData) = response else {
+                throw TestError("Expected response case")
+            }
+            
+            #expect(responseData.id == 3)
+            let result = try #require(responseData.result)
+            let content = try #require(result["content"]?.value as? [[String: String]])
+            let firstContent = try #require(content.first)
+            let type = try #require(firstContent["type"])
+            let text = try #require(firstContent["text"])
+            #expect(type == "text")
+            #expect(text == "Parameter 'order' expected one of [SORT_ASC, SORT_DESC] but received ascending")
+        }
+    }
+    
+    @Suite("Array Processing")
+    struct ArrayTests {
+        
+        @Test("Array of enums processing returns comma-separated values")
+        func arrayOfEnumsProcessing() async throws {
+            let server = EnumTestServer()
+            let client = MockClient(server: server)
+            
+            let request = JSONRPCMessage.request(
+                id: 4,
+                method: "tools/call",
+                params: [
+                    "name": "processPriorities",
+                    "arguments": ["priorities": ["low", "medium", "high"]]
+                ]
+            )
+            
+            let response = await client.send(request)
+            guard case .response(let responseData) = response else {
+                throw TestError("Expected response case")
+            }
+            
+            #expect(responseData.id == 4)
+            let result = try #require(responseData.result)
+            let isError = try #require(result["isError"]?.value as? Bool)
+            #expect(isError == false)
+            let content = try #require(result["content"]?.value as? [[String: String]])
+            let firstContent = try #require(content.first)
+            let type = try #require(firstContent["type"])
+            let text = try #require(firstContent["text"])
+            #expect(type == "text")
+            #expect(text == "0,1,2")
+        }
+        
+        @Test("Optional array processing with values returns status text")
+        func optionalArrayProcessingWithValues() async throws {
+            let server = EnumTestServer()
+            let client = MockClient(server: server)
+            
+            let request = JSONRPCMessage.request(
+                id: 5,
+                method: "tools/call",
+                params: [
+                    "name": "processStatus",
+                    "arguments": AnyCodable(["status": "active"])
+                ]
+            )
+            
+            let response = await client.send(request)
+            guard case .response(let responseData) = response else {
+                throw TestError("Expected response case")
+            }
+            
+            #expect(responseData.id == 5)
+            let result = try #require(responseData.result)
+            let isError = try #require(result["isError"]?.value as? Bool)
+            #expect(isError == false)
+            let content = try #require(result["content"]?.value as? [[String: String]])
+            let firstContent = try #require(content.first)
+            let text = try #require(firstContent["text"])
+            #expect(text == "Status: ACTIVE")
+        }
+        
+        @Test("Optional array processing with nil returns empty text")
+        func optionalArrayProcessingWithNil() async throws {
+            let server = EnumTestServer()
+            let client = MockClient(server: server)
+            
+            let request = JSONRPCMessage.request(
+                id: 6,
+                method: "tools/call",
+                params: [
+                    "name": "processOptionalStatuses",
+                    "arguments": AnyCodable([:])
+                ]
+            )
+            
+            let response = await client.send(request)
+            guard case .response(let responseData) = response else {
+                throw TestError("Expected response case")
+            }
+            
+            #expect(responseData.id == 6)
+            let result = try #require(responseData.result)
+            let isError = try #require(result["isError"]?.value as? Bool)
+            #expect(isError == false)
+            let content = try #require(result["content"]?.value as? [[String: String]])
+            let firstContent = try #require(content.first)
+            let text = try #require(firstContent["text"])
+            #expect(text == "empty")
+        }
+    }
+    
+    @Suite("Schema Generation", .tags(.schema))
+    struct SchemaTests {
+        
+        @Test("Case labels match raw values for Priority enum")
+        func priorityCaseLabelsMatchRawValues() throws {
+            let labels = Array<String>(caseLabelsFrom: Priority.self)
+            let actualLabels = try #require(labels)
+            #expect(actualLabels == ["low", "medium", "high"])
+        }
+        
+        @Test("Case labels match raw values for Status enum")
+        func statusCaseLabelsMatchRawValues() throws {
+            let labels = Array<String>(caseLabelsFrom: Status.self)
+            let actualLabels = try #require(labels)
+            #expect(actualLabels == ["pending", "active", "completed"])
+        }
+        
+        @Test("Case labels match raw values for SortOrder enum")
+        func sortOrderCaseLabelsMatchRawValues() throws {
+            let labels = Array<String>(caseLabelsFrom: SortOrder.self)
+            let actualLabels = try #require(labels)
+            #expect(actualLabels == ["SORT_ASC", "SORT_DESC"])
+        }
+        
+        @Test("Enum schema generation includes proper constraints")
+        func enumSchemaGeneration() throws {
+            let server = EnumTestServer()
+            let tools = server.mcpToolMetadata.convertedToTools()
+            
+            // Test priority schema
+            let priorityTool = try #require(tools.first { $0.name == "processPriority" })
+            
+            guard case .object(let object) = priorityTool.inputSchema else {
+                throw TestError("Expected object schema")
+            }
+            
+            let prioritySchema = try #require(object.properties["priority"])
+            
+            guard case .enum(let enumValues, description: _) = prioritySchema else {
+                throw TestError("Expected enum schema")
+            }
+            
+            #expect(Set(enumValues) == Set(["low", "medium", "high"]))
+        }
+    }
+}
+
+// MARK: - Test Tags Extension
+extension Tag {
+    @Tag static var enumType: Self
+    @Tag static var schema: Self
 } 

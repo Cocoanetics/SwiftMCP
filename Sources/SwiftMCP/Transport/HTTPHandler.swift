@@ -258,6 +258,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
         do {
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601WithTimeZone
+            encoder.nonConformingFloatEncodingStrategy = .convertToString(positiveInfinity: "Infinity", negativeInfinity: "-Infinity", nan: "NaN")
             let jsonData = try encoder.encode(dataToEncode)
             var buffer = channel.allocator.buffer(capacity: jsonData.count)
             buffer.writeBytes(jsonData)
@@ -645,6 +646,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
             // Convert result to JSON data
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601WithTimeZone
+            encoder.nonConformingFloatEncodingStrategy = .convertToString(positiveInfinity: "Infinity", negativeInfinity: "-Infinity", nan: "NaN")
             encoder.outputFormatting = [.prettyPrinted]
 
             let jsonData = try encoder.encode(responseToEncode)

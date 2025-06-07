@@ -220,6 +220,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
 
                 // Create ISO8601 formatter with timezone
                 encoder.dateEncodingStrategy = .iso8601WithTimeZone
+                encoder.nonConformingFloatEncodingStrategy = .convertToString(positiveInfinity: "Infinity", negativeInfinity: "-Infinity", nan: "NaN")
 
                 let jsonData = try encoder.encode(response)
 

@@ -307,7 +307,7 @@ func testMultiLineDoc() throws {
     // Test function with multi-line documentation
     if let longDescTool = tools.first(where: { $0.name == "longDescription" }) {
         // Check that the description was extracted correctly
-        let longDescription = unwrap(longDescTool.description)
+        let longDescription = try #require(longDescTool.description)
         
         #expect(longDescription.hasPrefix("This function has a very long description that spans"), "Description should mention it's a long description")
         // The actual output doesn't contain "multiple lines" so we'll check for "spans" instead

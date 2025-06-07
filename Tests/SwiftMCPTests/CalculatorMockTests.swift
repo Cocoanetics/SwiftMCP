@@ -3,329 +3,378 @@ import Testing
 @testable import SwiftMCP
 import AnyCodable
 
-@Test("Tests add function with mock client")
-func testAddViaMockClient() async throws {
-    let calculator = Calculator()
-    let client = MockClient(server: calculator)
+@Suite("Calculator Mock Client Tests", .tags(.calculator, .mockClient, .unit))
+struct CalculatorMockTests {
     
-    let request = JSONRPCMessage.request(
-        id: 1,
-        method: "tools/call",
-        params: [
-            "name": "add",
-            "arguments": ["a": 2, "b": 3]
-        ]
-    )
-    
-    let message = await client.send(request)
-    guard case .response(let response) = message else {
-        #expect(Bool(false), "Expected response case")
-        return
-    }
-    #expect(response.id == 1)
-    let result = unwrap(response.result)
-    let isError = unwrap(result["isError"]?.value as? Bool)
-    #expect(isError == false)
-    let content = unwrap(result["content"]?.value as? [[String: String]])
-    let firstContent = unwrap(content.first)
-    let type = unwrap(firstContent["type"])
-    let text = unwrap(firstContent["text"])
-    #expect(type == "text")
-    #expect(text == "5")
-}
+    @Suite("Basic Arithmetic Operations")
+    struct BasicArithmeticTests {
+        
+        @Test("Add function returns correct sum")
+        func addFunctionReturnsCorrectSum() async throws {
+            let calculator = Calculator()
+            let client = MockClient(server: calculator)
+            
+            let request = JSONRPCMessage.request(
+                id: 1,
+                method: "tools/call",
+                params: [
+                    "name": "add",
+                    "arguments": ["a": 2, "b": 3]
+                ]
+            )
+            
+            let message = await client.send(request)
+            guard case .response(let response) = message else {
+                throw TestError("Expected response case")
+            }
+            
+            #expect(response.id == 1)
+            let result = try #require(response.result)
+            let isError = try #require(result["isError"]?.value as? Bool)
+            #expect(isError == false)
+            let content = try #require(result["content"]?.value as? [[String: String]])
+            let firstContent = try #require(content.first)
+            let type = try #require(firstContent["type"])
+            let text = try #require(firstContent["text"])
+            #expect(type == "text")
+            #expect(text == "5")
+        }
 
-@Test("Tests greet function with mock client")
-func testGreetViaMockClient() async throws {
-    let calculator = Calculator()
-    let client = MockClient(server: calculator)
-    
-    let request = JSONRPCMessage.request(
-        id: 1,
-        method: "tools/call",
-        params: [
-            "name": "greet",
-            "arguments": ["name": "Oliver"]
-        ]
-    )
-    
-    guard let message = await client.send(request) else {
-        #expect(Bool(false), "Expected a response message")
-        return
-    }
-    guard case .response(let response) = message else {
-        #expect(Bool(false), "Expected response case")
-        return
-    }
-    #expect(response.id == 1)
-    let result = unwrap(response.result)
-    let isError = unwrap(result["isError"]?.value as? Bool)
-    #expect(isError == false)
-    let content = unwrap(result["content"]?.value as? [[String: String]])
-    let firstContent = unwrap(content.first)
-    let type = unwrap(firstContent["type"])
-    let text = unwrap(firstContent["text"])
-    #expect(type == "text")
-    #expect(text == "Hello, Oliver!")
-}
+        @Test("Subtract function returns correct difference")
+        func subtractFunctionReturnsCorrectDifference() async throws {
+            let calculator = Calculator()
+            let client = MockClient(server: calculator)
+            
+            let request = JSONRPCMessage.request(
+                id: 1,
+                method: "tools/call",
+                params: [
+                    "name": "subtract",
+                    "arguments": ["a": 10, "b": 4]
+                ]
+            )
+            
+            let message = try #require(await client.send(request))
+            guard case .response(let response) = message else {
+                throw TestError("Expected response case")
+            }
+            
+            #expect(response.id == 1)
+            let result = try #require(response.result)
+            let isError = try #require(result["isError"]?.value as? Bool)
+            #expect(isError == false)
+            let content = try #require(result["content"]?.value as? [[String: String]])
+            let firstContent = try #require(content.first)
+            let type = try #require(firstContent["type"])
+            let text = try #require(firstContent["text"])
+            #expect(type == "text")
+            #expect(text == "6")
+        }
 
-@Test("Tests subtract function with mock client")
-func testSubtractViaMockClient() async throws {
-    let calculator = Calculator()
-    let client = MockClient(server: calculator)
-    
-    let request = JSONRPCMessage.request(
-        id: 1,
-        method: "tools/call",
-        params: [
-            "name": "subtract",
-            "arguments": ["a": 10, "b": 4]
-        ]
-    )
-    
-    guard let message = await client.send(request) else {
-        #expect(Bool(false), "Expected a response message")
-        return
-    }
-    guard case .response(let response) = message else {
-        #expect(Bool(false), "Expected response case")
-        return
-    }
-    #expect(response.id == 1)
-    let result = unwrap(response.result)
-    let isError = unwrap(result["isError"]?.value as? Bool)
-    #expect(isError == false)
-    let content = unwrap(result["content"]?.value as? [[String: String]])
-    let firstContent = unwrap(content.first)
-    let type = unwrap(firstContent["type"])
-    let text = unwrap(firstContent["text"])
-    #expect(type == "text")
-    #expect(text == "6")
-}
+        @Test("Multiply function returns correct product")
+        func multiplyFunctionReturnsCorrectProduct() async throws {
+            let calculator = Calculator()
+            let client = MockClient(server: calculator)
+            
+            let request = JSONRPCMessage.request(
+                id: 1,
+                method: "tools/call",
+                params: [
+                    "name": "multiply",
+                    "arguments": ["a": 6, "b": 7]
+                ]
+            )
+            
+            let message = try #require(await client.send(request))
+            guard case .response(let response) = message else {
+                throw TestError("Expected response case")
+            }
+            
+            #expect(response.id == 1)
+            let result = try #require(response.result)
+            let isError = try #require(result["isError"]?.value as? Bool)
+            #expect(isError == false)
+            let content = try #require(result["content"]?.value as? [[String: String]])
+            let firstContent = try #require(content.first)
+            let type = try #require(firstContent["type"])
+            let text = try #require(firstContent["text"])
+            #expect(type == "text")
+            #expect(text == "42")
+        }
 
-@Test("Tests multiply function with mock client")
-func testMultiplyViaMockClient() async throws {
-    let calculator = Calculator()
-    let client = MockClient(server: calculator)
-    
-    let request = JSONRPCMessage.request(
-        id: 1,
-        method: "tools/call",
-        params: [
-            "name": "multiply",
-            "arguments": ["a": 6, "b": 7]
-        ]
-    )
-    
-    guard let message = await client.send(request) else {
-        #expect(Bool(false), "Expected a response message")
-        return
-    }
-    guard case .response(let response) = message else {
-        #expect(Bool(false), "Expected response case")
-        return
-    }
-    #expect(response.id == 1)
-    let result = unwrap(response.result)
-    let isError = unwrap(result["isError"]?.value as? Bool)
-    #expect(isError == false)
-    let content = unwrap(result["content"]?.value as? [[String: String]])
-    let firstContent = unwrap(content.first)
-    let type = unwrap(firstContent["type"])
-    let text = unwrap(firstContent["text"])
-    #expect(type == "text")
-    #expect(text == "42")
-}
-
-@Test("Tests divide function with mock client")
-func testDivideViaMockClient() async throws {
-    let calculator = Calculator()
-    let client = MockClient(server: calculator)
-    
-    let request = JSONRPCMessage.request(
-        id: 1,
-        method: "tools/call",
-        params: [
-            "name": "divide",
-            "arguments": ["numerator": 10, "denominator": 2]
-        ]
-    )
-    
-    guard let message = await client.send(request) else {
-        #expect(Bool(false), "Expected a response message")
-        return
-    }
-    guard case .response(let response) = message else {
-        #expect(Bool(false), "Expected response case")
-        return
-    }
-    #expect(response.id == 1)
-    let result = unwrap(response.result)
-    let isError = unwrap(result["isError"]?.value as? Bool)
-    #expect(isError == false)
-    let content = unwrap(result["content"]?.value as? [[String: String]])
-    let firstContent = unwrap(content.first)
-    let type = unwrap(firstContent["type"])
-    let text = unwrap(firstContent["text"])
-    #expect(type == "text")
-    #expect(text == "5")
-}
-
-@Test("Tests testArray function with mock client")
-func testTestArrayViaMockClient() async throws {
-    let calculator = Calculator()
-    let client = MockClient(server: calculator)
-    
-    let request = JSONRPCMessage.request(
-        id: 1,
-        method: "tools/call",
-        params: [
-            "name": "testArray",
-            "arguments": ["a": [1, 2, 3, 4, 5]]
-        ]
-    )
-    
-    guard let message = await client.send(request) else {
-        #expect(Bool(false), "Expected a response message")
-        return
-    }
-    guard case .response(let response) = message else {
-        #expect(Bool(false), "Expected response case")
-        return
-    }
-    #expect(response.id == 1)
-    let result = unwrap(response.result)
-    let isError = unwrap(result["isError"]?.value as? Bool)
-    #expect(isError == false)
-    let content = unwrap(result["content"]?.value as? [[String: String]])
-    let firstContent = unwrap(content.first)
-    let type = unwrap(firstContent["type"])
-    let text = unwrap(firstContent["text"])
-    #expect(type == "text")
-    #expect(text == "1, 2, 3, 4, 5")
-}
-
-@Test("Tests ping function with mock client")
-func testPingViaMockClient() async throws {
-    let calculator = Calculator()
-    let client = MockClient(server: calculator)
-    
-    let request = JSONRPCMessage.request(
-        id: 1,
-        method: "tools/call",
-        params: [
-            "name": "ping",
-            "arguments": []
-        ]
-    )
-    
-    guard let message = await client.send(request) else {
-        #expect(Bool(false), "Expected a response message")
-        return
-    }
-    guard case .response(let response) = message else {
-        #expect(Bool(false), "Expected response case")
-        return
-    }
-    #expect(response.id == 1)
-    let result = unwrap(response.result)
-    let isError = unwrap(result["isError"]?.value as? Bool)
-    #expect(isError == false)
-    let content = unwrap(result["content"]?.value as? [[String: String]])
-    let firstContent = unwrap(content.first)
-    let type = unwrap(firstContent["type"])
-    let text = unwrap(firstContent["text"])
-    #expect(type == "text")
-    #expect(text == "pong")
-}
-
-@Test("Tests noop function with mock client")
-func testNoopViaMockClient() async throws {
-    let calculator = Calculator()
-    let client = MockClient(server: calculator)
-    
-    let request = JSONRPCMessage.request(
-        id: 1,
-        method: "tools/call",
-        params: [
-            "name": "noop",
-            "arguments": []
-        ]
-    )
-    
-    guard let message = await client.send(request) else {
-        #expect(Bool(false), "Expected a response message")
-        return
-    }
-    guard case .response(let response) = message else {
-        #expect(Bool(false), "Expected response case")
-        return
-    }
-    #expect(response.id == 1)
-    let result = unwrap(response.result)
-    let isError = unwrap(result["isError"]?.value as? Bool)
-    #expect(isError == false)
-    let content = unwrap(result["content"]?.value as? [[String: String]])
-    let firstContent = unwrap(content.first)
-    let type = unwrap(firstContent["type"])
-    let text = unwrap(firstContent["text"])
-    #expect(type == "text")
-    #expect(text == "")
-}
-
-@Test("Tests getCurrentDateTime function with mock client")
-func testGetCurrentDateTimeViaMockClient() async throws {
-    let calculator = Calculator()
-    let client = MockClient(server: calculator)
-    
-    let request = JSONRPCMessage.request(
-        id: 1,
-        method: "tools/call",
-        params: [
-            "name": "getCurrentDateTime",
-            "arguments": []
-        ]
-    )
-    
-    guard let message = await client.send(request) else {
-        #expect(Bool(false), "Expected a response message")
-        return
-    }
-    guard case .response(let response) = message else {
-        #expect(Bool(false), "Expected response case")
-        return
-    }
-    #expect(response.id == 1)
-    let result = unwrap(response.result)
-    let isError = unwrap(result["isError"]?.value as? Bool)
-    #expect(isError == false)
-    let content = unwrap(result["content"]?.value as? [[String: String]])
-    let firstContent = unwrap(content.first)
-    let type = unwrap(firstContent["type"])
-    let text = unwrap(firstContent["text"])
-    #expect(type == "text")
-    // Verify the text is a valid ISO 8601 date string
-    let dateFormatter = ISO8601DateFormatter()
-    let date = dateFormatter.date(from: text.replacingOccurrences(of: "\"", with: ""))
-    #expect(date != nil, "Response should be a valid ISO 8601 date string")
-}
-
-/// Errors that can occur during MCP client operations
-public enum MCPError: LocalizedError {
-    case notConnected
-    case invalidEndpointURL
-    case invalidResponse
-    case timeout
-    
-    public var errorDescription: String? {
-        switch self {
-        case .notConnected:
-            return "Client is not connected to the server"
-        case .invalidEndpointURL:
-            return "Invalid messages endpoint URL received from server"
-        case .invalidResponse:
-            return "Invalid response received from server"
-        case .timeout:
-            return "Request timed out"
+        @Test("Divide function returns correct quotient")
+        func divideFunctionReturnsCorrectQuotient() async throws {
+            let calculator = Calculator()
+            let client = MockClient(server: calculator)
+            
+            let request = JSONRPCMessage.request(
+                id: 1,
+                method: "tools/call",
+                params: [
+                    "name": "divide",
+                    "arguments": ["numerator": 10, "denominator": 2]
+                ]
+            )
+            
+            let message = try #require(await client.send(request))
+            guard case .response(let response) = message else {
+                throw TestError("Expected response case")
+            }
+            
+            #expect(response.id == 1)
+            let result = try #require(response.result)
+            let isError = try #require(result["isError"]?.value as? Bool)
+            #expect(isError == false)
+            let content = try #require(result["content"]?.value as? [[String: String]])
+            let firstContent = try #require(content.first)
+            let type = try #require(firstContent["type"])
+            let text = try #require(firstContent["text"])
+            #expect(type == "text")
+            #expect(text == "5")
         }
     }
+    
+    @Suite("String and Array Operations")
+    struct StringAndArrayTests {
+        
+        @Test("Greet function returns personalized greeting")
+        func greetFunctionReturnsPersonalizedGreeting() async throws {
+            let calculator = Calculator()
+            let client = MockClient(server: calculator)
+            
+            let request = JSONRPCMessage.request(
+                id: 1,
+                method: "tools/call",
+                params: [
+                    "name": "greet",
+                    "arguments": ["name": "Oliver"]
+                ]
+            )
+            
+            let message = try #require(await client.send(request))
+            guard case .response(let response) = message else {
+                throw TestError("Expected response case")
+            }
+            
+            #expect(response.id == 1)
+            let result = try #require(response.result)
+            let isError = try #require(result["isError"]?.value as? Bool)
+            #expect(isError == false)
+            let content = try #require(result["content"]?.value as? [[String: String]])
+            let firstContent = try #require(content.first)
+            let type = try #require(firstContent["type"])
+            let text = try #require(firstContent["text"])
+            #expect(type == "text")
+            #expect(text == "Hello, Oliver!")
+        }
+
+        @Test("Test array function processes array correctly")
+        func testArrayFunctionProcessesArrayCorrectly() async throws {
+            let calculator = Calculator()
+            let client = MockClient(server: calculator)
+            
+            let request = JSONRPCMessage.request(
+                id: 1,
+                method: "tools/call",
+                params: [
+                    "name": "testArray",
+                    "arguments": ["a": [1, 2, 3, 4, 5]]
+                ]
+            )
+            
+            let message = try #require(await client.send(request))
+            guard case .response(let response) = message else {
+                throw TestError("Expected response case")
+            }
+            
+            #expect(response.id == 1)
+            let result = try #require(response.result)
+            let isError = try #require(result["isError"]?.value as? Bool)
+            #expect(isError == false)
+            let content = try #require(result["content"]?.value as? [[String: String]])
+            let firstContent = try #require(content.first)
+            let type = try #require(firstContent["type"])
+            let text = try #require(firstContent["text"])
+            #expect(type == "text")
+            #expect(text == "1, 2, 3, 4, 5")
+        }
+    }
+    
+    @Suite("Error Handling Tests")
+    struct ErrorHandlingTests {
+        
+        @Test("Division by zero returns infinity")
+        func divisionByZeroReturnsInfinity() async throws {
+            let calculator = Calculator()
+            let client = MockClient(server: calculator)
+            
+            let request = JSONRPCMessage.request(
+                id: 1,
+                method: "tools/call",
+                params: [
+                    "name": "divide",
+                    "arguments": ["numerator": 10, "denominator": 0]
+                ]
+            )
+            
+            let message = try #require(await client.send(request))
+            guard case .response(let response) = message else {
+                throw TestError("Expected response case")
+            }
+            
+            #expect(response.id == 1)
+            let result = try #require(response.result)
+            let isError = try #require(result["isError"]?.value as? Bool)
+            #expect(isError == false)
+            let content = try #require(result["content"]?.value as? [[String: String]])
+            let firstContent = try #require(content.first)
+            let type = try #require(firstContent["type"])
+            let text = try #require(firstContent["text"])
+            #expect(type == "text")
+            #expect(text == "Infinity")
+        }
+        
+        @Test("Negative division by zero returns negative infinity")
+        func negativeDivisionByZeroReturnsNegativeInfinity() async throws {
+            let calculator = Calculator()
+            let client = MockClient(server: calculator)
+            
+            let request = JSONRPCMessage.request(
+                id: 1,
+                method: "tools/call",
+                params: [
+                    "name": "divide",
+                    "arguments": ["numerator": -10, "denominator": 0]
+                ]
+            )
+            
+            let message = try #require(await client.send(request))
+            guard case .response(let response) = message else {
+                throw TestError("Expected response case")
+            }
+            
+            let result = try #require(response.result)
+            let isError = try #require(result["isError"]?.value as? Bool)
+            #expect(isError == false)
+            let content = try #require(result["content"]?.value as? [[String: String]])
+            let firstContent = try #require(content.first)
+            let text = try #require(firstContent["text"])
+            #expect(text == "-Infinity")
+        }
+        
+        @Test("Zero divided by zero returns NaN")
+        func zeroDividedByZeroReturnsNaN() async throws {
+            let calculator = Calculator()
+            let client = MockClient(server: calculator)
+            
+            let request = JSONRPCMessage.request(
+                id: 1,
+                method: "tools/call",
+                params: [
+                    "name": "divide",
+                    "arguments": ["numerator": 0, "denominator": 0]
+                ]
+            )
+            
+            let message = try #require(await client.send(request))
+            guard case .response(let response) = message else {
+                throw TestError("Expected response case")
+            }
+            
+            let result = try #require(response.result)
+            let isError = try #require(result["isError"]?.value as? Bool)
+            #expect(isError == false)
+            let content = try #require(result["content"]?.value as? [[String: String]])
+            let firstContent = try #require(content.first)
+            let text = try #require(firstContent["text"])
+            #expect(text == "NaN")
+        }
+        
+        @Test("Invalid tool name returns error")
+        func invalidToolNameReturnsError() async throws {
+            let calculator = Calculator()
+            let client = MockClient(server: calculator)
+            
+            let request = JSONRPCMessage.request(
+                id: 1,
+                method: "tools/call",
+                params: [
+                    "name": "invalidTool",
+                    "arguments": [:]
+                ]
+            )
+            
+            let message = try #require(await client.send(request))
+            guard case .response(let response) = message else {
+                throw TestError("Expected response case")
+            }
+            
+            #expect(response.id == 1)
+            let result = try #require(response.result)
+            let isError = try #require(result["isError"]?.value as? Bool)
+            #expect(isError == true)
+            let content = try #require(result["content"]?.value as? [[String: String]])
+            let firstContent = try #require(content.first)
+            let type = try #require(firstContent["type"])
+            let text = try #require(firstContent["text"])
+            #expect(type == "text")
+            #expect(text.contains("The tool 'invalidTool' was not found on the server"))
+        }
+    }
+    
+    @Suite("Complex Operations")
+    struct ComplexOperationTests {
+        
+        @Test("Complex calculation with multiple steps")
+        func complexCalculationWithMultipleSteps() async throws {
+            let calculator = Calculator()
+            let client = MockClient(server: calculator)
+            
+            // First operation: 5 + 3 = 8
+            let addRequest = JSONRPCMessage.request(
+                id: 1,
+                method: "tools/call",
+                params: [
+                    "name": "add",
+                    "arguments": ["a": 5, "b": 3]
+                ]
+            )
+            
+            let addMessage = try #require(await client.send(addRequest))
+            guard case .response(let addResponse) = addMessage else {
+                throw TestError("Expected response case")
+            }
+            
+            let addResult = try #require(addResponse.result)
+            let addContent = try #require(addResult["content"]?.value as? [[String: String]])
+            let addText = try #require(addContent.first?["text"])
+            #expect(addText == "8")
+            
+            // Second operation: 8 * 2 = 16
+            let multiplyRequest = JSONRPCMessage.request(
+                id: 2,
+                method: "tools/call",
+                params: [
+                    "name": "multiply",
+                    "arguments": ["a": 8, "b": 2]
+                ]
+            )
+            
+            let multiplyMessage = try #require(await client.send(multiplyRequest))
+            guard case .response(let multiplyResponse) = multiplyMessage else {
+                throw TestError("Expected response case")
+            }
+            
+            let multiplyResult = try #require(multiplyResponse.result)
+            let multiplyContent = try #require(multiplyResult["content"]?.value as? [[String: String]])
+            let multiplyText = try #require(multiplyContent.first?["text"])
+            #expect(multiplyText == "16")
+        }
+    }
+}
+
+// MARK: - Test Tags Extension
+extension Tag {
+    @Tag static var calculator: Self
+    @Tag static var mockClient: Self
 }

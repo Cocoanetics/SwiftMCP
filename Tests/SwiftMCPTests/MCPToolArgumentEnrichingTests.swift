@@ -15,7 +15,7 @@ func testEnrichArguments() throws {
     let calculator = Calculator()
     
     // Get the add tool metadata from the calculator
-    let metadata = unwrap(calculator.mcpToolMetadata(for: "add"))
+    let metadata = try #require(calculator.mcpToolMetadata(for: "add"))
     
     // Test enriching arguments
     let arguments: [String: Codable & Sendable] = ["a": 2, "b": 3]
@@ -32,7 +32,7 @@ func testEnrichArgumentsWithExplicitFunctionName() throws {
     let calculator = Calculator()
     
     // Get the add tool metadata from the calculator
-    let metadata = unwrap(calculator.mcpToolMetadata(for: "add"))
+    let metadata = try #require(calculator.mcpToolMetadata(for: "add"))
     
     // Test enriching arguments with explicit function name
     let arguments: [String: Codable & Sendable] = ["a": 2, "b": 3]
@@ -49,7 +49,7 @@ func testEnrichArgumentsWithNoDefaults() throws {
     let calculator = Calculator()
     
     // Get the add tool metadata from the calculator
-    let metadata = unwrap(calculator.mcpToolMetadata(for: "add"))
+    let metadata = try #require(calculator.mcpToolMetadata(for: "add"))
     
     // Test enriching arguments with no default values
     let arguments: [String: Codable & Sendable] = ["a": 2, "b": 3]
@@ -66,7 +66,7 @@ func testEnrichArgumentsWithMissingRequiredArgument() throws {
     let calculator = Calculator()
     
     // Get the add tool metadata from the calculator
-    let metadata = unwrap(calculator.mcpToolMetadata(for: "add"))
+    let metadata = try #require(calculator.mcpToolMetadata(for: "add"))
     
     // Test enriching arguments with a missing required argument
     #expect(throws: MCPToolError.self, "Should notice missing parameter") {
@@ -79,7 +79,7 @@ func testEnrichArgumentsWithTypeConversion() throws {
     let calculator = Calculator()
     
     // Get the add tool metadata from the calculator
-    let metadata = unwrap(calculator.mcpToolMetadata(for: "add"))
+    let metadata = try #require(calculator.mcpToolMetadata(for: "add"))
     
     // Test enriching arguments with string values that need to be converted
     let arguments: [String: Codable & Sendable] = ["a": "2", "b": "3"]
@@ -96,7 +96,7 @@ func testSubtractArguments() throws {
     let calculator = Calculator()
     
     // Get the subtract tool metadata from the calculator
-    let metadata = unwrap(calculator.mcpToolMetadata(for: "subtract"))
+    let metadata = try #require(calculator.mcpToolMetadata(for: "subtract"))
     
     // Test with no arguments - should throw missing required parameter
     #expect(throws: MCPToolError.self, "Should notice missing parameter") {
@@ -120,7 +120,7 @@ func testMultiplyArguments() throws {
     let calculator = Calculator()
     
     // Get the multiply tool metadata from the calculator
-    let metadata = unwrap(calculator.mcpToolMetadata(for: "multiply"))
+    let metadata = try #require(calculator.mcpToolMetadata(for: "multiply"))
     
     // Test with no arguments - should throw missing required parameter
     #expect(throws: MCPToolError.self, "Should notice missing parameter") {

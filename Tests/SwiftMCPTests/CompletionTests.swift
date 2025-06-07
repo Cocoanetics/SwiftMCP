@@ -47,63 +47,74 @@ class CustomCompletionServer: MCPCompletionProviding {
     }
 }
 
-@Test("Enum completion returns case labels with prefix match first")
-func testEnumCompletion() async throws {
-    let server = CompletionServer()
+@Suite("Completion Tests", .tags(.completion, .unit))
+struct CompletionTests {
+    
+    @Test("Enum completion returns case labels with prefix match first")
+    func enumCompletionReturnsCaseLabelsWithPrefixFirst() async throws {
+        let server = CompletionServer()
 
-    let request = JSONRPCMessage.request(
-        id: 1,
-        method: "completion/complete",
-        params: [
-            "argument": ["name": "color", "value": "r"],
-            "ref": ["type": "ref/resource", "uri": "color://message?color={color}"]
-        ]
-    )
+        let request = JSONRPCMessage.request(
+            id: 1,
+            method: "completion/complete",
+            params: [
+                "argument": ["name": "color", "value": "r"],
+                "ref": ["type": "ref/resource", "uri": "color://message?color={color}"]
+            ]
+        )
 
-    guard let message = await server.handleMessage(request),
-          case .response(let response) = message else {
-        #expect(Bool(false), "Expected response")
-        return
+        let message = try #require(await server.handleMessage(request))
+        
+        guard case .response(let response) = message else {
+            throw TestError("Expected response")
+        }
+
+        let result = try #require(response.result)
+        let comp = try #require(result["completion"]?.value as? [String: Any])
+        let values = try #require(comp["values"] as? [String])
+
+        #expect(values == ["red", "green", "blue"])
     }
 
-    let result = unwrap(response.result)
-    let comp = unwrap(result["completion"]?.value as? [String: Any])
-    let values = unwrap(comp["values"] as? [String])
+    @Test("Custom completion provider returns custom values")
+    func customCompletionProviderReturnsCustomValues() async throws {
+        let server = CustomCompletionServer()
 
-    #expect(values == ["red", "green", "blue"])
-}
+        let request = JSONRPCMessage.request(
+            id: 1,
+            method: "completion/complete",
+            params: [
+                "argument": ["name": "color", "value": "ru"],
+                "ref": ["type": "ref/resource", "uri": "color://message?color={color}"]
+            ]
+        )
 
-@Test("Custom completion provider returns custom values")
-func testCustomCompletionProvider() async throws {
-    let server = CustomCompletionServer()
+        let message = try #require(await server.handleMessage(request))
+        
+        guard case .response(let response) = message else {
+            throw TestError("Expected response")
+        }
 
-    let request = JSONRPCMessage.request(
-        id: 1,
-        method: "completion/complete",
-        params: [
-            "argument": ["name": "color", "value": "ru"],
-            "ref": ["type": "ref/resource", "uri": "color://message?color={color}"]
-        ]
-    )
+        let result = try #require(response.result)
+        let comp = try #require(result["completion"]?.value as? [String: Any])
+        let values = try #require(comp["values"] as? [String])
 
-    guard let message = await server.handleMessage(request),
-          case .response(let response) = message else {
-        #expect(Bool(false), "Expected response")
-        return
+        #expect(values.first == "ruby")
+        #expect(values.contains("red"))
+        #expect(values.count == 5)
     }
 
-    let result = unwrap(response.result)
-    let comp = unwrap(result["completion"]?.value as? [String: Any])
-    let values = unwrap(comp["values"] as? [String])
-
-    #expect(values.first == "ruby")
-    #expect(values.contains("red"))
-    #expect(values.count == 5)
+    @Test("Completion sorting prefers longer prefix matches")
+    func completionSortingPrefersLongerPrefixMatches() {
+        let sorted = ["red", "green", "blue", "ruby"].sortedByBestCompletion(prefix: "re")
+        #expect(sorted.first == "red")
+        #expect(sorted[1] == "ruby")
+    }
 }
 
-@Test("Completion sorting prefers longer prefix matches")
-func testSortedByBestCompletion() {
-    let sorted = ["red", "green", "blue", "ruby"].sortedByBestCompletion(prefix: "re")
-    #expect(sorted.first == "red")
-    #expect(sorted[1] == "ruby")
+// MARK: - Test Tags Extension
+extension Tag {
+    @Tag static var completion: Self
 }
+
+

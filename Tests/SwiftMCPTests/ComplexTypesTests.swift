@@ -227,13 +227,13 @@ func testIntArrayProcessing() async throws {
         return
     }
     #expect(response.id == 1)
-    let result = unwrap(response.result)
-    let isError = unwrap(result["isError"]?.value as? Bool)
+    let result = try #require(response.result)
+    let isError = try #require(result["isError"]?.value as? Bool)
     #expect(isError == false)
-    let content = unwrap(result["content"]?.value as? [[String: String]])
-    let firstContent = unwrap(content.first)
-    let type = unwrap(firstContent["type"])
-    let text = unwrap(firstContent["text"])
+    let content = try #require(result["content"]?.value as? [[String: String]])
+    let firstContent = try #require(content.first)
+    let type = try #require(firstContent["type"])
+    let text = try #require(firstContent["text"])
     #expect(type == "text")
     #expect(text == "[2,4,6,8,10]")
 }
@@ -258,13 +258,13 @@ func testOptionalIntArrayProcessing() async throws {
         return
     }
     #expect(response.id == 1)
-    let result = unwrap(response.result)
-    let isError = unwrap(result["isError"]?.value as? Bool)
+    let result = try #require(response.result)
+    let isError = try #require(result["isError"]?.value as? Bool)
     #expect(isError == false)
-    let content = unwrap(result["content"]?.value as? [[String: String]])
-    let firstContent = unwrap(content.first)
-    let type = unwrap(firstContent["type"])
-    let text = unwrap(firstContent["text"])
+    let content = try #require(result["content"]?.value as? [[String: String]])
+    let firstContent = try #require(content.first)
+    let type = try #require(firstContent["type"])
+    let text = try #require(firstContent["text"])
     #expect(type == "text")
     #expect(text == "[]")
 }
@@ -291,13 +291,13 @@ func testStringArrayProcessing() async throws {
         return
     }
     #expect(response.id == 1)
-    let result = unwrap(response.result)
-    let isError = unwrap(result["isError"]?.value as? Bool)
+    let result = try #require(response.result)
+    let isError = try #require(result["isError"]?.value as? Bool)
     #expect(isError == false)
-    let content = unwrap(result["content"]?.value as? [[String: String]])
-    let firstContent = unwrap(content.first)
-    let type = unwrap(firstContent["type"])
-    let text = unwrap(firstContent["text"])
+    let content = try #require(result["content"]?.value as? [[String: String]])
+    let firstContent = try #require(content.first)
+    let type = try #require(firstContent["type"])
+    let text = try #require(firstContent["text"])
     #expect(type == "text")
     #expect(text == "[\"HELLO\",\"WORLD\",\"TEST\"]")
 }
@@ -324,13 +324,13 @@ func testDoubleArrayProcessing() async throws {
         return
     }
     #expect(response.id == 1)
-    let result = unwrap(response.result)
-    let isError = unwrap(result["isError"]?.value as? Bool)
+    let result = try #require(response.result)
+    let isError = try #require(result["isError"]?.value as? Bool)
     #expect(isError == false)
-    let content = unwrap(result["content"]?.value as? [[String: String]])
-    let firstContent = unwrap(content.first)
-    let type = unwrap(firstContent["type"])
-    let text = unwrap(firstContent["text"])
+    let content = try #require(result["content"]?.value as? [[String: String]])
+    let firstContent = try #require(content.first)
+    let type = try #require(firstContent["type"])
+    let text = try #require(firstContent["text"])
     #expect(type == "text")
     #expect(text == "[2.2,4.4,6.6]")
 }
@@ -357,13 +357,13 @@ func testOptionalDoubleArrayProcessing() async throws {
         return
     }
     #expect(response.id == 1)
-    let result = unwrap(response.result)
-    let isError = unwrap(result["isError"]?.value as? Bool)
+    let result = try #require(response.result)
+    let isError = try #require(result["isError"]?.value as? Bool)
     #expect(isError == false)
-    let content = unwrap(result["content"]?.value as? [[String: String]])
-    let firstContent = unwrap(content.first)
-    let type = unwrap(firstContent["type"])
-    let text = unwrap(firstContent["text"])
+    let content = try #require(result["content"]?.value as? [[String: String]])
+    let firstContent = try #require(content.first)
+    let type = try #require(firstContent["type"])
+    let text = try #require(firstContent["text"])
     #expect(type == "text")
     #expect(text == "[2.2,4.4,6.6]")
 }
@@ -390,13 +390,13 @@ func testBooleanArrayProcessing() async throws {
         return
     }
     #expect(response.id == 1)
-    let result = unwrap(response.result)
-    let isError = unwrap(result["isError"]?.value as? Bool)
+    let result = try #require(response.result)
+    let isError = try #require(result["isError"]?.value as? Bool)
     #expect(isError == false)
-    let content = unwrap(result["content"]?.value as? [[String: String]])
-    let firstContent = unwrap(content.first)
-    let type = unwrap(firstContent["type"])
-    let text = unwrap(firstContent["text"])
+    let content = try #require(result["content"]?.value as? [[String: String]])
+    let firstContent = try #require(content.first)
+    let type = try #require(firstContent["type"])
+    let text = try #require(firstContent["text"])
     #expect(type == "text")
     #expect(text == "[false,true,false]")
 }
@@ -423,13 +423,13 @@ func testOptionalBooleanArrayProcessing() async throws {
         return
     }
     #expect(response.id == 1)
-    let result = unwrap(response.result)
-    let isError = unwrap(result["isError"]?.value as? Bool)
+    let result = try #require(response.result)
+    let isError = try #require(result["isError"]?.value as? Bool)
     #expect(isError == false)
-    let content = unwrap(result["content"]?.value as? [[String: String]])
-    let firstContent = unwrap(content.first)
-    let type = unwrap(firstContent["type"])
-    let text = unwrap(firstContent["text"])
+    let content = try #require(result["content"]?.value as? [[String: String]])
+    let firstContent = try #require(content.first)
+    let type = try #require(firstContent["type"])
+    let text = try #require(firstContent["text"])
     #expect(type == "text")
     #expect(text == "[false,true,false]")
 }
@@ -463,12 +463,12 @@ func testContactInfoProcessing() async throws {
         return
     }
     #expect(createResponse.id == 1)
-    let createResult = unwrap(createResponse.result)
-    let createIsError = unwrap(createResult["isError"]?.value as? Bool)
+    let createResult = try #require(createResponse.result)
+    let createIsError = try #require(createResult["isError"]?.value as? Bool)
     #expect(createIsError == false)
-    let createContent = unwrap(createResult["content"]?.value as? [[String: String]])
-    let createFirstContent = unwrap(createContent.first)
-    let createText = unwrap(createFirstContent["text"])
+    let createContent = try #require(createResult["content"]?.value as? [[String: String]])
+    let createFirstContent = try #require(createContent.first)
+    let createText = try #require(createFirstContent["text"])
     
     // Now process the contact array
     let processRequest = JSONRPCMessage.request(
@@ -488,17 +488,17 @@ func testContactInfoProcessing() async throws {
         return
     }
     #expect(processResponse.id == 1)
-    let processResult = unwrap(processResponse.result)
-    let processIsError = unwrap(processResult["isError"]?.value as? Bool)
+    let processResult = try #require(processResponse.result)
+    let processIsError = try #require(processResult["isError"]?.value as? Bool)
     #expect(processIsError == false)
-    let processContent = unwrap(processResult["content"]?.value as? [[String: String]])
-    let processFirstContent = unwrap(processContent.first)
-    let processText = unwrap(processFirstContent["text"])
+    let processContent = try #require(processResult["content"]?.value as? [[String: String]])
+    let processFirstContent = try #require(processContent.first)
+    let processText = try #require(processFirstContent["text"])
     
     // Verify the processed contact
     let json = processText.data(using: .utf8)!
     let processedContacts = try JSONDecoder().decode([ContactInfo].self, from: json)
-    let processedContact = unwrap(processedContacts.first)
+    let processedContact = try #require(processedContacts.first)
     #expect(processedContact.name == "JOHN DOE")
     #expect(processedContact.email == "john@example.com")
     #expect(processedContact.phone == "+1234567890")
@@ -532,9 +532,9 @@ func testProfileCreation() async throws {
         #expect(Bool(false), "Expected response case")
         return
     }
-    let contactResult = unwrap(contactResponse.result)
-    let contactContent = unwrap(contactResult["content"]?.value as? [[String: String]])
-    let contactText = unwrap(contactContent.first?["text"])
+    let contactResult = try #require(contactResponse.result)
+    let contactContent = try #require(contactResult["content"]?.value as? [[String: String]])
+    let contactText = try #require(contactContent.first?["text"])
     
     // Create an address
     let addressRequest = JSONRPCMessage.request(
@@ -556,9 +556,9 @@ func testProfileCreation() async throws {
         #expect(Bool(false), "Expected response case")
         return
     }
-    let addressResult = unwrap(addressResponse.result)
-    let addressContent = unwrap(addressResult["content"]?.value as? [[String: String]])
-    let addressText = unwrap(addressContent.first?["text"])
+    let addressResult = try #require(addressResponse.result)
+    let addressContent = try #require(addressResult["content"]?.value as? [[String: String]])
+    let addressText = try #require(addressContent.first?["text"])
     
     // Create the profile
     let profileRequest = JSONRPCMessage.request(
@@ -583,11 +583,11 @@ func testProfileCreation() async throws {
         return
     }
     #expect(profileResponse.id == 1)
-    let profileResult = unwrap(profileResponse.result)
-    let profileIsError = unwrap(profileResult["isError"]?.value as? Bool)
+    let profileResult = try #require(profileResponse.result)
+    let profileIsError = try #require(profileResult["isError"]?.value as? Bool)
     #expect(profileIsError == false)
-    let profileContent = unwrap(profileResult["content"]?.value as? [[String: String]])
-    let profileText = unwrap(profileContent.first?["text"] as? String)
+    let profileContent = try #require(profileResult["content"]?.value as? [[String: String]])
+    let profileText = try #require(profileContent.first?["text"] as? String)
     let profile = try JSONDecoder().decode(Profile.self, from: (profileText as String).data(using: .utf8)!)
     #expect(profile.contact.name == "Jane Doe")
     #expect(profile.contact.email == "jane@example.com")
@@ -626,9 +626,9 @@ func testOptionalArraysWithNil() async throws {
         #expect(Bool(false), "Expected response case")
         return
     }
-    let intResult = unwrap(intResponse.result)
-    let intContent = unwrap(intResult["content"]?.value as? [[String: String]])
-    let intText = unwrap(intContent.first?["text"])
+    let intResult = try #require(intResponse.result)
+    let intContent = try #require(intResult["content"]?.value as? [[String: String]])
+    let intText = try #require(intContent.first?["text"])
     #expect(intText == "[]")
     
     // Test optional string array with nil
@@ -646,9 +646,9 @@ func testOptionalArraysWithNil() async throws {
         #expect(Bool(false), "Expected response case")
         return
     }
-    let stringResult = unwrap(stringResponse.result)
-    let stringContent = unwrap(stringResult["content"]?.value as? [[String: String]])
-    let stringText = unwrap(stringContent.first?["text"])
+    let stringResult = try #require(stringResponse.result)
+    let stringContent = try #require(stringResult["content"]?.value as? [[String: String]])
+    let stringText = try #require(stringContent.first?["text"])
     #expect(stringText == "[]")
     
     // Test optional contact array with nil
@@ -666,8 +666,8 @@ func testOptionalArraysWithNil() async throws {
         #expect(Bool(false), "Expected response case")
         return
     }
-    let contactResult = unwrap(contactResponse.result)
-    let contactContent = unwrap(contactResult["content"]?.value as? [[String: String]])
-    let contactText = unwrap(contactContent.first?["text"])
+    let contactResult = try #require(contactResponse.result)
+    let contactContent = try #require(contactResult["content"]?.value as? [[String: String]])
+    let contactText = try #require(contactContent.first?["text"])
     #expect(contactText == "[]")
 } 
