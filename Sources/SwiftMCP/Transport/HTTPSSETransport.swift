@@ -50,6 +50,21 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     /// Authorization handler for bearer tokens.
     public var authorizationHandler: AuthorizationHandler = { _ in return .authorized }
 
+    /// Optional OAuth configuration. When set, incoming bearer tokens are
+    /// validated using the provided settings and `.well-known` endpoints are
+    /// served with the corresponding metadata.
+    public var oauthConfiguration: OAuthConfiguration?
+
+    /// Perform authorization using either the OAuth configuration or the
+    /// synchronous ``authorizationHandler`` closure.
+    func authorize(_ token: String?) async -> AuthorizationResult {
+        if let oauthConfiguration {
+            let valid = await oauthConfiguration.validate(token: token)
+            return valid ? .authorized : .unauthorized("Invalid token")
+        }
+        return authorizationHandler(token)
+    }
+
     /// Defines the available keep-alive modes for maintaining connections.
     public enum KeepAliveMode: Sendable {
         case none

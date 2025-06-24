@@ -47,7 +47,7 @@ final class HTTPSSECommand: AsyncParsableCommand {
   Features:
   - Server-Sent Events endpoint at /sse
   - JSON-RPC endpoints at /<serverName>/<toolName>
-  - Optional bearer token authentication
+  - Optional bearer token authentication or OAuth validation
   - Optional OpenAPI endpoints for AI plugin integration
   
   Examples:
@@ -59,6 +59,13 @@ final class HTTPSSECommand: AsyncParsableCommand {
     
     # With OpenAPI support
     SwiftMCPDemo httpsse --port 8080 --openapi
+
+    # With OAuth
+    SwiftMCPDemo httpsse --port 8080 \
+        --oauth-issuer https://example.com \
+        --oauth-token-endpoint https://example.com/oauth/token \
+        --oauth-introspection-endpoint https://example.com/oauth/introspect \
+        --oauth-jwks-endpoint https://example.com/.well-known/jwks.json
 """
     )
     
@@ -70,6 +77,30 @@ final class HTTPSSECommand: AsyncParsableCommand {
     
     @Flag(name: .long, help: "Enable OpenAPI endpoints")
     var openapi: Bool = false
+
+    @Option(name: .long, help: "OAuth issuer URL")
+    var oauthIssuer: String?
+
+    @Option(name: .long, help: "OAuth authorization endpoint")
+    var oauthAuthorize: String?
+
+    @Option(name: .long, help: "OAuth token endpoint")
+    var oauthTokenEndpoint: String?
+
+    @Option(name: .long, help: "OAuth introspection endpoint")
+    var oauthIntrospectionEndpoint: String?
+
+    @Option(name: .long, help: "OAuth JWKS endpoint")
+    var oauthJWKS: String?
+
+    @Option(name: .long, help: "OAuth audience")
+    var oauthAudience: String?
+
+    @Option(name: .long, help: "OAuth client identifier")
+    var oauthClientID: String?
+
+    @Option(name: .long, help: "OAuth client secret")
+    var oauthClientSecret: String?
     
     // Make this a computed property instead of stored property
     private var signalHandler: SignalHandler? = nil
@@ -82,12 +113,28 @@ final class HTTPSSECommand: AsyncParsableCommand {
         self.port = try container.decode(Int.self, forKey: .port)
         self.token = try container.decodeIfPresent(String.self, forKey: .token)
         self.openapi = try container.decode(Bool.self, forKey: .openapi)
+        self.oauthIssuer = try container.decodeIfPresent(String.self, forKey: .oauthIssuer)
+        self.oauthAuthorize = try container.decodeIfPresent(String.self, forKey: .oauthAuthorize)
+        self.oauthTokenEndpoint = try container.decodeIfPresent(String.self, forKey: .oauthTokenEndpoint)
+        self.oauthIntrospectionEndpoint = try container.decodeIfPresent(String.self, forKey: .oauthIntrospectionEndpoint)
+        self.oauthJWKS = try container.decodeIfPresent(String.self, forKey: .oauthJWKS)
+        self.oauthAudience = try container.decodeIfPresent(String.self, forKey: .oauthAudience)
+        self.oauthClientID = try container.decodeIfPresent(String.self, forKey: .oauthClientID)
+        self.oauthClientSecret = try container.decodeIfPresent(String.self, forKey: .oauthClientSecret)
     }
-    
+
     private enum CodingKeys: String, CodingKey {
         case port
         case token
         case openapi
+        case oauthIssuer
+        case oauthAuthorize
+        case oauthTokenEndpoint
+        case oauthIntrospectionEndpoint
+        case oauthJWKS
+        case oauthAudience
+        case oauthClientID
+        case oauthClientSecret
     }
     
     func run() async throws {
@@ -116,9 +163,30 @@ final class HTTPSSECommand: AsyncParsableCommand {
                 return .authorized
             }
         }
-        
+
         // Enable OpenAPI endpoints if requested
         transport.serveOpenAPI = openapi
+
+        if let issuer = oauthIssuer,
+           let tokenURLString = oauthTokenEndpoint,
+           let issuerURL = URL(string: issuer),
+           let tokenURL = URL(string: tokenURLString) {
+
+            let authURL = URL(string: oauthAuthorize ?? issuer)
+           let introspectURL = oauthIntrospectionEndpoint.flatMap { URL(string: $0) }
+            let jwksURL = oauthJWKS.flatMap { URL(string: $0) }
+
+            transport.oauthConfiguration = OAuthConfiguration(
+                issuer: issuerURL,
+                authorizationEndpoint: authURL ?? tokenURL,
+                tokenEndpoint: tokenURL,
+                introspectionEndpoint: introspectURL,
+                jwksEndpoint: jwksURL,
+                audience: oauthAudience,
+                clientID: oauthClientID,
+                clientSecret: oauthClientSecret
+            )
+        }
         
         // Set up signal handling to shut down the transport on Ctrl+C
         signalHandler = SignalHandler(transport: transport)

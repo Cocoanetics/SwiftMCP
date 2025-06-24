@@ -10,6 +10,7 @@ A Swift implementation of the MCP (Model Context Protocol) for JSON-RPC over var
 - JSON-RPC 2.0 compliant
 - Asynchronous response handling via SSE
 - Built-in authorization support
+- Optional OAuth 2.0 validation with well-known endpoints
 - Cross-platform compatibility
 
 ## Installation
@@ -43,6 +44,14 @@ SwiftMCPDemo httpsse --port 8080 --openapi
 
 # Using HTTP+SSE with authorization and OpenAPI support
 SwiftMCPDemo httpsse --port 8080 --token your-secret-token --openapi
+
+# Using HTTP+SSE with OAuth
+SwiftMCPDemo httpsse --port 8080 \
+    --oauth-issuer https://example.com \
+    --oauth-token-endpoint https://example.com/oauth/token \
+    --oauth-introspection-endpoint https://example.com/oauth/introspect \
+    --oauth-jwks-endpoint https://example.com/.well-known/jwks.json \
+    --oauth-audience your-api-identifier
 ```
 
 When using HTTP+SSE transport with the `--token` option, clients must include an Authorization header with their requests:
@@ -54,6 +63,15 @@ Authorization: Bearer your-secret-token
 ## OpenAPI support
 
 The `--openapi` option enables OpenAPI endpoints for AI plugin integration. When this option is used, the server will provide an OpenAPI specification at `/openapi.json` and an AI plugin manifest at `/.well-known/ai-plugin.json`. This allows for easy integration with AI models and other tools that support OpenAPI.
+
+## OAuth support
+
+When `HTTPSSETransport` is configured with ``OAuthConfiguration``, the transport
+validates incoming bearer tokens through the configured OAuth provider.
+Validation can use an introspection endpoint or by checking JWT claims against
+the provider's JWKS when introspection is not available. The transport also
+serves metadata at `/.well-known/oauth-authorization-server` and
+`/.well-known/oauth-protected-resource` for discovery by clients.
 
 ## Custom Server Implementation
 
@@ -85,6 +103,18 @@ transport.authorizationHandler = { token in
     }
     return .authorized
 }
+
+// Or configure OAuth validation
+transport.oauthConfiguration = OAuthConfiguration(
+    issuer: URL(string: "https://example.com")!,
+    authorizationEndpoint: URL(string: "https://example.com/authorize")!,
+    tokenEndpoint: URL(string: "https://example.com/oauth/token")!,
+    introspectionEndpoint: URL(string: "https://example.com/oauth/introspect")!,
+    jwksEndpoint: URL(string: "https://example.com/.well-known/jwks.json")!,
+    audience: "your-api-identifier",
+    clientID: "client",
+    clientSecret: "secret"
+)
 
 try transport.run()
 ```

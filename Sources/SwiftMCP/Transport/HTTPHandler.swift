@@ -143,6 +143,17 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
             case (_, "/openapi.json"):
                 sendResponse(channel: context.channel, status: .methodNotAllowed)
 
+            // OAuth metadata
+            case (.GET, "/.well-known/oauth-authorization-server"):
+                handleOAuthAuthorizationServer(channel: context.channel)
+
+            case (.GET, "/.well-known/oauth-protected-resource"):
+                handleOAuthProtectedResource(channel: context.channel)
+
+            case (_, "/.well-known/oauth-authorization-server"),
+                 (_, "/.well-known/oauth-protected-resource"):
+                sendResponse(channel: context.channel, status: .methodNotAllowed)
+
             // Tool Endpoint
             case (.POST, let path) where path.hasPrefix(serverPath):
                 handleToolCall(context: context, head: head, body: body)
@@ -188,7 +199,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
         }
 
         // Validate token
-        if case .unauthorized(let message) = transport.authorizationHandler(token) {
+        if case .unauthorized(let message) = await transport.authorize(token) {
             let errorMessage = JSONRPCMessage.errorResponse(id: nil, error: .init(code: 401, message: "Unauthorized: \(message)"))
             await sendJSONResponse(channel: channel, status: .unauthorized, json: errorMessage, sessionId: sessionID.uuidString)
             return
@@ -372,7 +383,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
         }
 
         // Validate token
-        if case .unauthorized(let message) = transport.authorizationHandler(token) {
+        if case .unauthorized(let message) = await transport.authorize(token) {
             let errorMessage = JSONRPCMessage.errorResponse(id: nil, error: .init(code: 401, message: "Unauthorized: \(message)"))
 
             let data = try! JSONEncoder().encode(errorMessage)
@@ -523,6 +534,52 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
         }
     }
 
+    // MARK: - OAuth Metadata
+
+    /// Serve metadata for the OAuth authorization server.
+    private func handleOAuthAuthorizationServer(channel: Channel) {
+        guard let config = transport.oauthConfiguration else {
+            sendResponse(channel: channel, status: .notFound)
+            return
+        }
+
+        let metadata = config.authorizationServerMetadata()
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+
+        do {
+            let data = try encoder.encode(metadata)
+            var buffer = channel.allocator.buffer(capacity: data.count)
+            buffer.writeBytes(data)
+            sendResponse(channel: channel, status: .ok, body: buffer)
+        } catch {
+            logger.error("Failed to encode OAuth metadata: \(error)")
+            sendResponse(channel: channel, status: .internalServerError)
+        }
+    }
+
+    /// Serve metadata for the OAuth protected resource.
+    private func handleOAuthProtectedResource(channel: Channel) {
+        guard let config = transport.oauthConfiguration else {
+            sendResponse(channel: channel, status: .notFound)
+            return
+        }
+
+        let metadata = config.protectedResourceMetadata()
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+
+        do {
+            let data = try encoder.encode(metadata)
+            var buffer = channel.allocator.buffer(capacity: data.count)
+            buffer.writeBytes(data)
+            sendResponse(channel: channel, status: .ok, body: buffer)
+        } catch {
+            logger.error("Failed to encode OAuth metadata: \(error)")
+            sendResponse(channel: channel, status: .internalServerError)
+        }
+    }
+
     private func handleToolCall(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?) {
         precondition(head.method == .POST)
         precondition(transport.serveOpenAPI)
@@ -570,7 +627,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
         }
 
         // Validate token
-        if case .unauthorized(let message) = transport.authorizationHandler(token) {
+        if case .unauthorized(let message) = await transport.authorize(token) {
             let errorDict = ["error": "Unauthorized: \(message)"] as [String: String]
             let data = try! JSONEncoder().encode(errorDict)
             var buffer = allocator.buffer(capacity: data.count)
