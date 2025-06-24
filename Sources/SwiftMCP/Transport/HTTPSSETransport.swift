@@ -32,7 +32,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
 
     private let group: EventLoopGroup
     private var channel: Channel?
-    internal let channelManager = SSEChannelManager()
+    internal lazy var sessionManager = SessionManager(transport: self)
     private var keepAliveTimer: DispatchSourceTimer?
 
     /// Flag to determine whether to serve OpenAPI endpoints.
@@ -75,8 +75,9 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
 
     /// The number of active SSE channels currently connected to the server.
     var sseChannelCount: Int {
-		get async { await channelManager.channelCount }
+        get async { await sessionManager.channelCount }
     }
+
 
     // MARK: - Initialization
 
@@ -150,7 +151,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         logger.info("Stopping server...")
         stopKeepAliveTimer()
 
-        await channelManager.stopAllChannels()
+        await sessionManager.removeAllSessions()
 
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             group.shutdownGracefully { error in
@@ -192,14 +193,14 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
                 case .none:
                     return
                 case .sse:
-                    await self.channelManager.broadcastSSE(SSEMessage(data: ": keep-alive"))
+                    await self.sessionManager.broadcastSSE(SSEMessage(data: ": keep-alive"))
                 case .ping:
                     let ping = JSONRPCMessage.request(id: self.sequenceNumber, method: "ping")
                     let encoder = JSONEncoder()
                     let data = try! encoder.encode(ping)
                     let string = String(data: data, encoding: .utf8)!
                     let message = SSEMessage(data: string)
-                    await self.channelManager.broadcastSSE(message)
+                    await self.sessionManager.broadcastSSE(message)
                     self.sequenceNumber += 1
             }
         }
@@ -207,31 +208,15 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
 
     // MARK: - Request Handling
     /// Handle a JSON-RPC request and send the response through the SSE channels.
-    func handleJSONRPCRequest(_ request: JSONRPCMessage, from clientId: String) {
+    func handleJSONRPCRequest(_ request: JSONRPCMessage, from sessionID: UUID) {
         Task {
-            // Handle the JSON-RPC request
-            guard let response = await server.handleMessage(request) else {
-                // No response to send (e.g., notification)
-                return
-            }
-
-            do {
-                let encoder = JSONEncoder()
-
-                // Create ISO8601 formatter with timezone
-                encoder.dateEncodingStrategy = .iso8601WithTimeZone
-                encoder.nonConformingFloatEncodingStrategy = .convertToString(positiveInfinity: "Infinity", negativeInfinity: "-Infinity", nan: "NaN")
-
-                let jsonData = try encoder.encode(response)
-
-                guard let jsonString = String(data: jsonData, encoding: .utf8) else {
-                    logger.critical("Cannot convert JSON data to string")
+            try await sessionManager.session(id: sessionID).work { _ in
+                guard let response = await server.handleMessage(request) else {
+                    // No response to send (e.g., notification)
                     return
                 }
 
-                await channelManager.sendSSE(SSEMessage(data: jsonString), to: clientId)
-            } catch {
-                logger.critical("Failed to encode response: \(error.localizedDescription)")
+                try await send(response)
             }
         }
     }
@@ -240,24 +225,24 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     /// Broadcast a named event to all connected SSE clients.
     func broadcastSSE(_ message: SSEMessage) {
         Task {
-            await channelManager.broadcastSSE(message)
+            await sessionManager.broadcastSSE(message)
         }
     }
 
     /// Register a new SSE channel.
     func registerSSEChannel(_ channel: Channel, id: UUID) {
         Task {
-            await channelManager.register(channel: channel, id: id)
-            let count = await channelManager.channelCount
+            await sessionManager.register(channel: channel, id: id)
+            let count = await sessionManager.channelCount
             logger.info("New SSE channel registered (total: \(count))")
         }
 
         channel.closeFuture.whenComplete { [weak self] _ in
             guard let self = self else { return }
             Task {
-                let removed = await self.channelManager.removeChannel(id: id)
+                let removed = await self.sessionManager.removeChannel(id: id)
                 if removed {
-                    let count = await self.channelManager.channelCount
+                    let count = await self.sessionManager.channelCount
                     self.logger.info("SSE channel removed (remaining: \(count))")
                 }
             }
@@ -265,9 +250,23 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     }
 
     /// Send a message to a specific client.
-    func sendSSE(_ message: SSEMessage, to clientId: String) {
+    func sendSSE(_ message: SSEMessage, to sessionID: UUID) {
         Task {
-            await channelManager.sendSSE(message, to: clientId)
+            let session = await sessionManager.session(id: sessionID)
+            session.sendSSE(message)
         }
+    }
+
+
+    // MARK: - Transport
+
+    /// Send raw data to the client associated with the current `Session`.
+    public func send(_ data: Data) async throws {
+        precondition(Session.current != nil, "Attempted to send without an active session")
+        let session = Session.current!
+
+        let string = String(data: data, encoding: .utf8) ?? ""
+        let message = SSEMessage(data: string)
+        session.sendSSE(message)
     }
 }
