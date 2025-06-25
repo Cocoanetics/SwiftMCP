@@ -5,7 +5,7 @@ import Logging
 
 
 /// HTTP request handler for the SSE transport
-final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendable {
+final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @unchecked Sendable, URLSessionTaskDelegate {
     typealias InboundIn = HTTPServerRequestPart
     typealias OutboundOut = HTTPServerResponsePart
 
@@ -154,7 +154,10 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
                 }
 
             case (.GET, let path) where path.hasPrefix("/oauth/callback"):
-                handleOAuthCallback(channel: context.channel, head: head)
+                let channel = context.channel
+                Task {
+                    await self.handleOAuthCallback(channel: channel, head: head)
+                }
 
             case (.POST, "/token"):
                 let channel = context.channel
@@ -410,11 +413,11 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
         let head = HTTPResponseHead(version: .http1_1, status: status, headers: responseHeaders)
         
         do {
-            _ = try await channel.write(HTTPServerResponsePart.head(head)).get()
+            try await channel.write(HTTPServerResponsePart.head(head))
             if let body = body {
-                _ = try await channel.write(HTTPServerResponsePart.body(.byteBuffer(body))).get()
+                try await channel.write(HTTPServerResponsePart.body(.byteBuffer(body)))
             }
-            _ = try await channel.writeAndFlush(HTTPServerResponsePart.end(nil)).get()
+            try await channel.writeAndFlush(HTTPServerResponsePart.end(nil))
         } catch {
             logger.error("Failed to send response: \(error)")
             // If the channel is closed, there's nothing more we can do.
@@ -785,25 +788,53 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
             await self.sendResponseAsync(channel: channel, status: .internalServerError, body: buffer)
             return
         }
-        
-        // Extract state from query params
+
+        // 1. Extract original redirect_uri and state from the initial client request
         guard let components = URLComponents(string: head.uri),
-              let state = components.queryItems?.first(where: { $0.name == "state" })?.value else {
-            let buffer = self.stringBuffer("Missing 'state' parameter in request from client", allocator: channel.allocator)
+              let originalState = components.queryItems?.first(where: { $0.name == "state" })?.value,
+              let originalRedirectURI = components.queryItems?.first(where: { $0.name == "redirect_uri" })?.value else {
+            let buffer = self.stringBuffer("Missing 'state' or 'redirect_uri' parameter in request from client", allocator: channel.allocator)
             await self.sendResponseAsync(channel: channel, status: .badRequest, body: buffer)
             return
         }
 
-        let baseURL = self.getBaseURL(from: head)
-        let redirectURI = "\(baseURL)/oauth/callback"
+        // 2. Generate a new state for our server to track this request
+        let serverState = UUID().uuidString
+
+        // 3. Store the original client info against our new server state
+        await transport.sessionManager.storeOAuthState(serverState: serverState, originalRedirectURI: originalRedirectURI, originalState: originalState)
+
+        // 4. Construct the URL to redirect the user to Auth0
+        
+        // The redirect URI for Auth0 must be our own /oauth/callback endpoint
+        var callbackURLComponents = URLComponents()
+        callbackURLComponents.scheme = head.headers["X-Forwarded-Proto"].first ?? "http"
+        callbackURLComponents.host = head.headers["X-Forwarded-Host"].first ?? transport.host
+        
+        // When using a forwarded host (like ngrok), the port is implicit (443 for https).
+        // Only add the local transport port if we are not behind such a proxy.
+        if head.headers["X-Forwarded-Host"] == nil {
+            let transportPort = transport.port
+            if !((callbackURLComponents.scheme == "http" && transportPort == 80) || (callbackURLComponents.scheme == "https" && transportPort == 443)) {
+                callbackURLComponents.port = transportPort
+            }
+        }
+        
+        callbackURLComponents.path = "/oauth/callback"
+        
+        guard let callbackURL = callbackURLComponents.url else {
+             let buffer = self.stringBuffer("Could not construct callback URL", allocator: channel.allocator)
+             await self.sendResponseAsync(channel: channel, status: .internalServerError, body: buffer)
+             return
+        }
 
         var authURLComponents = URLComponents(url: config.authorizationEndpoint, resolvingAgainstBaseURL: false)!
         var queryItems = [
             URLQueryItem(name: "response_type", value: "code"),
             URLQueryItem(name: "client_id", value: clientID),
-            URLQueryItem(name: "redirect_uri", value: redirectURI),
-            URLQueryItem(name: "scope", value: "openid profile email"), // Standard scopes
-            URLQueryItem(name: "state", value: state)
+            URLQueryItem(name: "redirect_uri", value: callbackURL.absoluteString),
+            URLQueryItem(name: "scope", value: "openid profile email"),
+            URLQueryItem(name: "state", value: serverState) // Use our server-generated state
         ]
 
         if let audience = config.audience {
@@ -817,83 +848,61 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
             return
         }
         
-        // --- Transparent Proxy Logic ---
-        var auth0Request = URLRequest(url: authURL)
-        auth0Request.httpMethod = "GET"
-
-        // Forward essential client headers to Auth0 to ensure a consistent user experience
-        let headersToForward = ["user-agent", "accept", "accept-language", "accept-encoding", "cookie"]
-        head.headers.forEach { name, value in
-            if headersToForward.contains(name.lowercased()) {
-                auth0Request.addValue(value, forHTTPHeaderField: name)
-            }
-        }
-
-        do {
-            let (data, response) = try await URLSession.shared.data(for: auth0Request)
-            guard let httpResponse = response as? HTTPURLResponse else {
-                await self.sendJSONResponseAsync(channel: channel, status: .internalServerError, json: ["error": "Invalid response from auth server"])
-                return
-            }
-
-            // Forward the response (body and status) from Auth0 back to the client
-            var responseBuffer = channel.allocator.buffer(capacity: data.count)
-            responseBuffer.writeBytes(data)
-            
-            var responseHeaders = HTTPHeaders()
-            // Copy headers from Auth0 response to our response
-            let headersToExclude = ["content-encoding", "content-length", "transfer-encoding", "connection"]
-            httpResponse.allHeaderFields.forEach { key, value in
-                if let keyString = key as? String, let valueString = value as? String, !headersToExclude.contains(keyString.lowercased()) {
-                    responseHeaders.add(name: keyString, value: valueString)
-                }
-            }
-
-            // Add our own headers
-            responseHeaders.add(name: "Access-Control-Allow-Origin", value: "*")
-            
-            await self.sendResponseAsync(channel: channel, status: HTTPResponseStatus(statusCode: httpResponse.statusCode), headers: responseHeaders, body: responseBuffer)
-            
-        } catch {
-            await self.sendJSONResponseAsync(channel: channel, status: .internalServerError, json: ["error": "Failed to proxy request to auth server: \(error.localizedDescription)"])
-        }
+        // 5. Redirect the client to the Auth0 authorization URL
+        logger.info("Redirecting client to Auth0 for authorization.")
+        var headers = HTTPHeaders()
+        headers.add(name: "Location", value: authURL.absoluteString)
+        await self.sendResponseAsync(channel: channel, status: .found, headers: headers)
     }
 
-    private func handleOAuthCallback(channel: Channel, head: HTTPRequestHead) {
-        // Extract code and state from query params coming from Auth0
+    private func handleOAuthCallback(channel: Channel, head: HTTPRequestHead) async {
+        // 1. Extract the authorization code and our server-generated state from Auth0's callback
         guard let components = URLComponents(string: head.uri),
               let code = components.queryItems?.first(where: { $0.name == "code" })?.value,
-              let state = components.queryItems?.first(where: { $0.name == "state" })?.value else {
-            let buffer = self.stringBuffer("Missing 'code' or 'state' parameter in callback from Auth0", allocator: channel.allocator)
-            sendResponse(channel: channel, status: .badRequest, body: buffer)
+              let serverState = components.queryItems?.first(where: { $0.name == "state" })?.value else {
+            let buffer = self.stringBuffer("Invalid callback from Auth0: missing 'code' or 'state' parameter.", allocator: channel.allocator)
+            await self.sendResponseAsync(channel: channel, status: .badRequest, body: buffer)
             return
         }
 
-        // This plugin ID is from the user's logs. In a real application, this might need to be configurable.
-        let pluginID = "g-5aa1662d0c86ed8b923f23cc50a63d7dba1be5bf"
-        let gptCallbackURL = "https://chat.openai.com/aip/\(pluginID)/oauth/callback"
+        // 2. Retrieve the original client's redirect URI and state
+        guard let (originalRedirectURI, originalState) = await transport.sessionManager.retrieveOAuthState(serverState: serverState) else {
+            let buffer = self.stringBuffer("Invalid or expired 'state' parameter in callback from Auth0.", allocator: channel.allocator)
+            await self.sendResponseAsync(channel: channel, status: .badRequest, body: buffer)
+            return
+        }
 
-        var gptURLComponents = URLComponents(string: gptCallbackURL)!
+        // 3. Construct the final redirect URL for the original client (e.g., ChatGPT)
+        guard var gptURLComponents = URLComponents(string: originalRedirectURI) else {
+            let buffer = self.stringBuffer("Invalid original redirect URI stored.", allocator: channel.allocator)
+            await self.sendResponseAsync(channel: channel, status: .internalServerError, body: buffer)
+            return
+        }
+        
         gptURLComponents.queryItems = [
             URLQueryItem(name: "code", value: code),
-            URLQueryItem(name: "state", value: state)
+            URLQueryItem(name: "state", value: originalState) // Pass back the original state
         ]
         
         guard let finalURL = gptURLComponents.url else {
-            let buffer = self.stringBuffer("Could not construct GPT callback URL", allocator: channel.allocator)
-            sendResponse(channel: channel, status: .internalServerError, body: buffer)
+            let buffer = self.stringBuffer("Could not construct final client callback URL.", allocator: channel.allocator)
+            await self.sendResponseAsync(channel: channel, status: .internalServerError, body: buffer)
             return
         }
 
+        // 4. Redirect the client to the final destination
+        logger.info("Redirecting client back to original redirect URI.")
         var headers = HTTPHeaders()
         headers.add(name: "Location", value: finalURL.absoluteString)
-        sendResponse(channel: channel, status: .found, headers: headers)
+        await self.sendResponseAsync(channel: channel, status: .found, headers: headers)
     }
 
     private func handleTokenProxy(channel: Channel, head: HTTPRequestHead, body: ByteBuffer?) async {
+        logger.info("Handling token proxy request")
         guard let config = transport.oauthConfiguration,
               let clientID = config.clientID,
               let clientSecret = config.clientSecret else {
+            logger.error("OAuth not configured correctly - missing clientID or clientSecret")
             await self.sendJSONResponseAsync(channel: channel, status: .internalServerError, json: ["error": "OAuth not configured correctly on server"])
             return
         }
@@ -945,6 +954,14 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
         } catch {
             await self.sendJSONResponseAsync(channel: channel, status: .internalServerError, json: ["error": "Failed to proxy request to auth server: \(error.localizedDescription)"])
         }
+    }
+
+    // MARK: - URLSessionTaskDelegate
+    
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
+        // Don't follow redirects. Let the original data task complete with the redirect response.
+        logger.info("URLSession delegate detected redirect, preventing follow.")
+        completionHandler(nil)
     }
 
     // MARK: - Helpers
