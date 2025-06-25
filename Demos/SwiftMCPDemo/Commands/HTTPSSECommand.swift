@@ -81,18 +81,6 @@ final class HTTPSSECommand: AsyncParsableCommand {
     @Option(name: .long, help: "OAuth issuer URL")
     var oauthIssuer: String?
 
-    @Option(name: .long, help: "OAuth authorization endpoint")
-    var oauthAuthorize: String?
-
-    @Option(name: .long, help: "OAuth token endpoint")
-    var oauthTokenEndpoint: String?
-
-    @Option(name: .long, help: "OAuth introspection endpoint")
-    var oauthIntrospectionEndpoint: String?
-
-    @Option(name: .long, help: "OAuth JWKS endpoint")
-    var oauthJWKS: String?
-
     @Option(name: .long, help: "OAuth audience")
     var oauthAudience: String?
 
@@ -101,9 +89,6 @@ final class HTTPSSECommand: AsyncParsableCommand {
 
     @Option(name: .long, help: "OAuth client secret")
     var oauthClientSecret: String?
-
-    @Option(name: .long, help: "OAuth dynamic client registration endpoint")
-    var oauthRegistrationEndpoint: String?
     
     // Make this a computed property instead of stored property
     private var signalHandler: SignalHandler? = nil
@@ -117,14 +102,9 @@ final class HTTPSSECommand: AsyncParsableCommand {
         self.token = try container.decodeIfPresent(String.self, forKey: .token)
         self.openapi = try container.decode(Bool.self, forKey: .openapi)
         self.oauthIssuer = try container.decodeIfPresent(String.self, forKey: .oauthIssuer)
-        self.oauthAuthorize = try container.decodeIfPresent(String.self, forKey: .oauthAuthorize)
-        self.oauthTokenEndpoint = try container.decodeIfPresent(String.self, forKey: .oauthTokenEndpoint)
-        self.oauthIntrospectionEndpoint = try container.decodeIfPresent(String.self, forKey: .oauthIntrospectionEndpoint)
-        self.oauthJWKS = try container.decodeIfPresent(String.self, forKey: .oauthJWKS)
         self.oauthAudience = try container.decodeIfPresent(String.self, forKey: .oauthAudience)
         self.oauthClientID = try container.decodeIfPresent(String.self, forKey: .oauthClientID)
         self.oauthClientSecret = try container.decodeIfPresent(String.self, forKey: .oauthClientSecret)
-        self.oauthRegistrationEndpoint = try container.decodeIfPresent(String.self, forKey: .oauthRegistrationEndpoint)
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -132,14 +112,9 @@ final class HTTPSSECommand: AsyncParsableCommand {
         case token
         case openapi
         case oauthIssuer
-        case oauthAuthorize
-        case oauthTokenEndpoint
-        case oauthIntrospectionEndpoint
-        case oauthJWKS
         case oauthAudience
         case oauthClientID
         case oauthClientSecret
-        case oauthRegistrationEndpoint
     }
     
     func run() async throws {
@@ -172,27 +147,16 @@ final class HTTPSSECommand: AsyncParsableCommand {
         // Enable OpenAPI endpoints if requested
         transport.serveOpenAPI = openapi
 
-        if let issuer = oauthIssuer,
-           let tokenURLString = oauthTokenEndpoint,
-           let issuerURL = URL(string: issuer),
-           let tokenURL = URL(string: tokenURLString) {
-
-            let authURL = URL(string: oauthAuthorize ?? issuer)
-            let introspectURL = oauthIntrospectionEndpoint.flatMap { URL(string: $0) }
-            let jwksURL = oauthJWKS.flatMap { URL(string: $0) }
-            let regURL = oauthRegistrationEndpoint.flatMap { URL(string: $0) }
-
-            transport.oauthConfiguration = OAuthConfiguration(
-                issuer: issuerURL,
-                authorizationEndpoint: authURL ?? tokenURL,
-                tokenEndpoint: tokenURL,
-                introspectionEndpoint: introspectURL,
-                jwksEndpoint: jwksURL,
-                audience: oauthAudience,
-                clientID: oauthClientID,
-                clientSecret: oauthClientSecret,
-                registrationEndpoint: regURL
-            )
+        if let issuerString = oauthIssuer,
+           let issuerURL = URL(string: issuerString)
+        {
+            if let config = await OAuthConfiguration(issuer: issuerURL,
+                                                     audience: oauthAudience,
+                                                     clientID: oauthClientID,
+                                                     clientSecret: oauthClientSecret)
+            {
+                transport.oauthConfiguration = config
+            }
         }
         
         // Set up signal handling to shut down the transport on Ctrl+C
