@@ -159,7 +159,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
                     await self.handleOAuthCallback(channel: channel, head: head)
                 }
 
-            case (.POST, "/token"):
+            case (.POST, "/oauth/token"):
                 let channel = context.channel
                 Task {
                     await self.handleTokenProxy(channel: channel, head: head, body: body)
@@ -879,10 +879,11 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             return
         }
         
-        gptURLComponents.queryItems = [
-            URLQueryItem(name: "code", value: code),
-            URLQueryItem(name: "state", value: originalState) // Pass back the original state
-        ]
+        // Append the code and state to any existing query items.
+        var queryItems = gptURLComponents.queryItems ?? []
+        queryItems.append(URLQueryItem(name: "code", value: code))
+        queryItems.append(URLQueryItem(name: "state", value: originalState))
+        gptURLComponents.queryItems = queryItems
         
         guard let finalURL = gptURLComponents.url else {
             let buffer = self.stringBuffer("Could not construct final client callback URL.", allocator: channel.allocator)
@@ -916,12 +917,24 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         let queryString = "?" + (requestBody.getString(at: requestBody.readerIndex, length: requestBody.readableBytes) ?? "")
         let clientParams = Dictionary(uniqueKeysWithValues: (URLComponents(string: queryString)?.queryItems ?? []).map { ($0.name, $0.value ?? "") })
 
+        // Reconstruct our server's callback URL, which is what Auth0 expects for the redirect_uri.
+        var callbackURLComponents = URLComponents()
+        callbackURLComponents.scheme = head.headers["X-Forwarded-Proto"].first ?? "http"
+        callbackURLComponents.host = head.headers["X-Forwarded-Host"].first ?? transport.host
+        callbackURLComponents.path = "/oauth/callback"
+        
+        guard let callbackURL = callbackURLComponents.url else {
+            logger.error("Could not construct callback URL for token proxy.")
+            await self.sendJSONResponseAsync(channel: channel, status: .internalServerError, json: ["error": "Could not construct callback URL for token proxy."])
+            return
+        }
+
         // Build the request to Auth0 using server's credentials
         var formBody = URLComponents()
         formBody.queryItems = [
             URLQueryItem(name: "grant_type", value: clientParams["grant_type"]),
             URLQueryItem(name: "code", value: clientParams["code"]),
-            URLQueryItem(name: "redirect_uri", value: clientParams["redirect_uri"]), // This must match what was sent in /authorize
+            URLQueryItem(name: "redirect_uri", value: callbackURL.absoluteString),
             URLQueryItem(name: "client_id", value: clientID),
             URLQueryItem(name: "client_secret", value: clientSecret)
         ]
@@ -943,11 +956,17 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             responseBuffer.writeBytes(data)
             
             var headers = HTTPHeaders()
+            // Copy headers from Auth0 response, but exclude problematic ones that describe the payload's transfer,
+            // since URLSession has already decoded the payload for us.
+            let headersToExclude = ["transfer-encoding", "connection", "content-encoding"]
             httpResponse.allHeaderFields.forEach { key, value in
-                if let keyString = key as? String, let valueString = value as? String {
+                if let keyString = key as? String, let valueString = value as? String, !headersToExclude.contains(keyString.lowercased()) {
                      headers.add(name: keyString, value: valueString)
                 }
             }
+            
+            // Set the correct content-length for the DECOMPRESSED data we are sending.
+            headers.replaceOrAdd(name: "Content-Length", value: "\(data.count)")
             
             await self.sendResponseAsync(channel: channel, status: HTTPResponseStatus(statusCode: httpResponse.statusCode), headers: headers, body: responseBuffer)
             
