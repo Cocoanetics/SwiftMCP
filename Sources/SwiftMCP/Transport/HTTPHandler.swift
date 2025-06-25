@@ -359,16 +359,11 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             }
         }
 
-        // Validate token
+        // Validate token first; if unauthorized reply immediately and abort.
         if case .unauthorized(let message) = await transport.authorize(token, sessionID: sessionID) {
-            let errorMessage = JSONRPCMessage.errorResponse(id: nil, error: .init(code: 401, message: "Unauthorized: \(message)"))
-
-            let data = try! JSONEncoder().encode(errorMessage)
-            let errorResponse = String(data: data, encoding: .utf8)!
-
-            // Send error via SSE
-            let sseMessage = SSEMessage(data: errorResponse)
-            transport.sendSSE(sseMessage, to: sessionID)
+            let err = JSONRPCMessage.errorResponse(id: nil, error: .init(code: 401, message: "Unauthorized: \(message)"))
+            await self.sendJSONResponseAsync(channel: channel, status: .unauthorized, json: err, sessionId: sessionID.uuidString)
+            return
         }
 
         guard let body = body else {
