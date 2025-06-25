@@ -104,9 +104,6 @@ final class HTTPSSECommand: AsyncParsableCommand {
 
     @Option(name: .long, help: "OAuth dynamic client registration endpoint")
     var oauthRegistrationEndpoint: String?
-
-    @Option(name: .long, help: "OAuth redirect URI (callback URL)")
-    var oauthRedirectURI: String?
     
     // Make this a computed property instead of stored property
     private var signalHandler: SignalHandler? = nil
@@ -128,7 +125,6 @@ final class HTTPSSECommand: AsyncParsableCommand {
         self.oauthClientID = try container.decodeIfPresent(String.self, forKey: .oauthClientID)
         self.oauthClientSecret = try container.decodeIfPresent(String.self, forKey: .oauthClientSecret)
         self.oauthRegistrationEndpoint = try container.decodeIfPresent(String.self, forKey: .oauthRegistrationEndpoint)
-        self.oauthRedirectURI = try container.decodeIfPresent(String.self, forKey: .oauthRedirectURI)
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -144,7 +140,6 @@ final class HTTPSSECommand: AsyncParsableCommand {
         case oauthClientID
         case oauthClientSecret
         case oauthRegistrationEndpoint
-        case oauthRedirectURI
     }
     
     func run() async throws {
@@ -186,7 +181,6 @@ final class HTTPSSECommand: AsyncParsableCommand {
             let introspectURL = oauthIntrospectionEndpoint.flatMap { URL(string: $0) }
             let jwksURL = oauthJWKS.flatMap { URL(string: $0) }
             let regURL = oauthRegistrationEndpoint.flatMap { URL(string: $0) }
-            let redirectURI = oauthRedirectURI
 
             transport.oauthConfiguration = OAuthConfiguration(
                 issuer: issuerURL,
@@ -197,8 +191,7 @@ final class HTTPSSECommand: AsyncParsableCommand {
                 audience: oauthAudience,
                 clientID: oauthClientID,
                 clientSecret: oauthClientSecret,
-                registrationEndpoint: regURL,
-                redirectURI: redirectURI
+                registrationEndpoint: regURL
             )
         }
         

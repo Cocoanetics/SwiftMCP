@@ -25,8 +25,6 @@ public struct OAuthConfiguration: Sendable {
     private let tokenValidator: (@Sendable (String?) async -> Bool)?
     /// The OAuth dynamic client registration endpoint (optional)
     public let registrationEndpoint: URL?
-    /// The OAuth redirect URI (optional)
-    public let redirectURI: String?
 
     public init(
         issuer: URL,
@@ -38,7 +36,6 @@ public struct OAuthConfiguration: Sendable {
         clientID: String? = nil,
         clientSecret: String? = nil,
         registrationEndpoint: URL? = nil,
-        redirectURI: String? = nil,
         tokenValidator: (@Sendable (String?) async -> Bool)? = nil
     ) {
         self.issuer = issuer
@@ -50,7 +47,6 @@ public struct OAuthConfiguration: Sendable {
         self.clientID = clientID
         self.clientSecret = clientSecret
         self.registrationEndpoint = registrationEndpoint
-        self.redirectURI = redirectURI
         self.tokenValidator = tokenValidator
     }
 
