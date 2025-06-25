@@ -148,7 +148,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
                 handleOAuthAuthorizationServer(channel: context.channel)
 
             case (.GET, "/.well-known/oauth-protected-resource"):
-                handleOAuthProtectedResource(channel: context.channel)
+                handleOAuthProtectedResource(channel: context.channel, head: head)
 
             case (_, "/.well-known/oauth-authorization-server"),
                  (_, "/.well-known/oauth-protected-resource"):
@@ -340,7 +340,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 									 headers: headers)
 
         logger.info("Sending SSE response headers")
-        context.write(wrapOutboundOut(.head(response)), promise: nil)
+        context.write(wrapOutboundOut(.head(response)))
         context.flush()
 
         // Conditionally send endpoint event (only for old protocol)
@@ -559,13 +559,48 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
     }
 
     /// Serve metadata for the OAuth protected resource.
-    private func handleOAuthProtectedResource(channel: Channel) {
+    private func handleOAuthProtectedResource(channel: Channel, head: HTTPRequestHead) {
         guard let config = transport.oauthConfiguration else {
             sendResponse(channel: channel, status: .notFound)
             return
         }
 
-        let metadata = config.protectedResourceMetadata()
+        // Build the resource base URL from the incoming request headers
+        // Use forwarded headers if present, otherwise use transport defaults
+        let host: String
+        let scheme: String
+        let port: Int
+
+        if let forwardedHost = head.headers["X-Forwarded-Host"].first {
+            host = forwardedHost
+        } else if let hostHeader = head.headers["Host"].first {
+            host = hostHeader
+        } else {
+            host = transport.host
+        }
+
+        if let forwardedProto = head.headers["X-Forwarded-Proto"].first {
+            scheme = forwardedProto
+        } else {
+            scheme = "http"
+        }
+
+        if let forwardedPort = head.headers["X-Forwarded-Port"].first, let p = Int(forwardedPort) {
+            port = p
+        } else {
+            port = transport.port
+        }
+
+        // Compose the base URL (include port if not default)
+        var resourceBaseURL = "\(scheme)://\(host)"
+        if !(scheme == "http" && port == 80) && !(scheme == "https" && port == 443) {
+            // Only add port if not default for scheme and not already present in host
+            if !host.contains(":") {
+                resourceBaseURL += ":\(port)"
+            }
+        }
+
+        let metadata = config.protectedResourceMetadata(resourceBaseURL: resourceBaseURL)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
 
@@ -799,13 +834,13 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
         responseHeaders.add(name: "Access-Control-Allow-Origin", value: "*")
 
         let head = HTTPResponseHead(version: .http1_1, status: status, headers: responseHeaders)
-        channel.write(HTTPServerResponsePart.head(head), promise: nil)
+        channel.write(HTTPServerResponsePart.head(head))
 
         if let body = body {
-            channel.write(HTTPServerResponsePart.body(.byteBuffer(body)), promise: nil)
+            channel.write(HTTPServerResponsePart.body(.byteBuffer(body)))
         }
 
-        channel.write(HTTPServerResponsePart.end(nil), promise: nil)
+        channel.write(HTTPServerResponsePart.end(nil))
         channel.flush()
     }
 }

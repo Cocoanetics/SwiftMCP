@@ -23,6 +23,10 @@ public struct OAuthConfiguration: Sendable {
     public let clientSecret: String?
     /// Optional custom validator closure.
     private let tokenValidator: (@Sendable (String?) async -> Bool)?
+    /// The OAuth dynamic client registration endpoint (optional)
+    public let registrationEndpoint: URL?
+    /// The OAuth redirect URI (optional)
+    public let redirectURI: String?
 
     public init(
         issuer: URL,
@@ -33,6 +37,8 @@ public struct OAuthConfiguration: Sendable {
         audience: String? = nil,
         clientID: String? = nil,
         clientSecret: String? = nil,
+        registrationEndpoint: URL? = nil,
+        redirectURI: String? = nil,
         tokenValidator: (@Sendable (String?) async -> Bool)? = nil
     ) {
         self.issuer = issuer
@@ -43,6 +49,8 @@ public struct OAuthConfiguration: Sendable {
         self.audience = audience
         self.clientID = clientID
         self.clientSecret = clientSecret
+        self.registrationEndpoint = registrationEndpoint
+        self.redirectURI = redirectURI
         self.tokenValidator = tokenValidator
     }
 
@@ -59,7 +67,7 @@ public struct OAuthConfiguration: Sendable {
             var request = URLRequest(url: introspectionEndpoint)
             request.httpMethod = "POST"
             request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-            var body = "token=\(token)"
+            let body = "token=\(token)"
             if let clientID, let clientSecret {
                 let credentials = "\(clientID):\(clientSecret)"
                 if let data = credentials.data(using: .utf8) {
@@ -133,27 +141,56 @@ public struct OAuthConfiguration: Sendable {
         public let authorization_endpoint: String
         public let token_endpoint: String
         public let introspection_endpoint: String?
+        public let jwks_uri: String?
+        public let response_types_supported: [String]
+        public let grant_types_supported: [String]
+        public let scopes_supported: [String]
+        public let registration_endpoint: String?
+        public let code_challenge_methods_supported: [String]?
     }
 
     /// Metadata for the `/.well-known/oauth-protected-resource` endpoint.
     public struct ProtectedResourceMetadata: Encodable {
+        public let resource: String
         public let issuer: String
         public let token_endpoint: String
+        public let jwks_uri: String?
+        public let scopes_supported: [String]
     }
 
     public func authorizationServerMetadata() -> AuthorizationServerMetadata {
-        AuthorizationServerMetadata(
+        let regEndpoint = registrationEndpoint?.absoluteString
+        print("[OAuthConfiguration] registration_endpoint: \(String(describing: regEndpoint))")
+        // Ensure authorization_endpoint ends with /authorize
+        let authEndpoint: String
+        if authorizationEndpoint.path.hasSuffix("/authorize") {
+            authEndpoint = authorizationEndpoint.absoluteString
+        } else {
+            authEndpoint = issuer.appendingPathComponent("authorize").absoluteString
+        }
+        let meta = AuthorizationServerMetadata(
             issuer: issuer.absoluteString,
-            authorization_endpoint: authorizationEndpoint.absoluteString,
+            authorization_endpoint: authEndpoint,
             token_endpoint: tokenEndpoint.absoluteString,
-            introspection_endpoint: introspectionEndpoint?.absoluteString
+            introspection_endpoint: introspectionEndpoint?.absoluteString,
+            jwks_uri: (jwksEndpoint ?? issuer.appendingPathComponent(".well-known/jwks.json")).absoluteString,
+            response_types_supported: ["code", "token"],
+            grant_types_supported: ["authorization_code", "client_credentials", "refresh_token"],
+            scopes_supported: ["openid", "profile", "email"],
+            registration_endpoint: regEndpoint,
+            code_challenge_methods_supported: ["S256"]
         )
+        print("[OAuthConfiguration] authorizationServerMetadata: \(meta)")
+        return meta
     }
 
-    public func protectedResourceMetadata() -> ProtectedResourceMetadata {
+    public func protectedResourceMetadata(resourceBaseURL: String? = nil) -> ProtectedResourceMetadata {
         ProtectedResourceMetadata(
+            resource: resourceBaseURL ?? issuer.absoluteString,
             issuer: issuer.absoluteString,
-            token_endpoint: tokenEndpoint.absoluteString
+            token_endpoint: tokenEndpoint.absoluteString,
+            jwks_uri: (jwksEndpoint ?? issuer.appendingPathComponent(".well-known/jwks.json")).absoluteString,
+            scopes_supported: ["openid", "profile", "email"]
         )
     }
 }
