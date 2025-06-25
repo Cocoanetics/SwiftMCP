@@ -5,17 +5,20 @@ public struct JWTTokenValidator: Sendable {
     private let decoder: JWTDecoder
     private let expectedIssuer: String?
     private let expectedAudience: String?
+    private let expectedAuthorizedParty: String?
     private let allowedClockSkew: TimeInterval
     
     /// Initialize a JWT token validator
     /// - Parameters:
     ///   - expectedIssuer: The expected issuer (e.g., "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/")
     ///   - expectedAudience: The expected audience (e.g., "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/api/v2/")
+    ///   - expectedAuthorizedParty: The expected authorized party / client ID (e.g., "n4vmrjiAhmoE1P1JvjvF1iU8m1RTq3yi")
     ///   - allowedClockSkew: Clock skew tolerance in seconds (default: 60)
-    public init(expectedIssuer: String? = nil, expectedAudience: String? = nil, allowedClockSkew: TimeInterval = 60) {
+    public init(expectedIssuer: String? = nil, expectedAudience: String? = nil, expectedAuthorizedParty: String? = nil, allowedClockSkew: TimeInterval = 60) {
         self.decoder = JWTDecoder()
         self.expectedIssuer = expectedIssuer
         self.expectedAudience = expectedAudience
+        self.expectedAuthorizedParty = expectedAuthorizedParty
         self.allowedClockSkew = allowedClockSkew
     }
     
@@ -28,6 +31,7 @@ public struct JWTTokenValidator: Sendable {
             let options = JWTDecoder.ValidationOptions(
                 expectedIssuer: expectedIssuer,
                 expectedAudience: expectedAudience,
+                expectedAuthorizedParty: expectedAuthorizedParty,
                 allowedClockSkew: allowedClockSkew
             )
             _ = try decoder.decodeAndValidate(token, options: options)
@@ -45,6 +49,7 @@ public struct JWTTokenValidator: Sendable {
         let options = JWTDecoder.ValidationOptions(
             expectedIssuer: expectedIssuer,
             expectedAudience: expectedAudience,
+            expectedAuthorizedParty: expectedAuthorizedParty,
             allowedClockSkew: allowedClockSkew
         )
         return try decoder.decodeAndValidate(token, options: options)

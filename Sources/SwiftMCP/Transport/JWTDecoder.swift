@@ -158,6 +158,7 @@ public struct JWTDecoder: Sendable {
         case notYetValid
         case invalidIssuer(expected: String, actual: String?)
         case invalidAudience(expected: String, actual: [String])
+        case invalidAuthorizedParty(expected: String, actual: String?)
         
         public static func == (lhs: JWTError, rhs: JWTError) -> Bool {
             switch (lhs, rhs) {
@@ -170,6 +171,8 @@ public struct JWTDecoder: Sendable {
             case (.invalidIssuer(let lExpected, let lActual), .invalidIssuer(let rExpected, let rActual)):
                 return lExpected == rExpected && lActual == rActual
             case (.invalidAudience(let lExpected, let lActual), .invalidAudience(let rExpected, let rActual)):
+                return lExpected == rExpected && lActual == rActual
+            case (.invalidAuthorizedParty(let lExpected, let lActual), .invalidAuthorizedParty(let rExpected, let rActual)):
                 return lExpected == rExpected && lActual == rActual
             default:
                 return false
@@ -192,6 +195,8 @@ public struct JWTDecoder: Sendable {
                 return "JWT issuer validation failed. Expected: \(expected), Actual: \(actual ?? "nil")"
             case .invalidAudience(let expected, let actual):
                 return "JWT audience validation failed. Expected: \(expected), Actual: \(actual)"
+            case .invalidAuthorizedParty(let expected, let actual):
+                return "JWT authorized party validation failed. Expected: \(expected), Actual: \(actual ?? "nil")"
             }
         }
     }
@@ -200,11 +205,13 @@ public struct JWTDecoder: Sendable {
     public struct ValidationOptions {
         public let expectedIssuer: String?
         public let expectedAudience: String?
+        public let expectedAuthorizedParty: String?
         public let allowedClockSkew: TimeInterval
         
-        public init(expectedIssuer: String? = nil, expectedAudience: String? = nil, allowedClockSkew: TimeInterval = 60) {
+        public init(expectedIssuer: String? = nil, expectedAudience: String? = nil, expectedAuthorizedParty: String? = nil, allowedClockSkew: TimeInterval = 60) {
             self.expectedIssuer = expectedIssuer
             self.expectedAudience = expectedAudience
+            self.expectedAuthorizedParty = expectedAuthorizedParty
             self.allowedClockSkew = allowedClockSkew
         }
     }
@@ -277,6 +284,13 @@ public struct JWTDecoder: Sendable {
             guard let audience = jwt.payload.aud, audience.contains(expectedAudience) else {
                 let actualAudiences = jwt.payload.aud?.values ?? []
                 throw JWTError.invalidAudience(expected: expectedAudience, actual: actualAudiences)
+            }
+        }
+        
+        // Check authorized party
+        if let expectedAzp = options.expectedAuthorizedParty {
+            guard jwt.payload.azp == expectedAzp else {
+                throw JWTError.invalidAuthorizedParty(expected: expectedAzp, actual: jwt.payload.azp)
             }
         }
     }

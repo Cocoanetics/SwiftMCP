@@ -326,6 +326,55 @@ struct JWTDecoderTests {
         #expect(!configInvalid)
     }
     
+    @Test("Validate JWT with correct authorized party")
+    func testValidateCorrectAuthorizedParty() throws {
+        let decoder = JWTDecoder()
+        let jwt = try decoder.decode(Self.testToken)
+        let options = JWTDecoder.ValidationOptions(expectedAuthorizedParty: "n4vmrjiAhmoE1P1JvjvF1iU8m1RTq3yi")
+        
+        // Should not throw
+        try decoder.validate(jwt, options: options)
+    }
+    
+    @Test("Validate JWT with incorrect authorized party fails")
+    func testValidateIncorrectAuthorizedParty() throws {
+        let decoder = JWTDecoder()
+        let jwt = try decoder.decode(Self.testToken)
+        let options = JWTDecoder.ValidationOptions(expectedAuthorizedParty: "wrong-client-id")
+        
+        #expect {
+            try decoder.validate(jwt, options: options)
+        } throws: { error in
+            guard case JWTDecoder.JWTError.invalidAuthorizedParty(let expected, let actual) = error else {
+                return false
+            }
+            return expected == "wrong-client-id" && actual == "n4vmrjiAhmoE1P1JvjvF1iU8m1RTq3yi"
+        }
+    }
+    
+    @Test("JWT token validator with authorized party validation")
+    func testJWTTokenValidatorWithAuthorizedParty() async throws {
+        let validator = JWTTokenValidator(
+            expectedIssuer: "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/",
+            expectedAudience: "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/api/v2/",
+            expectedAuthorizedParty: "n4vmrjiAhmoE1P1JvjvF1iU8m1RTq3yi"
+        )
+        
+        // Valid token should pass all validations
+        let isValid = await validator.validate(Self.testToken)
+        #expect(isValid)
+        
+        // Token with wrong AZP should fail
+        let validatorWrongAzp = JWTTokenValidator(
+            expectedIssuer: "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/",
+            expectedAudience: "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/api/v2/",
+            expectedAuthorizedParty: "wrong-client-id"
+        )
+        
+        let isValidWrongAzp = await validatorWrongAzp.validate(Self.testToken)
+        #expect(!isValidWrongAzp)
+    }
+    
     // MARK: - Helper methods
     
     private func createTestJWT(
