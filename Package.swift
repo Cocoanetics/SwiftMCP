@@ -30,7 +30,7 @@ let package = Package(
 		.package(url: "https://github.com/Flight-School/AnyCodable", from: "0.6.0"),
 		.package(url: "https://github.com/swiftlang/swift-docc-plugin.git", from: "1.0.0"),
 		.package(url: "https://github.com/swiftlang/swift-syntax.git", from: "602.0.0-latest"),
-		.package(url: "https://github.com/airsidemobile/JOSESwift.git", from: "2.3.0")
+		// JOSESwift removed – no longer needed after lightweight token validation
 	],
 	targets: [
 		.macro(
@@ -44,7 +44,7 @@ let package = Package(
 			name: "SwiftMCP",
 			dependencies: [
 				"AnyCodable",
-				"JOSESwift",
+				// JOSESwift removed
 				"SwiftMCPMacros",
 				.product(name: "NIOCore", package: "swift-nio"),
 				.product(name: "NIOHTTP1", package: "swift-nio"),

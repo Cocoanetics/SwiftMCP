@@ -212,7 +212,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         }
 
         // Validate token
-        if case .unauthorized(let message) = await transport.authorize(token) {
+        if case .unauthorized(let message) = await transport.authorize(token, sessionID: sessionID) {
             let errorMessage = JSONRPCMessage.errorResponse(id: nil, error: .init(code: 401, message: "Unauthorized: \(message)"))
             await self.sendJSONResponseAsync(channel: channel, status: .unauthorized, json: errorMessage, sessionId: sessionID.uuidString)
             return
@@ -360,7 +360,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         }
 
         // Validate token
-        if case .unauthorized(let message) = await transport.authorize(token) {
+        if case .unauthorized(let message) = await transport.authorize(token, sessionID: sessionID) {
             let errorMessage = JSONRPCMessage.errorResponse(id: nil, error: .init(code: 401, message: "Unauthorized: \(message)"))
 
             let data = try! JSONEncoder().encode(errorMessage)
@@ -668,7 +668,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         }
 
         // Validate token
-        if case .unauthorized(let message) = await transport.authorize(token) {
+        if case .unauthorized(let message) = await transport.authorize(token, sessionID: sessionID) {
             let errorDict = ["error": "Unauthorized: \(message)"] as [String: String]
             let data = try! JSONEncoder().encode(errorDict)
             var buffer = allocator.buffer(capacity: data.count)
@@ -957,6 +957,19 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             guard let httpResponse = response as? HTTPURLResponse else {
                 await self.sendJSONResponseAsync(channel: channel, status: .internalServerError, json: ["error": "Invalid response from auth server"])
                 return
+            }
+
+            // Try to parse access_token so we can store it with the session (light-weight auth)
+            if let sessionIDHeader = head.headers["Mcp-Session-Id"].first,
+               let sessionUUID = UUID(uuidString: sessionIDHeader) {
+                if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let accessToken = json["access_token"] as? String,
+                   let expiresIn = json["expires_in"] as? Int {
+                    await transport.sessionManager.session(id: sessionUUID).work { s in
+                        s.accessToken = accessToken
+                        s.accessTokenExpiry = Date().addingTimeInterval(TimeInterval(expiresIn))
+                    }
+                }
             }
 
             // Forward the response (body and status) from Auth0 back to the client

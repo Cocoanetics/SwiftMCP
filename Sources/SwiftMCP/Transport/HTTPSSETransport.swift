@@ -57,11 +57,28 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
 
     /// Perform authorization using either the OAuth configuration or the
     /// synchronous ``authorizationHandler`` closure.
-    func authorize(_ token: String?) async -> AuthorizationResult {
+    func authorize(_ token: String?, sessionID: UUID?) async -> AuthorizationResult {
+        // 1. If we have a session ID, check token against session-stored value
+        if let id = sessionID {
+            let session = await sessionManager.session(id: id)
+            if let stored = session.accessToken, let expiry = session.accessTokenExpiry {
+                if expiry > Date(), stored == token {
+                    return .authorized
+                } else {
+                    return .unauthorized("Invalid or expired token")
+                }
+            } else {
+                return .unauthorized("No token stored for session")
+            }
+        }
+
+        // 2. Fallback: if an OAuthConfiguration is still set, fall back to its validation
         if let oauthConfiguration {
             let valid = await oauthConfiguration.validate(token: token)
             return valid ? .authorized : .unauthorized("Invalid token")
         }
+
+        // 3. Otherwise use legacy handler
         return authorizationHandler(token)
     }
 

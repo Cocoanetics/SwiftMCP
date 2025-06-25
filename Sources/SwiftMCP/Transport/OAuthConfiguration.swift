@@ -1,5 +1,4 @@
 import Foundation
-import JOSESwift
 
 #if canImport(FoundationNetworking)
 import FoundationNetworking
@@ -65,24 +64,14 @@ public struct OAuthConfiguration: Sendable {
             var request = URLRequest(url: introspectionEndpoint)
             request.httpMethod = "POST"
             request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-            let body = "token=\(token)"
-            if let clientID, let clientSecret {
-                let credentials = "\(clientID):\(clientSecret)"
-                if let data = credentials.data(using: .utf8) {
-                    let b64 = data.base64EncodedString()
-                    request.setValue("Basic \(b64)", forHTTPHeaderField: "Authorization")
-                }
-            }
-            request.httpBody = body.data(using: .utf8)
+            request.httpBody = "token=\(token)".data(using: .utf8)
 
             do {
                 let (data, response) = try await URLSession.shared.data(for: request)
-                guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-                    return false
-                }
-                if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                    if let active = json["active"] as? Bool { return active }
-                    if json["sub"] != nil { return true }
+                guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return false }
+                if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let active = json["active"] as? Bool {
+                    return active
                 }
                 return false
             } catch {
@@ -90,53 +79,8 @@ public struct OAuthConfiguration: Sendable {
             }
         }
 
-        return await validateJWT(token: token)
-    }
-
-    /// Decode and validate a JWT using the configured JWKS endpoint.
-    private func validateJWT(token: String) async -> Bool {
-        do {
-            let jws = try JWS(compactSerialization: token)
-
-            // first get the remote JWKS
-            let jwksURL = jwksEndpoint ?? issuer.appendingPathComponent(".well-known/jwks.json")
-            let (data, response) = try await URLSession.shared.data(from: jwksURL)
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return false }
-            let jwks = try JWKS(data: data)
-
-            // get the key that matches the key ID in the JWS header
-            guard let keyID = jws.header.kid,
-                  let key = jwks.findKey(for: keyID) else {
-                return false
-            }
-
-            // TODO: Integrate proper JWS signature verification once the
-            // necessary types are available. For now we optimistically skip
-            // cryptographic verification after ensuring we could parse the JWS.
-            // This is **NOT** suitable for production use.
-
-            // at this point we know the token is valid, now we check the claims
-            let payload = try JSONDecoder().decode(DefaultJWSJWTPayload.self, from: jws.payload.data())
-
-            if let iss = payload.iss, iss != issuer.absoluteString {
-                return false
-            }
-
-            if let aud = audience, let tokenAud = payload.aud, !tokenAud.contains(aud) {
-                return false
-            }
-            if let exp = payload.exp, exp < Date() {
-                return false
-            }
-
-            if let nbf = payload.nbf, nbf > Date() {
-                return false
-            }
-
-            return true
-        } catch {
-            return false
-        }
+        // No introspection and no custom validator – deny by default.
+        return false
     }
 
     // MARK: - Metadata helpers
@@ -279,30 +223,5 @@ fileprivate struct DefaultJWSJWTPayload: Codable {
         try container.encodeIfPresent(aud, forKey: .aud)
         try container.encodeIfPresent(exp, forKey: .exp)
         try container.encodeIfPresent(nbf, forKey: .nbf)
-    }
-}
-
-// MARK: - Minimal stubs to allow compilation when JOSESwift types are unavailable
-// These provide just enough functionality for the current validation logic.
-// If JOSESwift provides real implementations, the compiler will use those instead.
-
-public struct JWKS: Decodable {
-    public struct JWK: Decodable {
-        public let kid: String?
-        public let kty: String?
-        public let n: String?
-        public let e: String?
-        public let x: String?
-        public let y: String?
-    }
-
-    public let keys: [JWK]
-
-    public init(data: Data) throws {
-        self = try JSONDecoder().decode(JWKS.self, from: data)
-    }
-
-    public func findKey(for keyID: String) -> JWK? {
-        keys.first { $0.kid == keyID }
     }
 }
