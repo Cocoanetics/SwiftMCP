@@ -130,4 +130,18 @@ actor SessionManager {
     func retrieveOAuthState(serverState: String) -> (redirectURI: String, state: String)? {
         return oauthStates.removeValue(forKey: serverState)
     }
+
+    // MARK: - Token lookup
+
+    /// Return the first session whose stored accessToken matches `token` and is not expired.
+    func session(forToken token: String) -> Session? {
+        for session in sessions.values {
+            if let stored = session.accessToken,
+               stored == token,
+               (session.accessTokenExpiry ?? Date.distantFuture) > Date() {
+                return session
+            }
+        }
+        return nil
+    }
 }

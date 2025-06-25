@@ -77,13 +77,20 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
             }
         }
 
-        // 2. Fallback: if an OAuthConfiguration is still set, fall back to its validation
+        // 2. If we don't have a sessionID, see if we can locate a session by token.
+        if let token, sessionID == nil {
+            if await sessionManager.session(forToken: token) != nil {
+                return .authorized
+            }
+        }
+
+        // 3. Fallback: if an OAuthConfiguration is still set, fall back to its validation
         if let oauthConfiguration {
             let valid = await oauthConfiguration.validate(token: token)
             return valid ? .authorized : .unauthorized("Invalid token")
         }
 
-        // 3. Otherwise use legacy handler
+        // 4. Otherwise use legacy handler
         return authorizationHandler(token)
     }
 
