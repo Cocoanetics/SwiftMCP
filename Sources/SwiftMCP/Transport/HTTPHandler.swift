@@ -77,46 +77,49 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
     private func handleRequest(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?) {
 
         let serverPath = "/\(transport.server.serverName.asModelName)"
+        let channel = context.channel
 
         switch (head.method, head.uri) {
 
             // Handle all OPTIONS requests in one case
             case (.OPTIONS, _):
-                handleOPTIONS(channel: context.channel, head: head)
+                handleOPTIONS(channel: channel, head: head)
 
             // Streamable HTTP Endpoint
             case (.POST, let path) where path.hasPrefix("/mcp"):
-                let channel = context.channel
                 Task {
                     await self.handleSimpleResponse(channel: channel, head: head, body: body)
                 }
 
             case (.GET, let path) where path.hasPrefix("/mcp"):
-                handleSSE(context: context, head: head, body: body, sendEndpoint: false)
+                Task {
+                    await self.handleSSE(channel: channel, head: head, body: body, sendEndpoint: false)
+                }
 
             // SSE Endpoint
 
             case (.GET, let path) where path.hasPrefix("/sse"):
-                handleSSE(context: context, head: head, body: body)
+                Task {
+                    await self.handleSSE(channel: channel, head: head, body: body)
+                }
 
             case (_, let path) where path.hasPrefix("/sse"):
-                sendResponse(channel: context.channel, status: .methodNotAllowed)
+                sendResponse(channel: channel, status: .methodNotAllowed)
 
             // Messages
 
             case (.POST, let path) where path.hasPrefix("/messages"):
-                let channel = context.channel
                 Task {
                     await self.handleMessagesAsync(channel: channel, head: head, body: body)
                 }
 
             case (_, let path) where path.hasPrefix("/messages"):
-                sendResponse(channel: context.channel, status: .methodNotAllowed)
+                sendResponse(channel: channel, status: .methodNotAllowed)
 
             // if OpenAPI is disabled: everything else is NOT FOUND
 
             case (_, _) where !transport.serveOpenAPI:
-                sendResponse(channel: context.channel, status: .notFound)
+                sendResponse(channel: channel, status: .notFound)
 
             // AI Plugin Manifest (OpenAPI)
 
@@ -124,43 +127,40 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
                 handleAIPluginManifest(context: context, head: head)
 
             case (_, "/.well-known/ai-plugin.json"):
-                sendResponse(channel: context.channel, status: .methodNotAllowed)
+                sendResponse(channel: channel, status: .methodNotAllowed)
 
             // OpenAPI Spec
 
             case (.GET, "/openapi.json"):
-                handleOpenAPISpec(channel: context.channel, head: head)
+                handleOpenAPISpec(channel: channel, head: head)
 
             case (_, "/openapi.json"):
-                sendResponse(channel: context.channel, status: .methodNotAllowed)
+                sendResponse(channel: channel, status: .methodNotAllowed)
 
             // OAuth metadata
             case (.GET, "/.well-known/oauth-authorization-server"):
-                handleOAuthAuthorizationServer(channel: context.channel)
+                handleOAuthAuthorizationServer(channel: channel)
 
             case (.GET, "/.well-known/oauth-protected-resource"):
-                handleOAuthProtectedResource(channel: context.channel, head: head)
+                handleOAuthProtectedResource(channel: channel, head: head)
 
             case (_, "/.well-known/oauth-authorization-server"),
                  (_, "/.well-known/oauth-protected-resource"):
-                sendResponse(channel: context.channel, status: .methodNotAllowed)
+                sendResponse(channel: channel, status: .methodNotAllowed)
 
             // --- OAuth Bridge for ChatGPT Plugin ---
             
             case (.GET, let path) where path.hasPrefix("/authorize"):
-                let channel = context.channel
                 Task {
                     await self.handleAuthorize(channel: channel, head: head)
                 }
 
             case (.GET, let path) where path.hasPrefix("/oauth/callback"):
-                let channel = context.channel
                 Task {
                     await self.handleOAuthCallback(channel: channel, head: head)
                 }
 
             case (.POST, "/oauth/token"):
-                let channel = context.channel
                 Task {
                     await self.handleTokenProxy(channel: channel, head: head, body: body)
                 }
@@ -172,11 +172,11 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
                 handleToolCall(context: context, head: head, body: body)
 
             case (_, let path) where path.hasPrefix(serverPath):
-                sendResponse(channel: context.channel, status: .methodNotAllowed)
+                sendResponse(channel: channel, status: .methodNotAllowed)
 
             // Fallback for unknown endpoints
             default:
-                sendResponse(channel: context.channel, status: .notFound)
+                sendResponse(channel: channel, status: .notFound)
         }
     }
 
@@ -264,8 +264,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         }
     }
 
-    private func handleSSE(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?, sendEndpoint: Bool = true) {
-
+    private func handleSSE(channel: Channel, head: HTTPRequestHead, body: ByteBuffer?, sendEndpoint: Bool = true) async {
         precondition(head.method == .GET)
 
         // Extract or generate session/client ID (they are the same thing)
@@ -276,11 +275,11 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
 
         guard "text/event-stream".matchesAcceptHeader(acceptHeader) else {
             logger.warning("Rejected non-SSE request (Accept: \(acceptHeader))")
-            sendResponse(channel: context.channel, status: .badRequest)
+            sendResponse(channel: channel, status: .badRequest)
             return
         }
 
-        let remoteAddress = context.channel.remoteAddress?.description ?? "unknown"
+        let remoteAddress = channel.remoteAddress?.description ?? "unknown"
         let userAgent = head.headers["user-agent"].first ?? "unknown"
 
         self.sessionID = sessionID
@@ -294,9 +293,24 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
                         - Protocol: \(sendEndpoint ? "Old (HTTP+SSE)" : "New (Streamable HTTP)")
                         """)
 
+        // Validate token (optional)
+        var token: String?
+        if let authHeader = head.headers["Authorization"].first {
+            let parts = authHeader.split(separator: " ")
+            if parts.count == 2 && parts[0].lowercased() == "bearer" {
+                token = String(parts[1])
+            }
+        }
+
+        if case .unauthorized(let message) = await transport.authorize(token, sessionID: sessionID) {
+            logger.warning("Unauthorized SSE connect: \(message)")
+            sendResponse(channel: channel, status: .unauthorized)
+            return
+        }
+
         // Register the channel with client ID
         logger.info("Registering SSE channel for client \(sessionID)")
-        transport.registerSSEChannel(context.channel, id: sessionID)
+        transport.registerSSEChannel(channel, id: sessionID)
 
 
         // Set up SSE response headers (ALWAYS send these for any SSE request)
@@ -317,20 +331,20 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
 									 headers: headers)
 
         logger.info("Sending SSE response headers")
-        context.write(wrapOutboundOut(.head(response)), promise: nil)
-        context.flush()
+        channel.write(HTTPServerResponsePart.head(response), promise: nil)
+        channel.flush()
 
         // Conditionally send endpoint event (only for old protocol)
         if sendEndpoint {
             guard let endpointUrl = self.endpointUrl(from: head, sessionID: sessionID) else {
                 logger.error("Failed to construct endpoint URL")
-                context.close(promise: nil)
+                channel.close(promise: nil)
                 return
             }
 
             logger.info("Sending endpoint event with URL: \(endpointUrl)")
             let message = SSEMessage(name: "endpoint", data: endpointUrl.absoluteString)
-            context.channel.sendSSE(message)
+            channel.sendSSE(message)
         }
 
         logger.info("SSE connection setup complete for client \(sessionID)")
