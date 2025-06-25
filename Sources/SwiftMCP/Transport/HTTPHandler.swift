@@ -412,16 +412,11 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
 
         let head = HTTPResponseHead(version: .http1_1, status: status, headers: responseHeaders)
         
-        do {
-            try await channel.write(HTTPServerResponsePart.head(head))
-            if let body = body {
-                try await channel.write(HTTPServerResponsePart.body(.byteBuffer(body)))
-            }
-            try await channel.writeAndFlush(HTTPServerResponsePart.end(nil))
-        } catch {
-            logger.error("Failed to send response: \(error)")
-            // If the channel is closed, there's nothing more we can do.
+        channel.write(HTTPServerResponsePart.head(head), promise: nil)
+        if let body = body {
+            channel.write(HTTPServerResponsePart.body(.byteBuffer(body)), promise: nil)
         }
+        channel.writeAndFlush(HTTPServerResponsePart.end(nil), promise: nil)
     }
 
     private func sendJSONResponseAsync<T: Encodable>(
@@ -809,15 +804,27 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         // The redirect URI for Auth0 must be our own /oauth/callback endpoint
         var callbackURLComponents = URLComponents()
         callbackURLComponents.scheme = head.headers["X-Forwarded-Proto"].first ?? "http"
-        callbackURLComponents.host = head.headers["X-Forwarded-Host"].first ?? transport.host
-        
-        // When using a forwarded host (like ngrok), the port is implicit (443 for https).
-        // Only add the local transport port if we are not behind such a proxy.
-        if head.headers["X-Forwarded-Host"] == nil {
-            let transportPort = transport.port
-            if !((callbackURLComponents.scheme == "http" && transportPort == 80) || (callbackURLComponents.scheme == "https" && transportPort == 443)) {
-                callbackURLComponents.port = transportPort
+
+        let port: Int?
+
+        if let forwardedHost = head.headers["X-Forwarded-Host"].first {
+            callbackURLComponents.host = forwardedHost
+            // If we are behind a proxy, only use the forwarded port if it's explicitly set.
+            // Otherwise, we assume the standard port for the scheme (e.g., 443 for https).
+            if let forwardedPortStr = head.headers["X-Forwarded-Port"].first, let forwardedPort = Int(forwardedPortStr) {
+                port = forwardedPort
+            } else {
+                port = nil
             }
+        } else {
+            // If not behind a proxy, use the local transport's host and port.
+            callbackURLComponents.host = transport.host
+            port = transport.port
+        }
+        
+        // Only add the port to the URL if it's non-standard for the scheme.
+        if let port = port, !((callbackURLComponents.scheme == "http" && port == 80) || (callbackURLComponents.scheme == "https" && port == 443)) {
+            callbackURLComponents.port = port
         }
         
         callbackURLComponents.path = "/oauth/callback"
@@ -880,10 +887,11 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         }
         
         // Append the code and state to any existing query items.
-        var queryItems = gptURLComponents.queryItems ?? []
-        queryItems.append(URLQueryItem(name: "code", value: code))
-        queryItems.append(URLQueryItem(name: "state", value: originalState))
-        gptURLComponents.queryItems = queryItems
+        if gptURLComponents.queryItems == nil {
+            gptURLComponents.queryItems = []
+        }
+        gptURLComponents.queryItems?.append(URLQueryItem(name: "code", value: code))
+        gptURLComponents.queryItems?.append(URLQueryItem(name: "state", value: originalState))
         
         guard let finalURL = gptURLComponents.url else {
             let buffer = self.stringBuffer("Could not construct final client callback URL.", allocator: channel.allocator)
