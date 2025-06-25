@@ -61,14 +61,19 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         // 1. If we have a session ID, check token against session-stored value
         if let id = sessionID {
             let session = await sessionManager.session(id: id)
-            if let stored = session.accessToken, let expiry = session.accessTokenExpiry {
-                if expiry > Date(), stored == token {
+            if let stored = session.accessToken {
+                if stored == token, (session.accessTokenExpiry ?? Date.distantFuture) > Date() {
                     return .authorized
                 } else {
                     return .unauthorized("Invalid or expired token")
                 }
+            } else if let token { // first time we see a token for this session – accept and remember it
+                session.accessToken = token
+                // Without expires_in we can't know exact lifetime; fall back to 24 h.
+                session.accessTokenExpiry = Date().addingTimeInterval(24 * 60 * 60)
+                return .authorized
             } else {
-                return .unauthorized("No token stored for session")
+                return .unauthorized("No token provided")
             }
         }
 

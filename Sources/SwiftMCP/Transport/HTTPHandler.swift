@@ -305,7 +305,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         headers.add(name: "Cache-Control", value: "no-cache")
         headers.add(name: "Connection", value: "keep-alive")
         headers.add(name: "Access-Control-Allow-Methods", value: "GET")
-        headers.add(name: "Access-Control-Allow-Headers", value: "*")
+        headers.add(name: "Access-Control-Allow-Headers", value: "Content-Type, Authorization, MCP-Protocol-Version")
 
         // Include session ID in response headers for new protocol
         if !sendEndpoint {
@@ -937,15 +937,29 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             return
         }
 
-        // Build the request to Auth0 using server's credentials
+        // Start with all parameters the client sent (so we don't drop PKCE code_verifier, etc.)
+        var queryItems: [URLQueryItem] = clientParams.map { URLQueryItem(name: $0.key, value: $0.value) }
+
+        // Ensure required fields are present / overridden
+        func upsert(_ name: String, _ value: String) {
+            if let idx = queryItems.firstIndex(where: { $0.name == name }) {
+                queryItems[idx].value = value
+            } else {
+                queryItems.append(URLQueryItem(name: name, value: value))
+            }
+        }
+
+        upsert("redirect_uri", callbackURL.absoluteString)
+        upsert("client_id", clientID)
+        upsert("client_secret", clientSecret)
+
+        // Default grant_type to authorization_code if the client didn't send one.
+        if !queryItems.contains(where: { $0.name == "grant_type" }) {
+            queryItems.append(URLQueryItem(name: "grant_type", value: "authorization_code"))
+        }
+
         var formBody = URLComponents()
-        formBody.queryItems = [
-            URLQueryItem(name: "grant_type", value: clientParams["grant_type"]),
-            URLQueryItem(name: "code", value: clientParams["code"]),
-            URLQueryItem(name: "redirect_uri", value: callbackURL.absoluteString),
-            URLQueryItem(name: "client_id", value: clientID),
-            URLQueryItem(name: "client_secret", value: clientSecret)
-        ]
+        formBody.queryItems = queryItems
 
         var auth0Request = URLRequest(url: config.tokenEndpoint)
         auth0Request.httpMethod = "POST"
@@ -1081,7 +1095,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         logger.info("Handling OPTIONS request for URI: \(head.uri)")
         var headers = HTTPHeaders()
         headers.add(name: "Access-Control-Allow-Methods", value: "GET, POST, OPTIONS")
-        headers.add(name: "Access-Control-Allow-Headers", value: "Content-Type, Authorization")
+        headers.add(name: "Access-Control-Allow-Headers", value: "Content-Type, Authorization, MCP-Protocol-Version")
         sendResponse(channel: channel, status: .ok, headers: headers)
     }
 
