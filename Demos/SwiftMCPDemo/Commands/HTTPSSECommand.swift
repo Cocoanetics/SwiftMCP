@@ -47,15 +47,20 @@ final class HTTPSSECommand: AsyncParsableCommand {
   Features:
   - Server-Sent Events endpoint at /sse
   - JSON-RPC endpoints at /<serverName>/<toolName>
-  - Optional bearer token authentication or OAuth validation
+  - Optional bearer token authentication, JWT validation, or OAuth validation
   - Optional OpenAPI endpoints for AI plugin integration
   
   Examples:
     # Basic usage
     SwiftMCPDemo httpsse --port 8080
     
-    # With authentication
+    # With simple token authentication
     SwiftMCPDemo httpsse --port 8080 --token my-secret-token
+    
+    # With JWT token validation
+    SwiftMCPDemo httpsse --port 8080 --jwt-validation \
+        --jwt-issuer https://dev-8ygj6eppnvjz8bm6.us.auth0.com/ \
+        --jwt-audience https://dev-8ygj6eppnvjz8bm6.us.auth0.com/api/v2/
     
     # With OpenAPI support
     SwiftMCPDemo httpsse --port 8080 --openapi
@@ -89,6 +94,15 @@ final class HTTPSSECommand: AsyncParsableCommand {
 
     @Option(name: .long, help: "OAuth client secret")
     var oauthClientSecret: String?
+
+    @Flag(name: .long, help: "Enable JWT token validation")
+    var jwtValidation: Bool = false
+    
+    @Option(name: .long, help: "Expected JWT issuer (e.g., https://domain.auth0.com/)")
+    var jwtIssuer: String?
+    
+    @Option(name: .long, help: "Expected JWT audience (e.g., your API identifier)")
+    var jwtAudience: String?
     
     // Make this a computed property instead of stored property
     private var signalHandler: SignalHandler? = nil
@@ -105,6 +119,9 @@ final class HTTPSSECommand: AsyncParsableCommand {
         self.oauthAudience = try container.decodeIfPresent(String.self, forKey: .oauthAudience)
         self.oauthClientID = try container.decodeIfPresent(String.self, forKey: .oauthClientID)
         self.oauthClientSecret = try container.decodeIfPresent(String.self, forKey: .oauthClientSecret)
+        self.jwtValidation = try container.decode(Bool.self, forKey: .jwtValidation)
+        self.jwtIssuer = try container.decodeIfPresent(String.self, forKey: .jwtIssuer)
+        self.jwtAudience = try container.decodeIfPresent(String.self, forKey: .jwtAudience)
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -115,6 +132,9 @@ final class HTTPSSECommand: AsyncParsableCommand {
         case oauthAudience
         case oauthClientID
         case oauthClientSecret
+        case jwtValidation
+        case jwtIssuer
+        case jwtAudience
     }
     
     func run() async throws {
@@ -129,8 +149,33 @@ final class HTTPSSECommand: AsyncParsableCommand {
         
         let transport = HTTPSSETransport(server: calculator, port: port)
         
-        // Set up authorization handler if token is provided
-        if let requiredToken = token {
+        // Set up authentication (priority: JWT > OAuth > simple token)
+        if jwtValidation {
+            // Use JWT validation via OAuth configuration
+            let validator = JWTTokenValidator(
+                expectedIssuer: jwtIssuer,
+                expectedAudience: jwtAudience
+            )
+            
+            // Create a minimal OAuth configuration with our JWT validator
+            let dummyIssuer = URL(string: jwtIssuer ?? "https://example.com")!
+            let config = OAuthConfiguration(
+                issuer: dummyIssuer,
+                authorizationEndpoint: dummyIssuer.appendingPathComponent("authorize"),
+                tokenEndpoint: dummyIssuer.appendingPathComponent("token"),
+                tokenValidator: validator.validate
+            )
+            transport.oauthConfiguration = config
+            
+            print("JWT validation enabled:")
+            if let issuer = jwtIssuer {
+                print("  Expected issuer: \(issuer)")
+            }
+            if let audience = jwtAudience {
+                print("  Expected audience: \(audience)")
+            }
+        } else if let requiredToken = token {
+            // Simple token check
             transport.authorizationHandler = { token in
                 guard let token else {
                     return .unauthorized("Missing bearer token")
@@ -142,22 +187,23 @@ final class HTTPSSECommand: AsyncParsableCommand {
                 
                 return .authorized
             }
+            print("Simple token validation enabled")
+        } else if let issuerString = oauthIssuer,
+                  let issuerURL = URL(string: issuerString) {
+            // OAuth configuration
+            if let config = await OAuthConfiguration(issuer: issuerURL,
+                                                     audience: oauthAudience,
+                                                     clientID: oauthClientID,
+                                                     clientSecret: oauthClientSecret) {
+                transport.oauthConfiguration = config
+                print("OAuth validation enabled with issuer: \(issuerString)")
+            }
+        } else {
+            print("No authentication configured - all requests will be accepted")
         }
 
         // Enable OpenAPI endpoints if requested
         transport.serveOpenAPI = openapi
-
-        if let issuerString = oauthIssuer,
-           let issuerURL = URL(string: issuerString)
-        {
-            if let config = await OAuthConfiguration(issuer: issuerURL,
-                                                     audience: oauthAudience,
-                                                     clientID: oauthClientID,
-                                                     clientSecret: oauthClientSecret)
-            {
-                transport.oauthConfiguration = config
-            }
-        }
         
         // Set up signal handling to shut down the transport on Ctrl+C
         signalHandler = SignalHandler(transport: transport)

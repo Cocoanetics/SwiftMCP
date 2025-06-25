@@ -291,6 +291,41 @@ struct JWTDecoderTests {
         }
     }
     
+    @Test("JWT token validator integration with OAuth configuration")
+    func testJWTValidatorIntegration() async throws {
+        let validator = JWTTokenValidator(
+            expectedIssuer: "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/",
+            expectedAudience: "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/api/v2/"
+        )
+        
+        // Test with valid token
+        let isValid = await validator.validate(Self.testToken)
+        #expect(isValid)
+        
+        // Test with invalid token
+        let isInvalid = await validator.validate("invalid.jwt.token")
+        #expect(!isInvalid)
+        
+        // Test with nil token
+        let isNil = await validator.validate(nil)
+        #expect(!isNil)
+        
+        // Test OAuth configuration creation
+        let config = OAuthConfiguration.auth0JWT(
+            domain: "dev-8ygj6eppnvjz8bm6.us.auth0.com",
+            expectedAudience: "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/api/v2/",
+            clientId: "test-client-id",
+            clientSecret: "test-client-secret"
+        )
+        
+        // Test OAuth configuration validation
+        let configValid = await config.validate(token: Self.testToken)
+        #expect(configValid)
+        
+        let configInvalid = await config.validate(token: "invalid.jwt.token")
+        #expect(!configInvalid)
+    }
+    
     // MARK: - Helper methods
     
     private func createTestJWT(
