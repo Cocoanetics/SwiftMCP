@@ -342,13 +342,14 @@ struct JWTDecoderTests {
         let jwt = try decoder.decode(Self.testToken)
         let options = JWTDecoder.ValidationOptions(expectedAuthorizedParty: "wrong-client-id")
         
-        #expect {
+        do {
             try decoder.validate(jwt, options: options)
-        } throws: { error in
-            guard case JWTDecoder.JWTError.invalidAuthorizedParty(let expected, let actual) = error else {
-                return false
-            }
-            return expected == "wrong-client-id" && actual == "n4vmrjiAhmoE1P1JvjvF1iU8m1RTq3yi"
+            #expect(Bool(false), "Expected validation to fail")
+        } catch JWTDecoder.JWTError.invalidAuthorizedParty(let expected, let actual) {
+            #expect(expected == "wrong-client-id")
+            #expect(actual == "n4vmrjiAhmoE1P1JvjvF1iU8m1RTq3yi")
+        } catch {
+            #expect(Bool(false), "Expected invalidAuthorizedParty error, got \(error)")
         }
     }
     

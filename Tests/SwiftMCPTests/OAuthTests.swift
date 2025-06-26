@@ -19,7 +19,7 @@ struct OAuthTests {
 
         let result = await transport.authorize("good", sessionID: nil)
         if case .authorized = result {
-            #expect(true)
+            #expect(Bool(true))
         } else {
             #expect(Bool(false), "Expected authorization")
         }
@@ -40,7 +40,7 @@ struct OAuthTests {
 
         let result = await transport.authorize("bad", sessionID: nil)
         if case .unauthorized = result {
-            #expect(true)
+            #expect(Bool(true))
         } else {
             #expect(Bool(false), "Expected unauthorized result")
         }
