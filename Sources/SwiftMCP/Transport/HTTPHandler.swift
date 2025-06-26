@@ -851,10 +851,14 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         proxyRequest.httpMethod = head.method.rawValue
         
         // Copy original query parameters if any
-        if let originalComponents = URLComponents(string: head.uri) {
+        // Parse the URI properly by adding a dummy scheme and host
+        if let originalComponents = URLComponents(string: "http://dummy\(head.uri)") {
             var targetComponents = URLComponents(url: targetURL, resolvingAgainstBaseURL: false)!
             targetComponents.queryItems = originalComponents.queryItems
-            proxyRequest.url = targetComponents.url
+            if let finalURL = targetComponents.url {
+                proxyRequest.url = finalURL
+                logger.info("Proxying to: \(finalURL.absoluteString)")
+            }
         }
 
         // Copy headers (excluding host and connection-specific headers)
@@ -899,8 +903,8 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             
             var headers = HTTPHeaders()
             // Copy headers from Auth0 response, but exclude problematic ones that describe the payload's transfer,
-            // since URLSession has already decoded the payload for us.
-            let headersToExclude = ["transfer-encoding", "connection", "content-encoding"]
+            // since URLSession has already decoded the payload for us. Also exclude CORS headers since we handle those ourselves.
+            let headersToExclude = ["transfer-encoding", "connection", "content-encoding", "access-control-allow-origin", "access-control-allow-methods", "access-control-allow-headers", "access-control-expose-headers", "access-control-max-age"]
             httpResponse.allHeaderFields.forEach { key, value in
                 if let keyString = key as? String, let valueString = value as? String, !headersToExclude.contains(keyString.lowercased()) {
                      headers.add(name: keyString, value: valueString)
