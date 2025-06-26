@@ -878,7 +878,11 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         }
 
         do {
-            let (data, response) = try await URLSession.shared.data(for: proxyRequest)
+            // Create a URLSession that doesn't automatically follow redirects
+            // This is important for OAuth flows where Auth0 returns redirects with authorization codes
+            let sessionConfig = URLSessionConfiguration.default
+            let session = URLSession(configuration: sessionConfig, delegate: self, delegateQueue: nil)
+            let (data, response) = try await session.data(for: proxyRequest)
             guard let httpResponse = response as? HTTPURLResponse else {
                 await self.sendJSONResponseAsync(channel: channel, status: .internalServerError, json: ["error": "Invalid response from auth server"])
                 return
@@ -907,7 +911,21 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             let headersToExclude = ["transfer-encoding", "connection", "content-encoding", "access-control-allow-origin", "access-control-allow-methods", "access-control-allow-headers", "access-control-expose-headers", "access-control-max-age"]
             httpResponse.allHeaderFields.forEach { key, value in
                 if let keyString = key as? String, let valueString = value as? String, !headersToExclude.contains(keyString.lowercased()) {
-                     headers.add(name: keyString, value: valueString)
+                                         // Special handling for Location header - convert relative URLs to absolute
+                     if keyString.lowercased() == "location" {
+                         if valueString.hasPrefix("/") {
+                             // Relative URL - make it absolute by prepending Auth0's base URL
+                             let baseURL = "\(config.issuer.scheme!)://\(config.issuer.host!)"
+                             let absoluteURL = baseURL + valueString
+                             headers.add(name: keyString, value: absoluteURL)
+                             logger.info("Converted relative Location header '\(valueString)' to absolute: '\(absoluteURL)'")
+                         } else {
+                             // Already absolute URL
+                             headers.add(name: keyString, value: valueString)
+                         }
+                     } else {
+                         headers.add(name: keyString, value: valueString)
+                     }
                 }
             }
             
