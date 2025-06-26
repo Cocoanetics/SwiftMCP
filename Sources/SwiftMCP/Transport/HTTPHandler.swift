@@ -139,33 +139,47 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
 
             // OAuth metadata
             case (.GET, "/.well-known/oauth-authorization-server"):
-                handleOAuthAuthorizationServer(channel: channel)
+                handleOAuthAuthorizationServer(channel: channel, head: head)
 
             case (.GET, "/.well-known/oauth-protected-resource"):
                 handleOAuthProtectedResource(channel: channel, head: head)
+
+            case (.GET, "/.well-known/openid-configuration"):
+                Task {
+                    await self.handleOAuthProxy(channel: channel, head: head, body: body)
+                }
 
             case (_, "/.well-known/oauth-authorization-server"),
                  (_, "/.well-known/oauth-protected-resource"):
                 sendResponse(channel: channel, status: .methodNotAllowed)
 
-            // --- OAuth Bridge for ChatGPT Plugin ---
+            // --- Transparent OAuth Proxy ---
             
-            case (.GET, let path) where path.hasPrefix("/authorize"):
+            // Proxy all /authorize requests directly to Auth0
+            case (_, let path) where path.hasPrefix("/authorize"):
                 Task {
-                    await self.handleAuthorize(channel: channel, head: head)
+                    await self.handleOAuthProxy(channel: channel, head: head, body: body)
                 }
 
-            case (.GET, let path) where path.hasPrefix("/oauth/callback"):
+            // Proxy all /oauth/* requests directly to Auth0  
+            case (_, let path) where path.hasPrefix("/oauth/"):
                 Task {
-                    await self.handleOAuthCallback(channel: channel, head: head)
+                    await self.handleOAuthProxy(channel: channel, head: head, body: body)
                 }
 
-            case (.POST, "/oauth/token"):
+            // Proxy userinfo endpoint
+            case (_, "/userinfo"):
                 Task {
-                    await self.handleTokenProxy(channel: channel, head: head, body: body)
+                    await self.handleOAuthProxy(channel: channel, head: head, body: body)
+                }
+
+            // Proxy JWKS endpoint  
+            case (_, "/.well-known/jwks.json"):
+                Task {
+                    await self.handleOAuthProxy(channel: channel, head: head, body: body)
                 }
                 
-            // --- End OAuth Bridge ---
+            // --- End Transparent OAuth Proxy ---
 
             // Tool Endpoint
             case (.POST, let path) where path.hasPrefix(serverPath):
@@ -552,13 +566,21 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
     // MARK: - OAuth Metadata
 
     /// Serve metadata for the OAuth authorization server.
-    private func handleOAuthAuthorizationServer(channel: Channel) {
+    private func handleOAuthAuthorizationServer(channel: Channel, head: HTTPRequestHead) {
         guard let config = transport.oauthConfiguration else {
             sendResponse(channel: channel, status: .notFound)
             return
         }
 
-        let metadata = config.authorizationServerMetadata()
+        let metadata: OAuthConfiguration.AuthorizationServerMetadata
+        if config.transparentProxy {
+            // Build server URL for transparent proxy mode using the actual request head
+            let serverBaseURL = getBaseURL(from: head)
+            metadata = config.proxyAuthorizationServerMetadata(serverBaseURL: serverBaseURL)
+        } else {
+            metadata = config.authorizationServerMetadata()
+        }
+        
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
 
@@ -615,7 +637,12 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             }
         }
 
-        let metadata = config.protectedResourceMetadata(resourceBaseURL: resourceBaseURL)
+        let metadata: OAuthConfiguration.ProtectedResourceMetadata
+        if config.transparentProxy {
+            metadata = config.proxyProtectedResourceMetadata(serverBaseURL: resourceBaseURL)
+        } else {
+            metadata = config.protectedResourceMetadata(resourceBaseURL: resourceBaseURL)
+        }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
 
@@ -784,199 +811,70 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         }
     }
 
-    // MARK: - OAuth Bridge Handlers
-    
-    private func handleAuthorize(channel: Channel, head: HTTPRequestHead) async {
-        guard let config = transport.oauthConfiguration, let clientID = config.clientID else {
-            let buffer = self.stringBuffer("OAuth not configured correctly on server: missing clientID", allocator: channel.allocator)
-            await self.sendResponseAsync(channel: channel, status: .internalServerError, body: buffer)
+    // MARK: - OAuth Proxy
+
+    private func handleOAuthProxy(channel: Channel, head: HTTPRequestHead, body: ByteBuffer?) async {
+        logger.info("Handling OAuth proxy request for \(head.uri)")
+        guard let config = transport.oauthConfiguration else {
+            logger.error("OAuth not configured")
+            await self.sendJSONResponseAsync(channel: channel, status: .internalServerError, json: ["error": "OAuth not configured"])
             return
         }
 
-        // 1. Extract original redirect_uri and state from the initial client request
-        guard let components = URLComponents(string: head.uri),
-              let originalState = components.queryItems?.first(where: { $0.name == "state" })?.value,
-              let originalRedirectURI = components.queryItems?.first(where: { $0.name == "redirect_uri" })?.value else {
-            let buffer = self.stringBuffer("Missing 'state' or 'redirect_uri' parameter in request from client", allocator: channel.allocator)
-            await self.sendResponseAsync(channel: channel, status: .badRequest, body: buffer)
+        // Determine target URL based on the request path
+        let targetURL: URL
+        switch head.uri {
+        case let path where path.hasPrefix("/authorize"):
+            targetURL = config.authorizationEndpoint
+        case let path where path.hasPrefix("/oauth/token"):
+            targetURL = config.tokenEndpoint
+        case let path where path.hasPrefix("/oauth/register"):
+            targetURL = config.registrationEndpoint ?? config.issuer.appendingPathComponent("oidc/register")
+        case let path where path.hasPrefix("/oauth/"):
+            // For other /oauth/* paths, append to issuer
+            let pathComponent = String(head.uri.dropFirst(1)) // Remove leading "/"
+            targetURL = config.issuer.appendingPathComponent(pathComponent)
+        case "/userinfo":
+            targetURL = config.issuer.appendingPathComponent("userinfo")
+        case "/.well-known/jwks.json":
+            targetURL = config.jwksEndpoint ?? config.issuer.appendingPathComponent(".well-known/jwks.json")
+        case "/.well-known/openid-configuration":
+            targetURL = config.issuer.appendingPathComponent(".well-known/openid-configuration")
+        default:
+            logger.error("Unknown OAuth proxy path: \(head.uri)")
+            await self.sendJSONResponseAsync(channel: channel, status: .notFound, json: ["error": "Unknown OAuth endpoint"])
             return
         }
 
-        // 2. Generate a new state for our server to track this request
-        let serverState = UUID().uuidString
-
-        // 3. Store the original client info against our new server state
-        await transport.sessionManager.storeOAuthState(serverState: serverState, originalRedirectURI: originalRedirectURI, originalState: originalState)
-
-        // 4. Construct the URL to redirect the user to Auth0
+        // Build the proxy request
+        var proxyRequest = URLRequest(url: targetURL)
+        proxyRequest.httpMethod = head.method.rawValue
         
-        // The redirect URI for Auth0 must be our own /oauth/callback endpoint
-        var callbackURLComponents = URLComponents()
-        callbackURLComponents.scheme = head.headers["X-Forwarded-Proto"].first ?? "http"
-
-        let port: Int?
-
-        if let forwardedHost = head.headers["X-Forwarded-Host"].first {
-            callbackURLComponents.host = forwardedHost
-            // If we are behind a proxy, only use the forwarded port if it's explicitly set.
-            // Otherwise, we assume the standard port for the scheme (e.g., 443 for https).
-            if let forwardedPortStr = head.headers["X-Forwarded-Port"].first, let forwardedPort = Int(forwardedPortStr) {
-                port = forwardedPort
-            } else {
-                port = nil
-            }
-        } else {
-            // If not behind a proxy, use the local transport's host and port.
-            callbackURLComponents.host = transport.host
-            port = transport.port
-        }
-        
-        // Only add the port to the URL if it's non-standard for the scheme.
-        if let port = port, !((callbackURLComponents.scheme == "http" && port == 80) || (callbackURLComponents.scheme == "https" && port == 443)) {
-            callbackURLComponents.port = port
-        }
-        
-        callbackURLComponents.path = "/oauth/callback"
-        
-        guard let callbackURL = callbackURLComponents.url else {
-             let buffer = self.stringBuffer("Could not construct callback URL", allocator: channel.allocator)
-             await self.sendResponseAsync(channel: channel, status: .internalServerError, body: buffer)
-             return
+        // Copy original query parameters if any
+        if let originalComponents = URLComponents(string: head.uri) {
+            var targetComponents = URLComponents(url: targetURL, resolvingAgainstBaseURL: false)!
+            targetComponents.queryItems = originalComponents.queryItems
+            proxyRequest.url = targetComponents.url
         }
 
-        var authURLComponents = URLComponents(url: config.authorizationEndpoint, resolvingAgainstBaseURL: false)!
-        var queryItems = [
-            URLQueryItem(name: "response_type", value: "code"),
-            URLQueryItem(name: "client_id", value: clientID),
-            URLQueryItem(name: "redirect_uri", value: callbackURL.absoluteString),
-            URLQueryItem(name: "scope", value: "openid profile email"),
-            URLQueryItem(name: "state", value: serverState) // Use our server-generated state
-        ]
-
-        if let audience = config.audience {
-            queryItems.append(URLQueryItem(name: "audience", value: audience))
-        }
-        authURLComponents.queryItems = queryItems
-
-        guard let authURL = authURLComponents.url else {
-            let buffer = self.stringBuffer("Could not construct authorization URL", allocator: channel.allocator)
-            await self.sendResponseAsync(channel: channel, status: .internalServerError, body: buffer)
-            return
-        }
-        
-        // 5. Redirect the client to the Auth0 authorization URL
-        logger.info("Redirecting client to Auth0 for authorization.")
-        var headers = HTTPHeaders()
-        headers.add(name: "Location", value: authURL.absoluteString)
-        await self.sendResponseAsync(channel: channel, status: .found, headers: headers)
-    }
-
-    private func handleOAuthCallback(channel: Channel, head: HTTPRequestHead) async {
-        // 1. Extract the authorization code and our server-generated state from Auth0's callback
-        guard let components = URLComponents(string: head.uri),
-              let code = components.queryItems?.first(where: { $0.name == "code" })?.value,
-              let serverState = components.queryItems?.first(where: { $0.name == "state" })?.value else {
-            let buffer = self.stringBuffer("Invalid callback from Auth0: missing 'code' or 'state' parameter.", allocator: channel.allocator)
-            await self.sendResponseAsync(channel: channel, status: .badRequest, body: buffer)
-            return
-        }
-
-        // 2. Retrieve the original client's redirect URI and state
-        guard let (originalRedirectURI, originalState) = await transport.sessionManager.retrieveOAuthState(serverState: serverState) else {
-            let buffer = self.stringBuffer("Invalid or expired 'state' parameter in callback from Auth0.", allocator: channel.allocator)
-            await self.sendResponseAsync(channel: channel, status: .badRequest, body: buffer)
-            return
-        }
-
-        // 3. Construct the final redirect URL for the original client (e.g., ChatGPT)
-        guard var gptURLComponents = URLComponents(string: originalRedirectURI) else {
-            let buffer = self.stringBuffer("Invalid original redirect URI stored.", allocator: channel.allocator)
-            await self.sendResponseAsync(channel: channel, status: .internalServerError, body: buffer)
-            return
-        }
-        
-        // Append the code and state to any existing query items.
-        if gptURLComponents.queryItems == nil {
-            gptURLComponents.queryItems = []
-        }
-        gptURLComponents.queryItems?.append(URLQueryItem(name: "code", value: code))
-        gptURLComponents.queryItems?.append(URLQueryItem(name: "state", value: originalState))
-        
-        guard let finalURL = gptURLComponents.url else {
-            let buffer = self.stringBuffer("Could not construct final client callback URL.", allocator: channel.allocator)
-            await self.sendResponseAsync(channel: channel, status: .internalServerError, body: buffer)
-            return
-        }
-
-        // 4. Redirect the client to the final destination
-        logger.info("Redirecting client back to original redirect URI.")
-        var headers = HTTPHeaders()
-        headers.add(name: "Location", value: finalURL.absoluteString)
-        await self.sendResponseAsync(channel: channel, status: .found, headers: headers)
-    }
-
-    private func handleTokenProxy(channel: Channel, head: HTTPRequestHead, body: ByteBuffer?) async {
-        logger.info("Handling token proxy request")
-        guard let config = transport.oauthConfiguration,
-              let clientID = config.clientID,
-              let clientSecret = config.clientSecret else {
-            logger.error("OAuth not configured correctly - missing clientID or clientSecret")
-            await self.sendJSONResponseAsync(channel: channel, status: .internalServerError, json: ["error": "OAuth not configured correctly on server"])
-            return
-        }
-
-        guard let requestBody = body else {
-            await self.sendJSONResponseAsync(channel: channel, status: .badRequest, json: ["error": "Missing request body"])
-            return
-        }
-        
-        // Prepend '?' to treat the form-urlencoded body as a query string for parsing
-        let queryString = "?" + (requestBody.getString(at: requestBody.readerIndex, length: requestBody.readableBytes) ?? "")
-        let clientParams = Dictionary(uniqueKeysWithValues: (URLComponents(string: queryString)?.queryItems ?? []).map { ($0.name, $0.value ?? "") })
-
-        // Reconstruct our server's callback URL, which is what Auth0 expects for the redirect_uri.
-        var callbackURLComponents = URLComponents()
-        callbackURLComponents.scheme = head.headers["X-Forwarded-Proto"].first ?? "http"
-        callbackURLComponents.host = head.headers["X-Forwarded-Host"].first ?? transport.host
-        callbackURLComponents.path = "/oauth/callback"
-        
-        guard let callbackURL = callbackURLComponents.url else {
-            logger.error("Could not construct callback URL for token proxy.")
-            await self.sendJSONResponseAsync(channel: channel, status: .internalServerError, json: ["error": "Could not construct callback URL for token proxy."])
-            return
-        }
-
-        // Start with all parameters the client sent (so we don't drop PKCE code_verifier, etc.)
-        var queryItems: [URLQueryItem] = clientParams.map { URLQueryItem(name: $0.key, value: $0.value) }
-
-        // Ensure required fields are present / overridden
-        func upsert(_ name: String, _ value: String) {
-            if let idx = queryItems.firstIndex(where: { $0.name == name }) {
-                queryItems[idx].value = value
-            } else {
-                queryItems.append(URLQueryItem(name: name, value: value))
+        // Copy headers (excluding host and connection-specific headers)
+        for (name, value) in head.headers {
+            let lowercaseName = name.lowercased()
+            if lowercaseName != "host" && 
+               lowercaseName != "content-length" &&
+               lowercaseName != "connection" &&
+               !lowercaseName.hasPrefix("x-forwarded") {
+                proxyRequest.setValue(value, forHTTPHeaderField: name)
             }
         }
 
-        upsert("redirect_uri", callbackURL.absoluteString)
-        upsert("client_id", clientID)
-        upsert("client_secret", clientSecret)
-
-        // Default grant_type to authorization_code if the client didn't send one.
-        if !queryItems.contains(where: { $0.name == "grant_type" }) {
-            queryItems.append(URLQueryItem(name: "grant_type", value: "authorization_code"))
+        // Copy body if present
+        if let requestBody = body {
+            proxyRequest.httpBody = Data(buffer: requestBody)
         }
-
-        var formBody = URLComponents()
-        formBody.queryItems = queryItems
-
-        var auth0Request = URLRequest(url: config.tokenEndpoint)
-        auth0Request.httpMethod = "POST"
-        auth0Request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        auth0Request.httpBody = formBody.query?.data(using: .utf8)
 
         do {
-            let (data, response) = try await URLSession.shared.data(for: auth0Request)
+            let (data, response) = try await URLSession.shared.data(for: proxyRequest)
             guard let httpResponse = response as? HTTPURLResponse else {
                 await self.sendJSONResponseAsync(channel: channel, status: .internalServerError, json: ["error": "Invalid response from auth server"])
                 return
@@ -1015,7 +913,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             await self.sendResponseAsync(channel: channel, status: HTTPResponseStatus(statusCode: httpResponse.statusCode), headers: headers, body: responseBuffer)
             
         } catch {
-            await self.sendJSONResponseAsync(channel: channel, status: .internalServerError, json: ["error": "Failed to proxy request to auth server: \(error.localizedDescription)"])
+            await self.sendJSONResponseAsync(channel: channel, status: .internalServerError, json: ["error": "Failed to proxy request to OAuth server: \(error.localizedDescription)"])
         }
     }
 

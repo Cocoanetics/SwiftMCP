@@ -26,6 +26,8 @@ public struct OAuthConfiguration: Sendable {
     private let tokenValidator: (@Sendable (String?) async -> Bool)?
     /// The OAuth dynamic client registration endpoint (optional)
     public let registrationEndpoint: URL?
+    /// Whether to enable transparent proxy mode (server acts as OAuth provider)
+    public let transparentProxy: Bool
 
     public init(
         issuer: URL,
@@ -37,6 +39,7 @@ public struct OAuthConfiguration: Sendable {
         clientID: String? = nil,
         clientSecret: String? = nil,
         registrationEndpoint: URL? = nil,
+        transparentProxy: Bool = false,
         tokenValidator: (@Sendable (String?) async -> Bool)? = nil
     ) {
         self.issuer = issuer
@@ -48,6 +51,7 @@ public struct OAuthConfiguration: Sendable {
         self.clientID = clientID
         self.clientSecret = clientSecret
         self.registrationEndpoint = registrationEndpoint
+        self.transparentProxy = transparentProxy
         self.tokenValidator = tokenValidator
     }
 
@@ -143,6 +147,35 @@ public struct OAuthConfiguration: Sendable {
             scopes_supported: ["openid", "profile", "email"]
         )
     }
+
+    // MARK: - Transparent Proxy Metadata
+    
+    /// Generate metadata for transparent proxy mode where the server acts as the OAuth provider
+    public func proxyAuthorizationServerMetadata(serverBaseURL: String) -> AuthorizationServerMetadata {
+        AuthorizationServerMetadata(
+            issuer: serverBaseURL,
+            authorization_endpoint: "\(serverBaseURL)/authorize",
+            token_endpoint: "\(serverBaseURL)/oauth/token",
+            introspection_endpoint: nil, // Not proxying introspection for now
+            jwks_uri: "\(serverBaseURL)/.well-known/jwks.json",
+            response_types_supported: ["code", "token"],
+            grant_types_supported: ["authorization_code", "client_credentials", "refresh_token"],
+            scopes_supported: ["openid", "profile", "email"],
+            registration_endpoint: "\(serverBaseURL)/oauth/register", // Proxy dynamic client registration
+            code_challenge_methods_supported: ["S256"]
+        )
+    }
+    
+    /// Generate metadata for transparent proxy mode where the server acts as the OAuth provider
+    public func proxyProtectedResourceMetadata(serverBaseURL: String) -> ProtectedResourceMetadata {
+        ProtectedResourceMetadata(
+            resource: serverBaseURL,
+            issuer: serverBaseURL,
+            token_endpoint: "\(serverBaseURL)/oauth/token",
+            jwks_uri: "\(serverBaseURL)/.well-known/jwks.json",
+            scopes_supported: ["openid", "profile", "email"]
+        )
+    }
 }
 
 private struct OIDCWellKnownConfiguration: Decodable, Sendable {
@@ -158,7 +191,8 @@ public extension OAuthConfiguration {
     init?(issuer: URL,
          audience: String? = nil,
          clientID: String? = nil,
-         clientSecret: String? = nil) async {
+         clientSecret: String? = nil,
+         transparentProxy: Bool = false) async {
         let configURL = issuer.appendingPathComponent(".well-known/openid-configuration")
 
         do {
@@ -178,7 +212,8 @@ public extension OAuthConfiguration {
                 audience: audience,
                 clientID: clientID,
                 clientSecret: clientSecret,
-                registrationEndpoint: config.registration_endpoint
+                registrationEndpoint: config.registration_endpoint,
+                transparentProxy: transparentProxy
             )
         } catch {
             return nil

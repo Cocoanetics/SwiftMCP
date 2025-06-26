@@ -98,6 +98,9 @@ final class HTTPSSECommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Enable JWT token validation (uses oauth-issuer and oauth-audience for validation)")
     var jwtValidation: Bool = false
     
+    @Flag(name: .long, help: "Enable transparent OAuth proxy mode (server acts as OAuth provider)")
+    var oauthTransparentProxy: Bool = false
+    
     // Make this a computed property instead of stored property
     private var signalHandler: SignalHandler? = nil
     
@@ -114,6 +117,7 @@ final class HTTPSSECommand: AsyncParsableCommand {
         self.oauthClientID = try container.decodeIfPresent(String.self, forKey: .oauthClientID)
         self.oauthClientSecret = try container.decodeIfPresent(String.self, forKey: .oauthClientSecret)
         self.jwtValidation = try container.decode(Bool.self, forKey: .jwtValidation)
+        self.oauthTransparentProxy = try container.decode(Bool.self, forKey: .oauthTransparentProxy)
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -125,6 +129,7 @@ final class HTTPSSECommand: AsyncParsableCommand {
         case oauthClientID
         case oauthClientSecret
         case jwtValidation
+        case oauthTransparentProxy
     }
     
     func run() async throws {
@@ -154,6 +159,7 @@ final class HTTPSSECommand: AsyncParsableCommand {
                 issuer: dummyIssuer,
                 authorizationEndpoint: dummyIssuer.appendingPathComponent("authorize"),
                 tokenEndpoint: dummyIssuer.appendingPathComponent("token"),
+                transparentProxy: oauthTransparentProxy,
                 tokenValidator: validator.validate
             )
             transport.oauthConfiguration = config
@@ -185,12 +191,30 @@ final class HTTPSSECommand: AsyncParsableCommand {
         } else if let issuerString = oauthIssuer,
                   let issuerURL = URL(string: issuerString) {
             // OAuth configuration
-            if let config = await OAuthConfiguration(issuer: issuerURL,
-                                                     audience: oauthAudience,
-                                                     clientID: oauthClientID,
-                                                     clientSecret: oauthClientSecret) {
+            if var config = await OAuthConfiguration(issuer: issuerURL,
+                                                      audience: oauthAudience,
+                                                      clientID: oauthClientID,
+                                                      clientSecret: oauthClientSecret) {
+                // Enable transparent proxy if requested
+                if oauthTransparentProxy {
+                    config = OAuthConfiguration(
+                        issuer: config.issuer,
+                        authorizationEndpoint: config.authorizationEndpoint,
+                        tokenEndpoint: config.tokenEndpoint,
+                        introspectionEndpoint: config.introspectionEndpoint,
+                        jwksEndpoint: config.jwksEndpoint,
+                        audience: config.audience,
+                        clientID: config.clientID,
+                        clientSecret: config.clientSecret,
+                        registrationEndpoint: config.registrationEndpoint,
+                        transparentProxy: true
+                    )
+                }
                 transport.oauthConfiguration = config
                 print("OAuth validation enabled with issuer: \(issuerString)")
+                if oauthTransparentProxy {
+                    print("  Transparent proxy mode: enabled (server acts as OAuth provider)")
+                }
             }
         } else {
             print("No authentication configured - all requests will be accepted")
