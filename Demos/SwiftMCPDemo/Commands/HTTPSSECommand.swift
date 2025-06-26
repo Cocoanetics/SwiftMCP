@@ -14,6 +14,7 @@ import OSLog
  - Server-Sent Events (SSE) for real-time updates
  - JSON-RPC over HTTP POST for function calls
  - Optional bearer token authentication
+ - Optional OAuth/JWT validation from JSON configuration
  - Optional OpenAPI endpoints for AI plugin integration
  
  Key Features:
@@ -29,6 +30,8 @@ import OSLog
  
  3. Security:
     - Optional bearer token authentication
+    - OAuth configuration from JSON file
+    - JWT validation (automatic when no introspection endpoint provided)
     - CORS support for web clients
     - Secure error handling and validation
  
@@ -47,8 +50,24 @@ final class HTTPSSECommand: AsyncParsableCommand {
   Features:
   - Server-Sent Events endpoint at /sse
   - JSON-RPC endpoints at /<serverName>/<toolName>
-  - Optional bearer token authentication, JWT validation (using oauth-issuer/oauth-audience), or OAuth validation
+  - Optional bearer token authentication or OAuth validation
   - Optional OpenAPI endpoints for AI plugin integration
+  
+  OAuth Configuration JSON Format:
+  {
+    "issuer": "https://example.com",
+    "authorization_endpoint": "https://example.com/authorize",
+    "token_endpoint": "https://example.com/oauth/token",
+    "introspection_endpoint": "https://example.com/oauth/introspect", // optional
+    "jwks_uri": "https://example.com/.well-known/jwks.json", // optional
+    "audience": "your-api-identifier", // optional
+    "client_id": "client", // optional
+    "client_secret": "secret", // optional
+    "registration_endpoint": "https://example.com/oauth/register", // optional
+    "transparent_proxy": true // optional, defaults to false
+  }
+  
+  Note: If no introspection_endpoint is provided, JWT validation will be automatically enabled.
   
   Examples:
     # Basic usage
@@ -57,20 +76,11 @@ final class HTTPSSECommand: AsyncParsableCommand {
     # With simple token authentication
     SwiftMCPDemo httpsse --port 8080 --token my-secret-token
     
-    # With JWT token validation
-    SwiftMCPDemo httpsse --port 8080 --jwt-validation \
-        --oauth-issuer https://dev-8ygj6eppnvjz8bm6.us.auth0.com/ \
-        --oauth-audience https://dev-8ygj6eppnvjz8bm6.us.auth0.com/api/v2/
+    # With OAuth configuration from JSON file
+    SwiftMCPDemo httpsse --port 8080 --oauth oauth-config.json
     
     # With OpenAPI support
     SwiftMCPDemo httpsse --port 8080 --openapi
-
-    # With OAuth
-    SwiftMCPDemo httpsse --port 8080 \
-        --oauth-issuer https://example.com \
-        --oauth-token-endpoint https://example.com/oauth/token \
-        --oauth-introspection-endpoint https://example.com/oauth/introspect \
-        --oauth-jwks-endpoint https://example.com/.well-known/jwks.json
 """
     )
     
@@ -83,23 +93,8 @@ final class HTTPSSECommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Enable OpenAPI endpoints")
     var openapi: Bool = false
 
-    @Option(name: .long, help: "OAuth issuer URL")
-    var oauthIssuer: String?
-
-    @Option(name: .long, help: "OAuth audience")
-    var oauthAudience: String?
-
-    @Option(name: .long, help: "OAuth client identifier")
-    var oauthClientID: String?
-
-    @Option(name: .long, help: "OAuth client secret")
-    var oauthClientSecret: String?
-
-    @Flag(name: .long, help: "Enable JWT token validation (uses oauth-issuer and oauth-audience for validation)")
-    var jwtValidation: Bool = false
-    
-    @Flag(name: .long, help: "Enable transparent OAuth proxy mode (server acts as OAuth provider)")
-    var oauthTransparentProxy: Bool = false
+    @Option(name: .long, help: "Path to OAuth configuration JSON file")
+    var oauth: String?
     
     // Make this a computed property instead of stored property
     private var signalHandler: SignalHandler? = nil
@@ -112,24 +107,14 @@ final class HTTPSSECommand: AsyncParsableCommand {
         self.port = try container.decode(Int.self, forKey: .port)
         self.token = try container.decodeIfPresent(String.self, forKey: .token)
         self.openapi = try container.decode(Bool.self, forKey: .openapi)
-        self.oauthIssuer = try container.decodeIfPresent(String.self, forKey: .oauthIssuer)
-        self.oauthAudience = try container.decodeIfPresent(String.self, forKey: .oauthAudience)
-        self.oauthClientID = try container.decodeIfPresent(String.self, forKey: .oauthClientID)
-        self.oauthClientSecret = try container.decodeIfPresent(String.self, forKey: .oauthClientSecret)
-        self.jwtValidation = try container.decode(Bool.self, forKey: .jwtValidation)
-        self.oauthTransparentProxy = try container.decode(Bool.self, forKey: .oauthTransparentProxy)
+        self.oauth = try container.decodeIfPresent(String.self, forKey: .oauth)
     }
 
     private enum CodingKeys: String, CodingKey {
         case port
         case token
         case openapi
-        case oauthIssuer
-        case oauthAudience
-        case oauthClientID
-        case oauthClientSecret
-        case jwtValidation
-        case oauthTransparentProxy
+        case oauth
     }
     
     func run() async throws {
@@ -144,60 +129,31 @@ final class HTTPSSECommand: AsyncParsableCommand {
         
         let transport = HTTPSSETransport(server: calculator, port: port)
         
-        // Set up authentication (priority: JWT > OAuth > simple token)
-        if jwtValidation {
-            // Use JWT validation via OAuth configuration
-            let validator = JWTTokenValidator(
-                expectedIssuer: oauthIssuer,
-                expectedAudience: oauthAudience,
-                expectedAuthorizedParty: oauthClientID
-            )
-            
-            // For JWT validation, fetch the real OAuth configuration from the issuer
-            // and then override with our custom token validator
-            if let issuerString = oauthIssuer,
-               let issuerURL = URL(string: issuerString),
-               var config = await OAuthConfiguration(issuer: issuerURL,
-                                                     audience: oauthAudience,
-                                                     clientID: oauthClientID,
-                                                     clientSecret: oauthClientSecret) {
-                // Create new config with JWT validator instead of OAuth introspection
-                config = OAuthConfiguration(
-                    issuer: config.issuer,
-                    authorizationEndpoint: config.authorizationEndpoint,
-                    tokenEndpoint: config.tokenEndpoint,
-                    introspectionEndpoint: config.introspectionEndpoint,
-                    jwksEndpoint: config.jwksEndpoint,
-                    audience: config.audience,
-                    clientID: config.clientID,
-                    clientSecret: config.clientSecret,
-                    registrationEndpoint: config.registrationEndpoint,
-                    transparentProxy: oauthTransparentProxy,
-                    tokenValidator: validator.validate
-                )
-                transport.oauthConfiguration = config
-            } else {
-                // Fallback to dummy config if issuer fetch fails
-                let dummyIssuer = URL(string: oauthIssuer ?? "https://example.com")!
-                let config = OAuthConfiguration(
-                    issuer: dummyIssuer,
-                    authorizationEndpoint: dummyIssuer.appendingPathComponent("authorize"),
-                    tokenEndpoint: dummyIssuer.appendingPathComponent("oauth/token"),
-                    transparentProxy: oauthTransparentProxy,
-                    tokenValidator: validator.validate
-                )
-                transport.oauthConfiguration = config
-            }
-            
-            print("JWT validation enabled:")
-            if let issuer = oauthIssuer {
-                print("  Expected issuer: \(issuer)")
-            }
-            if let audience = oauthAudience {
-                print("  Expected audience: \(audience)")
-            }
-            if let clientID = oauthClientID {
-                print("  Expected client ID (azp): \(clientID)")
+        // Set up authentication (priority: OAuth config > simple token > none)
+        if let oauthConfigPath = oauth {
+            do {
+                let jsonConfig = try JSONOAuthConfiguration.load(from: oauthConfigPath)
+                let oauthConfig = try jsonConfig.toOAuthConfiguration()
+                transport.oauthConfiguration = oauthConfig
+                
+                print("OAuth validation enabled with issuer: \(jsonConfig.issuer)")
+                if jsonConfig.transparentProxy == true {
+                    print("  Transparent proxy mode: enabled (server acts as OAuth provider)")
+                }
+                if jsonConfig.introspectionEndpoint == nil {
+                    print("  JWT validation: enabled (no introspection endpoint provided)")
+                } else {
+                    print("  Token introspection: enabled")
+                }
+                if let audience = jsonConfig.audience {
+                    print("  Expected audience: \(audience)")
+                }
+                if let clientID = jsonConfig.clientID {
+                    print("  Expected client ID: \(clientID)")
+                }
+            } catch {
+                print("Error loading OAuth configuration: \(error)")
+                throw ExitCode.failure
             }
         } else if let requiredToken = token {
             // Simple token check
@@ -213,34 +169,6 @@ final class HTTPSSECommand: AsyncParsableCommand {
                 return .authorized
             }
             print("Simple token validation enabled")
-        } else if let issuerString = oauthIssuer,
-                  let issuerURL = URL(string: issuerString) {
-            // OAuth configuration
-            if var config = await OAuthConfiguration(issuer: issuerURL,
-                                                      audience: oauthAudience,
-                                                      clientID: oauthClientID,
-                                                      clientSecret: oauthClientSecret) {
-                // Enable transparent proxy if requested
-                if oauthTransparentProxy {
-                    config = OAuthConfiguration(
-                        issuer: config.issuer,
-                        authorizationEndpoint: config.authorizationEndpoint,
-                        tokenEndpoint: config.tokenEndpoint,
-                        introspectionEndpoint: config.introspectionEndpoint,
-                        jwksEndpoint: config.jwksEndpoint,
-                        audience: config.audience,
-                        clientID: config.clientID,
-                        clientSecret: config.clientSecret,
-                        registrationEndpoint: config.registrationEndpoint,
-                        transparentProxy: true
-                    )
-                }
-                transport.oauthConfiguration = config
-                print("OAuth validation enabled with issuer: \(issuerString)")
-                if oauthTransparentProxy {
-                    print("  Transparent proxy mode: enabled (server acts as OAuth provider)")
-                }
-            }
         } else {
             print("No authentication configured - all requests will be accepted")
         }
