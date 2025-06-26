@@ -148,8 +148,13 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
                 handleOAuthProtectedResource(channel: channel, head: head)
 
             case (.GET, "/.well-known/openid-configuration"):
-                Task {
-                    await self.handleOAuthProxy(channel: channel, head: head, body: body)
+                // In transparent proxy mode, serve our own metadata instead of proxying to Auth0
+                if let config = transport.oauthConfiguration, config.transparentProxy {
+                    handleOAuthAuthorizationServer(channel: channel, head: head)
+                } else {
+                    Task {
+                        await self.handleOAuthProxy(channel: channel, head: head, body: body)
+                    }
                 }
 
             case (_, "/.well-known/oauth-authorization-server"),
