@@ -821,11 +821,28 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             return
         }
 
+        // Handle /authorize requests with direct redirect to Auth0 instead of proxying
+        if head.uri.hasPrefix("/authorize") {
+            // Parse query parameters from the request
+            var components = URLComponents(url: config.authorizationEndpoint, resolvingAgainstBaseURL: false)!
+            if let originalComponents = URLComponents(string: "http://dummy\(head.uri)") {
+                components.queryItems = originalComponents.queryItems
+            }
+            
+            if let redirectURL = components.url {
+                logger.info("Redirecting /authorize request to Auth0: \(redirectURL.absoluteString)")
+                
+                // Send a 302 redirect response directly to Auth0
+                var headers = HTTPHeaders()
+                headers.add(name: "Location", value: redirectURL.absoluteString)
+                await self.sendResponseAsync(channel: channel, status: .found, headers: headers)
+                return
+            }
+        }
+
         // Determine target URL based on the request path
         let targetURL: URL
         switch head.uri {
-        case let path where path.hasPrefix("/authorize"):
-            targetURL = config.authorizationEndpoint
         case let path where path.hasPrefix("/oauth/token"):
             targetURL = config.tokenEndpoint
         case let path where path.hasPrefix("/oauth/register"):
@@ -840,6 +857,14 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             targetURL = config.jwksEndpoint ?? config.issuer.appendingPathComponent(".well-known/jwks.json")
         case "/.well-known/openid-configuration":
             targetURL = config.issuer.appendingPathComponent(".well-known/openid-configuration")
+        case let path where path.hasPrefix("/u/"):
+            // Any Auth0 login UI paths should redirect to Auth0 instead of proxying
+            let redirectURL = config.issuer.appendingPathComponent(String(head.uri.dropFirst(1))).absoluteString
+            logger.info("Redirecting Auth0 UI path to Auth0: \(redirectURL)")
+            var headers = HTTPHeaders()
+            headers.add(name: "Location", value: redirectURL)
+            await self.sendResponseAsync(channel: channel, status: .found, headers: headers)
+            return
         default:
             logger.error("Unknown OAuth proxy path: \(head.uri)")
             await self.sendJSONResponseAsync(channel: channel, status: .notFound, json: ["error": "Unknown OAuth endpoint"])
@@ -870,6 +895,12 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
                !lowercaseName.hasPrefix("x-forwarded") {
                 proxyRequest.setValue(value, forHTTPHeaderField: name)
             }
+        }
+        
+        // Set proper referrer for Auth0 to recognize the OAuth flow context
+        if head.uri.hasPrefix("/authorize") || head.uri.hasPrefix("/u/login") {
+            proxyRequest.setValue(config.issuer.absoluteString, forHTTPHeaderField: "Referer")
+            logger.info("Set Referer header to: \(config.issuer.absoluteString)")
         }
 
         // Copy body if present

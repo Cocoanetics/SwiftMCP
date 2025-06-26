@@ -153,16 +153,41 @@ final class HTTPSSECommand: AsyncParsableCommand {
                 expectedAuthorizedParty: oauthClientID
             )
             
-            // Create a minimal OAuth configuration with our JWT validator
-            let dummyIssuer = URL(string: oauthIssuer ?? "https://example.com")!
-            let config = OAuthConfiguration(
-                issuer: dummyIssuer,
-                authorizationEndpoint: dummyIssuer.appendingPathComponent("authorize"),
-                tokenEndpoint: dummyIssuer.appendingPathComponent("token"),
-                transparentProxy: oauthTransparentProxy,
-                tokenValidator: validator.validate
-            )
-            transport.oauthConfiguration = config
+            // For JWT validation, fetch the real OAuth configuration from the issuer
+            // and then override with our custom token validator
+            if let issuerString = oauthIssuer,
+               let issuerURL = URL(string: issuerString),
+               var config = await OAuthConfiguration(issuer: issuerURL,
+                                                     audience: oauthAudience,
+                                                     clientID: oauthClientID,
+                                                     clientSecret: oauthClientSecret) {
+                // Create new config with JWT validator instead of OAuth introspection
+                config = OAuthConfiguration(
+                    issuer: config.issuer,
+                    authorizationEndpoint: config.authorizationEndpoint,
+                    tokenEndpoint: config.tokenEndpoint,
+                    introspectionEndpoint: config.introspectionEndpoint,
+                    jwksEndpoint: config.jwksEndpoint,
+                    audience: config.audience,
+                    clientID: config.clientID,
+                    clientSecret: config.clientSecret,
+                    registrationEndpoint: config.registrationEndpoint,
+                    transparentProxy: oauthTransparentProxy,
+                    tokenValidator: validator.validate
+                )
+                transport.oauthConfiguration = config
+            } else {
+                // Fallback to dummy config if issuer fetch fails
+                let dummyIssuer = URL(string: oauthIssuer ?? "https://example.com")!
+                let config = OAuthConfiguration(
+                    issuer: dummyIssuer,
+                    authorizationEndpoint: dummyIssuer.appendingPathComponent("authorize"),
+                    tokenEndpoint: dummyIssuer.appendingPathComponent("oauth/token"),
+                    transparentProxy: oauthTransparentProxy,
+                    tokenValidator: validator.validate
+                )
+                transport.oauthConfiguration = config
+            }
             
             print("JWT validation enabled:")
             if let issuer = oauthIssuer {
