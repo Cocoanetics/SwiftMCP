@@ -12,6 +12,8 @@ actor SessionManager {
     private var sessions: [UUID: Session] = [:]
     private weak var transport: (any Transport)?
 
+    // OAuth state management removed - using transparent proxy instead
+
     init(transport: (any Transport)? = nil) {
         self.transport = transport
     }
@@ -107,5 +109,21 @@ actor SessionManager {
     /// Remove a session entirely.
     func removeSession(id: UUID) {
         sessions.removeValue(forKey: id)
+    }
+
+    // MARK: - OAuth State Management (Removed - using transparent proxy)
+
+    // MARK: - Token lookup
+
+    /// Return the first session whose stored accessToken matches `token` and is not expired.
+    func session(forToken token: String) -> Session? {
+        for session in sessions.values {
+            if let stored = session.accessToken,
+               stored == token,
+               (session.accessTokenExpiry ?? Date.distantFuture) > Date() {
+                return session
+            }
+        }
+        return nil
     }
 }

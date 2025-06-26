@@ -1,11 +1,14 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 @preconcurrency import NIOCore
 import NIOHTTP1
 import Logging
 
 
 /// HTTP request handler for the SSE transport
-final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendable {
+final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @unchecked Sendable, URLSessionTaskDelegate {
     typealias InboundIn = HTTPServerRequestPart
     typealias OutboundOut = HTTPServerResponsePart
 
@@ -77,14 +80,13 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
     private func handleRequest(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?) {
 
         let serverPath = "/\(transport.server.serverName.asModelName)"
-
         let channel = context.channel
 
         switch (head.method, head.uri) {
 
             // Handle all OPTIONS requests in one case
             case (.OPTIONS, _):
-                handleOPTIONS(channel: context.channel, head: head)
+                handleOPTIONS(channel: channel, head: head)
 
             // Streamable HTTP Endpoint
             case (.POST, let path) where path.hasPrefix("/mcp"):
@@ -93,39 +95,34 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
                 }
 
             case (.GET, let path) where path.hasPrefix("/mcp"):
-                handleSSE(context: context, head: head, body: body, sendEndpoint: false)
+                Task {
+                    await self.handleSSE(channel: channel, head: head, body: body, sendEndpoint: false)
+                }
 
             // SSE Endpoint
 
             case (.GET, let path) where path.hasPrefix("/sse"):
-                handleSSE(context: context, head: head, body: body)
+                Task {
+                    await self.handleSSE(channel: channel, head: head, body: body)
+                }
 
             case (_, let path) where path.hasPrefix("/sse"):
-                sendResponse(channel: context.channel, status: .methodNotAllowed)
+                sendResponse(channel: channel, status: .methodNotAllowed)
 
             // Messages
 
             case (.POST, let path) where path.hasPrefix("/messages"):
-
-                // Create a channel reference that can be safely passed to the Task
-                let channel = context.channel
-
-                // Extract necessary information from head and body before passing to Task
-                let requestHead = head
-                let requestBody = body
-
                 Task {
-                    // Use extracted values instead of context directly
-                    await self.handleMessagesAsync(channel: channel, head: requestHead, body: requestBody)
+                    await self.handleMessagesAsync(channel: channel, head: head, body: body)
                 }
 
             case (_, let path) where path.hasPrefix("/messages"):
-                sendResponse(channel: context.channel, status: .methodNotAllowed)
+                sendResponse(channel: channel, status: .methodNotAllowed)
 
             // if OpenAPI is disabled: everything else is NOT FOUND
 
             case (_, _) where !transport.serveOpenAPI:
-                sendResponse(channel: context.channel, status: .notFound)
+                sendResponse(channel: channel, status: .notFound)
 
             // AI Plugin Manifest (OpenAPI)
 
@@ -133,26 +130,70 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
                 handleAIPluginManifest(context: context, head: head)
 
             case (_, "/.well-known/ai-plugin.json"):
-                sendResponse(channel: context.channel, status: .methodNotAllowed)
+                sendResponse(channel: channel, status: .methodNotAllowed)
 
             // OpenAPI Spec
 
             case (.GET, "/openapi.json"):
-                handleOpenAPISpec(channel: context.channel, head: head)
+                handleOpenAPISpec(channel: channel, head: head)
 
             case (_, "/openapi.json"):
-                sendResponse(channel: context.channel, status: .methodNotAllowed)
+                sendResponse(channel: channel, status: .methodNotAllowed)
+
+            // OAuth metadata
+            case (.GET, "/.well-known/oauth-authorization-server"):
+                handleOAuthAuthorizationServer(channel: channel, head: head)
+
+            case (.GET, "/.well-known/oauth-protected-resource"):
+                handleOAuthProtectedResource(channel: channel, head: head)
+
+            case (.GET, "/.well-known/openid-configuration"):
+                Task {
+                    await self.handleOAuthProxy(channel: channel, head: head, body: body)
+                }
+
+            case (_, "/.well-known/oauth-authorization-server"),
+                 (_, "/.well-known/oauth-protected-resource"):
+                sendResponse(channel: channel, status: .methodNotAllowed)
+
+            // --- Transparent OAuth Proxy ---
+            
+            // Proxy all /authorize requests directly to Auth0
+            case (_, let path) where path.hasPrefix("/authorize"):
+                Task {
+                    await self.handleOAuthProxy(channel: channel, head: head, body: body)
+                }
+
+            // Proxy all /oauth/* requests directly to Auth0  
+            case (_, let path) where path.hasPrefix("/oauth/"):
+                Task {
+                    await self.handleOAuthProxy(channel: channel, head: head, body: body)
+                }
+
+            // Proxy userinfo endpoint
+            case (_, "/userinfo"):
+                Task {
+                    await self.handleOAuthProxy(channel: channel, head: head, body: body)
+                }
+
+            // Proxy JWKS endpoint  
+            case (_, "/.well-known/jwks.json"):
+                Task {
+                    await self.handleOAuthProxy(channel: channel, head: head, body: body)
+                }
+                
+            // --- End Transparent OAuth Proxy ---
 
             // Tool Endpoint
             case (.POST, let path) where path.hasPrefix(serverPath):
                 handleToolCall(context: context, head: head, body: body)
 
             case (_, let path) where path.hasPrefix(serverPath):
-                sendResponse(channel: context.channel, status: .methodNotAllowed)
+                sendResponse(channel: channel, status: .methodNotAllowed)
 
             // Fallback for unknown endpoints
             default:
-                sendResponse(channel: context.channel, status: .notFound)
+                sendResponse(channel: channel, status: .notFound)
         }
     }
 
@@ -172,7 +213,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
         guard acceptHeader.lowercased().contains("application/json") else {
             logger.warning("Rejected non-json request (Accept: \(acceptHeader))")
             let buffer = channel.allocator.buffer(string: "Client must accept application/json.")
-            await sendResponseAsync(channel: channel, status: .badRequest, headers: headers, body: buffer)
+            await self.sendResponseAsync(channel: channel, status: .badRequest, headers: headers, body: buffer)
             return
         }
 
@@ -188,16 +229,16 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
         }
 
         // Validate token
-        if case .unauthorized(let message) = transport.authorizationHandler(token) {
+        if case .unauthorized(let message) = await transport.authorize(token, sessionID: sessionID) {
             let errorMessage = JSONRPCMessage.errorResponse(id: nil, error: .init(code: 401, message: "Unauthorized: \(message)"))
-            await sendJSONResponse(channel: channel, status: .unauthorized, json: errorMessage, sessionId: sessionID.uuidString)
+            await self.sendJSONResponseAsync(channel: channel, status: .unauthorized, json: errorMessage, sessionId: sessionID.uuidString)
             return
         }
 
         guard let body = body else {
             logger.error("POST /mcp received no body.")
             let buffer = channel.allocator.buffer(string: "Request body required.")
-            await sendResponseAsync(channel: channel, status: .badRequest, headers: headers, body: buffer)
+            await self.sendResponseAsync(channel: channel, status: .badRequest, headers: headers, body: buffer)
             return
         }
 
@@ -209,7 +250,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
                 if session.hasActiveConnection {
 
                     // Send 202 Accepted immediately
-                    await sendResponseAsync(channel: channel, status: .accepted, headers: responseHeaders, body: nil)
+                    await self.sendResponseAsync(channel: channel, status: .accepted, headers: responseHeaders, body: nil)
 
                     // Process messages and stream responses via SSE
                     for message in messages {
@@ -227,57 +268,20 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
                     let responses = await transport.server.processBatch(messages, ignoringEmptyResponses: true)
 
                     if responses.isEmpty {
-                        await sendResponseAsync(channel: channel, status: .accepted, headers: responseHeaders)
+                        await self.sendResponseAsync(channel: channel, status: .accepted, headers: responseHeaders)
                     } else {
-                        await sendJSONResponse(channel: channel, status: .ok, json: responses, sessionId: sessionID.uuidString)
+                        await self.sendJSONResponseAsync(channel: channel, status: .ok, json: responses, sessionId: sessionID.uuidString)
                 }
             }
             }
         } catch {
             logger.error("Failed to decode JSON-RPC message: \(error)")
             let response = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32600, message: error.localizedDescription))
-            await sendJSONResponse(channel: channel, status: .badRequest, json: response, sessionId: sessionID.uuidString)
+            await self.sendJSONResponseAsync(channel: channel, status: .badRequest, json: response, sessionId: sessionID.uuidString)
         }
     }
 
-    private func sendJSONResponse<T: Encodable>(
-        channel: Channel,
-        status: HTTPResponseStatus,
-        json: T,
-        sessionId: String? = nil
-    ) async {
-        
-        let dataToEncode: any Encodable
-
-        if let array = json as? [any Encodable], array.count == 1 {
-            dataToEncode = array[0]  // send a single JSON dict instead of array
-        } else {
-            dataToEncode = json  // send as is
-        }
-
-        do {
-            let encoder = JSONEncoder()
-            encoder.dateEncodingStrategy = .iso8601WithTimeZone
-            encoder.nonConformingFloatEncodingStrategy = .convertToString(positiveInfinity: "Infinity", negativeInfinity: "-Infinity", nan: "NaN")
-            let jsonData = try encoder.encode(dataToEncode)
-            var buffer = channel.allocator.buffer(capacity: jsonData.count)
-            buffer.writeBytes(jsonData)
-
-            var headers = HTTPHeaders()
-            headers.add(name: "Content-Type", value: "application/json")
-            headers.add(name: "Access-Control-Allow-Origin", value: "*")
-            if let sessionId = sessionId {
-                headers.add(name: "Mcp-Session-Id", value: sessionId)
-            }
-
-            await sendResponseAsync(channel: channel, status: status, headers: headers, body: buffer)
-        } catch {
-            logger.error("Error encoding response: \(error.localizedDescription)")
-        }
-    }
-
-    private func handleSSE(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?, sendEndpoint: Bool = true) {
-
+    private func handleSSE(channel: Channel, head: HTTPRequestHead, body: ByteBuffer?, sendEndpoint: Bool = true) async {
         precondition(head.method == .GET)
 
         // Extract or generate session/client ID (they are the same thing)
@@ -288,11 +292,11 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 
         guard "text/event-stream".matchesAcceptHeader(acceptHeader) else {
             logger.warning("Rejected non-SSE request (Accept: \(acceptHeader))")
-            sendResponse(channel: context.channel, status: .badRequest)
+            sendResponse(channel: channel, status: .badRequest)
             return
         }
 
-        let remoteAddress = context.channel.remoteAddress?.description ?? "unknown"
+        let remoteAddress = channel.remoteAddress?.description ?? "unknown"
         let userAgent = head.headers["user-agent"].first ?? "unknown"
 
         self.sessionID = sessionID
@@ -306,9 +310,24 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
                         - Protocol: \(sendEndpoint ? "Old (HTTP+SSE)" : "New (Streamable HTTP)")
                         """)
 
+        // Validate token (optional)
+        var token: String?
+        if let authHeader = head.headers["Authorization"].first {
+            let parts = authHeader.split(separator: " ")
+            if parts.count == 2 && parts[0].lowercased() == "bearer" {
+                token = String(parts[1])
+            }
+        }
+
+        if case .unauthorized(let message) = await transport.authorize(token, sessionID: sessionID) {
+            logger.warning("Unauthorized SSE connect: \(message)")
+            sendResponse(channel: channel, status: .unauthorized)
+            return
+        }
+
         // Register the channel with client ID
         logger.info("Registering SSE channel for client \(sessionID)")
-        transport.registerSSEChannel(context.channel, id: sessionID)
+        transport.registerSSEChannel(channel, id: sessionID)
 
 
         // Set up SSE response headers (ALWAYS send these for any SSE request)
@@ -317,7 +336,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
         headers.add(name: "Cache-Control", value: "no-cache")
         headers.add(name: "Connection", value: "keep-alive")
         headers.add(name: "Access-Control-Allow-Methods", value: "GET")
-        headers.add(name: "Access-Control-Allow-Headers", value: "*")
+        headers.add(name: "Access-Control-Allow-Headers", value: "Content-Type, Authorization, MCP-Protocol-Version")
 
         // Include session ID in response headers for new protocol
         if !sendEndpoint {
@@ -329,20 +348,20 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
 									 headers: headers)
 
         logger.info("Sending SSE response headers")
-        context.write(wrapOutboundOut(.head(response)), promise: nil)
-        context.flush()
+        channel.write(HTTPServerResponsePart.head(response), promise: nil)
+        channel.flush()
 
         // Conditionally send endpoint event (only for old protocol)
         if sendEndpoint {
             guard let endpointUrl = self.endpointUrl(from: head, sessionID: sessionID) else {
                 logger.error("Failed to construct endpoint URL")
-                context.close(promise: nil)
+                channel.close(promise: nil)
                 return
             }
 
             logger.info("Sending endpoint event with URL: \(endpointUrl)")
             let message = SSEMessage(name: "endpoint", data: endpointUrl.absoluteString)
-            context.channel.sendSSE(message)
+            channel.sendSSE(message)
         }
 
         logger.info("SSE connection setup complete for client \(sessionID)")
@@ -356,7 +375,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
               let sessionID = UUID(uuidString: idString),
               components.path.hasPrefix("/messages/") else {
             logger.warning("Invalid message endpoint URL format: \(head.uri)")
-            await sendResponseAsync(channel: channel, status: .badRequest)
+            await self.sendResponseAsync(channel: channel, status: .badRequest)
             return
         }
 
@@ -371,66 +390,90 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
             }
         }
 
-        // Validate token
-        if case .unauthorized(let message) = transport.authorizationHandler(token) {
-            let errorMessage = JSONRPCMessage.errorResponse(id: nil, error: .init(code: 401, message: "Unauthorized: \(message)"))
-
-            let data = try! JSONEncoder().encode(errorMessage)
-            let errorResponse = String(data: data, encoding: .utf8)!
-
-            // Send error via SSE
-            let sseMessage = SSEMessage(data: errorResponse)
-            transport.sendSSE(sseMessage, to: sessionID)
+        // Validate token first; if unauthorized reply immediately and abort.
+        if case .unauthorized(let message) = await transport.authorize(token, sessionID: sessionID) {
+            let err = JSONRPCMessage.errorResponse(id: nil, error: .init(code: 401, message: "Unauthorized: \(message)"))
+            await self.sendJSONResponseAsync(channel: channel, status: .unauthorized, json: err, sessionId: sessionID.uuidString)
+            return
         }
 
         guard let body = body else {
-            await sendResponseAsync(channel: channel, status: .badRequest)
+            await self.sendResponseAsync(channel: channel, status: .badRequest)
             return
         }
 
         // Send Accepted first
-        await sendResponseAsync(channel: channel, status: .accepted)
+        await self.sendResponseAsync(channel: channel, status: .accepted)
 
         do {
             let messages = try JSONRPCMessage.decodeMessages(from: body)
-            if messages.count > 1 {
-                logger.info("Received SSE batch with \(messages.count) messages")
-            }
 
-            await transport.sessionManager.session(id: sessionID).work { session in
-                for message in messages {
-                    // Check if it's an empty ping response - ignore it
-                    if case .response(let responseData) = message,
-                                       let result = responseData.result,
-                                       result.isEmpty {
-                        continue
-                    }
-
-                    // Handle each message in the batch with client ID
-                    transport.handleJSONRPCRequest(message, from: sessionID)
+            for message in messages {
+                // Check if it's an empty ping response - ignore it
+                if case .response(let responseData) = message,
+                                   let result = responseData.result,
+                                   result.isEmpty {
+                    continue
                 }
+
+                transport.handleJSONRPCRequest(message, from: sessionID)
             }
         } catch {
-            logger.error("Failed to decode JSON-RPC message: \(error)")
-            await sendResponseAsync(channel: channel, status: .badRequest)
+            logger.error("Failed to decode JSON-RPC message in SSE context: \(error)")
         }
     }
 
-    /// Async version of sendResponse that works with Channel instead of ChannelHandlerContext
     private func sendResponseAsync(channel: Channel, status: HTTPResponseStatus, headers: HTTPHeaders? = nil, body: ByteBuffer? = nil) async {
-        let response = HTTPResponseHead(version: .http1_1,
-                                                                         status: status,
-                                                                         headers: headers ?? HTTPHeaders())
+        var responseHeaders = headers ?? HTTPHeaders()
+        responseHeaders.add(name: "Access-Control-Allow-Origin", value: "*")
 
-        _ = channel.write(HTTPServerResponsePart.head(response))
         if let body = body {
-            _ = channel.write(HTTPServerResponsePart.body(.byteBuffer(body)))
+            if responseHeaders["Content-Type"].isEmpty {
+                 responseHeaders.add(name: "Content-Type", value: "text/plain; charset=utf-8")
+            }
+            responseHeaders.add(name: "Content-Length", value: "\(body.readableBytes)")
+        } else {
+            responseHeaders.add(name: "Content-Length", value: "0")
         }
-        _ = channel.write(HTTPServerResponsePart.end(nil))
-        channel.flush()
+
+        let head = HTTPResponseHead(version: .http1_1, status: status, headers: responseHeaders)
+        
+        channel.write(HTTPServerResponsePart.head(head), promise: nil)
+        if let body = body {
+            channel.write(HTTPServerResponsePart.body(.byteBuffer(body)), promise: nil)
+        }
+        channel.writeAndFlush(HTTPServerResponsePart.end(nil), promise: nil)
     }
 
+    private func sendJSONResponseAsync<T: Encodable>(
+        channel: Channel,
+        status: HTTPResponseStatus,
+        json: T,
+        sessionId: String? = nil
+    ) async {
+        do {
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601WithTimeZone
+            encoder.nonConformingFloatEncodingStrategy = .convertToString(positiveInfinity: "Infinity", negativeInfinity: "-Infinity", nan: "NaN")
+            let jsonData = try encoder.encode(json)
+            var buffer = channel.allocator.buffer(capacity: jsonData.count)
+            buffer.writeBytes(jsonData)
 
+            var headers = HTTPHeaders()
+            headers.add(name: "Content-Type", value: "application/json")
+            headers.add(name: "Access-Control-Allow-Origin", value: "*")
+            if let sessionId = sessionId {
+                headers.add(name: "Mcp-Session-Id", value: sessionId)
+            }
+
+            await self.sendResponseAsync(channel: channel, status: status, headers: headers, body: buffer)
+        } catch {
+            logger.error("Error encoding response: \(error.localizedDescription)")
+            // If encoding fails, we can't send a JSON error, so send a plain text one.
+            let errorBuffer = self.stringBuffer("Internal Server Error encoding response", allocator: channel.allocator)
+            await self.sendResponseAsync(channel: channel, status: .internalServerError, body: errorBuffer)
+        }
+    }
 
     // MARK: - OpenAPI Handlers
 
@@ -523,6 +566,100 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
         }
     }
 
+    // MARK: - OAuth Metadata
+
+    /// Serve metadata for the OAuth authorization server.
+    private func handleOAuthAuthorizationServer(channel: Channel, head: HTTPRequestHead) {
+        guard let config = transport.oauthConfiguration else {
+            sendResponse(channel: channel, status: .notFound)
+            return
+        }
+
+        let metadata: OAuthConfiguration.AuthorizationServerMetadata
+        if config.transparentProxy {
+            // Build server URL for transparent proxy mode using the actual request head
+            let serverBaseURL = getBaseURL(from: head)
+            metadata = config.proxyAuthorizationServerMetadata(serverBaseURL: serverBaseURL)
+        } else {
+            metadata = config.authorizationServerMetadata()
+        }
+        
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+
+        do {
+            let data = try encoder.encode(metadata)
+            var buffer = channel.allocator.buffer(capacity: data.count)
+            buffer.writeBytes(data)
+            sendResponse(channel: channel, status: .ok, body: buffer)
+        } catch {
+            logger.error("Failed to encode OAuth metadata: \(error)")
+            sendResponse(channel: channel, status: .internalServerError)
+        }
+    }
+
+    /// Serve metadata for the OAuth protected resource.
+    private func handleOAuthProtectedResource(channel: Channel, head: HTTPRequestHead) {
+        guard let config = transport.oauthConfiguration else {
+            sendResponse(channel: channel, status: .notFound)
+            return
+        }
+
+        // Build the resource base URL from the incoming request headers
+        // Use forwarded headers if present, otherwise use transport defaults
+        let host: String
+        let scheme: String
+        let port: Int
+
+        if let forwardedHost = head.headers["X-Forwarded-Host"].first {
+            host = forwardedHost
+        } else if let hostHeader = head.headers["Host"].first {
+            host = hostHeader
+        } else {
+            host = transport.host
+        }
+
+        if let forwardedProto = head.headers["X-Forwarded-Proto"].first {
+            scheme = forwardedProto
+        } else {
+            scheme = "http"
+        }
+
+        if let forwardedPort = head.headers["X-Forwarded-Port"].first, let p = Int(forwardedPort) {
+            port = p
+        } else {
+            port = transport.port
+        }
+
+        // Compose the base URL (include port if not default)
+        var resourceBaseURL = "\(scheme)://\(host)"
+        if !(scheme == "http" && port == 80) && !(scheme == "https" && port == 443) {
+            // Only add port if not default for scheme and not already present in host
+            if !host.contains(":") {
+                resourceBaseURL += ":\(port)"
+            }
+        }
+
+        let metadata: OAuthConfiguration.ProtectedResourceMetadata
+        if config.transparentProxy {
+            metadata = config.proxyProtectedResourceMetadata(serverBaseURL: resourceBaseURL)
+        } else {
+            metadata = config.protectedResourceMetadata(resourceBaseURL: resourceBaseURL)
+        }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+
+        do {
+            let data = try encoder.encode(metadata)
+            var buffer = channel.allocator.buffer(capacity: data.count)
+            buffer.writeBytes(data)
+            sendResponse(channel: channel, status: .ok, body: buffer)
+        } catch {
+            logger.error("Failed to encode OAuth metadata: \(error)")
+            sendResponse(channel: channel, status: .internalServerError)
+        }
+    }
+
     private func handleToolCall(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?) {
         precondition(head.method == .POST)
         precondition(transport.serveOpenAPI)
@@ -570,7 +707,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
         }
 
         // Validate token
-        if case .unauthorized(let message) = transport.authorizationHandler(token) {
+        if case .unauthorized(let message) = await transport.authorize(token, sessionID: sessionID) {
             let errorDict = ["error": "Unauthorized: \(message)"] as [String: String]
             let data = try! JSONEncoder().encode(errorDict)
             var buffer = allocator.buffer(capacity: data.count)
@@ -677,8 +814,201 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
         }
     }
 
+    // MARK: - OAuth Proxy
+
+    private func handleOAuthProxy(channel: Channel, head: HTTPRequestHead, body: ByteBuffer?) async {
+        logger.info("Handling OAuth proxy request for \(head.uri)")
+        guard let config = transport.oauthConfiguration else {
+            logger.error("OAuth not configured")
+            await self.sendJSONResponseAsync(channel: channel, status: .internalServerError, json: ["error": "OAuth not configured"])
+            return
+        }
+
+        // Handle /authorize requests with direct redirect to Auth0 instead of proxying
+        if head.uri.hasPrefix("/authorize") {
+            // Parse query parameters from the request
+            var components = URLComponents(url: config.authorizationEndpoint, resolvingAgainstBaseURL: false)!
+            if let originalComponents = URLComponents(string: "http://dummy\(head.uri)") {
+                components.queryItems = originalComponents.queryItems
+            }
+            
+            if let redirectURL = components.url {
+                logger.info("Redirecting /authorize request to Auth0: \(redirectURL.absoluteString)")
+                
+                // Send a 302 redirect response directly to Auth0
+                var headers = HTTPHeaders()
+                headers.add(name: "Location", value: redirectURL.absoluteString)
+                await self.sendResponseAsync(channel: channel, status: .found, headers: headers)
+                return
+            }
+        }
+
+        // Determine target URL based on the request path
+        let targetURL: URL
+        switch head.uri {
+        case let path where path.hasPrefix("/oauth/token"):
+            targetURL = config.tokenEndpoint
+        case let path where path.hasPrefix("/oauth/register"):
+            targetURL = config.registrationEndpoint ?? config.issuer.appendingPathComponent("oidc/register")
+        case let path where path.hasPrefix("/oauth/"):
+            // For other /oauth/* paths, append to issuer
+            let pathComponent = String(head.uri.dropFirst(1)) // Remove leading "/"
+            targetURL = config.issuer.appendingPathComponent(pathComponent)
+        case "/userinfo":
+            targetURL = config.issuer.appendingPathComponent("userinfo")
+        case "/.well-known/jwks.json":
+            targetURL = config.jwksEndpoint ?? config.issuer.appendingPathComponent(".well-known/jwks.json")
+        case "/.well-known/openid-configuration":
+            targetURL = config.issuer.appendingPathComponent(".well-known/openid-configuration")
+        case let path where path.hasPrefix("/u/"):
+            // Any Auth0 login UI paths should redirect to Auth0 instead of proxying
+            let redirectURL = config.issuer.appendingPathComponent(String(head.uri.dropFirst(1))).absoluteString
+            logger.info("Redirecting Auth0 UI path to Auth0: \(redirectURL)")
+            var headers = HTTPHeaders()
+            headers.add(name: "Location", value: redirectURL)
+            await self.sendResponseAsync(channel: channel, status: .found, headers: headers)
+            return
+        default:
+            logger.error("Unknown OAuth proxy path: \(head.uri)")
+            await self.sendJSONResponseAsync(channel: channel, status: .notFound, json: ["error": "Unknown OAuth endpoint"])
+            return
+        }
+
+        // Build the proxy request
+        var proxyRequest = URLRequest(url: targetURL)
+        proxyRequest.httpMethod = head.method.rawValue
+        
+        // Copy original query parameters if any
+        // Parse the URI properly by adding a dummy scheme and host
+        if let originalComponents = URLComponents(string: "http://dummy\(head.uri)") {
+            var targetComponents = URLComponents(url: targetURL, resolvingAgainstBaseURL: false)!
+            targetComponents.queryItems = originalComponents.queryItems
+            if let finalURL = targetComponents.url {
+                proxyRequest.url = finalURL
+                logger.info("Proxying to: \(finalURL.absoluteString)")
+            }
+        }
+
+        // Copy headers (excluding host and connection-specific headers)
+        for (name, value) in head.headers {
+            let lowercaseName = name.lowercased()
+            if lowercaseName != "host" && 
+               lowercaseName != "content-length" &&
+               lowercaseName != "connection" &&
+               !lowercaseName.hasPrefix("x-forwarded") {
+                proxyRequest.setValue(value, forHTTPHeaderField: name)
+            }
+        }
+        
+        // Set proper referrer for Auth0 to recognize the OAuth flow context
+        if head.uri.hasPrefix("/authorize") || head.uri.hasPrefix("/u/login") {
+            proxyRequest.setValue(config.issuer.absoluteString, forHTTPHeaderField: "Referer")
+            logger.info("Set Referer header to: \(config.issuer.absoluteString)")
+        }
+
+        // Copy body if present
+        if let requestBody = body {
+            proxyRequest.httpBody = Data(buffer: requestBody)
+        }
+
+        do {
+            // Create a URLSession that doesn't automatically follow redirects
+            // This is important for OAuth flows where Auth0 returns redirects with authorization codes
+            let sessionConfig = URLSessionConfiguration.default
+            let session = URLSession(configuration: sessionConfig, delegate: self, delegateQueue: nil)
+            let (data, response) = try await session.data(for: proxyRequest)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                await self.sendJSONResponseAsync(channel: channel, status: .internalServerError, json: ["error": "Invalid response from auth server"])
+                return
+            }
+
+            // Try to parse access_token so we can store it with the session (light-weight auth)
+            if let sessionIDHeader = head.headers["Mcp-Session-Id"].first,
+               let sessionUUID = UUID(uuidString: sessionIDHeader) {
+                if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let accessToken = json["access_token"] as? String,
+                   let expiresIn = json["expires_in"] as? Int {
+                    await transport.sessionManager.session(id: sessionUUID).work { s in
+                        s.accessToken = accessToken
+                        s.accessTokenExpiry = Date().addingTimeInterval(TimeInterval(expiresIn))
+                    }
+                }
+            }
+
+            // Forward the response (body and status) from Auth0 back to the client
+            var responseBuffer = channel.allocator.buffer(capacity: data.count)
+            responseBuffer.writeBytes(data)
+            
+            var headers = HTTPHeaders()
+            // Copy headers from Auth0 response, but exclude problematic ones that describe the payload's transfer,
+            // since URLSession has already decoded the payload for us. Also exclude CORS headers since we handle those ourselves.
+            let headersToExclude = ["transfer-encoding", "connection", "content-encoding", "access-control-allow-origin", "access-control-allow-methods", "access-control-allow-headers", "access-control-expose-headers", "access-control-max-age"]
+            httpResponse.allHeaderFields.forEach { key, value in
+                if let keyString = key as? String, let valueString = value as? String, !headersToExclude.contains(keyString.lowercased()) {
+                                         // Special handling for Location header - convert relative URLs to absolute
+                     if keyString.lowercased() == "location" {
+                         if valueString.hasPrefix("/") {
+                             // Relative URL - make it absolute by prepending Auth0's base URL
+                             let baseURL = "\(config.issuer.scheme!)://\(config.issuer.host!)"
+                             let absoluteURL = baseURL + valueString
+                             headers.add(name: keyString, value: absoluteURL)
+                             logger.info("Converted relative Location header '\(valueString)' to absolute: '\(absoluteURL)'")
+                         } else {
+                             // Already absolute URL
+                             headers.add(name: keyString, value: valueString)
+                         }
+                     } else {
+                         headers.add(name: keyString, value: valueString)
+                     }
+                }
+            }
+            
+            // Set the correct content-length for the DECOMPRESSED data we are sending.
+            headers.replaceOrAdd(name: "Content-Length", value: "\(data.count)")
+            
+            await self.sendResponseAsync(channel: channel, status: HTTPResponseStatus(statusCode: httpResponse.statusCode), headers: headers, body: responseBuffer)
+            
+        } catch {
+            await self.sendJSONResponseAsync(channel: channel, status: .internalServerError, json: ["error": "Failed to proxy request to OAuth server: \(error.localizedDescription)"])
+        }
+    }
+
+    // MARK: - URLSessionTaskDelegate
+    
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
+        // Don't follow redirects. Let the original data task complete with the redirect response.
+        logger.info("URLSession delegate detected redirect, preventing follow.")
+        completionHandler(nil)
+    }
+
     // MARK: - Helpers
 
+    private func stringBuffer(_ string: String, allocator: ByteBufferAllocator) -> ByteBuffer {
+        var buffer = allocator.buffer(capacity: string.utf8.count)
+        buffer.writeString(string)
+        return buffer
+    }
+
+    private func getBaseURL(from head: HTTPRequestHead) -> String {
+        let host: String
+        if let forwardedHost = head.headers["X-Forwarded-Host"].first {
+            host = forwardedHost
+        } else if let hostHeader = head.headers["Host"].first {
+            host = hostHeader
+        } else {
+            host = transport.host
+        }
+
+        let scheme: String
+        if let forwardedProto = head.headers["X-Forwarded-Proto"].first {
+            scheme = forwardedProto
+        } else {
+            scheme = "http"
+        }
+
+        return "\(scheme)://\(host)"
+    }
+    
     fileprivate func endpointUrl(from head: HTTPRequestHead, sessionID: UUID) -> URL? {
         var components = URLComponents()
 
@@ -728,7 +1058,7 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
         logger.info("Handling OPTIONS request for URI: \(head.uri)")
         var headers = HTTPHeaders()
         headers.add(name: "Access-Control-Allow-Methods", value: "GET, POST, OPTIONS")
-        headers.add(name: "Access-Control-Allow-Headers", value: "Content-Type, Authorization")
+        headers.add(name: "Access-Control-Allow-Headers", value: "Content-Type, Authorization, MCP-Protocol-Version")
         sendResponse(channel: channel, status: .ok, headers: headers)
     }
 
@@ -748,7 +1078,6 @@ final class HTTPHandler: ChannelInboundHandler, Identifiable, @unchecked Sendabl
             channel.write(HTTPServerResponsePart.body(.byteBuffer(body)), promise: nil)
         }
 
-        channel.write(HTTPServerResponsePart.end(nil), promise: nil)
-        channel.flush()
+        channel.writeAndFlush(HTTPServerResponsePart.end(nil), promise: nil)
     }
 }

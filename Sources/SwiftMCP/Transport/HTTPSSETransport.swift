@@ -50,6 +50,50 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     /// Authorization handler for bearer tokens.
     public var authorizationHandler: AuthorizationHandler = { _ in return .authorized }
 
+    /// Optional OAuth configuration. When set, incoming bearer tokens are
+    /// validated using the provided settings and `.well-known` endpoints are
+    /// served with the corresponding metadata.
+    public var oauthConfiguration: OAuthConfiguration?
+
+    /// Perform authorization using either the OAuth configuration or the
+    /// synchronous ``authorizationHandler`` closure.
+    func authorize(_ token: String?, sessionID: UUID?) async -> AuthorizationResult {
+        // 1. If we have a session ID, check token against session-stored value
+        if let id = sessionID {
+            let session = await sessionManager.session(id: id)
+            if let stored = session.accessToken {
+                if stored == token, (session.accessTokenExpiry ?? Date.distantFuture) > Date() {
+                    return .authorized
+                } else {
+                    return .unauthorized("Invalid or expired token")
+                }
+            } else if let token { // first time we see a token for this session – accept and remember it
+                session.accessToken = token
+                // Without expires_in we can't know exact lifetime; fall back to 24 h.
+                session.accessTokenExpiry = Date().addingTimeInterval(24 * 60 * 60)
+                return .authorized
+            } else {
+                return .unauthorized("No token provided")
+            }
+        }
+
+        // 2. If we don't have a sessionID, see if we can locate a session by token.
+        if let token, sessionID == nil {
+            if await sessionManager.session(forToken: token) != nil {
+                return .authorized
+            }
+        }
+
+        // 3. Fallback: if an OAuthConfiguration is still set, fall back to its validation
+        if let oauthConfiguration {
+            let valid = await oauthConfiguration.validate(token: token)
+            return valid ? .authorized : .unauthorized("Invalid token")
+        }
+
+        // 4. Otherwise use legacy handler
+        return authorizationHandler(token)
+    }
+
     /// Defines the available keep-alive modes for maintaining connections.
     public enum KeepAliveMode: Sendable {
         case none

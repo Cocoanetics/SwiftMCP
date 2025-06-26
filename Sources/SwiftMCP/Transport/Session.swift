@@ -15,6 +15,13 @@ public final class Session: @unchecked Sendable {
     /// The SSE channel associated with this session, if any.
     public var channel: Channel?
 
+    // MARK: - OAuth token (light-weight session storage)
+    /// Access-token issued for this session (if any).
+    public var accessToken: String?
+
+    /// Absolute expiry date for `accessToken`.
+    public var accessTokenExpiry: Date?
+
     /// Creates a new session.
     /// - Parameters:
     ///   - id: The unique session identifier.
