@@ -3,8 +3,9 @@
   "authorization_endpoint": "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/authorize",
   "token_endpoint": "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/oauth/token",
   "jwks_uri": "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/.well-known/jwks.json",
+  "registration_endpoint": "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/oidc/register",
   "audience": "https://unique-sponge-driven.ngrok-free.app",
   "client_id": "n4vmrjiAhmoE1P1JvjvF1iU8m1RTq3yi",
   "client_secret": "wXfa4HVXgKVBpOonsFa03GeLc3L2ZnWzX1LQ9RKgKimsasXVC1Qs8zlqluJyNlK_",
-  "transparent_proxy": true
+  "transparent_proxy": true 
 } 
