@@ -5,8 +5,8 @@ import Testing
 @Suite("JWT Decoder", .tags(.unit))
 struct JWTDecoderTests {
     
-    // The actual token from the user's request
-    static let testToken = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6ImlfRjhMWkdhRC10SkIzcm9MckRCMSJ9.eyJpc3MiOiJodHRwczovL2Rldi04eWdqNmVwcG52ano4Ym02LnVzLmF1dGgwLmNvbS8iLCJzdWIiOiJhdXRoMHw2ODViZmUwN2E1NGIyNGFhNzhiMGNhMmQiLCJhdWQiOlsiaHR0cHM6Ly9kZXYtOHlnajZlcHBudmp6OGJtNi51cy5hdXRoMC5jb20vYXBpL3YyLyIsImh0dHBzOi8vZGV2LTh5Z2o2ZXBwbnZqejhibTYudXMuYXV0aDAuY29tL3VzZXJpbmZvIl0sImlhdCI6MTc1MDg4MjM5OSwiZXhwIjoxNzUwOTY4Nzk5LCJzY29wZSI6Im9wZW5pZCBwcm9maWxlIGVtYWlsIiwiYXpwIjoibjR2bXJqaUFobW9FMVAxSnZqdkYxaVU4bTFSVHEzeWkifQ.l_5i_7vxlVIuwNAAoFeW9MQD6LInkT43ppu5P7NdWbZ5coaHjMvYhspDmLL-sa14KX5JLxgKlfj9K-QHuljZ5bjtYurzpU0hN7jcn_BcxdTNSKmMEp7vyxb0Y9ESEAEIaiUcS1j2W45eTsA1HsPCqcuRS0nWEXwSCzwQLX8gUgmacBcIAyvewvbJKN2oUBxh7TGaVQ_CQf4WYWYVGNTCM1oy8mwt5vKjNYGG9t_xecH2xQ8MpUDidpYNUKHnFqs5tDCwCi4HXf97jAock1LSSUH_uBBmb-YlukeOwt2SwZKzuupC9nq8SqH-11iAduhuDyJKJZaiuCSmtcRYXK2U8Q"
+    // Synthetic test token with far-future expiration (2030) for deterministic tests
+    static let testToken = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6ImlfRjhMWkdhRC10SkIzcm9MckRCMSJ9.eyJpc3MiOiJodHRwczovL2Rldi04eWdqNmVwcG52ano4Ym02LnVzLmF1dGgwLmNvbS8iLCJzdWIiOiJhdXRoMHw2ODViZmUwN2E1NGIyNGFhNzhiMGNhMmQiLCJhdWQiOlsiaHR0cHM6Ly9kZXYtOHlnajZlcHBudmp6OGJtNi51cy5hdXRoMC5jb20vYXBpL3YyLyIsImh0dHBzOi8vZGV2LTh5Z2o2ZXBwbnZqejhibTYudXMuYXV0aDAuY29tL3VzZXJpbmZvIl0sImlhdCI6MTc1MDg4MjM5OSwiZXhwIjoyNTI0NjA4MDAwLCJzY29wZSI6Im9wZW5pZCBwcm9maWxlIGVtYWlsIiwiYXpwIjoibjR2bXJqaUFobW9FMVAxSnZqdkYxaVU4bTFSVHEzeWkifQ.fake-signature-for-testing"
     
     // New token supplied by the user that lacks the azp claim (access_token type)
     static let tokenWithoutAzp = "eyJhbGciOiJSUzI1NiIsInR5cCI6ImF0K2p3dCIsImtpZCI6ImlfRjhMWkdhRC10SkIzcm9MckRCMSJ9.eyJpc3MiOiJodHRwczovL2Rldi04eWdqNmVwcG52ano4Ym02LnVzLmF1dGgwLmNvbS8iLCJzdWIiOiJhdXRoMHw2ODViZmUwN2E1NGIyNGFhNzhiMGNhMmQiLCJhdWQiOlsiaHR0cHM6Ly91bmlxdWUtc3BvbmdlLWRyaXZlbi5uZ3Jvay1mcmVlLmFwcCIsImh0dHBzOi8vZGV2LTh5Z2o2ZXBwbnZqejhibTYudXMuYXV0aDAuY29tL3VzZXJpbmZvIl0sImlhdCI6MTc1MTAxMzMwOCwiZXhwIjoxNzUxMDk5NzA4LCJzY29wZSI6Im9wZW5pZCBwcm9maWxlIGVtYWlsIiwianRpIjoic3RROTlmakt3VGFUR3lBQjRFM3pDNSIsImNsaWVudF9pZCI6Ik81VmJUR1BlT1lURG5qbzhCckQyV0ZzYjRMcm15WGxiIn0.kMsmlMNuPGwMZC-_DHvemhlUOkx-uQret9LzFc47kOSSpbpl-_XkKqUTFhCkV69Ywpu5rJah8ZA-bLKPT-fNE1QnuWvRwwW335XbfSjO9R8xRjrXrju1GdIXkp3pnoGN642BrkxlYnoXM3NdUTfiNRGQfsliVzvcmQpEXH7NV_nivCti4aQVW3ERVqrAzPHg53IKq7-lokW6mEV23YjwvpUm4DJqvSbNA9h5pIm-_Te1wP-iHEUmsPnp8g_Y2O9qXPxMWrsTe4JU7lemaeosNZOlHX6krXWxvCGpSyZnaa-gzT7P1RD1efnjg6YnMHzz_1Mpa7muaWnm5Khq5wFI9A"
@@ -37,7 +37,7 @@ struct JWTDecoderTests {
         
         // Verify timestamps (these are the actual values from the token)
         #expect(jwt.payload.iat?.timeIntervalSince1970 == 1750882399)
-        #expect(jwt.payload.exp?.timeIntervalSince1970 == 1750968799)
+        #expect(jwt.payload.exp?.timeIntervalSince1970 == 2524608000)
         
         // Verify signature is present
         #expect(!jwt.signature.isEmpty)
