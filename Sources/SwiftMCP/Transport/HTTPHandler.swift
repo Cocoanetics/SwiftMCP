@@ -927,24 +927,38 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
                 return
             }
 
-            // Try to parse access_token so we can store it with the session (light-weight auth)
-            if let sessionIDHeader = head.headers["Mcp-Session-Id"].first,
-               let sessionUUID = UUID(uuidString: sessionIDHeader) {
-                if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let accessToken = json["access_token"] as? String,
-                   let expiresIn = json["expires_in"] as? Int {
-                    await transport.sessionManager.session(id: sessionUUID).work { s in
-                        s.accessToken = accessToken
-                        s.accessTokenExpiry = Date().addingTimeInterval(TimeInterval(expiresIn))
-                    }
-                }
-            }
-
             // Forward the response (body and status) from Auth0 back to the client
             var responseBuffer = channel.allocator.buffer(capacity: data.count)
             responseBuffer.writeBytes(data)
             
             var headers = HTTPHeaders()
+            
+            // Always store access_token in session for /oauth/token responses and add session ID to headers
+            if head.uri.hasPrefix("/oauth/token") {
+                var sessionUUID: UUID
+                
+                // Check if we have an existing session ID, otherwise create a new one
+                if let sessionIDHeader = head.headers["Mcp-Session-Id"].first,
+                   let existingSessionUUID = UUID(uuidString: sessionIDHeader) {
+                    sessionUUID = existingSessionUUID
+                } else {
+                    // No session ID provided, create a new session
+                    sessionUUID = UUID()
+                }
+                
+                if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let accessToken = json["access_token"] as? String {
+                    let expiresIn = (json["expires_in"] as? Int) ?? (24 * 60 * 60)
+                    await transport.sessionManager.session(id: sessionUUID).work { s in
+                        s.accessToken = accessToken
+                        s.accessTokenExpiry = Date().addingTimeInterval(TimeInterval(expiresIn))
+                    }
+                    
+                    // Add the session ID to the response headers so the client can use it
+                    headers.add(name: "Mcp-Session-Id", value: sessionUUID.uuidString)
+                }
+            }
+            
             // Copy headers from Auth0 response, but exclude problematic ones that describe the payload's transfer,
             // since URLSession has already decoded the payload for us. Also exclude CORS headers since we handle those ourselves.
             let headersToExclude = ["transfer-encoding", "connection", "content-encoding", "access-control-allow-origin", "access-control-allow-methods", "access-control-allow-headers", "access-control-expose-headers", "access-control-max-age"]
