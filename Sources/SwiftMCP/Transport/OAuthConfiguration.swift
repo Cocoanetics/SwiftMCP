@@ -80,8 +80,7 @@ public struct JSONOAuthConfiguration: Codable, Sendable {
         let tokenValidator: (@Sendable (String?) async -> Bool)? = if introspectionURL == nil {
             JWTTokenValidator(
                 expectedIssuer: issuer,
-                expectedAudience: audience,
-                expectedAuthorizedParty: clientID
+                expectedAudience: audience
             ).validate
         } else {
             nil

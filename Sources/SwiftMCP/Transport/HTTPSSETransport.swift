@@ -111,8 +111,6 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
                 if await sessionManager.session(forToken: token) != nil {
                     return true
                 }
-                // If not found in any session, reject it - it didn't come through our proxy
-                return false
             }
             
             // Try OAuth validation for non-proxy mode

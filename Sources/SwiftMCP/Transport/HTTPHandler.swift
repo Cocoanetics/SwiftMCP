@@ -196,6 +196,12 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             case (_, let path) where path.hasPrefix(serverPath):
                 sendResponse(channel: channel, status: .methodNotAllowed)
 
+            // Handle DELETE /mcp to remove a session
+            case (.DELETE, "/mcp"):
+                Task {
+                    await self.handleDeleteSession(channel: channel, head: head)
+                }
+
             // Fallback for unknown endpoints
             default:
                 sendResponse(channel: channel, status: .notFound)
@@ -837,6 +843,16 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
                 components.queryItems = originalComponents.queryItems
             }
             
+            // Add the configured audience parameter if it's not already present and we have one configured
+            if let audience = config.audience {
+                var queryItems = components.queryItems ?? []
+                // Check if audience is already present
+                if !queryItems.contains(where: { $0.name == "audience" }) {
+                    queryItems.append(URLQueryItem(name: "audience", value: audience))
+                    components.queryItems = queryItems
+                }
+            }
+            
             if let redirectURL = components.url {
                 logger.info("Redirecting /authorize request to Auth0: \(redirectURL.absoluteString)")
                 
@@ -947,15 +963,46 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
                 }
                 
                 if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let accessToken = json["access_token"] as? String {
-                    let expiresIn = (json["expires_in"] as? Int) ?? (24 * 60 * 60)
-                    await transport.sessionManager.session(id: sessionUUID).work { s in
-                        s.accessToken = accessToken
-                        s.accessTokenExpiry = Date().addingTimeInterval(TimeInterval(expiresIn))
+                   let accessToken = json["access_token"] as? String,
+                   let tokenType = json["token_type"] as? String {
+                    
+                    // Validate token type
+                    guard tokenType.lowercased() == "bearer" else {
+                        logger.warning("Invalid token type: \(tokenType). Expected 'Bearer'")
+                        return
                     }
                     
-                    // Add the session ID to the response headers so the client can use it
-                    headers.add(name: "Mcp-Session-Id", value: sessionUUID.uuidString)
+                    // Validate the JWT if we have the capability
+                    var isValidToken = false
+                    if let oauthConfig = config as? OAuthConfiguration {
+                        // Use the OAuth configuration's validation
+                        isValidToken = await oauthConfig.validate(token: accessToken)
+                        if !isValidToken {
+                            logger.warning("JWT validation failed for access token")
+                            return
+                        }
+                    } else {
+                        // If no OAuth validation available, at least check it's a JWT format
+                        let parts = accessToken.split(separator: ".")
+                        guard parts.count == 3 else {
+                            logger.warning("Access token is not in JWT format (expected 3 parts, got \(parts.count))")
+                            return
+                        }
+                        isValidToken = true
+                    }
+                    
+                    // Only store if validation passed
+                    if isValidToken {
+                        let expiresIn = (json["expires_in"] as? Int) ?? (24 * 60 * 60)
+                        await transport.sessionManager.session(id: sessionUUID).work { s in
+                            s.accessToken = accessToken
+                            s.accessTokenExpiry = Date().addingTimeInterval(TimeInterval(expiresIn))
+                        }
+                        
+                        // Add the session ID to the response headers so the client can use it
+                        headers.add(name: "Mcp-Session-Id", value: sessionUUID.uuidString)
+                        logger.info("Stored validated access token in session \(sessionUUID.uuidString)")
+                    }
                 }
             }
             
@@ -1098,5 +1145,16 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         }
 
         channel.writeAndFlush(HTTPServerResponsePart.end(nil), promise: nil)
+    }
+
+    // Handle DELETE /mcp to remove a session by session ID
+    private func handleDeleteSession(channel: Channel, head: HTTPRequestHead) async {
+        guard let sessionIDHeader = head.headers["Mcp-Session-Id"].first,
+              let sessionUUID = UUID(uuidString: sessionIDHeader) else {
+            sendResponse(channel: channel, status: .badRequest)
+            return
+        }
+        await transport.sessionManager.removeSession(id: sessionUUID)
+        sendResponse(channel: channel, status: .noContent)
     }
 }
