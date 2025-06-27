@@ -104,15 +104,20 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     private func validateNewToken(_ token: String) async -> Bool {
         // If we have OAuth configuration, use its validation
         if let oauthConfiguration {
-            // Try OAuth validation first
-            let oauthValid = await oauthConfiguration.validate(token: token)
-            if oauthValid {
-                return true
+            // In transparent proxy mode, only accept tokens that are already stored in a session
+            // This ensures we only trust tokens that came through our proxy
+            if oauthConfiguration.transparentProxy {
+                // Check if this token is already stored in any session
+                if await sessionManager.session(forToken: token) != nil {
+                    return true
+                }
+                // If not found in any session, reject it - it didn't come through our proxy
+                return false
             }
             
-            // If OAuth validation fails but we're in transparent proxy mode, 
-            // trust the token anyway (it might be from Auth0)
-            if oauthConfiguration.transparentProxy {
+            // Try OAuth validation for non-proxy mode
+            let oauthValid = await oauthConfiguration.validate(token: token)
+            if oauthValid {
                 return true
             }
             
