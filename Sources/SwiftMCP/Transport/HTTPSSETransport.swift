@@ -42,6 +42,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     public enum AuthorizationResult: Sendable {
         case authorized
         case unauthorized(String)
+        case jweNotSupported(String)
     }
 
     /// A function type that handles authorization of requests.
@@ -58,6 +59,22 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     /// Perform authorization using either the OAuth configuration or the
     /// synchronous ``authorizationHandler`` closure.
     func authorize(_ token: String?, sessionID: UUID?) async -> AuthorizationResult {
+        // Check for JWE tokens first (5 segments: header.encrypted_key.iv.ciphertext.tag)
+        if let token = token {
+            let segments = token.split(separator: ".")
+            if segments.count == 5 {
+                // JWE token detected - only allow in proxy mode
+                if let oauthConfiguration = oauthConfiguration, oauthConfiguration.transparentProxy {
+                    // In proxy mode, we can handle JWE tokens by proxying them
+                    // Continue with normal validation
+                } else {
+                    // In non-proxy mode, JWE tokens are not supported
+                    let audience = oauthConfiguration?.audience ?? "your-api"
+                    return .jweNotSupported("Encrypted (JWE) tokens are not supported. Use a signed JWT (JWS) with audience=\(audience)")
+                }
+            }
+        }
+        
         // 1. If we have a session ID, check token against session-stored value
         if let id = sessionID {
             let session = await sessionManager.session(id: id)
@@ -127,6 +144,8 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         case .authorized:
             return true
         case .unauthorized:
+            return false
+        case .jweNotSupported:
             return false
         }
     }

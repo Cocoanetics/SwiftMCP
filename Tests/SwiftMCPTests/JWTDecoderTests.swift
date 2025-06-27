@@ -72,7 +72,7 @@ struct JWTDecoderTests {
         }
         
         #expect(throws: JWTDecoder.JWTError.invalidFormat) {
-            try decoder.decode("too.many.segments.here.extra")
+            try decoder.decode("too.many.segments.here.extra.more")
         }
         
         #expect(throws: JWTDecoder.JWTError.invalidFormat) {
@@ -402,6 +402,36 @@ struct JWTDecoderTests {
         )
         #expect(throws: JWTDecoder.JWTError.self) {
             try decoder.validate(jwt, options: options)
+        }
+    }
+    
+    @Test("JWE tokens are not supported")
+    func testJWETokensNotSupported() {
+        let decoder = JWTDecoder()
+        
+        // JWE token format: header.encrypted_key.iv.ciphertext.tag (5 segments)
+        let jweToken = "eyJhbGciOiJBMjU2R0NNS1ciLCJlbmMiOiJBMjU2Q0JDLUhTNTEyIiwiaXYiOiJhYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5eiIsInRhZyI6InNvbWV0YWcifQ.encrypted_key_data.iv_data.ciphertext_data.tag_data"
+        
+        #expect(throws: JWTDecoder.JWTError.jweNotSupported) {
+            try decoder.decode(jweToken)
+        }
+    }
+    
+    @Test("JWE tokens with different segment counts are rejected")
+    func testJWETokensWithDifferentSegments() {
+        let decoder = JWTDecoder()
+        
+        // Test various malformed JWE-like tokens
+        let malformedTokens = [
+            "header.encrypted_key.iv.ciphertext", // 4 segments
+            "header.encrypted_key.iv.ciphertext.tag.extra", // 6 segments
+            "header.encrypted_key.iv.ciphertext.tag.extra.more" // 7 segments
+        ]
+        
+        for token in malformedTokens {
+            #expect(throws: JWTDecoder.JWTError.self) {
+                try decoder.decode(token)
+            }
         }
     }
     

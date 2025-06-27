@@ -159,6 +159,7 @@ public struct JWTDecoder: Sendable {
         case invalidIssuer(expected: String, actual: String?)
         case invalidAudience(expected: String, actual: [String])
         case invalidAuthorizedParty(expected: String, actual: String?)
+        case jweNotSupported
         
         public static func == (lhs: JWTError, rhs: JWTError) -> Bool {
             switch (lhs, rhs) {
@@ -166,7 +167,8 @@ public struct JWTDecoder: Sendable {
                  (.invalidBase64, .invalidBase64),
                  (.invalidJSON, .invalidJSON),
                  (.expired, .expired),
-                 (.notYetValid, .notYetValid):
+                 (.notYetValid, .notYetValid),
+                 (.jweNotSupported, .jweNotSupported):
                 return true
             case (.invalidIssuer(let lExpected, let lActual), .invalidIssuer(let rExpected, let rActual)):
                 return lExpected == rExpected && lActual == rActual
@@ -197,6 +199,8 @@ public struct JWTDecoder: Sendable {
                 return "JWT audience validation failed. Expected: \(expected), Actual: \(actual)"
             case .invalidAuthorizedParty(let expected, let actual):
                 return "JWT authorized party validation failed. Expected: \(expected), Actual: \(actual ?? "nil")"
+            case .jweNotSupported:
+                return "Encrypted (JWE) tokens are not supported. Use a signed JWT (JWS)"
             }
         }
     }
@@ -224,6 +228,13 @@ public struct JWTDecoder: Sendable {
     /// - Throws: JWTError if the token is malformed
     public func decode(_ token: String) throws -> DecodedJWT {
         let segments = token.split(separator: ".")
+        
+        // Check for JWE format (5 segments: header.encrypted_key.iv.ciphertext.tag)
+        if segments.count == 5 {
+            throw JWTError.jweNotSupported
+        }
+        
+        // Check for JWS format (3 segments: header.payload.signature)
         guard segments.count == 3 else {
             throw JWTError.invalidFormat
         }

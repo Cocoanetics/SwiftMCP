@@ -28,12 +28,10 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
     // MARK: - Channel Handler
 
     func channelInactive(context: ChannelHandlerContext) {
-        logger.trace("Channel inactive")
         context.fireChannelInactive()
     }
 
     func errorCaught(context: ChannelHandlerContext, error: Error) {
-        logger.error("Channel error: \(error)")
         context.close(promise: nil)
     }
 
@@ -240,10 +238,18 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         }
 
         // Validate token
-        if case .unauthorized(let message) = await transport.authorize(token, sessionID: sessionID) {
-            let errorMessage = JSONRPCMessage.errorResponse(id: nil, error: .init(code: 401, message: "Unauthorized: \(message)"))
-            await self.sendJSONResponseAsync(channel: channel, status: .unauthorized, json: errorMessage, sessionId: sessionID.uuidString)
-            return
+        let authResult = await transport.authorize(token, sessionID: sessionID)
+        switch authResult {
+            case .unauthorized(let message):
+                let errorMessage = JSONRPCMessage.errorResponse(id: nil, error: .init(code: 401, message: "Unauthorized: \(message)"))
+                await self.sendJSONResponseAsync(channel: channel, status: .unauthorized, json: errorMessage, sessionId: sessionID.uuidString)
+                return
+            case .jweNotSupported(let message):
+                let errorMessage = JSONRPCMessage.errorResponse(id: nil, error: .init(code: 403, message: message))
+                await self.sendJSONResponseAsync(channel: channel, status: .forbidden, json: errorMessage, sessionId: sessionID.uuidString)
+                return
+            case .authorized:
+                break
         }
 
         guard let body = body else {
@@ -330,12 +336,20 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             }
         }
 
-        if case .unauthorized(let message) = await transport.authorize(token, sessionID: sessionID) {
+        let authResult = await transport.authorize(token, sessionID: sessionID)
+        switch authResult {
+        case .unauthorized(let message):
             logger.warning("Unauthorized SSE connect: \(message)")
             sendResponse(channel: channel, status: .unauthorized)
             return
+        case .jweNotSupported(let message):
+            logger.warning("JWE token not supported for SSE connect: \(message)")
+            sendResponse(channel: channel, status: .forbidden)
+            return
+        case .authorized:
+            break
         }
-
+        
         // Register the channel with client ID
         logger.info("Registering SSE channel for client \(sessionID)")
         transport.registerSSEChannel(channel, id: sessionID)
@@ -400,12 +414,20 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
                 token = String(parts[1])
             }
         }
-
+        
         // Validate token first; if unauthorized reply immediately and abort.
-        if case .unauthorized(let message) = await transport.authorize(token, sessionID: sessionID) {
-            let err = JSONRPCMessage.errorResponse(id: nil, error: .init(code: 401, message: "Unauthorized: \(message)"))
-            await self.sendJSONResponseAsync(channel: channel, status: .unauthorized, json: err, sessionId: sessionID.uuidString)
-            return
+        let authResult = await transport.authorize(token, sessionID: sessionID)
+        switch authResult {
+            case .unauthorized(let message):
+                let err = JSONRPCMessage.errorResponse(id: nil, error: .init(code: 401, message: "Unauthorized: \(message)"))
+                await self.sendJSONResponseAsync(channel: channel, status: .unauthorized, json: err, sessionId: sessionID.uuidString)
+                return
+            case .jweNotSupported(let message):
+                let err = JSONRPCMessage.errorResponse(id: nil, error: .init(code: 403, message: message))
+                await self.sendJSONResponseAsync(channel: channel, status: .forbidden, json: err, sessionId: sessionID.uuidString)
+                return
+            case .authorized:
+                break
         }
 
         guard let body = body else {
@@ -974,21 +996,10 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
                     
                     // Validate the JWT if we have the capability
                     var isValidToken = false
-                    if let oauthConfig = config as? OAuthConfiguration {
-                        // Use the OAuth configuration's validation
-                        isValidToken = await oauthConfig.validate(token: accessToken)
-                        if !isValidToken {
-                            logger.warning("JWT validation failed for access token")
-                            return
-                        }
-                    } else {
-                        // If no OAuth validation available, at least check it's a JWT format
-                        let parts = accessToken.split(separator: ".")
-                        guard parts.count == 3 else {
-                            logger.warning("Access token is not in JWT format (expected 3 parts, got \(parts.count))")
-                            return
-                        }
-                        isValidToken = true
+                    isValidToken = await config.validate(token: accessToken)
+                    if !isValidToken {
+                        logger.warning("JWT validation failed for access token")
+                        return
                     }
                     
                     // Only store if validation passed
@@ -998,7 +1009,6 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
                             s.accessToken = accessToken
                             s.accessTokenExpiry = Date().addingTimeInterval(TimeInterval(expiresIn))
                         }
-                        
                         // Add the session ID to the response headers so the client can use it
                         headers.add(name: "Mcp-Session-Id", value: sessionUUID.uuidString)
                         logger.info("Stored validated access token in session \(sessionUUID.uuidString)")
