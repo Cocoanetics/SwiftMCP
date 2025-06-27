@@ -67,11 +67,17 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
                 } else {
                     return .unauthorized("Invalid or expired token")
                 }
-            } else if let token { // first time we see a token for this session – accept and remember it
-                session.accessToken = token
-                // Without expires_in we can't know exact lifetime; fall back to 24 h.
-                session.accessTokenExpiry = Date().addingTimeInterval(24 * 60 * 60)
-                return .authorized
+            } else if let token { 
+                // First time we see a token for this session - validate it before accepting
+                let isValid = await validateNewToken(token)
+                if isValid {
+                    session.accessToken = token
+                    // Without expires_in we can't know exact lifetime; fall back to 24 h.
+                    session.accessTokenExpiry = Date().addingTimeInterval(24 * 60 * 60)
+                    return .authorized
+                } else {
+                    return .unauthorized("Invalid token - token exchange required")
+                }
             } else {
                 return .unauthorized("No token provided")
             }
@@ -84,14 +90,42 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
             }
         }
 
-        // 3. Fallback: if an OAuthConfiguration is still set, fall back to its validation
-        if let oauthConfiguration {
-            let valid = await oauthConfiguration.validate(token: token)
-            return valid ? .authorized : .unauthorized("Invalid token")
+        // 3. For tokens without session context, validate them
+        if let token {
+            let isValid = await validateNewToken(token)
+            return isValid ? .authorized : .unauthorized("Invalid token - token exchange required")
         }
 
         // 4. Otherwise use legacy handler
         return authorizationHandler(token)
+    }
+    
+    /// Validate a new token using OAuth configuration or authorization handler
+    private func validateNewToken(_ token: String) async -> Bool {
+        // If we have OAuth configuration, use its validation
+        if let oauthConfiguration {
+            // Try OAuth validation first
+            let oauthValid = await oauthConfiguration.validate(token: token)
+            if oauthValid {
+                return true
+            }
+            
+            // If OAuth validation fails but we're in transparent proxy mode, 
+            // trust the token anyway (it might be from Auth0)
+            if oauthConfiguration.transparentProxy {
+                return true
+            }
+            
+            return false
+        }
+        
+        // Fallback to authorization handler
+        switch authorizationHandler(token) {
+        case .authorized:
+            return true
+        case .unauthorized:
+            return false
+        }
     }
 
     /// Defines the available keep-alive modes for maintaining connections.
