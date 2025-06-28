@@ -865,15 +865,32 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
                 components.queryItems = originalComponents.queryItems
             }
             
+            var queryItems = components.queryItems ?? []
+            
             // Add the configured audience parameter if it's not already present and we have one configured
             if let audience = config.audience {
-                var queryItems = components.queryItems ?? []
                 // Check if audience is already present
                 if !queryItems.contains(where: { $0.name == "audience" }) {
                     queryItems.append(URLQueryItem(name: "audience", value: audience))
-                    components.queryItems = queryItems
                 }
             }
+            
+            // Add openid scope if not already present (required for /userinfo endpoint)
+            if !queryItems.contains(where: { $0.name == "scope" && $0.value?.contains("openid") == true }) {
+                // Check if there's already a scope parameter
+                if let existingScopeIndex = queryItems.firstIndex(where: { $0.name == "scope" }) {
+                    // Append openid to existing scope
+                    let existingScope = queryItems[existingScopeIndex].value ?? ""
+                    let newScope = existingScope.isEmpty ? "openid profile email" : "\(existingScope) openid profile email"
+                    queryItems[existingScopeIndex] = URLQueryItem(name: "scope", value: newScope)
+                } else {
+                    // Add new scope parameter
+                    queryItems.append(URLQueryItem(name: "scope", value: "openid profile email"))
+                }
+                logger.info("Added openid scope to authorization request")
+            }
+            
+            components.queryItems = queryItems
             
             if let redirectURL = components.url {
                 logger.info("Redirecting /authorize request to Auth0: \(redirectURL.absoluteString)")
@@ -984,19 +1001,19 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
                     sessionUUID = UUID()
                 }
                 
-                if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let accessToken = json["access_token"] as? String,
-                   let tokenType = json["token_type"] as? String {
+                // Decode the OAuth token response
+                let decoder = JSONDecoder()
+                if let tokenResponse = try? decoder.decode(OAuthTokenResponse.self, from: data) {
                     
                     // Validate token type
-                    guard tokenType.lowercased() == "bearer" else {
-                        logger.warning("Invalid token type: \(tokenType). Expected 'Bearer'")
+                    guard tokenResponse.tokenType.lowercased() == "bearer" else {
+                        logger.warning("Invalid token type: \(tokenResponse.tokenType). Expected 'Bearer'")
                         return
                     }
                     
                     // Validate the JWT if we have the capability
                     var isValidToken = false
-                    isValidToken = await config.validate(token: accessToken)
+                    isValidToken = await config.validate(token: tokenResponse.accessToken)
                     if !isValidToken {
                         logger.warning("JWT validation failed for access token")
                         return
@@ -1004,11 +1021,18 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
                     
                     // Only store if validation passed
                     if isValidToken {
-                        let expiresIn = (json["expires_in"] as? Int) ?? (24 * 60 * 60)
+                        let expiresIn = tokenResponse.expiresIn ?? (24 * 60 * 60)
                         await transport.sessionManager.session(id: sessionUUID).work { s in
-                            s.accessToken = accessToken
+                            s.accessToken = tokenResponse.accessToken
                             s.accessTokenExpiry = Date().addingTimeInterval(TimeInterval(expiresIn))
+                            s.idToken = tokenResponse.idToken
                         }
+                        
+                        // Fetch and store user info
+                        if let oauthConfiguration = transport.oauthConfiguration {
+                            await transport.sessionManager.fetchAndStoreUserInfo(for: sessionUUID, oauthConfiguration: oauthConfiguration)
+                        }
+                        
                         // Add the session ID to the response headers so the client can use it
                         headers.add(name: "Mcp-Session-Id", value: sessionUUID.uuidString)
                         logger.info("Stored validated access token in session \(sessionUUID.uuidString)")
@@ -1168,3 +1192,5 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         sendResponse(channel: channel, status: .noContent)
     }
 }
+
+

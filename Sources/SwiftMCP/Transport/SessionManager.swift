@@ -126,4 +126,22 @@ actor SessionManager {
         }
         return nil
     }
+
+    /// Fetch and store user info for a session after token validation.
+    /// - Parameters:
+    ///   - sessionID: The session identifier
+    ///   - oauthConfiguration: The OAuth configuration to use for fetching user info
+    func fetchAndStoreUserInfo(for sessionID: UUID, oauthConfiguration: OAuthConfiguration) async {
+        guard let session = sessions[sessionID],
+              let accessToken = session.accessToken else {
+            return
+        }
+        
+        // Only fetch user info if we don't already have it
+        if session.userInfo == nil {
+            if let userInfo = await oauthConfiguration.fetchUserInfo(token: accessToken) {
+                session.userInfo = userInfo
+            }
+        }
+    }
 }

@@ -210,6 +210,48 @@ public struct OAuthConfiguration: Sendable {
         return false
     }
 
+    /// Fetch user information from the OAuth provider using the access token.
+    /// - Parameter token: The access token to use for the request
+    /// - Returns: User information as a UserInfo struct, or nil if the request fails
+    public func fetchUserInfo(token: String) async -> UserInfo? {
+        // Construct the userinfo endpoint URL (standard OIDC endpoint)
+        let userinfoURL = issuer.appendingPathComponent("userinfo")
+        
+        var request = URLRequest(url: userinfoURL)
+        request.httpMethod = "GET"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        
+        print("[OAuthConfiguration] Fetching user info from: \(userinfoURL.absoluteString)")
+        
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                print("[OAuthConfiguration] Invalid response type for userinfo request")
+                return nil
+            }
+            
+            print("[OAuthConfiguration] Userinfo response status: \(http.statusCode)")
+            
+            if http.statusCode != 200 {
+                if let errorData = String(data: data, encoding: .utf8) {
+                    print("[OAuthConfiguration] Userinfo error response: \(errorData)")
+                }
+                return nil
+            }
+            
+            // Decode the JSON response into UserInfo struct
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let userInfo = try decoder.decode(UserInfo.self, from: data)
+            print("[OAuthConfiguration] Successfully fetched user info for user: \(userInfo.sub)")
+            return userInfo
+        } catch {
+            print("[OAuthConfiguration] Error fetching user info: \(error)")
+            return nil
+        }
+    }
+
     // MARK: - Metadata helpers
 
     /// Metadata for the `/.well-known/oauth-authorization-server` endpoint.

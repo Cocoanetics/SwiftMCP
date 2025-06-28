@@ -91,6 +91,12 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
                     session.accessToken = token
                     // Without expires_in we can't know exact lifetime; fall back to 24 h.
                     session.accessTokenExpiry = Date().addingTimeInterval(24 * 60 * 60)
+                    
+                    // Fetch and store user info if we have OAuth configuration
+                    if let oauthConfiguration = oauthConfiguration {
+                        await sessionManager.fetchAndStoreUserInfo(for: id, oauthConfiguration: oauthConfiguration)
+                    }
+                    
                     return .authorized
                 } else {
                     return .unauthorized("Invalid token - token exchange required")

@@ -22,6 +22,21 @@ public final class Session: @unchecked Sendable {
     /// Absolute expiry date for `accessToken`.
     public var accessTokenExpiry: Date?
 
+    /// ID token from OAuth response (if any).
+    public var idToken: String?
+
+    /// User information fetched from the OAuth provider (if any).
+    public var userInfo: UserInfo?
+
+    /// Convenience accessors for common user info fields
+    public var userID: String? { userInfo?.sub }
+    public var email: String? { userInfo?.email }
+    public var name: String? { userInfo?.name }
+    public var givenName: String? { userInfo?.givenName }
+    public var familyName: String? { userInfo?.familyName }
+    public var picture: String? { userInfo?.picture }
+    public var emailVerified: Bool? { userInfo?.emailVerified }
+
     /// Creates a new session.
     /// - Parameters:
     ///   - id: The unique session identifier.
