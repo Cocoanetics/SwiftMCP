@@ -222,20 +222,20 @@ public struct OAuthConfiguration: Sendable {
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         
-        print("[OAuthConfiguration] Fetching user info from: \(userinfoURL.absoluteString)")
+        // print("[OAuthConfiguration] Fetching user info from: \(userinfoURL.absoluteString)")
         
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse else {
-                print("[OAuthConfiguration] Invalid response type for userinfo request")
+                // print("[OAuthConfiguration] Invalid response type for userinfo request")
                 return nil
             }
             
-            print("[OAuthConfiguration] Userinfo response status: \(http.statusCode)")
+            // print("[OAuthConfiguration] Userinfo response status: \(http.statusCode)")
             
             if http.statusCode != 200 {
                 if let errorData = String(data: data, encoding: .utf8) {
-                    print("[OAuthConfiguration] Userinfo error response: \(errorData)")
+                    // print("[OAuthConfiguration] Userinfo error response: \(errorData)")
                 }
                 return nil
             }
@@ -244,10 +244,10 @@ public struct OAuthConfiguration: Sendable {
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
             let userInfo = try decoder.decode(UserInfo.self, from: data)
-            print("[OAuthConfiguration] Successfully fetched user info for user: \(userInfo.sub)")
+            // print("[OAuthConfiguration] Successfully fetched user info for user: \(userInfo.sub)")
             return userInfo
         } catch {
-            print("[OAuthConfiguration] Error fetching user info: \(error)")
+            // print("[OAuthConfiguration] Error fetching user info: \(error)")
             return nil
         }
     }
