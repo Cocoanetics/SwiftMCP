@@ -71,7 +71,9 @@ let package = Package(
 			dependencies: [
 				"SwiftMCP", 
 				"SwiftMCPMacros",
-				.product(name: "Crypto", package: "swift-crypto")
+				.product(name: "Crypto", package: "swift-crypto"),
+				.product(name: "_CryptoExtras", package: "swift-crypto"),
+				.product(name: "X509", package: "swift-certificates")
 			]
 		)
 	]

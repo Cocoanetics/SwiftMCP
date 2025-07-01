@@ -1,6 +1,11 @@
 import Foundation
 import Testing
 import Crypto
+import _CryptoExtras
+import X509
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 @testable import SwiftMCP
 
 @Suite("JWT Signature Verification", .tags(.unit))
@@ -103,6 +108,33 @@ struct JWTSignatureVerificationTests {
                 throw VerificationError.jwksFetchFailed
             }
             
+            #if canImport(FoundationNetworking)
+            // For Linux/cross-platform environments, use FoundationNetworking
+            return try await withCheckedThrowingContinuation { continuation in
+                let task = URLSession.shared.dataTask(with: url) { data, response, error in
+                    if let error = error {
+                        continuation.resume(throwing: VerificationError.jwksFetchFailed)
+                        return
+                    }
+                    
+                    guard let httpResponse = response as? HTTPURLResponse,
+                          httpResponse.statusCode == 200,
+                          let data = data else {
+                        continuation.resume(throwing: VerificationError.jwksFetchFailed)
+                        return
+                    }
+                    
+                    do {
+                        let jwks = try JSONDecoder().decode(JWKSResponse.self, from: data)
+                        continuation.resume(returning: jwks)
+                    } catch {
+                        continuation.resume(throwing: VerificationError.jwksFetchFailed)
+                    }
+                }
+                task.resume()
+            }
+            #else
+            // For Darwin/macOS/iOS environments, use standard URLSession
             let (data, response) = try await URLSession.shared.data(from: url)
             
             guard let httpResponse = response as? HTTPURLResponse,
@@ -111,6 +143,7 @@ struct JWTSignatureVerificationTests {
             }
             
             return try JSONDecoder().decode(JWKSResponse.self, from: data)
+            #endif
         }
         
         /// Verify RS256 signature using CryptoKit framework
@@ -157,188 +190,57 @@ struct JWTSignatureVerificationTests {
             )
         }
         
-        /// Create RSA public key from JWK parameters
+        /// Create RSA public key from JWK parameters using Swift Crypto
         /// - Parameters:
         ///   - modulus: RSA modulus (base64url encoded)
         ///   - exponent: RSA exponent (base64url encoded)
         ///   - x5c: X.509 certificate chain (optional)
-        /// - Returns: RSA public key
+        /// - Returns: RSA.Signing.PublicKey from Swift Crypto
         /// - Throws: VerificationError if key creation fails
         private static func createRSAPublicKeyFromJWK(
             modulus: String,
             exponent: String,
             x5c: [String]? = nil
-        ) throws -> SecKey {
-            if let x5c = x5c, let certB64 = x5c.first, let certData = Data(base64Encoded: certB64) {
-                guard let certificate = SecCertificateCreateWithData(nil, certData as CFData) else {
-                    print("Failed to create SecCertificate from x5c")
-                    throw VerificationError.invalidKeyFormat
-                }
-                guard let publicKey = SecCertificateCopyKey(certificate) else {
-                    print("Failed to extract public key from certificate")
-                    throw VerificationError.invalidKeyFormat
-                }
-                return publicKey
-            }
-            // Fallback to manual DER
+        ) throws -> _RSA.Signing.PublicKey {
+            // For now, focus on manual key construction from modulus/exponent
+            // TODO: Add X.509 certificate parsing when swift-certificates API is stable
+            
+            // Create key from modulus / exponent in the JWKS
             let modulusData = try base64URLDecode(modulus)
             let exponentData = try base64URLDecode(exponent)
-            let derKey = createRSAPublicKeyDER(modulus: modulusData, exponent: exponentData)
-            let attributes: [String: Any] = [
-                kSecAttrKeyType as String: kSecAttrKeyTypeRSA,
-                kSecAttrKeyClass as String: kSecAttrKeyClassPublic
-            ]
-            var error: Unmanaged<CFError>?
-            guard let publicKey = SecKeyCreateWithData(derKey as CFData, attributes as CFDictionary, &error) else {
-                if let error = error?.takeRetainedValue() {
-                    print("RSA key creation error: \(error)")
-                }
-                throw VerificationError.invalidKeyFormat
-            }
-            return publicKey
+            
+            return try _RSA.Signing.PublicKey(n: modulusData, e: exponentData)
         }
         
-        /// Verify RS256 signature using CryptoKit
+        /// Verify RS256 signature using Swift Crypto
         /// - Parameters:
         ///   - signature: The signature to verify
         ///   - data: The data that was signed
-        ///   - publicKey: The RSA public key
+        ///   - publicKey: The RSA public key from Swift Crypto
         /// - Returns: True if signature is valid
         /// - Throws: VerificationError if verification fails
         private static func verifyRS256SignatureWithCryptoKit(
             signature: Data,
             data: Data,
-            publicKey: SecKey
+            publicKey: _RSA.Signing.PublicKey
         ) throws -> Bool {
-            // Use the correct algorithm for RS256
-            let algorithm = SecKeyAlgorithm.rsaSignatureMessagePKCS1v15SHA256
-            
-            var error: Unmanaged<CFError>?
-            let isValid = SecKeyVerifySignature(
-                publicKey,
-                algorithm,
-                data as CFData, // Pass raw data, not hash
-                signature as CFData,
-                &error
-            )
-            
-            if !isValid {
-                if let error = error?.takeRetainedValue() {
-                    print("Signature verification error: \(error)")
+            // Verify the signature using Swift Crypto
+            do {
+                let rsaSignature = _RSA.Signing.RSASignature(rawRepresentation: signature)
+                let isValid = publicKey.isValidSignature(rsaSignature, for: data, padding: .insecurePKCS1v1_5)
+                
+                if !isValid {
+                    throw VerificationError.signatureVerificationFailed
                 }
+                
+                return true
+            } catch {
+                // If signature creation or verification fails, it's an invalid signature
                 throw VerificationError.signatureVerificationFailed
             }
-            
-            return isValid
         }
         
-        /// Create ASN.1 DER encoded RSA public key
-        /// - Parameters:
-        ///   - modulus: RSA modulus
-        ///   - exponent: RSA exponent
-        /// - Returns: DER encoded public key
-        private static func createRSAPublicKeyDER(modulus: Data, exponent: Data) -> Data {
-            // ASN.1 DER encoding for RSA public key
-            // SEQUENCE {
-            //   SEQUENCE {
-            //     OBJECT IDENTIFIER rsaEncryption
-            //     NULL
-            //   }
-            //   BIT STRING {
-            //     SEQUENCE {
-            //       INTEGER modulus
-            //       INTEGER exponent
-            //     }
-            //   }
-            // }
-            
-            var der = Data()
-            
-            // RSA OID: 1.2.840.113549.1.1.1
-            let rsaOID: [UInt8] = [0x06, 0x09, 0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x01]
-            
-            // Create the inner sequence (modulus, exponent)
-            let innerSequence = createASN1Sequence([
-                createASN1Integer(modulus),
-                createASN1Integer(exponent)
-            ])
-            
-            // Create the algorithm sequence (OID, NULL)
-            let algorithmSequence = createASN1Sequence([
-                Data(rsaOID),
-                createASN1Null()
-            ])
-            
-            // Create the bit string containing the inner sequence
-            let bitString = createASN1BitString(innerSequence)
-            
-            // Create the outer sequence
-            der = createASN1Sequence([algorithmSequence, bitString])
-            
-            return der
-        }
-        
-        /// Create ASN.1 INTEGER
-        /// - Parameter data: Integer data
-        /// - Returns: ASN.1 encoded integer
-        private static func createASN1Integer(_ data: Data) -> Data {
-            var result = Data()
-            
-            // Add leading zero if needed to ensure positive number
-            var value = data
-            if value.first == 0x80 || (value.first == 0x00 && value.count > 1 && (value[1] & 0x80) == 0) {
-                value.insert(0x00, at: 0)
-            }
-            
-            result.append(0x02) // INTEGER tag
-            result.append(contentsOf: encodeLength(value.count))
-            result.append(value)
-            
-            return result
-        }
-        
-        /// Create ASN.1 NULL
-        /// - Returns: ASN.1 encoded NULL
-        private static func createASN1Null() -> Data {
-            return Data([0x05, 0x00]) // NULL tag, length 0
-        }
-        
-        /// Create ASN.1 BIT STRING
-        /// - Parameter data: Bit string data
-        /// - Returns: ASN.1 encoded bit string
-        private static func createASN1BitString(_ data: Data) -> Data {
-            var result = Data()
-            result.append(0x03) // BIT STRING tag
-            result.append(contentsOf: encodeLength(data.count + 1))
-            result.append(0x00) // Unused bits
-            result.append(data)
-            return result
-        }
-        
-        /// Create ASN.1 SEQUENCE
-        /// - Parameter items: Sequence items
-        /// - Returns: ASN.1 encoded sequence
-        private static func createASN1Sequence(_ items: [Data]) -> Data {
-            var result = Data()
-            let content = items.reduce(Data(), +)
-            result.append(0x30) // SEQUENCE tag
-            result.append(contentsOf: encodeLength(content.count))
-            result.append(content)
-            return result
-        }
-        
-        /// Encode ASN.1 length
-        /// - Parameter length: Length to encode
-        /// - Returns: Length bytes
-        private static func encodeLength(_ length: Int) -> [UInt8] {
-            if length < 128 {
-                return [UInt8(length)]
-            } else {
-                let bytes = withUnsafeBytes(of: length.bigEndian) { Data($0) }
-                let significantBytes = bytes.drop(while: { $0 == 0 })
-                return [UInt8(0x80 | significantBytes.count)] + Array(significantBytes)
-            }
-        }
+
         
         /// Base64URL decode
         /// - Parameter string: Base64URL encoded string
