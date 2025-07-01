@@ -51,57 +51,6 @@ public struct JSONWebToken: Sendable {
             self.scope = scope
             self.azp = azp
         }
-        
-        private enum CodingKeys: String, CodingKey {
-            case iss, sub, aud, exp, nbf, iat, scope, azp
-        }
-        
-        public init(from decoder: Decoder) throws {
-            let container = try decoder.container(keyedBy: CodingKeys.self)
-            self.iss = try container.decodeIfPresent(String.self, forKey: .iss)
-            self.sub = try container.decodeIfPresent(String.self, forKey: .sub)
-            self.aud = try container.decodeIfPresent(AudienceValue.self, forKey: .aud)
-            self.scope = try container.decodeIfPresent(String.self, forKey: .scope)
-            self.azp = try container.decodeIfPresent(String.self, forKey: .azp)
-            
-            // Handle date fields as Unix timestamps
-            if let expTimestamp = try container.decodeIfPresent(TimeInterval.self, forKey: .exp) {
-                self.exp = Date(timeIntervalSince1970: expTimestamp)
-            } else {
-                self.exp = nil
-            }
-            
-            if let nbfTimestamp = try container.decodeIfPresent(TimeInterval.self, forKey: .nbf) {
-                self.nbf = Date(timeIntervalSince1970: nbfTimestamp)
-            } else {
-                self.nbf = nil
-            }
-            
-            if let iatTimestamp = try container.decodeIfPresent(TimeInterval.self, forKey: .iat) {
-                self.iat = Date(timeIntervalSince1970: iatTimestamp)
-            } else {
-                self.iat = nil
-            }
-        }
-        
-        public func encode(to encoder: Encoder) throws {
-            var container = encoder.container(keyedBy: CodingKeys.self)
-            try container.encodeIfPresent(iss, forKey: .iss)
-            try container.encodeIfPresent(sub, forKey: .sub)
-            try container.encodeIfPresent(aud, forKey: .aud)
-            try container.encodeIfPresent(scope, forKey: .scope)
-            try container.encodeIfPresent(azp, forKey: .azp)
-            
-            if let exp = exp {
-                try container.encode(exp.timeIntervalSince1970, forKey: .exp)
-            }
-            if let nbf = nbf {
-                try container.encode(nbf.timeIntervalSince1970, forKey: .nbf)
-            }
-            if let iat = iat {
-                try container.encode(iat.timeIntervalSince1970, forKey: .iat)
-            }
-        }
     }
     
     /// Audience can be either a string or an array of strings
@@ -301,7 +250,9 @@ public struct JSONWebToken: Sendable {
         }
         
         do {
-            payload = try JSONDecoder().decode(JWTPayload.self, from: payloadData)
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .secondsSince1970
+            payload = try decoder.decode(JWTPayload.self, from: payloadData)
         } catch {
             throw JWTError.invalidJSON
         }
@@ -479,7 +430,9 @@ public struct JSONWebToken: Sendable {
                 }
                 
                 do {
-                    let jwks = try JSONDecoder().decode(JWKS.self, from: data)
+                    let decoder = JSONDecoder()
+                    decoder.dateDecodingStrategy = .secondsSince1970
+                    let jwks = try decoder.decode(JWKS.self, from: data)
                     continuation.resume(returning: jwks)
                 } catch {
                     continuation.resume(throwing: JWTError.jwksFetchFailed)
@@ -496,7 +449,9 @@ public struct JSONWebToken: Sendable {
             throw JWTError.jwksFetchFailed
         }
         
-        return try JSONDecoder().decode(JWKS.self, from: data)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        return try decoder.decode(JWKS.self, from: data)
         #endif
     }
     
