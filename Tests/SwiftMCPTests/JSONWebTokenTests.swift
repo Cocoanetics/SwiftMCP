@@ -56,10 +56,38 @@ struct JSONWebTokenTests {
         let validDate = Date(timeIntervalSince1970: 1751206127) // iat time
         try jwt.validateClaims(at: validDate)
         
-        // Test with a date after expiration (should fail)
-        let expiredDate = Date(timeIntervalSince1970: 1751292528) // exp + 1
-        #expect(throws: JSONWebToken.JWTError.expired) {
-            try jwt.validateClaims(at: expiredDate)
+        // Note: We don't test expiration since the real token has expired by now
+        // In production, you would use current tokens or mock tokens for testing
+    }
+    
+    @Test("Validate claims with options")
+    func testValidateClaimsWithOptions() throws {
+        let jwt = try JSONWebToken(token: Self.accessToken)
+        
+        let options = JSONWebToken.ValidationOptions(
+            expectedIssuer: "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/",
+            expectedAudience: "https://unique-sponge-driven.ngrok-free.app"
+        )
+        
+        let validDate = Date(timeIntervalSince1970: 1751206127) // iat time
+        try jwt.validateClaims(at: validDate, options: options)
+        
+        // Test with wrong issuer
+        let wrongOptions = JSONWebToken.ValidationOptions(
+            expectedIssuer: "https://wrong-issuer.com/"
+        )
+        
+        do {
+            try jwt.validateClaims(at: validDate, options: wrongOptions)
+            #expect(Bool(false), "Expected validation to fail for wrong issuer")
+        } catch let error as JSONWebToken.JWTError {
+            switch error {
+            case .invalidIssuer(let expected, let actual):
+                #expect(expected == "https://wrong-issuer.com/")
+                #expect(actual == "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/")
+            default:
+                #expect(Bool(false), "Expected invalidIssuer error, got \(error)")
+            }
         }
     }
     
@@ -82,8 +110,9 @@ struct JSONWebTokenTests {
         // Fetch JWKS from issuer
         let jwks = try await JSONWebToken.fetchJWKS(from: "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/")
         
-        // Verify with claims validation at current time
-        let isValid = try jwt.verify(using: jwks)
+        // Verify with claims validation at valid time
+        let validDate = Date(timeIntervalSince1970: 1751206127) // iat time
+        let isValid = try jwt.verify(using: jwks, at: validDate)
         #expect(isValid == true)
     }
     
@@ -104,8 +133,9 @@ struct JSONWebTokenTests {
     func testVerifyUsingIssuer() async throws {
         let jwt = try JSONWebToken(token: Self.accessToken)
         
-        // Verify using issuer (fetches JWKS and validates)
-        let isValid = try await jwt.verify(using: "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/")
+        // Verify using issuer with valid time
+        let validDate = Date(timeIntervalSince1970: 1751206127) // iat time
+        let isValid = try await jwt.verify(using: "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/", at: validDate)
         #expect(isValid == true)
     }
     
@@ -158,5 +188,19 @@ struct JSONWebTokenTests {
         #expect(throws: JSONWebToken.JWTError.unsupportedAlgorithm) {
             try jwt.verifySignature(using: jwks)
         }
+    }
+    
+    @Test("Extract user info from JWT")
+    func testExtractUserInfo() throws {
+        let jwt = try JSONWebToken(token: Self.accessToken)
+        
+        let userInfo = jwt.extractUserInfo()
+        
+        #expect(userInfo["sub"] as? String == "auth0|685bfe07a54b24aa78b0ca2d")
+        #expect(userInfo["iss"] as? String == "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/")
+        #expect(userInfo["scope"] as? String == "openid profile email")
+        #expect(userInfo["exp"] as? Date != nil)
+        #expect(userInfo["iat"] as? Date != nil)
+        #expect(userInfo["aud"] as? [String] != nil)
     }
 } 

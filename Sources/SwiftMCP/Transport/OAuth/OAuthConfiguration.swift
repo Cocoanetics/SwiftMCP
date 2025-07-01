@@ -234,9 +234,7 @@ public struct OAuthConfiguration: Sendable {
             // print("[OAuthConfiguration] Userinfo response status: \(http.statusCode)")
             
             if http.statusCode != 200 {
-                if let errorData = String(data: data, encoding: .utf8) {
-                    // print("[OAuthConfiguration] Userinfo error response: \(errorData)")
-                }
+                // Could log error response here if needed
                 return nil
             }
             

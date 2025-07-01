@@ -63,8 +63,7 @@ struct JWTSignatureVerificationTests {
         /// - Throws: VerificationError if verification fails
         static func verifySignature(token: String, issuer: String) async throws -> Bool {
             // Decode the JWT to get header and payload
-            let decoder = JWTDecoder()
-            let jwt = try decoder.decode(token)
+            let jwt = try JSONWebToken(token: token)
             
             // Check algorithm
             guard jwt.header.alg == "RS256" else {
