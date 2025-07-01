@@ -31,6 +31,7 @@ let package = Package(
 		.package(url: "https://github.com/swiftlang/swift-docc-plugin.git", from: "1.0.0"),
 		.package(url: "https://github.com/swiftlang/swift-syntax.git", from: "602.0.0-latest"),
 		.package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
+		.package(url: "https://github.com/apple/swift-certificates.git", from: "1.1.0"),
 		// JOSESwift removed – no longer needed after lightweight token validation
 	],
 	targets: [
@@ -52,7 +53,9 @@ let package = Package(
 				.product(name: "NIOPosix", package: "swift-nio"),
 				.product(name: "Logging", package: "swift-log"),
 				.product(name: "NIOFoundationCompat", package: "swift-nio"),
-				.product(name: "Crypto", package: "swift-crypto")
+				.product(name: "Crypto", package: "swift-crypto"),
+				.product(name: "_CryptoExtras", package: "swift-crypto"),
+				.product(name: "X509", package: "swift-certificates")
 			]
 		),
 		.executableTarget(
