@@ -14,7 +14,7 @@ public struct JWTDecoder: Sendable {
     }
     
     /// JWT Header structure
-    public struct JWTHeader: Codable {
+    public struct JWTHeader: Codable, Sendable {
         public let alg: String
         public let typ: String
         public let kid: String?
@@ -27,7 +27,7 @@ public struct JWTDecoder: Sendable {
     }
     
     /// JWT Payload structure
-    public struct JWTPayload: Codable {
+    public struct JWTPayload: Codable, Sendable {
         public let iss: String?
         public let sub: String?
         public let aud: AudienceValue?
@@ -103,7 +103,7 @@ public struct JWTDecoder: Sendable {
     }
     
     /// Audience can be either a string or an array of strings
-    public enum AudienceValue: Codable, Equatable {
+    public enum AudienceValue: Codable, Equatable, Sendable {
         case single(String)
         case multiple([String])
         
