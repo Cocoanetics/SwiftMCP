@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-import CryptoKit
+import Crypto
 @testable import SwiftMCP
 
 @Suite("JWT Signature Verification", .tags(.unit))

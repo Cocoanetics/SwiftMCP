@@ -1,5 +1,5 @@
 import Foundation
-import CryptoKit
+import Crypto
 
 /// A comprehensive JSON Web Token (JWT) implementation with decoding, validation, and signature verification
 public struct JSONWebToken: Sendable {
