@@ -100,36 +100,7 @@ public struct JSONWebToken: Sendable {
         }
     }
     
-    /// JWKS (JSON Web Key Set) for signature verification
-    public struct JWKS: Codable, Sendable {
-        public let keys: [JWK]
-        
-        public init(keys: [JWK]) {
-            self.keys = keys
-        }
-    }
-    
-    /// JSON Web Key for signature verification
-    public struct JWK: Codable, Sendable {
-        public let kty: String
-        public let kid: String
-        public let use: String?
-        public let alg: String?
-        public let n: String  // RSA modulus
-        public let e: String  // RSA exponent
-        public let x5c: [String]?  // X.509 certificate chain
-        
-        public init(kty: String, kid: String, use: String? = nil, alg: String? = nil, 
-                   n: String, e: String, x5c: [String]? = nil) {
-            self.kty = kty
-            self.kid = kid
-            self.use = use
-            self.alg = alg
-            self.n = n
-            self.e = e
-            self.x5c = x5c
-        }
-    }
+
     
     /// Validation options for JWT tokens
     public struct ValidationOptions: Sendable {
@@ -146,77 +117,7 @@ public struct JSONWebToken: Sendable {
         }
     }
     
-    /// Errors that can occur during JWT operations
-    public enum JWTError: Error, LocalizedError, Sendable, Equatable {
-        case invalidFormat
-        case invalidBase64
-        case invalidJSON
-        case unsupportedAlgorithm
-        case signatureVerificationFailed
-        case jwksFetchFailed
-        case keyNotFound
-        case expired
-        case notYetValid
-        case invalidIssuer(expected: String, actual: String?)
-        case invalidAudience(expected: String, actual: [String])
-        case invalidAuthorizedParty(expected: String, actual: String?)
-        case jweNotSupported
-        
-        public static func == (lhs: JWTError, rhs: JWTError) -> Bool {
-            switch (lhs, rhs) {
-            case (.invalidFormat, .invalidFormat),
-                 (.invalidBase64, .invalidBase64),
-                 (.invalidJSON, .invalidJSON),
-                 (.unsupportedAlgorithm, .unsupportedAlgorithm),
-                 (.signatureVerificationFailed, .signatureVerificationFailed),
-                 (.jwksFetchFailed, .jwksFetchFailed),
-                 (.keyNotFound, .keyNotFound),
-                 (.expired, .expired),
-                 (.notYetValid, .notYetValid),
-                 (.jweNotSupported, .jweNotSupported):
-                return true
-            case (.invalidIssuer(let lExpected, let lActual), .invalidIssuer(let rExpected, let rActual)):
-                return lExpected == rExpected && lActual == rActual
-            case (.invalidAudience(let lExpected, let lActual), .invalidAudience(let rExpected, let rActual)):
-                return lExpected == rExpected && lActual == rActual
-            case (.invalidAuthorizedParty(let lExpected, let lActual), .invalidAuthorizedParty(let rExpected, let rActual)):
-                return lExpected == rExpected && lActual == rActual
-            default:
-                return false
-            }
-        }
-        
-        public var errorDescription: String? {
-            switch self {
-            case .invalidFormat:
-                return "JWT does not have the correct format (header.payload.signature)"
-            case .invalidBase64:
-                return "Failed to decode base64 encoded JWT segment"
-            case .invalidJSON:
-                return "Failed to parse JSON in JWT segment"
-            case .unsupportedAlgorithm:
-                return "Algorithm not supported for signature verification"
-            case .signatureVerificationFailed:
-                return "JWT signature verification failed"
-            case .jwksFetchFailed:
-                return "Failed to fetch JWKS from issuer"
-            case .keyNotFound:
-                return "Key with specified kid not found in JWKS"
-            case .expired:
-                return "JWT token has expired"
-            case .notYetValid:
-                return "JWT token is not yet valid"
-            case .invalidIssuer(let expected, let actual):
-                return "JWT issuer validation failed. Expected: \(expected), Actual: \(actual ?? "nil")"
-            case .invalidAudience(let expected, let actual):
-                return "JWT audience validation failed. Expected: \(expected), Actual: \(actual)"
-            case .invalidAuthorizedParty(let expected, let actual):
-                return "JWT authorized party validation failed. Expected: \(expected), Actual: \(actual ?? "nil")"
-            case .jweNotSupported:
-                return "Encrypted (JWE) tokens are not supported. Use a signed JWT (JWS)"
-            }
-        }
-    }
+
     
     // MARK: - Initialization
     
@@ -310,11 +211,11 @@ public struct JSONWebToken: Sendable {
     
     // MARK: - Signature Verification
     
-    /// Verify the JWT signature using a JWKS
+    /// Verify the JWT signature using a JSONWebKeySet
     /// - Parameter jwks: The JSON Web Key Set containing the public keys
     /// - Returns: True if the signature is valid
     /// - Throws: JWTError if verification fails
-    public func verifySignature(using jwks: JWKS) throws -> Bool {
+    public func verifySignature(using jwks: JSONWebKeySet) throws -> Bool {
         // Check algorithm
         guard header.alg == "RS256" else {
             throw JWTError.unsupportedAlgorithm
@@ -348,7 +249,7 @@ public struct JSONWebToken: Sendable {
     ///   - options: Additional validation options
     /// - Returns: True if both signature and claims are valid
     /// - Throws: JWTError if verification fails
-    public func verify(using jwks: JWKS, at date: Date = Date(), options: ValidationOptions = ValidationOptions()) throws -> Bool {
+    public func verify(using jwks: JSONWebKeySet, at date: Date = Date(), options: ValidationOptions = ValidationOptions()) throws -> Bool {
         // First validate claims
         try validateClaims(at: date, options: options)
         
@@ -364,96 +265,11 @@ public struct JSONWebToken: Sendable {
     /// - Returns: True if the token is valid
     /// - Throws: JWTError if verification fails
     public func verify(using issuer: String, at date: Date = Date(), options: ValidationOptions = ValidationOptions()) async throws -> Bool {
-        let jwks = try await Self.fetchJWKS(from: issuer)
+        let jwks = try await JSONWebKeySet(fromIssuer: issuer)
         return try verify(using: jwks, at: date, options: options)
     }
     
-    // MARK: - Convenience Methods
-    
-    /// Extract user information from the JWT payload
-    /// - Returns: A dictionary containing user information
-    public func extractUserInfo() -> [String: Any] {
-        var userInfo: [String: Any] = [:]
-        
-        if let sub = payload.sub {
-            userInfo["sub"] = sub
-        }
-        if let iss = payload.iss {
-            userInfo["iss"] = iss
-        }
-        if let scope = payload.scope {
-            userInfo["scope"] = scope
-        }
-        if let azp = payload.azp {
-            userInfo["azp"] = azp
-        }
-        if let exp = payload.exp {
-            userInfo["exp"] = exp
-        }
-        if let iat = payload.iat {
-            userInfo["iat"] = iat
-        }
-        if let aud = payload.aud {
-            userInfo["aud"] = aud.values
-        }
-        
-        return userInfo
-    }
-    
     // MARK: - Static helpers
-    
-    /// Fetch JWKS from the issuer
-    /// - Parameter issuer: The JWT issuer
-    /// - Returns: JWKS response
-    /// - Throws: JWTError if fetch fails
-    public static func fetchJWKS(from issuer: String) async throws -> JWKS {
-        let jwksURL = "\(issuer).well-known/jwks.json"
-        
-        guard let url = URL(string: jwksURL) else {
-            throw JWTError.jwksFetchFailed
-        }
-        
-        #if canImport(FoundationNetworking)
-        // For Linux/cross-platform environments, use FoundationNetworking
-        return try await withCheckedThrowingContinuation { continuation in
-            let task = URLSession.shared.dataTask(with: url) { data, response, error in
-                if let error = error {
-                    continuation.resume(throwing: JWTError.jwksFetchFailed)
-                    return
-                }
-                
-                guard let httpResponse = response as? HTTPURLResponse,
-                      httpResponse.statusCode == 200,
-                      let data = data else {
-                    continuation.resume(throwing: JWTError.jwksFetchFailed)
-                    return
-                }
-                
-                do {
-                    let decoder = JSONDecoder()
-                    decoder.dateDecodingStrategy = .secondsSince1970
-                    let jwks = try decoder.decode(JWKS.self, from: data)
-                    continuation.resume(returning: jwks)
-                } catch {
-                    continuation.resume(throwing: JWTError.jwksFetchFailed)
-                }
-            }
-            task.resume()
-        }
-        #else
-        // For Darwin/macOS/iOS environments, use standard URLSession
-        let (data, response) = try await URLSession.shared.data(from: url)
-        
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
-            throw JWTError.jwksFetchFailed
-        }
-        
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .secondsSince1970
-        return try decoder.decode(JWKS.self, from: data)
-        #endif
-    }
     
     // MARK: - Private helpers
     
@@ -610,7 +426,7 @@ extension Data {
                            .replacingOccurrences(of: "_", with: "/")
         padded += String(repeating: "=", count: (4 - padded.count % 4) % 4)
         guard let d = Data(base64Encoded: padded) else {
-            throw JSONWebToken.JWTError.invalidBase64
+            throw JWTError.invalidBase64
         }
         self = d
     }

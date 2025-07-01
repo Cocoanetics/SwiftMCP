@@ -80,7 +80,7 @@ struct JSONWebTokenTests {
         do {
             try jwt.validateClaims(at: validDate, options: wrongOptions)
             #expect(Bool(false), "Expected validation to fail for wrong issuer")
-        } catch let error as JSONWebToken.JWTError {
+        } catch let error as JWTError {
             switch error {
             case .invalidIssuer(let expected, let actual):
                 #expect(expected == "https://wrong-issuer.com/")
@@ -96,7 +96,7 @@ struct JSONWebTokenTests {
         let jwt = try JSONWebToken(token: Self.accessToken)
         
         // Fetch JWKS from issuer
-        let jwks = try await JSONWebToken.fetchJWKS(from: "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/")
+        let jwks = try await JSONWebKeySet(fromIssuer: "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/")
         
         // Verify signature
         let isValid = try jwt.verifySignature(using: jwks)
@@ -108,7 +108,7 @@ struct JSONWebTokenTests {
         let jwt = try JSONWebToken(token: Self.accessToken)
         
         // Fetch JWKS from issuer
-        let jwks = try await JSONWebToken.fetchJWKS(from: "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/")
+        let jwks = try await JSONWebKeySet(fromIssuer: "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/")
         
         // Verify with claims validation at valid time
         let validDate = Date(timeIntervalSince1970: 1751206127) // iat time
@@ -121,7 +121,7 @@ struct JSONWebTokenTests {
         let jwt = try JSONWebToken(token: Self.accessToken)
         
         // Fetch JWKS from issuer
-        let jwks = try await JSONWebToken.fetchJWKS(from: "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/")
+        let jwks = try await JSONWebKeySet(fromIssuer: "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/")
         
         // Verify with a specific date (iat time)
         let customDate = Date(timeIntervalSince1970: 1751206127)
@@ -146,9 +146,9 @@ struct JSONWebTokenTests {
         let modifiedToken = "\(segments[0]).\(segments[1]).dGVzdC1zaWduYXR1cmU=" // base64 for "test-signature"
         
         let jwt = try JSONWebToken(token: modifiedToken)
-        let jwks = try await JSONWebToken.fetchJWKS(from: "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/")
+        let jwks = try await JSONWebKeySet(fromIssuer: "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/")
         
-        #expect(throws: JSONWebToken.JWTError.signatureVerificationFailed) {
+        #expect(throws: JWTError.signatureVerificationFailed) {
             try jwt.verifySignature(using: jwks)
         }
     }
@@ -183,24 +183,23 @@ struct JSONWebTokenTests {
         let invalidToken = "\(headerB64).\(payloadB64).signature"
         
         let jwt = try JSONWebToken(token: invalidToken)
-        let jwks = try await JSONWebToken.fetchJWKS(from: "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/")
+        let jwks = try await JSONWebKeySet(fromIssuer: "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/")
         
-        #expect(throws: JSONWebToken.JWTError.unsupportedAlgorithm) {
+        #expect(throws: JWTError.unsupportedAlgorithm) {
             try jwt.verifySignature(using: jwks)
         }
     }
     
-    @Test("Extract user info from JWT")
-    func testExtractUserInfo() throws {
+    @Test("Access JWT payload properties directly")
+    func testDirectPayloadAccess() throws {
         let jwt = try JSONWebToken(token: Self.accessToken)
         
-        let userInfo = jwt.extractUserInfo()
-        
-        #expect(userInfo["sub"] as? String == "auth0|685bfe07a54b24aa78b0ca2d")
-        #expect(userInfo["iss"] as? String == "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/")
-        #expect(userInfo["scope"] as? String == "openid profile email")
-        #expect(userInfo["exp"] as? Date != nil)
-        #expect(userInfo["iat"] as? Date != nil)
-        #expect(userInfo["aud"] as? [String] != nil)
+        // Directly access payload properties instead of extractUserInfo()
+        #expect(jwt.payload.sub == "auth0|685bfe07a54b24aa78b0ca2d")
+        #expect(jwt.payload.iss == "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/")
+        #expect(jwt.payload.scope == "openid profile email")
+        #expect(jwt.payload.exp != nil)
+        #expect(jwt.payload.iat != nil)
+        #expect(jwt.payload.aud != nil)
     }
 } 
