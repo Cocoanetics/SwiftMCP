@@ -100,25 +100,6 @@ public struct JSONWebToken: Sendable {
         }
     }
     
-
-    
-    /// Validation options for JWT tokens
-    public struct ValidationOptions: Sendable {
-        public let expectedIssuer: String?
-        public let expectedAudience: String?
-        public let expectedAuthorizedParty: String?
-        public let allowedClockSkew: TimeInterval
-        
-        public init(expectedIssuer: String? = nil, expectedAudience: String? = nil, expectedAuthorizedParty: String? = nil, allowedClockSkew: TimeInterval = 60) {
-            self.expectedIssuer = expectedIssuer
-            self.expectedAudience = expectedAudience
-            self.expectedAuthorizedParty = expectedAuthorizedParty
-            self.allowedClockSkew = allowedClockSkew
-        }
-    }
-    
-
-    
     // MARK: - Initialization
     
     /// Initialize a JWT from a token string
@@ -171,7 +152,7 @@ public struct JSONWebToken: Sendable {
     ///   - date: The date to validate against (defaults to current date)
     ///   - options: Additional validation options
     /// - Throws: JWTError if validation fails
-    public func validateClaims(at date: Date = Date(), options: ValidationOptions = ValidationOptions()) throws {
+    public func validateClaims(at date: Date = Date(), options: JWTValidationOptions = JWTValidationOptions()) throws {
         // Check expiration
         if let exp = payload.exp {
             if date.timeIntervalSince(exp) > options.allowedClockSkew {
@@ -232,54 +213,8 @@ public struct JSONWebToken: Sendable {
         }
         
         // Verify the signature
-        return try Self.verifyRS256Signature(token: rawToken, publicKey: publicKey)
-    }
-    
-    // MARK: - Combined Verification
-    
-    /// Verify signature and validate claims in one step
-    /// - Parameters:
-    ///   - jwks: The JSON Web Key Set containing the public keys
-    ///   - date: The date to validate against (defaults to current date)
-    ///   - options: Additional validation options
-    /// - Returns: True if both signature and claims are valid
-    /// - Throws: JWTError if verification fails
-    public func verify(using jwks: JSONWebKeySet, at date: Date = Date(), options: ValidationOptions = ValidationOptions()) throws -> Bool {
-        // First validate claims
-        try validateClaims(at: date, options: options)
-        
-        // Then verify signature
-        return try verifySignature(using: jwks)
-    }
-    
-    /// Fetch JWKS from the issuer and verify the token
-    /// - Parameters:
-    ///   - issuer: The JWT issuer URL (used to construct JWKS URL)
-    ///   - date: The date to validate against (defaults to current date)
-    ///   - options: Additional validation options
-    /// - Returns: True if the token is valid
-    /// - Throws: JWTError if verification fails
-    public func verify(using issuer: URL, at date: Date = Date(), options: ValidationOptions = ValidationOptions()) async throws -> Bool {
-        let jwks = try await JSONWebKeySet(fromIssuer: issuer)
-        return try verify(using: jwks, at: date, options: options)
-    }
-    
-    // MARK: - Static helpers
-    
-    // MARK: - Private helpers
-    
-    /// Verify RS256 signature using Swift Crypto framework
-    /// - Parameters:
-    ///   - token: The JWT token
-    ///   - publicKey: RSA public key from Swift Crypto
-    /// - Returns: True if signature is valid
-    /// - Throws: JWTError if verification fails
-    private static func verifyRS256Signature(
-        token: String,
-        publicKey: _RSA.Signing.PublicKey
-    ) throws -> Bool {
         // Split the token
-        let segments = token.split(separator: ".")
+        let segments = rawToken.split(separator: ".")
         guard segments.count == 3 else {
             throw JWTError.invalidFormat
         }
@@ -304,92 +239,34 @@ public struct JSONWebToken: Sendable {
         }
     }
     
-
-}
-
-// MARK: - Convenience Token Validator
-
-/// A lightweight JWT token validator for use with OAuthConfiguration
-public struct JWTTokenValidator: Sendable {
-    private let options: JSONWebToken.ValidationOptions
+    // MARK: - Combined Verification
     
-    /// Initialize a JWT token validator
+    /// Verify signature and validate claims in one step
     /// - Parameters:
-    ///   - expectedIssuer: The expected issuer (e.g., "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/")
-    ///   - expectedAudience: The expected audience (e.g., "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/api/v2/")
-    ///   - expectedAuthorizedParty: The expected authorized party / client ID (e.g., "n4vmrjiAhmoE1P1JvjvF1iU8m1RTq3yi")
-    ///   - allowedClockSkew: Clock skew tolerance in seconds (default: 60)
-    public init(expectedIssuer: String? = nil, expectedAudience: String? = nil, expectedAuthorizedParty: String? = nil, allowedClockSkew: TimeInterval = 60) {
-        self.options = JSONWebToken.ValidationOptions(
-            expectedIssuer: expectedIssuer,
-            expectedAudience: expectedAudience,
-            expectedAuthorizedParty: expectedAuthorizedParty,
-            allowedClockSkew: allowedClockSkew
-        )
+    ///   - jwks: The JSON Web Key Set containing the public keys
+    ///   - date: The date to validate against (defaults to current date)
+    ///   - options: Additional validation options
+    /// - Returns: True if both signature and claims are valid
+    /// - Throws: JWTError if verification fails
+    public func verify(using jwks: JSONWebKeySet, at date: Date = Date(), options: JWTValidationOptions = JWTValidationOptions()) throws -> Bool {
+        // First validate claims
+        try validateClaims(at: date, options: options)
+        
+        // Then verify signature
+        return try verifySignature(using: jwks)
     }
     
-    /// Validate a JWT token string (for use with OAuthConfiguration)
-    /// - Parameter token: The JWT token to validate
-    /// - Returns: true if the token is valid, false otherwise
-    public func validate(_ token: String?) async -> Bool {
-        guard let token = token else { return false }
-        do {
-            let jwt = try JSONWebToken(token: token)
-            try jwt.validateClaims(options: options)
-            return true
-        } catch {
-            return false
-        }
-    }
-}
-
-// MARK: - OAuthConfiguration Extensions
-
-extension OAuthConfiguration {
-    /// Create an OAuth configuration with JWT token validation for Auth0
+    /// Fetch JWKS from the issuer and verify the token
     /// - Parameters:
-    ///   - auth0Domain: Your Auth0 domain (e.g., "dev-8ygj6eppnvjz8bm6.us.auth0.com")
-    ///   - expectedAudience: The expected audience for your API
-    ///   - clientId: Your Auth0 client ID
-    ///   - clientSecret: Your Auth0 client secret
-    /// - Returns: A configured OAuthConfiguration with JWT validation
-    public static func auth0JWT(
-        domain: String,
-        expectedAudience: String,
-        clientId: String,
-        clientSecret: String
-    ) -> OAuthConfiguration {
-        let baseURL = "https://\(domain)"
-        let expectedIssuer = "\(baseURL)/"
-        
-        let validator = JWTTokenValidator(
-            expectedIssuer: expectedIssuer,
-            expectedAudience: expectedAudience
-        )
-        
-        return OAuthConfiguration(
-            issuer: URL(string: baseURL)!,
-            authorizationEndpoint: URL(string: "\(baseURL)/authorize")!,
-            tokenEndpoint: URL(string: "\(baseURL)/oauth/token")!,
-            clientID: clientId,
-            clientSecret: clientSecret,
-            tokenValidator: validator.validate
-        )
+    ///   - issuer: The JWT issuer URL (used to construct JWKS URL)
+    ///   - date: The date to validate against (defaults to current date)
+    ///   - options: Additional validation options
+    ///   - jwksCache: Optional JWKS cache to use (creates new one if not provided)
+    /// - Returns: True if the token is valid
+    /// - Throws: JWTError if verification fails
+    public func verify(using issuer: URL, at date: Date = Date(), options: JWTValidationOptions = JWTValidationOptions(), jwksCache: JWKSCache? = nil) async throws -> Bool {
+        let cache = jwksCache ?? JWKSCache()
+        let jwks = try await cache.getJWKS(for: issuer)
+        return try verify(using: jwks, at: date, options: options)
     }
 }
-
-// MARK: - Extension to handle base64URL decoding for JWT
-
-extension Data {
-    /// SwiftCrypto expects raw big-endian bytes.  
-    /// JWT uses base64url with no padding.  
-    init(base64URLEncoded source: String) throws {
-        var padded = source.replacingOccurrences(of: "-", with: "+")
-                           .replacingOccurrences(of: "_", with: "/")
-        padded += String(repeating: "=", count: (4 - padded.count % 4) % 4)
-        guard let d = Data(base64Encoded: padded) else {
-            throw JWTError.invalidBase64
-        }
-        self = d
-    }
-} 

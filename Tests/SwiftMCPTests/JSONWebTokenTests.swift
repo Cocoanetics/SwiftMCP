@@ -67,7 +67,7 @@ struct JSONWebTokenTests {
     func testValidateClaimsWithOptions() throws {
         let jwt = try JSONWebToken(token: Self.accessToken)
         
-        let options = JSONWebToken.ValidationOptions(
+        let options = JWTValidationOptions(
             expectedIssuer: "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/",
             expectedAudience: "https://unique-sponge-driven.ngrok-free.app"
         )
@@ -76,7 +76,7 @@ struct JSONWebTokenTests {
         try jwt.validateClaims(at: validDate, options: options)
         
         // Test with wrong issuer
-        let wrongOptions = JSONWebToken.ValidationOptions(
+        let wrongOptions = JWTValidationOptions(
             expectedIssuer: "https://wrong-issuer.com/"
         )
         

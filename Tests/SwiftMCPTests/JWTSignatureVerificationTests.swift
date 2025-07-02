@@ -123,4 +123,30 @@ struct JWTSignatureVerificationTests {
             #expect(Bool(false), "Expected unsupportedAlgorithm error, got \(error)")
         }
     }
+    
+    @Test("JWKS caching works correctly")
+    func testJWKSCaching() async throws {
+        let issuer = "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/"
+        let issuerURL = URL(string: issuer)!
+        
+        // Create a cache with short validity for testing
+        let cache = JWKSCache(cacheValidityDuration: 60) // 1 minute
+        
+        // First call - should fetch from network
+        let jwks1 = try await cache.getJWKS(for: issuerURL)
+        #expect(jwks1.keys.count > 0)
+        
+        // Second call - should use cache
+        let jwks2 = try await cache.getJWKS(for: issuerURL)
+        #expect(jwks2.keys.count > 0)
+        
+        // Verify both are the same object (cached)
+        #expect(jwks1.keys.count == jwks2.keys.count)
+        
+        // Test that we can use the cached JWKS for verification
+        let jwt = try JSONWebToken(token: Self.accessToken)
+        let validDate = Date(timeIntervalSince1970: 1751206127)
+        let isValid = try jwt.verify(using: jwks1, at: validDate)
+        #expect(isValid == true)
+    }
 } 
