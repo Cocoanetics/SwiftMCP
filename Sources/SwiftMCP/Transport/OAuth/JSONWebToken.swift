@@ -9,18 +9,34 @@ import FoundationNetworking
 /// A comprehensive JSON Web Token (JWT) implementation with decoding, validation, and signature verification
 public struct JSONWebToken: Sendable {
     
-    /// The decoded JWT components
+    /// The decoded JWT header containing algorithm, type, and key ID information
     public let header: JWTHeader
+    
+    /// The decoded JWT payload containing claims like issuer, subject, audience, expiration, etc.
     public let payload: JWTPayload
+    
+    /// The raw signature string from the JWT (base64url encoded)
     public let signature: String
+    
+    /// The complete original JWT token string
     public let rawToken: String
     
-    /// JWT Header structure
+    /// JWT Header structure containing metadata about the token
     public struct JWTHeader: Codable, Sendable {
+        /// The algorithm used for signing the JWT (e.g., "RS256", "HS256")
         public let alg: String
+        
+        /// The type of token (typically "JWT" or "at+jwt")
         public let typ: String
+        
+        /// The key ID used to identify the signing key in the JWKS
         public let kid: String?
         
+        /// Initialize a JWT header
+        /// - Parameters:
+        ///   - alg: The signing algorithm
+        ///   - typ: The token type
+        ///   - kid: Optional key ID
         public init(alg: String, typ: String, kid: String? = nil) {
             self.alg = alg
             self.typ = typ
@@ -28,17 +44,42 @@ public struct JSONWebToken: Sendable {
         }
     }
     
-    /// JWT Payload structure
+    /// JWT Payload structure containing all the claims and data
     public struct JWTPayload: Codable, Sendable {
+        /// The issuer of the JWT (who created the token)
         public let iss: String?
+        
+        /// The subject of the JWT (who the token is about)
         public let sub: String?
+        
+        /// The audience(s) the JWT is intended for
         public let aud: AudienceValue?
+        
+        /// The expiration time of the JWT (when it becomes invalid)
         public let exp: Date?
+        
+        /// The "not before" time (when the JWT becomes valid)
         public let nbf: Date?
+        
+        /// The issued at time (when the JWT was created)
         public let iat: Date?
+        
+        /// The OAuth scopes granted by this token
         public let scope: String?
+        
+        /// The authorized party (client ID that requested the token)
         public let azp: String?
         
+        /// Initialize a JWT payload
+        /// - Parameters:
+        ///   - iss: Optional issuer
+        ///   - sub: Optional subject
+        ///   - aud: Optional audience
+        ///   - exp: Optional expiration time
+        ///   - nbf: Optional "not before" time
+        ///   - iat: Optional issued at time
+        ///   - scope: Optional OAuth scopes
+        ///   - azp: Optional authorized party
         public init(iss: String? = nil, sub: String? = nil, aud: AudienceValue? = nil, 
                    exp: Date? = nil, nbf: Date? = nil, iat: Date? = nil, 
                    scope: String? = nil, azp: String? = nil) {
@@ -55,9 +96,14 @@ public struct JSONWebToken: Sendable {
     
     /// Audience can be either a string or an array of strings
     public enum AudienceValue: Codable, Equatable, Sendable {
+        /// Single audience value
         case single(String)
+        /// Multiple audience values
         case multiple([String])
         
+        /// Initialize from decoder, handling both string and array formats
+        /// - Parameter decoder: The decoder to read from
+        /// - Throws: DecodingError if the format is invalid
         public init(from decoder: Decoder) throws {
             let container = try decoder.singleValueContainer()
             if let single = try? container.decode(String.self) {
@@ -69,6 +115,9 @@ public struct JSONWebToken: Sendable {
             }
         }
         
+        /// Encode to encoder
+        /// - Parameter encoder: The encoder to write to
+        /// - Throws: EncodingError if encoding fails
         public func encode(to encoder: Encoder) throws {
             var container = encoder.singleValueContainer()
             switch self {
@@ -80,6 +129,8 @@ public struct JSONWebToken: Sendable {
         }
         
         /// Check if the audience contains a specific value
+        /// - Parameter value: The value to check for
+        /// - Returns: True if the audience contains the value
         public func contains(_ value: String) -> Bool {
             switch self {
             case .single(let aud):

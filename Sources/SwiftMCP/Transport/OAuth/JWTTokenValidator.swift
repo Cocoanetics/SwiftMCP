@@ -10,11 +10,23 @@ import Foundation
 // MARK: - Convenience Token Validator
 
 /// A lightweight JWT token validator for use with OAuthConfiguration
+/// 
+/// This validator provides a simple interface for validating JWT tokens in OAuth
+/// configurations. It handles both claims validation and signature verification
+/// with built-in JWKS caching for performance.
 public struct JWTTokenValidator: Sendable {
+    /// The validation options to apply to JWT tokens
     private let options: JWTValidationOptions
+    
+    /// The JWKS cache used for signature verification
     private let jwksCache: JWKSCache
     
     /// Initialize a JWT token validator
+    /// 
+    /// This initializer creates a validator with the specified validation criteria.
+    /// The validator will check JWT claims against these options and verify
+    /// signatures using JWKS from the expected issuer.
+    /// 
     /// - Parameters:
     ///   - expectedIssuer: The expected issuer (e.g., "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/")
     ///   - expectedAudience: The expected audience (e.g., "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/api/v2/")
@@ -32,6 +44,13 @@ public struct JWTTokenValidator: Sendable {
     }
     
     /// Validate a JWT token string (for use with OAuthConfiguration)
+    /// 
+    /// This method performs comprehensive JWT validation including:
+    /// 1. Claims validation (issuer, audience, timing, etc.)
+    /// 2. Signature verification using JWKS (if issuer is specified)
+    /// 
+    /// The validation uses cached JWKS when possible to improve performance.
+    /// 
     /// - Parameter token: The JWT token to validate
     /// - Returns: true if the token is valid, false otherwise
     public func validate(_ token: String?) async -> Bool {
