@@ -10,6 +10,9 @@ struct JSONWebTokenTests {
     
     static let idToken = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6ImlfRjhMWkdhRC10SkIzcm9MckRCMSJ9.eyJuaWNrbmFtZSI6Im9saXZlcitkcm9wcyIsIm5hbWUiOiJvbGl2ZXIrZHJvcHNAZHJvYm5pay5jb20iLCJwaWN0dXJlIjoiaHR0cHM6Ly9zLmdyYXZhdGFyLmNvbS9hdmF0YXIvNDNhMDZjOTdlNjE2YTcwMmE2MTI4YjA0MDIzNDhjMmI_cz00ODAmcj1wZyZkPWh0dHBzJTNBJTJGJTJGY2RuLmF1dGgwLmNvbSUyRmF2YXRhcnMlMkZvbC5wbmciLCJ1cGRhdGVkX2F0IjoiMjAyNS0wNi0yN1QxMzo1NDozNS45MDdaIiwiZW1haWwiOiJvbGl2ZXIrZHJvcHNAZHJvYm5pay5jb20iLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwiaXNzIjoiaHR0cHM6Ly9kZXYtOHlnajZlcHBudmp6OGJtNi51cy5hdXRoMC5jb20vIiwiYXVkIjoiRXp6RmdvbDNRTWU2ZVFvWHhrZmY0RTJiV2RwQjJEZzkiLCJzdWIiOiJhdXRoMHw2ODViZmUwN2E1NGIyNGFhNzhiMGNhMmQiLCJpYXQiOjE3NTEyMDYxMjcsImV4cCI6MTc1MTI0MjEyNywic2lkIjoieFJ1ZEItYmphTkZoVV9rODVwYkM5SWxsNzFVMkEtbXkifQ.SDA735wvNiweN_ruafcRoVUhhM8smmjBLx-p1W1V_U9H_dlVoURKuRsjC0DaAEHLb07UfqKx181xcFI2GNdUHBG7p1nJU2AkRpZ0Jkqa_G2mqpq3ALx7EbJaewEHUJGxYbxo4hPetfat74kYPmjcrL44D9eQfmb3nVyk0QOsFFhSNIFNL50s3SghQRULeGrn2bdIm34QUA5bhg9acmVKL0l0H58Cj3oOoedPP0UyYljRDBYgu3EMFCRFS97Rvfh1PQop-QGTKrPbzqAUtcCMJ4R_TWPYNLUEKJHWQbdcsxYQ8MNPdJ_LAeUB5-EfQZRIfku9kiizx_SlLHq4Uw2-Xg"
     
+    // Test issuer URL
+    static let issuerURL = URL(string: "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/")!
+    
     @Test("Initialize JSONWebToken from access token string")
     func testInitFromAccessToken() throws {
         let jwt = try JSONWebToken(token: Self.accessToken)
@@ -96,7 +99,7 @@ struct JSONWebTokenTests {
         let jwt = try JSONWebToken(token: Self.accessToken)
         
         // Fetch JWKS from issuer
-        let jwks = try await JSONWebKeySet(fromIssuer: "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/")
+        let jwks = try await JSONWebKeySet(fromIssuer: Self.issuerURL)
         
         // Verify signature
         let isValid = try jwt.verifySignature(using: jwks)
@@ -108,7 +111,7 @@ struct JSONWebTokenTests {
         let jwt = try JSONWebToken(token: Self.accessToken)
         
         // Fetch JWKS from issuer
-        let jwks = try await JSONWebKeySet(fromIssuer: "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/")
+        let jwks = try await JSONWebKeySet(fromIssuer: Self.issuerURL)
         
         // Verify with claims validation at valid time
         let validDate = Date(timeIntervalSince1970: 1751206127) // iat time
@@ -121,7 +124,7 @@ struct JSONWebTokenTests {
         let jwt = try JSONWebToken(token: Self.accessToken)
         
         // Fetch JWKS from issuer
-        let jwks = try await JSONWebKeySet(fromIssuer: "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/")
+        let jwks = try await JSONWebKeySet(fromIssuer: Self.issuerURL)
         
         // Verify with a specific date (iat time)
         let customDate = Date(timeIntervalSince1970: 1751206127)
@@ -135,7 +138,7 @@ struct JSONWebTokenTests {
         
         // Verify using issuer with valid time
         let validDate = Date(timeIntervalSince1970: 1751206127) // iat time
-        let isValid = try await jwt.verify(using: "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/", at: validDate)
+        let isValid = try await jwt.verify(using: Self.issuerURL, at: validDate)
         #expect(isValid == true)
     }
     
@@ -146,7 +149,7 @@ struct JSONWebTokenTests {
         let modifiedToken = "\(segments[0]).\(segments[1]).dGVzdC1zaWduYXR1cmU=" // base64 for "test-signature"
         
         let jwt = try JSONWebToken(token: modifiedToken)
-        let jwks = try await JSONWebKeySet(fromIssuer: "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/")
+        let jwks = try await JSONWebKeySet(fromIssuer: Self.issuerURL)
         
         #expect(throws: JWTError.signatureVerificationFailed) {
             try jwt.verifySignature(using: jwks)
@@ -183,7 +186,7 @@ struct JSONWebTokenTests {
         let invalidToken = "\(headerB64).\(payloadB64).signature"
         
         let jwt = try JSONWebToken(token: invalidToken)
-        let jwks = try await JSONWebKeySet(fromIssuer: "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/")
+        let jwks = try await JSONWebKeySet(fromIssuer: Self.issuerURL)
         
         #expect(throws: JWTError.unsupportedAlgorithm) {
             try jwt.verifySignature(using: jwks)

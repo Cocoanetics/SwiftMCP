@@ -31,249 +31,19 @@ struct JWTSignatureVerificationTests {
         let x5c: [String]?  // X.509 certificate chain
     }
     
-    // JWT Signature Verifier using CryptoKit framework
-    struct JWTSignatureVerifier {
-        
-        enum VerificationError: Error, LocalizedError {
-            case invalidAlgorithm
-            case unsupportedAlgorithm
-            case invalidKeyFormat
-            case signatureVerificationFailed
-            case jwksFetchFailed
-            case keyNotFound
-            
-            var errorDescription: String? {
-                switch self {
-                case .invalidAlgorithm:
-                    return "Invalid or unsupported JWT algorithm"
-                case .unsupportedAlgorithm:
-                    return "Algorithm not supported for signature verification"
-                case .invalidKeyFormat:
-                    return "Invalid key format"
-                case .signatureVerificationFailed:
-                    return "JWT signature verification failed"
-                case .jwksFetchFailed:
-                    return "Failed to fetch JWKS from issuer"
-                case .keyNotFound:
-                    return "Key with specified kid not found in JWKS"
-                }
-            }
-        }
-        
-        /// Verify JWT signature using public key from JWKS
-        /// - Parameters:
-        ///   - token: The JWT token to verify
-        ///   - issuer: The JWT issuer (used to construct JWKS URL)
-        /// - Returns: True if signature is valid
-        /// - Throws: VerificationError if verification fails
-        static func verifySignature(token: String, issuer: String) async throws -> Bool {
-            // Decode the JWT to get header and payload
-            let jwt = try JSONWebToken(token: token)
-            
-            // Check algorithm
-            guard jwt.header.alg == "RS256" else {
-                throw VerificationError.unsupportedAlgorithm
-            }
-            
-            // Get the key ID
-            guard let kid = jwt.header.kid else {
-                throw VerificationError.invalidKeyFormat
-            }
-            
-            // Fetch JWKS from issuer
-            let jwks = try await fetchJWKS(from: issuer)
-            
-            // Find the key with matching kid
-            guard let jwk = jwks.keys.first(where: { $0.kid == kid }) else {
-                throw VerificationError.keyNotFound
-            }
-            
-            // Verify the signature
-            return try verifyRS256Signature(
-                token: token,
-                publicKeyModulus: jwk.n,
-                publicKeyExponent: jwk.e,
-                x5c: jwk.x5c
-            )
-        }
-        
-        /// Fetch JWKS from the issuer
-        /// - Parameter issuer: The JWT issuer
-        /// - Returns: JWKS response
-        /// - Throws: VerificationError if fetch fails
-        private static func fetchJWKS(from issuer: String) async throws -> JWKSResponse {
-            let jwksURL = "\(issuer).well-known/jwks.json"
-            
-            guard let url = URL(string: jwksURL) else {
-                throw VerificationError.jwksFetchFailed
-            }
-            
-            #if canImport(FoundationNetworking)
-            // For Linux/cross-platform environments, use FoundationNetworking
-            return try await withCheckedThrowingContinuation { continuation in
-                let task = URLSession.shared.dataTask(with: url) { data, response, error in
-                    if let error = error {
-                        continuation.resume(throwing: VerificationError.jwksFetchFailed)
-                        return
-                    }
-                    
-                    guard let httpResponse = response as? HTTPURLResponse,
-                          httpResponse.statusCode == 200,
-                          let data = data else {
-                        continuation.resume(throwing: VerificationError.jwksFetchFailed)
-                        return
-                    }
-                    
-                    do {
-                        let jwks = try JSONDecoder().decode(JWKSResponse.self, from: data)
-                        continuation.resume(returning: jwks)
-                    } catch {
-                        continuation.resume(throwing: VerificationError.jwksFetchFailed)
-                    }
-                }
-                task.resume()
-            }
-            #else
-            // For Darwin/macOS/iOS environments, use standard URLSession
-            let (data, response) = try await URLSession.shared.data(from: url)
-            
-            guard let httpResponse = response as? HTTPURLResponse,
-                  httpResponse.statusCode == 200 else {
-                throw VerificationError.jwksFetchFailed
-            }
-            
-            return try JSONDecoder().decode(JWKSResponse.self, from: data)
-            #endif
-        }
-        
-        /// Verify RS256 signature using CryptoKit framework
-        /// - Parameters:
-        ///   - token: The JWT token
-        ///   - publicKeyModulus: RSA modulus (base64url encoded)
-        ///   - publicKeyExponent: RSA exponent (base64url encoded)
-        ///   - x5c: X.509 certificate chain (optional)
-        /// - Returns: True if signature is valid
-        /// - Throws: VerificationError if verification fails
-        private static func verifyRS256Signature(
-            token: String,
-            publicKeyModulus: String,
-            publicKeyExponent: String,
-            x5c: [String]? = nil
-        ) throws -> Bool {
-            // Split the token
-            let segments = token.split(separator: ".")
-            guard segments.count == 3 else {
-                throw VerificationError.invalidKeyFormat
-            }
-            
-            let headerAndPayload = "\(segments[0]).\(segments[1])"
-            let signature = String(segments[2])
-            
-            // Decode the signature
-            let signatureData = try base64URLDecode(signature)
-            
-            // Create RSA public key using X.509 certificate if available
-            let publicKey = try createRSAPublicKeyFromJWK(
-                modulus: publicKeyModulus,
-                exponent: publicKeyExponent,
-                x5c: x5c
-            )
-            
-            // Create the data to verify
-            let dataToVerify = headerAndPayload.data(using: .utf8)!
-            
-            // Verify the signature using CryptoKit
-            return try verifyRS256SignatureWithCryptoKit(
-                signature: signatureData,
-                data: dataToVerify,
-                publicKey: publicKey
-            )
-        }
-        
-        /// Create RSA public key from JWK parameters using Swift Crypto
-        /// - Parameters:
-        ///   - modulus: RSA modulus (base64url encoded)
-        ///   - exponent: RSA exponent (base64url encoded)
-        ///   - x5c: X.509 certificate chain (optional)
-        /// - Returns: RSA.Signing.PublicKey from Swift Crypto
-        /// - Throws: VerificationError if key creation fails
-        private static func createRSAPublicKeyFromJWK(
-            modulus: String,
-            exponent: String,
-            x5c: [String]? = nil
-        ) throws -> _RSA.Signing.PublicKey {
-            // For now, focus on manual key construction from modulus/exponent
-            // TODO: Add X.509 certificate parsing when swift-certificates API is stable
-            
-            // Create key from modulus / exponent in the JWKS
-            let modulusData = try base64URLDecode(modulus)
-            let exponentData = try base64URLDecode(exponent)
-            
-            return try _RSA.Signing.PublicKey(n: modulusData, e: exponentData)
-        }
-        
-        /// Verify RS256 signature using Swift Crypto
-        /// - Parameters:
-        ///   - signature: The signature to verify
-        ///   - data: The data that was signed
-        ///   - publicKey: The RSA public key from Swift Crypto
-        /// - Returns: True if signature is valid
-        /// - Throws: VerificationError if verification fails
-        private static func verifyRS256SignatureWithCryptoKit(
-            signature: Data,
-            data: Data,
-            publicKey: _RSA.Signing.PublicKey
-        ) throws -> Bool {
-            // Verify the signature using Swift Crypto
-            do {
-                let rsaSignature = _RSA.Signing.RSASignature(rawRepresentation: signature)
-                let isValid = publicKey.isValidSignature(rsaSignature, for: data, padding: .insecurePKCS1v1_5)
-                
-                if !isValid {
-                    throw VerificationError.signatureVerificationFailed
-                }
-                
-                return true
-            } catch {
-                // If signature creation or verification fails, it's an invalid signature
-                throw VerificationError.signatureVerificationFailed
-            }
-        }
-        
 
-        
-        /// Base64URL decode
-        /// - Parameter string: Base64URL encoded string
-        /// - Returns: Decoded data
-        /// - Throws: VerificationError if decoding fails
-        private static func base64URLDecode(_ string: String) throws -> Data {
-            var base64 = string
-                .replacingOccurrences(of: "-", with: "+")
-                .replacingOccurrences(of: "_", with: "/")
-            
-            // Add padding if needed
-            let remainder = base64.count % 4
-            if remainder > 0 {
-                base64 += String(repeating: "=", count: 4 - remainder)
-            }
-            
-            guard let data = Data(base64Encoded: base64) else {
-                throw VerificationError.invalidKeyFormat
-            }
-            
-            return data
-        }
-    }
     
     @Test("Verify JWT signature using CryptoKit framework")
     func testJWTSignatureVerification() async throws {
         // Test with the provided access token
         let issuer = "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/"
         
-        let isValid = try await JWTSignatureVerifier.verifySignature(
-            token: Self.accessToken,
-            issuer: issuer
-        )
+        // Use a date within the token's validity period (iat: 1751206127)
+        let validDate = Date(timeIntervalSince1970: 1751206127)
+        
+        let jwt = try JSONWebToken(token: Self.accessToken)
+        let issuerURL = URL(string: issuer)!
+        let isValid = try await jwt.verify(using: issuerURL, at: validDate)
         
         #expect(isValid == true)
     }
@@ -283,10 +53,12 @@ struct JWTSignatureVerificationTests {
         // Test with the provided ID token
         let issuer = "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/"
         
-        let isValid = try await JWTSignatureVerifier.verifySignature(
-            token: Self.idToken,
-            issuer: issuer
-        )
+        // Use a date within the token's validity period (iat: 1751206127)
+        let validDate = Date(timeIntervalSince1970: 1751206127)
+        
+        let jwt = try JSONWebToken(token: Self.idToken)
+        let issuerURL = URL(string: issuer)!
+        let isValid = try await jwt.verify(using: issuerURL, at: validDate)
         
         #expect(isValid == true)
     }
@@ -300,13 +72,12 @@ struct JWTSignatureVerificationTests {
         let issuer = "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/"
         
         do {
-            _ = try await JWTSignatureVerifier.verifySignature(
-                token: modifiedToken,
-                issuer: issuer
-            )
+            let jwt = try JSONWebToken(token: modifiedToken)
+            let issuerURL = URL(string: issuer)!
+            _ = try await jwt.verify(using: issuerURL)
             #expect(Bool(false), "Expected verification to fail")
         } catch {
-            #expect(error is JWTSignatureVerifier.VerificationError)
+            #expect(error is JWTError)
         }
     }
     
@@ -342,12 +113,11 @@ struct JWTSignatureVerificationTests {
         let issuer = "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/"
         
         do {
-            _ = try await JWTSignatureVerifier.verifySignature(
-                token: invalidToken,
-                issuer: issuer
-            )
+            let jwt = try JSONWebToken(token: invalidToken)
+            let issuerURL = URL(string: issuer)!
+            _ = try await jwt.verify(using: issuerURL)
             #expect(Bool(false), "Expected verification to fail")
-        } catch let error as JWTSignatureVerifier.VerificationError {
+        } catch let error as JWTError {
             #expect(error == .unsupportedAlgorithm)
         } catch {
             #expect(Bool(false), "Expected unsupportedAlgorithm error, got \(error)")

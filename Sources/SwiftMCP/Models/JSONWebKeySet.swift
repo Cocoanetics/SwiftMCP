@@ -1,4 +1,7 @@
 import Foundation
+import Crypto
+import _CryptoExtras
+import X509
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
@@ -11,15 +14,22 @@ public struct JSONWebKeySet: Codable, Sendable {
         self.keys = keys
     }
     
-    /// Initialize JSONWebKeySet by fetching from an issuer
-    /// - Parameter issuer: The JWT issuer
-    /// - Throws: JWTError if fetch fails
-    public init(fromIssuer issuer: String) async throws {
-        let jwksURL = "\(issuer).well-known/jwks.json"
-        
-        guard let url = URL(string: jwksURL) else {
-            throw JWTError.jwksFetchFailed
+    /// Get a public key by key ID
+    /// - Parameter kid: The key ID to look up
+    /// - Returns: RSA public key if found and valid, nil otherwise
+    public func key(kid: String) -> _RSA.Signing.PublicKey? {
+        guard let jwk = keys.first(where: { $0.kid == kid }) else {
+            return nil
         }
+        
+        return try? jwk.createRSAPublicKey()
+    }
+    
+    /// Initialize JSONWebKeySet by fetching from an issuer
+    /// - Parameter issuer: The JWT issuer URL
+    /// - Throws: JWTError if fetch fails
+    public init(fromIssuer issuer: URL) async throws {
+        let url = issuer.appendingPathComponent(".well-known/jwks.json")
         
         #if canImport(FoundationNetworking)
         // For Linux/cross-platform environments, use FoundationNetworking

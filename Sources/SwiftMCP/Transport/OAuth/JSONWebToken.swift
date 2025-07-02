@@ -226,18 +226,13 @@ public struct JSONWebToken: Sendable {
             throw JWTError.keyNotFound
         }
         
-        // Find the key with matching kid
-        guard let jwk = jwks.keys.first(where: { $0.kid == kid }) else {
+        // Get the public key from JWKS
+        guard let publicKey = jwks.key(kid: kid) else {
             throw JWTError.keyNotFound
         }
         
         // Verify the signature
-        return try Self.verifyRS256Signature(
-            token: rawToken,
-            publicKeyModulus: jwk.n,
-            publicKeyExponent: jwk.e,
-            x5c: jwk.x5c
-        )
+        return try Self.verifyRS256Signature(token: rawToken, publicKey: publicKey)
     }
     
     // MARK: - Combined Verification
@@ -259,12 +254,12 @@ public struct JSONWebToken: Sendable {
     
     /// Fetch JWKS from the issuer and verify the token
     /// - Parameters:
-    ///   - issuer: The JWT issuer (used to construct JWKS URL)
+    ///   - issuer: The JWT issuer URL (used to construct JWKS URL)
     ///   - date: The date to validate against (defaults to current date)
     ///   - options: Additional validation options
     /// - Returns: True if the token is valid
     /// - Throws: JWTError if verification fails
-    public func verify(using issuer: String, at date: Date = Date(), options: ValidationOptions = ValidationOptions()) async throws -> Bool {
+    public func verify(using issuer: URL, at date: Date = Date(), options: ValidationOptions = ValidationOptions()) async throws -> Bool {
         let jwks = try await JSONWebKeySet(fromIssuer: issuer)
         return try verify(using: jwks, at: date, options: options)
     }
@@ -276,16 +271,12 @@ public struct JSONWebToken: Sendable {
     /// Verify RS256 signature using Swift Crypto framework
     /// - Parameters:
     ///   - token: The JWT token
-    ///   - publicKeyModulus: RSA modulus (base64url encoded)
-    ///   - publicKeyExponent: RSA exponent (base64url encoded)
-    ///   - x5c: X.509 certificate chain (optional)
+    ///   - publicKey: RSA public key from Swift Crypto
     /// - Returns: True if signature is valid
     /// - Throws: JWTError if verification fails
     private static func verifyRS256Signature(
         token: String,
-        publicKeyModulus: String,
-        publicKeyExponent: String,
-        x5c: [String]? = nil
+        publicKey: _RSA.Signing.PublicKey
     ) throws -> Bool {
         // Split the token
         let segments = token.split(separator: ".")
@@ -296,13 +287,6 @@ public struct JSONWebToken: Sendable {
         // Prepare the signing input and signature data
         let signingInput = Data("\(segments[0]).\(segments[1])".utf8)
         let signatureData = try Data(base64URLEncoded: String(segments[2]))
-        
-        // Create RSA public key using Swift Crypto
-        let publicKey = try createRSAPublicKeyFromJWK(
-            modulus: publicKeyModulus,
-            exponent: publicKeyExponent,
-            x5c: x5c
-        )
         
         // Verify the signature using Swift Crypto
         do {
@@ -320,28 +304,6 @@ public struct JSONWebToken: Sendable {
         }
     }
     
-    /// Create RSA public key from JWK parameters using Swift Crypto
-    /// - Parameters:
-    ///   - modulus: RSA modulus (base64url encoded)
-    ///   - exponent: RSA exponent (base64url encoded)
-    ///   - x5c: X.509 certificate chain (optional)
-    /// - Returns: RSA.Signing.PublicKey from Swift Crypto
-    /// - Throws: JWTError if key creation fails
-    private static func createRSAPublicKeyFromJWK(
-        modulus: String,
-        exponent: String,
-        x5c: [String]? = nil
-    ) throws -> _RSA.Signing.PublicKey {
-        // For now, focus on manual key construction from modulus/exponent
-        // TODO: Add X.509 certificate parsing when swift-certificates API is stable
-        
-        // Create key from modulus / exponent in the JWKS
-        let modulusData = try Data(base64URLEncoded: modulus)
-        let exponentData = try Data(base64URLEncoded: exponent)
-        
-        return try _RSA.Signing.PublicKey(n: modulusData, e: exponentData)
-    }
-
 
 }
 
