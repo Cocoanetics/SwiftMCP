@@ -166,14 +166,6 @@ public enum JSONRPCMessage: Codable, Sendable {
         return .errorResponse(JSONRPCErrorResponseData(jsonrpc: jsonrpc, id: id, error: error))
     }
 
-    public static func errorResponse(jsonrpc: String = "2.0", id: Int?, error: JSONRPCErrorResponseData.ErrorPayload) -> JSONRPCMessage {
-        errorResponse(jsonrpc: jsonrpc, id: id.map { .int($0) }, error: error)
-    }
-
-    public static func errorResponse(jsonrpc: String = "2.0", id: String?, error: JSONRPCErrorResponseData.ErrorPayload) -> JSONRPCMessage {
-        errorResponse(jsonrpc: jsonrpc, id: id.map { .string($0) }, error: error)
-    }
-
     public static func notification(jsonrpc: String = "2.0", method: String, params: [String : AnyCodable]? = nil) -> JSONRPCMessage {
         return .notification(JSONRPCNotificationData(jsonrpc: jsonrpc, method: method, params: params))
     }
