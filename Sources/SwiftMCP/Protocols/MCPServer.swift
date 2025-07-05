@@ -192,7 +192,7 @@ public extension MCPServer {
      - Parameter id: The request ID to include in the response
      - Returns: A JSON-RPC message containing the initialization response
      */
-    func createInitializeResponse(id: Int) -> JSONRPCMessage {
+    func createInitializeResponse(id: JSONRPCID) -> JSONRPCMessage {
         var capabilities = ServerCapabilities()
 
         if self is MCPToolProviding {
@@ -411,7 +411,7 @@ public extension MCPServer {
 	 - Parameter id: The request ID to include in the response
 	 - Returns: A JSON-RPC message containing the tools list
 	 */
-    private func createToolsListResponse(id: Int) -> JSONRPCMessage {
+    private func createToolsListResponse(id: JSONRPCID) -> JSONRPCMessage {
 
         guard let toolProvider = self as? MCPToolProviding else
 		{
@@ -429,7 +429,7 @@ public extension MCPServer {
     }
 
     /// Creates a response listing all available prompts.
-    private func createPromptsListResponse(id: Int) -> JSONRPCMessage {
+    private func createPromptsListResponse(id: JSONRPCID) -> JSONRPCMessage {
         guard let promptProvider = self as? MCPPromptProviding else {
             return JSONRPCMessage.response(id: id, result: [
                 "content": [["type": "text", "text": "Server does not provide any prompts"]],
@@ -447,7 +447,7 @@ public extension MCPServer {
 	 - Parameter id: The request ID to include in the response
 	 - Returns: A JSON-RPC message containing the resources list
 	 */
-    func createResourcesListResponse(id: Int) async -> JSONRPCMessage {
+    func createResourcesListResponse(id: JSONRPCID) async -> JSONRPCMessage {
 
         guard let resourceProvider = self as? MCPResourceProviding else
 		{
@@ -482,7 +482,7 @@ public extension MCPServer {
        - request: The original JSON-RPC request
      - Returns: A JSON-RPC message containing the resource content or an error
      */
-    func createResourcesReadResponse(id: Int, request: JSONRPCMessage.JSONRPCRequestData) async -> JSONRPCMessage {
+    func createResourcesReadResponse(id: JSONRPCID, request: JSONRPCMessage.JSONRPCRequestData) async -> JSONRPCMessage {
 
         guard let resourceProvider = self as? MCPResourceProviding else
 		{
@@ -521,7 +521,7 @@ public extension MCPServer {
      - Parameter id: The request ID to include in the response
      - Returns: A JSON-RPC response containing the resource templates list
      */
-    func createResourceTemplatesListResponse(id: Int) async -> JSONRPCMessage {
+    func createResourceTemplatesListResponse(id: JSONRPCID) async -> JSONRPCMessage {
 
         guard let resourceProvider = self as? MCPResourceProviding else
 		{
@@ -553,7 +553,7 @@ public extension MCPServer {
      - Parameter id: The request ID to include in the response
      - Returns: A JSON-RPC response for ping
      */
-    func createPingResponse(id: Int) -> JSONRPCMessage {
+    func createPingResponse(id: JSONRPCID) -> JSONRPCMessage {
         return JSONRPCMessage.response(id: id, result: [:])
     }
 

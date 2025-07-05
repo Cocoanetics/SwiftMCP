@@ -37,7 +37,7 @@ func testInitializeRequest() async throws {
     }
     
     #expect(response.jsonrpc == "2.0")
-    #expect(response.id == 1)
+    #expect(response.id == .int(1))
     #expect(response.result != nil)
 
     // Check result contents
@@ -107,7 +107,7 @@ func testToolsListRequest() async throws {
         return
     }
     #expect(response.jsonrpc == "2.0")
-    #expect(response.id == 2)
+    #expect(response.id == .int(2))
     #expect(response.result != nil)
     
     guard let result = response.result else {
@@ -153,7 +153,7 @@ func testToolCallRequest() async throws {
         return
     }
     #expect(response.jsonrpc == "2.0")
-    #expect(response.id == 3)
+    #expect(response.id == .int(3))
     #expect(response.result != nil)
     
     guard let result = response.result else {
@@ -193,7 +193,7 @@ func testToolCallRequestWithError() async throws {
         return
     }
     #expect(response.jsonrpc == "2.0")
-    #expect(response.id == 4)
+    #expect(response.id == .int(4))
     #expect(response.result != nil)
     
     guard let result = response.result else {
@@ -244,7 +244,7 @@ func testToolCallRequestWithInvalidArgument() async throws {
         return
     }
     #expect(response.jsonrpc == "2.0")
-    #expect(response.id == 5)
+    #expect(response.id == .int(5))
     #expect(response.result != nil)
     
     guard let result = response.result else {
@@ -274,7 +274,7 @@ func testCustomNameAndVersion() async throws {
     let calculator = CustomNameCalculator()
     
     // Get the response using our test method
-    let response = calculator.createInitializeResponse(id: 1)
+    let response = calculator.createInitializeResponse(id: .int(1))
 
     // Extract server info from the response using pattern matching
     guard case .response(let responseData) = response else {
@@ -305,7 +305,7 @@ func testDefaultNameAndVersion() async throws {
     let calculator = DefaultNameCalculator()
     
     // Get the response using our test method
-    let response = calculator.createInitializeResponse(id: 1)
+    let response = calculator.createInitializeResponse(id: .int(1))
 
     // Extract server info from the response using pattern matching
     guard case .response(let responseData) = response else {
@@ -351,7 +351,7 @@ func testUnknownMethodReturnsMethodNotFoundError() async throws {
         return
     }
     #expect(response.jsonrpc == "2.0")
-    #expect(response.id == 99)
+    #expect(response.id == .int(99))
     #expect(response.error.code == -32601)
     #expect(response.error.message == "Method not found")
 }

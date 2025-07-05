@@ -26,7 +26,7 @@ public enum JSONRPCMessage: Codable, Sendable {
         public var jsonrpc: String = "2.0"
 
         /// The unique identifier for the request (non-optional for requests expecting responses)
-        public var id: Int
+        public var id: JSONRPCID
 
         /// The name of the method to be invoked
         public var method: String
@@ -35,7 +35,7 @@ public enum JSONRPCMessage: Codable, Sendable {
         public var params: [String: AnyCodable]?
 
         /// Public initializer
-        public init(jsonrpc: String = "2.0", id: Int, method: String, params: [String : AnyCodable]? = nil) {
+        public init(jsonrpc: String = "2.0", id: JSONRPCID, method: String, params: [String : AnyCodable]? = nil) {
             self.jsonrpc = jsonrpc
             self.id = id
             self.method = method
@@ -68,13 +68,13 @@ public enum JSONRPCMessage: Codable, Sendable {
         public var jsonrpc: String = "2.0"
 
         /// The unique identifier matching the request ID (non-optional for responses)
-        public var id: Int
+        public var id: JSONRPCID
 
         /// The result of the method invocation, as a dictionary of result fields
         public var result: [String: AnyCodable]?
 
         /// Public initializer
-        public init(jsonrpc: String = "2.0", id: Int, result: [String: AnyCodable]? = nil) {
+        public init(jsonrpc: String = "2.0", id: JSONRPCID, result: [String: AnyCodable]? = nil) {
             self.jsonrpc = jsonrpc
             self.id = id
             self.result = result
@@ -102,12 +102,12 @@ public enum JSONRPCMessage: Codable, Sendable {
         public var jsonrpc: String = "2.0"
 
         /// The unique identifier matching the request ID
-        public var id: Int?
+        public var id: JSONRPCID?
 
         /// The error details containing the error code and message
         public var error: ErrorPayload
 
-        public init(jsonrpc: String = "2.0", id: Int?, error: ErrorPayload) {
+        public init(jsonrpc: String = "2.0", id: JSONRPCID?, error: ErrorPayload) {
             self.jsonrpc = jsonrpc
             self.id = id
             self.error = error
@@ -127,7 +127,7 @@ public enum JSONRPCMessage: Codable, Sendable {
     }
 
     /// The unique identifier for the message, used to correlate requests and responses
-    public var id: Int? {
+    public var id: JSONRPCID? {
         switch self {
             case .request(let data): return data.id
             case .response(let data): return data.id
@@ -138,15 +138,31 @@ public enum JSONRPCMessage: Codable, Sendable {
 
     // MARK: - Convenience Initializers
 
-    public static func request(jsonrpc: String = "2.0", id: Int, method: String, params: [String : AnyCodable]? = nil) -> JSONRPCMessage {
+    public static func request(jsonrpc: String = "2.0", id: JSONRPCID, method: String, params: [String : AnyCodable]? = nil) -> JSONRPCMessage {
         return .request(JSONRPCRequestData(jsonrpc: jsonrpc, id: id, method: method, params: params))
     }
 
-    public static func response(jsonrpc: String = "2.0", id: Int, result: [String: AnyCodable]? = nil) -> JSONRPCMessage {
+    public static func request(jsonrpc: String = "2.0", id: Int, method: String, params: [String : AnyCodable]? = nil) -> JSONRPCMessage {
+        request(jsonrpc: jsonrpc, id: .int(id), method: method, params: params)
+    }
+
+    public static func request(jsonrpc: String = "2.0", id: String, method: String, params: [String : AnyCodable]? = nil) -> JSONRPCMessage {
+        request(jsonrpc: jsonrpc, id: .string(id), method: method, params: params)
+    }
+
+    public static func response(jsonrpc: String = "2.0", id: JSONRPCID, result: [String: AnyCodable]? = nil) -> JSONRPCMessage {
         return .response(JSONRPCResponseData(jsonrpc: jsonrpc, id: id, result: result))
     }
 
-    public static func errorResponse(jsonrpc: String = "2.0", id: Int?, error: JSONRPCErrorResponseData.ErrorPayload) -> JSONRPCMessage {
+    public static func response(jsonrpc: String = "2.0", id: Int, result: [String: AnyCodable]? = nil) -> JSONRPCMessage {
+        response(jsonrpc: jsonrpc, id: .int(id), result: result)
+    }
+
+    public static func response(jsonrpc: String = "2.0", id: String, result: [String: AnyCodable]? = nil) -> JSONRPCMessage {
+        response(jsonrpc: jsonrpc, id: .string(id), result: result)
+    }
+
+    public static func errorResponse(jsonrpc: String = "2.0", id: JSONRPCID?, error: JSONRPCErrorResponseData.ErrorPayload) -> JSONRPCMessage {
         return .errorResponse(JSONRPCErrorResponseData(jsonrpc: jsonrpc, id: id, error: error))
     }
 
@@ -169,7 +185,7 @@ public enum JSONRPCMessage: Codable, Sendable {
 
         // All messages must have jsonrpc
         let jsonrpc = try container.decode(String.self, forKey: .jsonrpc)
-        let id = try container.decodeIfPresent(Int.self, forKey: .id)
+        let id = try container.decodeIfPresent(JSONRPCID.self, forKey: .id)
 
         // Determine message type based on available keys
         if container.contains(.method) {

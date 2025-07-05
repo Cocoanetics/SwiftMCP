@@ -164,7 +164,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     }
 
     /// The current keep-alive mode for the transport.
-    public var keepAliveMode: KeepAliveMode = .ping {
+    public var keepAliveMode: KeepAliveMode = .none {
 		didSet {
         if oldValue != keepAliveMode {
             if keepAliveMode == .none {

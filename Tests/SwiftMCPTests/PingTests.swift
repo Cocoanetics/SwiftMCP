@@ -25,5 +25,5 @@ func testPingRequest() async throws {
         return
     }
     
-    #expect(response.id == 1)
+    #expect(response.id == .int(1))
 } 
