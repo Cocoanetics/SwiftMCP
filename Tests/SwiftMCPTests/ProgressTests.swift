@@ -75,6 +75,6 @@ func testProgressNotification() async throws {
     let params = try #require(data.params)
     #expect(params["progressToken"]?.value as? String == "abc")
     #expect(params["progress"]?.value as? Double == 0.5)
-    #expect(params["total"]?.value as? Double == 1.0)
+    #expect(params["total"]?.value as? Int == 1)
     #expect(params["message"]?.value as? String == "Halfway")
 }
