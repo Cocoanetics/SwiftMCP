@@ -1,4 +1,5 @@
 import Foundation
+import AnyCodable
 import NIO
 
 /// Represents a connection session.
@@ -73,3 +74,31 @@ public final class Session: @unchecked Sendable {
     }
 }
 
+
+extension Session {
+    /// Send a progress notification to the client associated with this session.
+    /// - Parameters:
+    ///   - progressToken: The token identifying the operation progress belongs to.
+    ///   - progress: Current progress value.
+    ///   - total: Optional total value if known.
+    ///   - message: Optional human-readable progress message.
+    public func sendProgressNotification(progressToken: AnyCodable,
+                                         progress: Double,
+                                         total: Double? = nil,
+                                         message: String? = nil) async {
+        var params: [String: AnyCodable] = [
+            "progressToken": progressToken,
+            "progress": AnyCodable(progress)
+        ]
+        if let total = total { params["total"] = AnyCodable(total) }
+        if let message = message { params["message"] = AnyCodable(message) }
+
+        let notification = JSONRPCMessage.notification(method: "notifications/progress",
+                                                       params: params)
+        do {
+            try await transport?.send(notification)
+        } catch {
+            // Intentionally ignore send errors in tests
+        }
+    }
+}
