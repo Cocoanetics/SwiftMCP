@@ -4,6 +4,7 @@ import NIOHTTP1
 import NIOPosix
 import NIOFoundationCompat
 import Logging
+import AnyCodable
 
 /**
  A transport that exposes an HTTP server with Server-Sent Events (SSE) and JSON-RPC endpoints.
@@ -361,6 +362,13 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
             let session = await sessionManager.session(id: sessionID)
             session.sendSSE(message)
         }
+    }
+
+    /// Broadcast a log message to all connected clients.
+    /// - Parameter message: The log message to broadcast
+    public func broadcastLog(_ message: LogMessage) async {
+        // Send to all connected sessions, filtered by their minimumLogLevel
+        await sessionManager.broadcastLog(message)
     }
 
 

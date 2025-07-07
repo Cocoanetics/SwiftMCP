@@ -14,7 +14,8 @@ actor DemoServer {
 	 - Returns: The current time
 	 */
 	@MCPTool
-	func getCurrentDateTime() -> Date {
+	func getCurrentDateTime() async -> Date {
+		await Session.current?.sendLogNotification(LogMessage(level: .info, message: "getCurrentDateTime called"))
 		return Date()
 	}
 	
@@ -24,8 +25,8 @@ actor DemoServer {
 	 - Returns: A string with the date formatted
 	 */
 	@MCPTool(isConsequential: false)
-	func formatDateAsString(date: Date) -> String {
-		
+	func formatDateAsString(date: Date) async -> String {
+		await Session.current?.sendLogNotification(LogMessage(level: .info, message: "formatDateAsString called with date=\(date)"))
 		let dateFormatter = DateFormatter()
 		dateFormatter.dateStyle = .long
 		dateFormatter.timeStyle = .long
@@ -38,7 +39,8 @@ actor DemoServer {
 	/// - Parameter b: Second number to add
 	/// - Returns: The sum of a and b
 	@MCPTool(description: "Custom description: Performs addition of two numbers")
-	func add(a: Int, b: Int) -> Int {
+	func add(a: Int, b: Int) async -> Int {
+		await Session.current?.sendLogNotification(LogMessage(level: .info, message: "add called with a=\(a), b=\(b)"))
 		return a + b
 	}
 	
@@ -47,7 +49,8 @@ actor DemoServer {
 	/// - Parameter b: Number to subtract
 	/// - Returns: The difference between a and b
 	@MCPTool
-	func subtract(a: Int = 5, b: Int = 3) -> Int {
+	func subtract(a: Int = 5, b: Int = 3) async -> Int {
+		await Session.current?.sendLogNotification(LogMessage(level: .info, message: "subtract called with a=\(a), b=\(b)"))
 		return a - b
 	}
 	
@@ -57,7 +60,8 @@ actor DemoServer {
 	 - Returns: A string representation of the array
 	 */
 	@MCPTool(description: "Custom description: Tests array processing")
-	func testArray(a: [Int] = [1,2,3]) -> String {
+	func testArray(a: [Int] = [1,2,3]) async -> String {
+		await Session.current?.sendLogNotification(LogMessage(level: .info, message: "testArray called with a=\(a)"))
 		return a.map(String.init).joined(separator: ", ")
 	}
 	
@@ -68,7 +72,8 @@ actor DemoServer {
 	 - Returns: The product of a and b
 	 */
 	@MCPTool
-	func multiply(a: Int, b: Int) -> Int {
+	func multiply(a: Int, b: Int) async -> Int {
+		await Session.current?.sendLogNotification(LogMessage(level: .info, message: "multiply called with a=\(a), b=\(b)"))
 		return a * b
 	}
 	
@@ -77,7 +82,8 @@ actor DemoServer {
 	/// - Parameter denominator: Number to divide by (defaults to 1.0)
 	/// - Returns: The quotient of numerator divided by denominator
 	@MCPTool
-	func divide(numerator: Double, denominator: Double = 1.0) -> Double {
+	func divide(numerator: Double, denominator: Double = 1.0) async -> Double {
+		await Session.current?.sendLogNotification(LogMessage(level: .info, message: "divide called with numerator=\(numerator), denominator=\(denominator)"))
 		return numerator / denominator
 	}
 	
@@ -86,6 +92,7 @@ actor DemoServer {
 	/// - Returns: The greeting message
 	@MCPTool(description: "Shows a greeting message")
 	func greet(name: String) async throws -> String {
+		await Session.current?.sendLogNotification(LogMessage(level: .info, message: "greet called with name=\(name)"))
 		// Validate name length
 		if name.count < 2 {
 			throw DemoError.nameTooShort(name: name)
@@ -102,35 +109,39 @@ actor DemoServer {
 	
 	/** A simple ping function that returns 'pong' */
 	@MCPTool
-	func ping() -> String {
+	func ping() async -> String {
+		await Session.current?.sendLogNotification(LogMessage(level: .info, message: "ping called"))
 		return "pong"
 	}
 	
 	/** A function to test doing nothing, not returning anything*/
 	@MCPTool
-	func noop() {
-		
+	func noop() async {
+		await Session.current?.sendLogNotification(LogMessage(level: .info, message: "noop called"))
 	}
 	
 	/** A function returning a random file
 	 - returns: A multiple simple text files */
 	@MCPTool
-	func randomFile() -> [FileResourceContent]
+	func randomFile() async -> [FileResourceContent]
 	{
+		await Session.current?.sendLogNotification(LogMessage(level: .info, message: "randomFile called"))
 		return [FileResourceContent(uri: URL(string: "file:///hello.txt")!, mimeType: "text/plain", text: "Hello World!"),
 				FileResourceContent(uri: URL(string: "file:///hello2.txt")!, mimeType: "text/plain", text: "Hello World 2!")]
 	}
 	
 	/// Returns a static server info string
 	@MCPResource("server://info")
-	func getServerInfo() -> String {
+	func getServerInfo() async -> String {
+		await Session.current?.sendLogNotification(LogMessage(level: .info, message: "getServerInfo called"))
 		return "SwiftMCP Demo Server v1.0"
 	}
 	
 	/// Returns a greeting for a user by ID
 	/// - Parameter user_id: The user's unique identifier
 	@MCPResource("users://{user_id}/greeting")
-	func getUserGreeting(user_id: Int) -> String {
+	func getUserGreeting(user_id: Int) async -> String {
+		await Session.current?.sendLogNotification(LogMessage(level: .info, message: "getUserGreeting called with user_id=\(user_id)"))
 		return "Hello, user #\(user_id)!"
 	}
 	
@@ -141,12 +152,14 @@ actor DemoServer {
 	///   - limit: The number of results per page (default: 10)
 	@MCPResource("search://users?query={query}&page={page}&limit={limit}")
 	func searchUsers(query: String, page: Int = 1, limit: Int = 10) async throws -> String {
+		await Session.current?.sendLogNotification(LogMessage(level: .info, message: "searchUsers called with query=\(query), page=\(page), limit=\(limit)"))
 		return "Results for query '\(query)' (page \(page), limit \(limit))"
 	}
 	
 	/// Returns a list of available features
 	@MCPResource("features://list", name: "Features.list")
-	func getFeatureList() -> [String] {
+	func getFeatureList() async -> [String] {
+		await Session.current?.sendLogNotification(LogMessage(level: .info, message: "getFeatureList called"))
 		return ["math", "date", "greet", "file"]
 	}
 	
@@ -159,7 +172,8 @@ actor DemoServer {
 	
 	/// Returns a message for the selected color
 	@MCPResource("color://message?color={color}&bool={bool}")
-    func getColorMessage(color: Color, bool: Bool) -> String {
+    func getColorMessage(color: Color, bool: Bool) async -> String {
+		await Session.current?.sendLogNotification(LogMessage(level: .info, message: "getColorMessage called with color=\(color), bool=\(bool)"))
 		switch color {
 			case .red:
 				return "You selected RED!"
@@ -173,7 +187,7 @@ actor DemoServer {
     /// A prompt for saying Hello
     @MCPPrompt()
     func helloPrompt(name: String) async throws -> [PromptMessage] {
-        
+        await Session.current?.sendLogNotification(LogMessage(level: .info, message: "helloPrompt called with name=\(name)"))
         let message = PromptMessage(role: .assistant, content: .init(text: "Hello \(name)!"))
         return [message]
     }
@@ -181,8 +195,8 @@ actor DemoServer {
     /// A prompt to get a color description
     /// - parameter color: A color
     @MCPPrompt()
-    func colorPrompt(color: Color) -> String {
-        
+    func colorPrompt(color: Color) async -> String {
+        await Session.current?.sendLogNotification(LogMessage(level: .info, message: "colorPrompt called with color=\(color)"))
         let text: String
         
         switch color {

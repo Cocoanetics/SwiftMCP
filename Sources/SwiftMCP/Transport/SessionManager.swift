@@ -144,4 +144,12 @@ actor SessionManager {
             }
         }
     }
+
+    /// Broadcast a log message to all sessions, filtered by their minimumLogLevel.
+    /// - Parameter message: The log message to send.
+    func broadcastLog(_ message: LogMessage) async {
+        for session in sessions.values {
+            await session.sendLogNotification(message)
+        }
+    }
 }

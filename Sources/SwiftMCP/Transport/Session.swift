@@ -38,6 +38,9 @@ public final class Session: @unchecked Sendable {
     public var picture: String? { userInfo?.picture }
     public var emailVerified: Bool? { userInfo?.emailVerified }
 
+    /// The minimum log level for this session (default: .info)
+    public var minimumLogLevel: LogLevel = .info
+
     /// Creates a new session.
     /// - Parameters:
     ///   - id: The unique session identifier.
@@ -94,6 +97,25 @@ extension Session {
         if let message = message { params["message"] = AnyCodable(message) }
 
         let notification = JSONRPCMessage.notification(method: "notifications/progress",
+                                                       params: params)
+        do {
+            try await transport?.send(notification)
+        } catch {
+            // Intentionally ignore send errors in tests
+        }
+    }
+
+    /// Send a log message notification to the client associated with this session, filtered by minimumLogLevel.
+    /// - Parameter message: The log message to send
+    public func sendLogNotification(_ message: LogMessage) async {
+        guard message.level.isAtLeast(self.minimumLogLevel) else { return }
+        var params: [String: AnyCodable] = [
+            "level": AnyCodable(message.level.rawValue),
+            "data": message.data
+        ]
+        if let logger = message.logger { params["logger"] = AnyCodable(logger) }
+
+        let notification = JSONRPCMessage.notification(method: "notifications/message",
                                                        params: params)
         do {
             try await transport?.send(notification)

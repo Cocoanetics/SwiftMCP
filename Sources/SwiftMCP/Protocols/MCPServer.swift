@@ -131,6 +131,9 @@ public extension MCPServer {
             case "tools/call":
                 return await handleToolCall(requestData)
 
+            case "logging/setLevel":
+                return await handleLoggingSetLevel(requestData)
+
             default:
                 // Respond with JSON-RPC error for method not found
                 return JSONRPCMessage.errorResponse(id: requestData.id, error: .init(code: -32601, message: "Method not found"))
@@ -207,6 +210,10 @@ public extension MCPServer {
 
         if self is MCPPromptProviding {
             capabilities.prompts = .init(listChanged: false)
+        }
+
+        if self is MCPLoggingProviding {
+            capabilities.logging = .init(enabled: true)
         }
 
         // Advertise completion support
@@ -557,6 +564,42 @@ public extension MCPServer {
      */
     func createPingResponse(id: JSONRPCID) -> JSONRPCMessage {
         return JSONRPCMessage.response(id: id, result: [:])
+    }
+
+    /**
+     Handles a logging level configuration request.
+     
+     - Parameter request: The JSON-RPC request containing the logging level details
+     - Returns: A JSON-RPC message containing the result
+     */
+    private func handleLoggingSetLevel(_ request: JSONRPCMessage.JSONRPCRequestData) async -> JSONRPCMessage? {
+        guard let session = Session.current else {
+            return JSONRPCMessage.errorResponse(
+                id: request.id,
+                error: .init(code: -32603, message: "No session context for logging/setLevel")
+            )
+        }
+
+        guard let params = request.params,
+              let levelString = params["level"]?.value as? String else {
+            return JSONRPCMessage.errorResponse(
+                id: request.id,
+                error: .init(code: -32602, message: "Invalid parameters: 'level' parameter is required")
+            )
+        }
+
+        guard let level = LogLevel(string: levelString) else {
+            return JSONRPCMessage.errorResponse(
+                id: request.id,
+                error: .init(code: -32602, message: "Invalid log level: '\(levelString)'. Valid levels are: \(LogLevel.allCases.map(\.rawValue).joined(separator: ", "))")
+            )
+        }
+
+        // Set the minimum log level for this session
+        session.minimumLogLevel = level
+
+        // Return empty result for success
+        return JSONRPCMessage.response(id: request.id, result: [:])
     }
 
     // MARK: - Internal Helpers
