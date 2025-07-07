@@ -73,20 +73,22 @@ public extension MCPServer {
      - Returns: A response message if one should be sent, nil otherwise
      */
     func handleMessage(_ message: JSONRPCMessage) async -> JSONRPCMessage? {
+        let context = RequestContext(message: message)
+        return await context.work { _ in
+            // First switch on message type
+            switch message {
+                case .request(let requestData):
+                    return await handleRequest(requestData)
 
-        // First switch on message type
-        switch message {
-            case .request(let requestData):
-                return await handleRequest(requestData)
+                case .notification(let notificationData):
+                    return await handleNotification(notificationData)
 
-            case .notification(let notificationData):
-                return await handleNotification(notificationData)
+                case .response(let responseData):
+                    return await handleResponse(responseData)
 
-            case .response(let responseData):
-                return await handleResponse(responseData)
-
-            case .errorResponse(let errorResponseData):
-                return await handleErrorResponse(errorResponseData)
+                case .errorResponse(let errorResponseData):
+                    return await handleErrorResponse(errorResponseData)
+            }
         }
     }
 
