@@ -164,7 +164,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     }
 
     /// The current keep-alive mode for the transport.
-    public var keepAliveMode: KeepAliveMode = .none {
+    public var keepAliveMode: KeepAliveMode = .ping {
         didSet {
             if oldValue != keepAliveMode {
                 if keepAliveMode == .none {
@@ -299,7 +299,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
                 case .none:
                     return
                 case .sse:
-                    await self.sessionManager.broadcastSSE(SSEMessage(data: ": keep-alive"))
+                    await self.sessionManager.broadcastSSE(SSEMessage(comment: "keep-alive"))
                 case .ping:
                     let ping = JSONRPCMessage.request(id: self.sequenceNumber, method: "ping")
                     let encoder = JSONEncoder()

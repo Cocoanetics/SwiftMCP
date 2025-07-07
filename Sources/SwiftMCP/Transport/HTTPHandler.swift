@@ -385,7 +385,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             }
 
             logger.info("Sending endpoint event with URL: \(endpointUrl)")
-            let message = SSEMessage(name: "endpoint", data: endpointUrl.absoluteString)
+            let message = SSEMessage(data: endpointUrl.absoluteString, eventName: "endpoint")
             channel.sendSSE(message)
         }
 
