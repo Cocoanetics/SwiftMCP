@@ -241,11 +241,11 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         let authResult = await transport.authorize(token, sessionID: sessionID)
         switch authResult {
             case .unauthorized(let message):
-                let errorMessage = JSONRPCMessage.errorResponse(id: nil, error: .init(code: 401, message: "Unauthorized: \(message)"))
+                let errorMessage = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32000, message: "Unauthorized: \(message)"))
                 await self.sendJSONResponseAsync(channel: channel, status: .unauthorized, json: errorMessage, sessionId: sessionID.uuidString)
                 return
             case .jweNotSupported(let message):
-                let errorMessage = JSONRPCMessage.errorResponse(id: nil, error: .init(code: 403, message: message))
+                let errorMessage = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32000, message: message))
                 await self.sendJSONResponseAsync(channel: channel, status: .forbidden, json: errorMessage, sessionId: sessionID.uuidString)
                 return
             case .authorized:
@@ -293,7 +293,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             }
         } catch {
             logger.error("Failed to decode JSON-RPC message: \(error)")
-            let response = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32600, message: error.localizedDescription))
+            let response = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32700, message: error.localizedDescription))
             await self.sendJSONResponseAsync(channel: channel, status: .badRequest, json: response, sessionId: sessionID.uuidString)
         }
     }
@@ -419,11 +419,11 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         let authResult = await transport.authorize(token, sessionID: sessionID)
         switch authResult {
             case .unauthorized(let message):
-                let err = JSONRPCMessage.errorResponse(id: nil, error: .init(code: 401, message: "Unauthorized: \(message)"))
+                let err = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32000, message: "Unauthorized: \(message)"))
                 await self.sendJSONResponseAsync(channel: channel, status: .unauthorized, json: err, sessionId: sessionID.uuidString)
                 return
             case .jweNotSupported(let message):
-                let err = JSONRPCMessage.errorResponse(id: nil, error: .init(code: 403, message: message))
+                let err = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32000, message: message))
                 await self.sendJSONResponseAsync(channel: channel, status: .forbidden, json: err, sessionId: sessionID.uuidString)
                 return
             case .authorized:
@@ -741,8 +741,8 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
 
         // Validate token
         if case .unauthorized(let message) = await transport.authorize(token, sessionID: sessionID) {
-            let errorDict = ["error": "Unauthorized: \(message)"] as [String: String]
-            let data = try! JSONEncoder().encode(errorDict)
+            let err = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32000, message: "Unauthorized: \(message)"))
+            let data = try! JSONEncoder().encode(err)
             var buffer = allocator.buffer(capacity: data.count)
             buffer.writeBytes(data)
 
@@ -830,8 +830,8 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             await sendResponseAsync(channel: channel, status: .ok, body: buffer)
 
         } catch {
-            let errorDict = ["error": error.localizedDescription] as [String : String]
-            let data = try! JSONEncoder().encode(errorDict)
+            let err = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32000, message: error.localizedDescription))
+            let data = try! JSONEncoder().encode(err)
             let string = String(data: data, encoding: .utf8)!
 
             var status = HTTPResponseStatus.badRequest
@@ -853,7 +853,8 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         logger.info("Handling OAuth proxy request for \(head.uri)")
         guard let config = transport.oauthConfiguration else {
             logger.error("OAuth not configured")
-            await self.sendJSONResponseAsync(channel: channel, status: .internalServerError, json: ["error": "OAuth not configured"])
+            let err = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32603, message: "OAuth not configured"))
+            await self.sendJSONResponseAsync(channel: channel, status: .internalServerError, json: err)
             return
         }
 
@@ -930,7 +931,8 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             return
         default:
             logger.error("Unknown OAuth proxy path: \(head.uri)")
-            await self.sendJSONResponseAsync(channel: channel, status: .notFound, json: ["error": "Unknown OAuth endpoint"])
+            let err = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32601, message: "Unknown OAuth endpoint"))
+            await self.sendJSONResponseAsync(channel: channel, status: .notFound, json: err)
             return
         }
 
@@ -978,7 +980,8 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             let session = URLSession(configuration: sessionConfig, delegate: self, delegateQueue: nil)
             let (data, response) = try await session.data(for: proxyRequest)
             guard let httpResponse = response as? HTTPURLResponse else {
-                await self.sendJSONResponseAsync(channel: channel, status: .internalServerError, json: ["error": "Invalid response from auth server"])
+                let err = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32603, message: "Invalid response from auth server"))
+                await self.sendJSONResponseAsync(channel: channel, status: .internalServerError, json: err)
                 return
             }
 
@@ -1069,7 +1072,8 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             await self.sendResponseAsync(channel: channel, status: HTTPResponseStatus(statusCode: httpResponse.statusCode), headers: headers, body: responseBuffer)
             
         } catch {
-            await self.sendJSONResponseAsync(channel: channel, status: .internalServerError, json: ["error": "Failed to proxy request to OAuth server: \(error.localizedDescription)"])
+            let err = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32603, message: "Failed to proxy request to OAuth server: \(error.localizedDescription)"))
+            await self.sendJSONResponseAsync(channel: channel, status: .internalServerError, json: err)
         }
     }
 
