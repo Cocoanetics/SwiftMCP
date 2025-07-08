@@ -230,13 +230,19 @@ struct OpenAPISpec: Codable {
                 }
             }
 
-            // Create error response schema to match {"error": "error message"}
+            // Create error response schema matching {"error": {"code": Int, "message": String}}
             let errorSchema = JSONSchema.object(JSONSchema.Object(
                 properties: [
-                    "error": .string()  // No description needed as it will contain error.localizedDescription
+                    "error": .object(JSONSchema.Object(
+                        properties: [
+                            "code": .number(),
+                            "message": .string()
+                        ],
+                        required: ["code", "message"]
+                    ))
                 ],
                 required: ["error"],
-                description: "Error response containing the error message"
+                description: "Error response containing the error code and message"
             ))
 
             // Create responses dictionary with success and error cases
