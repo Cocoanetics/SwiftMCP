@@ -2,6 +2,38 @@ import Foundation
 import Testing
 @testable import SwiftMCP
 
+// MARK: - Test Resource Loading Helper
+
+/// JWKS data for testing (embedded directly to avoid file loading issues)
+let testJWKSData = """
+{
+  "keys": [
+    {
+      "kty": "RSA",
+      "use": "sig",
+      "n": "6-pg4UUyl358e7OiriuBzKuHlefgtUkEV8kpOYN1-Z6H9SXPRNvrpOfeMdJfay6U94ROb8j9mhba22AX9-V5CXVv-zfizBQFbqLywq6UNF53RoRkAkQuQbdwKl4jTtNGObtWF7FEY_yPGd2Y25Da2HtpIZeO1tqnPpwteDPnKI4koQWlTeuI6fCbyhckDXI9X_-xvoRmW6c3FOs9zcuqa_aGTLWdmb6A4wRgS66_pzY2F3ccgG5UkEq2CGMVl6-boNNWP_FJQF-z3vzBtM7VULz2U4y08Gk_8-ulWrGOcbmFhVU7obuJvC2afbrdoiPbD2sg64kO1cdNPr745OQ9gQ",
+      "e": "AQAB",
+      "kid": "i_F8LZGaD-tJB3roLrDB1",
+      "x5t": "Rn8yHdStu3fvQqytLEqMT-Yd-QI",
+      "x5c": [
+        "MIIDHTCCAgWgAwIBAgIJDn8Y8QY3z80wMA0GCSqGSIb3DQEBCwUAMCwxKjAoBgNVBAMTIWRldi04eWdqNmVwcG52ano4Ym02LnVzLmF1dGgwLmNvbTAeFw0yNTA2MjQxNTQ1NDFaFw0zOTAzMDMxNTQ1NDFaMCwxKjAoBgNVBAMTIWRldi04eWdqNmVwcG52ano4Ym02LnVzLmF1dGgwLmNvbTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAOvqYOFFMpd+fHuzoq4rgcyrh5Xn4LVJBFfJKTmDdfmeh/Ulz0Tb66Tn3jHSX2sulPeETm/I/ZoW2ttgF/fleQl1b/s34swUBW6i8sKulDRed0aEZAJELkG3cCpeI07TRjm7VhexRGP8jxndmNuQ2th7aSGXjtbapz6cLXgz5yiOJKEFpU3riOnwm8oXJA1yPV//sb6EZlunNxTrPc3Lqmv2hky1nZm+gOMEYEuuv6c2Nhd3HIBuVJBKtghjFZevm6DTVj/xSUBfs978wbTO1VC89lOMtPBpP/PrpVqxjnG5hYVVO6G7ibwtmn263aIj2w9rIOuJDtXHTT6++OTkPYECAwEAAaNCMEAwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4EFgQUXlGH4xINz773VU3GACHST/SbkJkwDgYDVR0PAQH/BAQDAgKEMA0GCSqGSIb3DQEBCwUAA4IBAQALuQdw6vcUdE1pXTwrnAz5AegSRpjNIgRNSAj3RsDU9LmEhMZMw9KSx2QCl8SO61H/ObZ3scxjES0UVsQqKDnRX0gQZTx3vHLnDCUnpwiSoHSUK1oTxCtsnfdH9CD26+zd+7Yv9XqRp+FucUznoe9jVTDVSvKYUyomjm0VkExZBWQGss8uVgYEEZ/3FqAm6DU+yuml5y0BeLz89ys3jxOJd6aBjuKar+ls1CDvu25zsymTHotAoSU6JUYhqJ6yx45UBz0vOGH52Xa3aqDlO4+dEBwBihPQ8D6AyCtUZ1rmSSAjClQR7gkBoETqlyoI90DhbSHyR6OkJ3D58ZSrp6xw"
+      ],
+      "alg": "RS256"
+    }
+  ]
+}
+"""
+
+/// Load JWKS from embedded test data
+/// - Returns: The JSONWebKeySet loaded from the embedded data
+func loadTestJWKS() throws -> JSONWebKeySet {
+    let jwksData = testJWKSData.data(using: .utf8)!
+    let decoder = JSONDecoder()
+    return try decoder.decode(JSONWebKeySet.self, from: jwksData)
+}
+
+// MARK: - JSONWebToken Tests
+
 @Suite("JSONWebToken", .tags(.unit))
 struct JSONWebTokenTests {
     
@@ -98,8 +130,8 @@ struct JSONWebTokenTests {
     func testVerifySignatureUsingJWKS() async throws {
         let jwt = try JSONWebToken(token: Self.accessToken)
         
-        // Fetch JWKS from issuer
-        let jwks = try await JSONWebKeySet(fromIssuer: Self.issuerURL)
+        // Load JWKS from local test resource
+        let jwks = try loadTestJWKS()
         
         // Verify signature
         let isValid = try jwt.verifySignature(using: jwks)
@@ -110,8 +142,8 @@ struct JSONWebTokenTests {
     func testVerifyWithClaimsValidation() async throws {
         let jwt = try JSONWebToken(token: Self.accessToken)
         
-        // Fetch JWKS from issuer
-        let jwks = try await JSONWebKeySet(fromIssuer: Self.issuerURL)
+        // Load JWKS from local test resource
+        let jwks = try loadTestJWKS()
         
         // Verify with claims validation at valid time
         let validDate = Date(timeIntervalSince1970: 1751206127) // iat time
@@ -123,8 +155,8 @@ struct JSONWebTokenTests {
     func testVerifyWithCustomDate() async throws {
         let jwt = try JSONWebToken(token: Self.accessToken)
         
-        // Fetch JWKS from issuer
-        let jwks = try await JSONWebKeySet(fromIssuer: Self.issuerURL)
+        // Load JWKS from local test resource
+        let jwks = try loadTestJWKS()
         
         // Verify with a specific date (iat time)
         let customDate = Date(timeIntervalSince1970: 1751206127)
@@ -149,7 +181,7 @@ struct JSONWebTokenTests {
         let modifiedToken = "\(segments[0]).\(segments[1]).dGVzdC1zaWduYXR1cmU=" // base64 for "test-signature"
         
         let jwt = try JSONWebToken(token: modifiedToken)
-        let jwks = try await JSONWebKeySet(fromIssuer: Self.issuerURL)
+        let jwks = try loadTestJWKS()
         
         #expect(throws: JWTError.signatureVerificationFailed) {
             try jwt.verifySignature(using: jwks)
@@ -186,7 +218,7 @@ struct JSONWebTokenTests {
         let invalidToken = "\(headerB64).\(payloadB64).signature"
         
         let jwt = try JSONWebToken(token: invalidToken)
-        let jwks = try await JSONWebKeySet(fromIssuer: Self.issuerURL)
+        let jwks = try loadTestJWKS()
         
         #expect(throws: JWTError.unsupportedAlgorithm) {
             try jwt.verifySignature(using: jwks)

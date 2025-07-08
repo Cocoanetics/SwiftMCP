@@ -21,7 +21,7 @@ class TestLoggingServer: MCPLoggingProviding {
         print("LOG [\(message.level.rawValue.uppercased())] \(message.logger ?? "default"): \(message.data)")
     }
     
-    @MCPTool
+    @MCPTool(description: "Test logging functionality with different log levels")
     func testLogging() async {
         await log(.debug, "This is a debug message", logger: "test")
         await log(.info, "This is an info message", logger: "test")
@@ -83,11 +83,14 @@ func testLogMessageCreation() throws {
     #expect(message2.logger == "test")
     #expect(message2.data.value as? String == "Error message")
     
-    let data = ["key": "value", "number": 42]
+    let data: [String: Any] = ["key": "value", "number": 42]
     let message3 = LogMessage(level: .debug, data: data, logger: "debug")
     #expect(message3.level == .debug)
     #expect(message3.logger == "debug")
-    #expect(message3.data.value as? [String: Any] == data)
+    let messageData = message3.data.value as? [String: Any]
+    #expect(messageData != nil)
+    #expect(messageData?["key"] as? String == "value")
+    #expect(messageData?["number"] as? Int == 42)
 }
 
 @Test
