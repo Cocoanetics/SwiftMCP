@@ -269,7 +269,7 @@ struct ElicitationTests {
         func emailFormatSchemaTest() throws {
             let schema = JSONSchema.object(JSONSchema.Object(
                 properties: [
-                    "email": .string(description: "Email address", format: "email")
+                    "email": .string(description: "Email address", format: "email", minLength: nil, maxLength: nil)
                 ],
                 required: ["email"]
             ))
@@ -282,11 +282,43 @@ struct ElicitationTests {
             let decodedSchema = try decoder.decode(JSONSchema.self, from: data)
             
             if case .object(let obj) = decodedSchema {
-                if case .string(let description, let format) = obj.properties["email"] {
+                if case .string(let description, let format, let minLength, let maxLength) = obj.properties["email"] {
                     #expect(description == "Email address")
                     #expect(format == "email")
+                    #expect(minLength == nil)
+                    #expect(maxLength == nil)
                 } else {
                     #expect(Bool(false), "Email property is not a string with format")
+                }
+            } else {
+                #expect(Bool(false), "Schema is not an object")
+            }
+        }
+        
+        @Test("String schema with length constraints")
+        func stringSchemaWithLengthConstraintsTest() throws {
+            let schema = JSONSchema.object(JSONSchema.Object(
+                properties: [
+                    "username": .string(description: "Username", format: nil, minLength: 3, maxLength: 20)
+                ],
+                required: ["username"]
+            ))
+            
+            // Test encoding/decoding
+            let encoder = JSONEncoder()
+            let data = try encoder.encode(schema)
+            
+            let decoder = JSONDecoder()
+            let decodedSchema = try decoder.decode(JSONSchema.self, from: data)
+            
+            if case .object(let obj) = decodedSchema {
+                if case .string(let description, let format, let minLength, let maxLength) = obj.properties["username"] {
+                    #expect(description == "Username")
+                    #expect(format == nil)
+                    #expect(minLength == 3)
+                    #expect(maxLength == 20)
+                } else {
+                    #expect(Bool(false), "Username property is not a string with constraints")
                 }
             } else {
                 #expect(Bool(false), "Schema is not an object")

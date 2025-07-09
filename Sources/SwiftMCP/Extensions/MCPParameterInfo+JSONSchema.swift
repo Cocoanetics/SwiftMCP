@@ -52,7 +52,7 @@ extension MCPParameterInfo {
             } else if let schemaType = type as? any SchemaRepresentable.Type {
                 schema = schemaType.schemaMetadata.schema
             } else {
-                schema = JSONSchema.string()
+                schema = JSONSchema.string(description: nil, format: nil, minLength: nil, maxLength: nil)
             }
 
             return JSONSchema.array(items: schema, description: description)
@@ -65,7 +65,7 @@ extension MCPParameterInfo {
             case is Bool.Type:
                 return JSONSchema.boolean(description: description)
             default:
-                return JSONSchema.string(description: description)
+                return JSONSchema.string(description: description, format: nil, minLength: nil, maxLength: nil)
         }
     }
 }

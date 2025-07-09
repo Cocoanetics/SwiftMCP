@@ -27,6 +27,10 @@ extension JSONSchema: Codable {
         case enumValues = "enum"
         /// The format of the content
         case format
+        /// Minimum length for string values
+        case minLength
+        /// Maximum length for string values
+        case maxLength
         /// If additional properties are allowed (optional, needed for structured responses, not for MCP)
         case additionalProperties
     }
@@ -52,7 +56,9 @@ extension JSONSchema: Codable {
 				else
 				{
                     let format = try container.decodeIfPresent(String.self, forKey: .format)
-                    self = .string(description: description, format: format)
+                    let minLength = try container.decodeIfPresent(Int.self, forKey: .minLength)
+                    let maxLength = try container.decodeIfPresent(Int.self, forKey: .maxLength)
+                    self = .string(description: description, format: format, minLength: minLength, maxLength: maxLength)
                 }
 
             case "number":
@@ -93,9 +99,11 @@ extension JSONSchema: Codable {
         var container = encoder.container(keyedBy: CodingKeys.self)
 
         switch self {
-            case .string(let description, let format):
+            case .string(let description, let format, let minLength, let maxLength):
                 try container.encode("string", forKey: .type)
                 try container.encodeIfPresent(format, forKey: .format)
+                try container.encodeIfPresent(minLength, forKey: .minLength)
+                try container.encodeIfPresent(maxLength, forKey: .maxLength)
                 try container.encodeIfPresent(description, forKey: .description)
             case .number(let description):
                 try container.encode("number", forKey: .type)

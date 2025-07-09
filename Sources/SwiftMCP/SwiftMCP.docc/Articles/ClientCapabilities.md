@@ -259,12 +259,13 @@ func collectProjectPreferences() async throws -> String {
 
 Elicitation supports these JSON Schema types for flat object structures:
 
-- **String**: `JSONSchema.string(description: "Field description", format: "email")`
+- **String**: `JSONSchema.string(description: "Field description", format: "email", minLength: 3, maxLength: 50)`
 - **Number**: `JSONSchema.number(description: "Numeric value")`
 - **Boolean**: `JSONSchema.boolean(description: "True/false value")`
 - **Enum**: `JSONSchema.enum(values: ["option1", "option2"], description: "Selection")`
 
 Supported string formats include: `email`, `uri`, `date`, `date-time`.
+String constraints like `minLength` and `maxLength` are also supported for validation.
 
 ## Best Practices
 

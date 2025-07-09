@@ -93,19 +93,19 @@ extension Bool: JSONSchemaTypeConvertible {
 
 extension String: JSONSchemaTypeConvertible {
     public static func jsonSchema(description: String?) -> JSONSchema {
-        .string(description: description)
+        .string(description: description, format: nil, minLength: nil, maxLength: nil)
     }
 }
 
 extension Character: JSONSchemaTypeConvertible {
     public static func jsonSchema(description: String?) -> JSONSchema {
-        .string(description: description)
+        .string(description: description, format: nil, minLength: nil, maxLength: nil)
     }
 }
 
 extension Data: JSONSchemaTypeConvertible {
     public static func jsonSchema(description: String?) -> JSONSchema {
-        .string(description: description, format: "byte")
+        .string(description: description, format: "byte", minLength: nil, maxLength: nil)
     }
 }
 

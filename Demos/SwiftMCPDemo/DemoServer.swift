@@ -351,8 +351,8 @@ actor DemoServer {
         // Create a schema for contact information
         let schema = JSONSchema.object(JSONSchema.Object(
             properties: [
-                "name": .string(description: "Your full name"),
-                "email": .string(description: "Your email address", format: "email"),
+                "name": .string(description: "Your full name", format: nil, minLength: 2, maxLength: 50),
+                "email": .string(description: "Your email address", format: "email", minLength: nil, maxLength: nil),
                 "age": .number(description: "Your age")
             ],
             required: ["name", "email"],
@@ -434,6 +434,62 @@ actor DemoServer {
             return "User declined to provide project preferences"
         case .cancel:
             return "User cancelled the project preferences request"
+        }
+    }
+    
+    /**
+     Requests user credentials with validation constraints.
+     - Returns: A string describing the user's response or the action they took
+     */
+    @MCPTool(description: "Requests user credentials with validation")
+    func requestUserCredentials() async throws -> String {
+        await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+            "function": "requestUserCredentials",
+            "message": "requestUserCredentials called"
+        ]))
+        
+        // Create a schema with string length constraints
+        let schema = JSONSchema.object(JSONSchema.Object(
+            properties: [
+                "username": .string(description: "Username (3-20 characters)", format: nil, minLength: 3, maxLength: 20),
+                "password": .string(description: "Password (8-50 characters)", format: nil, minLength: 8, maxLength: 50),
+                "confirmPassword": .string(description: "Confirm password", format: nil, minLength: 8, maxLength: 50),
+                "email": .string(description: "Email address", format: "email", minLength: 5, maxLength: 100)
+            ],
+            required: ["username", "password", "confirmPassword", "email"],
+            description: "User credentials with validation constraints"
+        ))
+        
+        let response = try await RequestContext.current?.elicit(
+            message: "Please create your account credentials",
+            schema: schema
+        )
+        
+        guard let elicitationResponse = response else {
+            return "No elicitation response received"
+        }
+        
+        switch elicitationResponse.action {
+        case .accept:
+            if let content = elicitationResponse.content {
+                let username = content["username"]?.value as? String ?? "Unknown"
+                let email = content["email"]?.value as? String ?? "Unknown"
+                let password = content["password"]?.value as? String ?? ""
+                let confirmPassword = content["confirmPassword"]?.value as? String ?? ""
+                
+                // Basic validation example
+                if password == confirmPassword {
+                    return "Account creation successful! Username: \(username), Email: \(email)"
+                } else {
+                    return "Password mismatch detected. Please try again."
+                }
+            } else {
+                return "User accepted but no content was provided"
+            }
+        case .decline:
+            return "User declined to create account"
+        case .cancel:
+            return "User cancelled the account creation"
         }
     }
 

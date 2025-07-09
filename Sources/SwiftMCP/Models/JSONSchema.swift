@@ -36,7 +36,7 @@ public indirect enum JSONSchema: Sendable {
     }
 
     /// A string schema
-    case string(description: String? = nil, format: String? = nil)
+    case string(description: String? = nil, format: String? = nil, minLength: Int? = nil, maxLength: Int? = nil)
 
     /// A number schema
     case number(description: String? = nil)
