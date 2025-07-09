@@ -274,6 +274,8 @@ actor DemoServer {
         return text
     }
 
+    // MARK: - Notifications
+    
     /**
      Handles the roots list changed notification from the client.
      
@@ -290,12 +292,7 @@ actor DemoServer {
                 level: .info,
                 data: [
                     "message": "Roots list updated",
-                    "roots": updatedRoots.map { root in
-                        [
-                            "uri": root.uri,
-                            "name": root.name ?? "unnamed"
-                        ]
-                    }
+                    "roots": updatedRoots
                 ]
             ))
         } catch {
