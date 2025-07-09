@@ -46,6 +46,11 @@ Start with <doc:GettingStarted> to create your first MCP server, then explore <d
 
 - ``MCPServer``
 - ``MCPTool``
+- <doc:Tools>
+- <doc:Resources>
+- <doc:Prompts>
+- <doc:ServerCapabilities>
+- <doc:Sampling>
 
 ### Core Types
 
@@ -66,5 +71,4 @@ struct Calculator {
     func add(a: Double, b: Double) -> Double {
         return a + b
     }
-}
-``` 
+}``` 

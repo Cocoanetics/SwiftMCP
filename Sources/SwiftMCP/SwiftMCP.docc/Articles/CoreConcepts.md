@@ -113,6 +113,10 @@ Without proper documentation:
 - Parameters may receive invalid values
 - Return values may be misinterpreted
 
+## Session and Request Context
+
+`Session.current` represents the client connection for the active task and lets you send log messages or other notifications. `RequestContext.current` exists only for the lifetime of a single request and provides the `reportProgress` helper. You can also inspect `Session.current.clientCapabilities` to discover client features such as roots or sampling support. Use these globals anywhere in your tool implementations.
+
 ## Best Practices
 
 1. Always document your server class with:
@@ -135,5 +139,4 @@ Without proper documentation:
 
 - [Swift Documentation Comments Guide](https://github.com/swiftlang/swift/blob/main/docs/DocumentationComments.md)
 - <doc:GettingStarted>
-- ``MCPServer``
-- ``MCPTool`` 
+- ``MCPServer``- ``MCPTool`` 
