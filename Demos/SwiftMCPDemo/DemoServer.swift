@@ -9,6 +9,8 @@ import SwiftMCP
 @MCPServer(name: "SwiftMCP Demo")
 actor DemoServer {
 	
+    // MARK: - Tools
+    
 	/**
 	 Gets the current date/time on the server
 	 - Returns: The current time
@@ -203,6 +205,8 @@ actor DemoServer {
 				FileResourceContent(uri: URL(string: "file:///hello2.txt")!, mimeType: "text/plain", text: "Hello World 2!")]
 	}
 	
+    // MARK: - Resources
+    
 	/// Returns a static server info string
 	@MCPResource("server://info")
 	func getServerInfo() async -> String {
@@ -275,6 +279,8 @@ actor DemoServer {
 		}
 	}
     
+    // MARK: - Prompts
+    
     /// A prompt for saying Hello
     @MCPPrompt()
     func helloPrompt(name: String) async throws -> [PromptMessage] {
@@ -308,6 +314,25 @@ actor DemoServer {
         }
         
         return text
+    }
+    
+    // MARK: - Sampling
+
+    /**
+     Requests sampling from the client using the MCP Sampling feature.
+     - Parameter prompt: The prompt to send to the client's LLM
+     - Parameter modelPreferences: Optional model preferences for the request
+     - Returns: The generated text from the client, or nil if no context is available
+     */
+    @MCPTool(description: "Requests sampling from the client LLM")
+    func sampleFromClient(prompt: String, modelPreferences: ModelPreferences? = nil) async throws -> String {
+        await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+            "function": "sampleFromClient",
+            "message": "sampleFromClient called",
+            "arguments": ["prompt": prompt, "has_model_preferences": modelPreferences != nil]
+        ]))
+        
+        return try await RequestContext.current?.sample(prompt: prompt, modelPreferences: modelPreferences) ?? "No response from client"
     }
 
     // MARK: - Notifications

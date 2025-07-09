@@ -256,14 +256,14 @@ extension Session {
     public func listRoots() async throws -> [Root] {
         // Check if client supports roots
         guard clientCapabilities?.roots != nil else {
-            return []
+            throw MCPServerError.clientHasNoRootsSupport
         }
         
         let response = try await request(method: "roots/list", params: [:])
         
         // Parse the response to extract the roots list
         guard case .response(let responseData) = response else {
-            preconditionFailure("Expected response but got different message type")
+            throw MCPServerError.unexpectedMessageType(method: "roots/list")
         }
         
         guard let result = responseData.result,
