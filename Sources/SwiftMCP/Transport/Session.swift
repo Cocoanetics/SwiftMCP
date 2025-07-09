@@ -127,11 +127,6 @@ public actor Session {
         self.clientCapabilities = capabilities
     }
     
-    /// Get the client capabilities stored for this session.
-    public func getClientCapabilities() -> ClientCapabilities? {
-        return self.clientCapabilities
-    }
-    
     /// Sends a JSON-RPC message to the client and waits for the response.
     /// - Parameter message: The JSON-RPC message to send
     /// - Returns: The response message from the client

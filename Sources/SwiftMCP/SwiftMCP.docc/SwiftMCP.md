@@ -49,7 +49,11 @@ Start with <doc:GettingStarted> to create your first MCP server, then explore <d
 - <doc:Tools>
 - <doc:Resources>
 - <doc:Prompts>
+
+### Capabilities
+
 - <doc:ServerCapabilities>
+- <doc:ClientCapabilities>
 - <doc:Sampling>
 
 ### Core Types

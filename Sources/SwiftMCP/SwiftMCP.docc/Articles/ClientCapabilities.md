@@ -37,7 +37,7 @@ func myTool() async throws -> String {
         throw MCPServerError.noActiveSession
     }
     
-    let capabilities = session.getClientCapabilities()
+    let capabilities = await session.clientCapabilities
     
     if capabilities?.roots != nil {
         // Client supports roots - safe to call listRoots()
@@ -69,7 +69,7 @@ func listClientRoots() async throws -> [String] {
     }
     
     // Check if client supports roots
-    guard session.getClientCapabilities()?.roots != nil else {
+    guard await session.clientCapabilities?.roots != nil else {
         return ["Client does not support roots"]
     }
     
@@ -165,7 +165,7 @@ func generateCreativeContent(topic: String) async throws -> String {
 @MCPTool
 func robustTool() async -> String {
     do {
-        if let capabilities = Session.current?.getClientCapabilities() {
+        if let capabilities = await Session.current?.clientCapabilities {
             if capabilities.sampling != nil {
                 return try await RequestContext.current?.sample(prompt: "Hello") ?? "No response"
             } else {

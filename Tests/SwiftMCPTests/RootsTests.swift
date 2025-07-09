@@ -121,7 +121,7 @@ struct RootsTests {
             
             await session.setClientCapabilities(capabilities)
             
-            let storedCapabilities = await session.getClientCapabilities()
+            let storedCapabilities = await session.clientCapabilities
             #expect(storedCapabilities?.roots?.listChanged == true)
         }
         
@@ -147,7 +147,7 @@ struct RootsTests {
             
             await session.setClientCapabilities(capabilities)
             
-            let storedCapabilities = await session.getClientCapabilities()
+            let storedCapabilities = await session.clientCapabilities
             #expect(storedCapabilities?.roots?.listChanged == true)
         }
     }

@@ -96,9 +96,8 @@ public final class RequestContext: @unchecked Sendable {
             throw MCPServerError.noActiveSession
         }
         
-        // Check if client supports sampling
-        let clientCapabilities = await session.getClientCapabilities()
-        guard clientCapabilities?.sampling != nil else {
+        // Check if client supports sampling  
+        guard await session.clientCapabilities?.sampling != nil else {
             throw MCPServerError.clientHasNoSamplingSupport
         }
         
