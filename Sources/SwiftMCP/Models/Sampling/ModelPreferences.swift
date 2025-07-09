@@ -1,8 +1,10 @@
 import Foundation
 
 /// Represents model preferences for sampling requests.
+@Schema
 public struct ModelPreferences: Codable, Sendable {
     /// Model hints for preference matching.
+    @Schema
     public struct ModelHint: Codable, Sendable {
         /// The name or partial name of the model to prefer.
         public let name: String

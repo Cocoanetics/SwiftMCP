@@ -321,17 +321,18 @@ actor DemoServer {
     /**
      Requests sampling from the client using the MCP Sampling feature.
      - Parameter prompt: The prompt to send to the client's LLM
+     - Parameter modelPreferences: Optional model preferences for the request
      - Returns: The generated text from the client, or nil if no context is available
      */
     @MCPTool(description: "Requests sampling from the client LLM")
-    func sampleFromClient(prompt: String) async throws -> String {
+    func sampleFromClient(prompt: String, modelPreferences: ModelPreferences? = nil) async throws -> String {
         await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
             "function": "sampleFromClient",
             "message": "sampleFromClient called",
-            "arguments": ["prompt": prompt]
+            "arguments": ["prompt": prompt, "has_model_preferences": modelPreferences != nil]
         ]))
         
-        return try await RequestContext.current?.sample(prompt: prompt) ?? "No response from client"
+        return try await RequestContext.current?.sample(prompt: prompt, modelPreferences: modelPreferences) ?? "No response from client"
     }
 
     // MARK: - Notifications

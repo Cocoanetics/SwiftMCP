@@ -80,7 +80,7 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
         var propertyString = ""
         var propertyInfos: [(name: String, type: String, defaultValue: String?)] = []
 
-        // Process all members including nested structs
+        // Process all members, but only properties (ignore nested structs)
         for member in structDecl.memberBlock.members {
             if let property = member.decl.as(VariableDeclSyntax.self) {
                 // Process regular property
@@ -95,11 +95,8 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
                 }
                 propertyString += propertyStr
                 propertyInfos.append(propertyInfo)
-            } else if let nestedStruct = member.decl.as(StructDeclSyntax.self) {
-                // Process nested struct
-                let nestedSchema = try processNestedStruct(nestedStruct, context: context)
-                propertyString += nestedSchema
             }
+            // Ignore nested structs - they should have their own @Schema annotation
         }
 
         // Create a registration statement
@@ -237,45 +234,6 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
         }
 
         return nil
-    }
-
-    private static func processNestedStruct(
-        _ structDecl: StructDeclSyntax,
-        context: MacroExpansionContext
-    ) throws -> String {
-        let structName = structDecl.name.text
-        let documentation = Documentation(from: structDecl.leadingTrivia.description)
-
-        var propertyString = ""
-
-        // Process properties of nested struct
-        for member in structDecl.memberBlock.members {
-            if let property = member.decl.as(VariableDeclSyntax.self) {
-                let (propertyStr, _) = try processProperty(
-                    property: property,
-                    documentation: documentation,
-                    context: context
-                )
-
-                if !propertyString.isEmpty {
-                    propertyString += ", "
-                }
-                propertyString += propertyStr
-            }
-        }
-
-        // Create metadata for nested struct
-        return """
-        , SchemaPropertyInfo(
-            name: "\(structName)",
-            type: "\(structName)",
-            type: \(structName).self,
-            description: \(documentation.description.isEmpty ? "nil" : "\"\(documentation.description.escapedForSwiftString)\""),
-            defaultValue: nil,
-            enumValues: nil,
-            isRequired: true
-        )
-        """
     }
 }
 
