@@ -596,7 +596,7 @@ public extension MCPServer {
         }
 
         // Set the minimum log level for this session
-        session.minimumLogLevel = level
+        await session.setMinimumLogLevel(level)
 
         // Return empty result for success
         return JSONRPCMessage.response(id: request.id, result: [:])

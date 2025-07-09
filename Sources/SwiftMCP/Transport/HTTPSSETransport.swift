@@ -79,8 +79,8 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         // 1. If we have a session ID, check token against session-stored value
         if let id = sessionID {
             let session = await sessionManager.session(id: id)
-            if let stored = session.accessToken {
-                if stored == token, (session.accessTokenExpiry ?? Date.distantFuture) > Date() {
+            if let stored = await session.accessToken {
+                if stored == token, (await session.accessTokenExpiry ?? Date.distantFuture) > Date() {
                     return .authorized
                 } else {
                     return .unauthorized("Invalid or expired token")
@@ -89,9 +89,9 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
                 // First time we see a token for this session - validate it before accepting
                 let isValid = await validateNewToken(token)
                 if isValid {
-                    session.accessToken = token
+                    await session.setAccessToken(token)
                     // Without expires_in we can't know exact lifetime; fall back to 24 h.
-                    session.accessTokenExpiry = Date().addingTimeInterval(24 * 60 * 60)
+                    await session.setAccessTokenExpiry(Date().addingTimeInterval(24 * 60 * 60))
                     
                     // Fetch and store user info if we have OAuth configuration
                     if let oauthConfiguration = oauthConfiguration {
@@ -360,7 +360,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     func sendSSE(_ message: SSEMessage, to sessionID: UUID) {
         Task {
             let session = await sessionManager.session(id: sessionID)
-            session.sendSSE(message)
+            await session.sendSSE(message)
         }
     }
 
@@ -381,6 +381,6 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
 
         let string = String(data: data, encoding: .utf8) ?? ""
         let message = SSEMessage(data: string)
-        session.sendSSE(message)
+        await session.sendSSE(message)
     }
 }

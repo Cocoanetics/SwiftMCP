@@ -44,9 +44,10 @@ public extension MCPLoggingMixin {
         }
         
         // For HTTP+SSE transport, try to broadcast to all connected clients
-        if let session = Session.current,
-           let transport = session.transport as? HTTPSSETransport {
-            await transport.broadcastLog(message)
+        if let session = Session.current {
+            if let transport = await session.transport as? HTTPSSETransport {
+                await transport.broadcastLog(message)
+            }
         }
     }
 } 

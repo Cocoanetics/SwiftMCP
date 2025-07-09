@@ -6,7 +6,7 @@ import NIO
 ///
 /// A session tracks the client identifier and the transport that should be used
 /// for sending responses back to this client.
-public final class Session: @unchecked Sendable {
+public actor Session {
     /// Unique identifier of the session/client.
     public let id: UUID
 
@@ -58,7 +58,7 @@ public final class Session: @unchecked Sendable {
     }
 
     /// Runs `operation` with this session bound to `Session.current`.
-    public func work<T>(_ operation: @Sendable (Session) async throws -> T) async rethrows -> T {
+    public func work<T: Sendable>(_ operation: @Sendable (Session) async throws -> T) async rethrows -> T {
         try await Self.$taskSession.withValue(self) {
             try await operation(self)
         }
@@ -74,6 +74,45 @@ public final class Session: @unchecked Sendable {
     func sendSSE(_ message: SSEMessage) {
         guard let channel, channel.isActive else { return }
         channel.sendSSE(message)
+    }
+
+    // MARK: - Convenience Mutators
+
+    /// Update the access token stored for this session.
+    /// - Parameter token: The new access token value.
+    public func setAccessToken(_ token: String?) {
+        self.accessToken = token
+    }
+
+    /// Update the expiry date for the stored access token.
+    /// - Parameter date: The new expiry date.
+    public func setAccessTokenExpiry(_ date: Date?) {
+        self.accessTokenExpiry = date
+    }
+
+    /// Update the associated transport (weak reference) for this session.
+    public func setTransport(_ transport: (any Transport)?) {
+        self.transport = transport
+    }
+
+    /// Update the channel associated with this session.
+    public func setChannel(_ channel: Channel?) {
+        self.channel = channel
+    }
+
+    /// Update the userInfo stored for this session.
+    public func setUserInfo(_ info: UserInfo?) {
+        self.userInfo = info
+    }
+
+    /// Update the minimum log level for this session.
+    public func setMinimumLogLevel(_ level: LogLevel) {
+        self.minimumLogLevel = level
+    }
+
+    /// Update the ID token stored for this session.
+    public func setIDToken(_ token: String?) {
+        self.idToken = token
     }
 }
 
