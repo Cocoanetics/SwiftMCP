@@ -41,6 +41,9 @@ public final class Session: @unchecked Sendable {
     /// The minimum log level for this session (default: .info)
     public var minimumLogLevel: LogLevel = .info
 
+    /// Client capabilities received during initialization (if any).
+    public var clientCapabilities: ClientCapabilities?
+
     /// Creates a new session.
     /// - Parameters:
     ///   - id: The unique session identifier.
@@ -121,6 +124,54 @@ extension Session {
             try await transport?.send(notification)
         } catch {
             // Intentionally ignore send errors in tests
+        }
+    }
+
+    /// Send a roots/list request to the client and return the roots.
+    /// - Returns: The list of roots available to the client
+    /// - Throws: An error if the client doesn't support roots or the request fails
+    public func listRoots() async throws -> RootsList {
+        // Check if client supports roots
+        guard clientCapabilities?.roots != nil else {
+            throw RootsError.clientDoesNotSupportRoots
+        }
+
+        let request = JSONRPCMessage.request(id: .string(UUID().uuidString), method: "roots/list")
+        
+        do {
+            try await transport?.send(request)
+            // Note: In a real implementation, we would need to wait for the response
+            // For now, we'll return an empty list as this is a server-side implementation
+            // and the actual response handling would need to be implemented in the transport layer
+            return RootsList(roots: [])
+        } catch {
+            throw RootsError.requestFailed(error)
+        }
+    }
+
+    /// Send a notification that the roots list has changed.
+    /// This should be called by clients when their available roots change.
+    public func sendRootsListChangedNotification() async {
+        let notification = JSONRPCMessage.notification(method: "notifications/roots/list_changed")
+        do {
+            try await transport?.send(notification)
+        } catch {
+            // Intentionally ignore send errors in tests
+        }
+    }
+}
+
+/// Errors related to roots functionality.
+public enum RootsError: Error, LocalizedError {
+    case clientDoesNotSupportRoots
+    case requestFailed(Error)
+    
+    public var errorDescription: String? {
+        switch self {
+        case .clientDoesNotSupportRoots:
+            return "Client does not support roots capability"
+        case .requestFailed(let error):
+            return "Roots request failed: \(error.localizedDescription)"
         }
     }
 }

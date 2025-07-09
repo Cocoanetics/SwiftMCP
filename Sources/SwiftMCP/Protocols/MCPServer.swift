@@ -102,7 +102,7 @@ public extension MCPServer {
         // Prepare the response based on the method
         switch requestData.method {
             case "initialize":
-                return createInitializeResponse(id: requestData.id)
+                return await handleInitializeRequest(requestData)
 
             case "ping":
                 return createPingResponse(id: requestData.id)
@@ -156,6 +156,11 @@ public extension MCPServer {
                 // Client has cancelled a request
                 return nil
 
+            case "notifications/roots/list_changed":
+                // Client's root list has changed
+                // This notification doesn't require a response, just log it
+                return nil
+
             default:
                 // Unknown notification - log it but don't respond
                 return nil
@@ -184,6 +189,35 @@ public extension MCPServer {
         // In a typical server scenario, we don't usually respond to error responses
         // This could be extended for scenarios where the server also acts as a client
         return nil
+    }
+
+/**
+     Handles an initialization request from the client.
+     
+     This processes the client capabilities and stores them in the current session,
+     then creates and returns an initialization response.
+     
+     - Parameter request: The initialization request data
+     - Returns: A JSON-RPC message containing the initialization response
+     */
+    private func handleInitializeRequest(_ request: JSONRPCMessage.JSONRPCRequestData) async -> JSONRPCMessage? {
+        // Extract and store client capabilities if provided
+        if let params = request.params,
+           let capabilitiesDict = params["capabilities"]?.value as? [String: Any] {
+            
+            do {
+                let capabilitiesData = try JSONSerialization.data(withJSONObject: capabilitiesDict)
+                let clientCapabilities = try JSONDecoder().decode(ClientCapabilities.self, from: capabilitiesData)
+                
+                // Store client capabilities in current session
+                Session.current?.clientCapabilities = clientCapabilities
+            } catch {
+                // If parsing fails, continue without client capabilities
+                // This is non-fatal as not all clients may send capabilities
+            }
+        }
+        
+        return createInitializeResponse(id: request.id)
     }
 
 /**
