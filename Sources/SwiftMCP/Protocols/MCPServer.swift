@@ -169,8 +169,11 @@ public extension MCPServer {
      - Returns: Always returns nil since we don't currently respond to responses
      */
     private func handleResponse(_ responseData: JSONRPCMessage.JSONRPCResponseData) async -> JSONRPCMessage? {
-        // In a typical server scenario, we don't usually respond to responses
-        // This could be extended for scenarios where the server also acts as a client
+        // Route the response to the current session for request/response matching
+        let response = JSONRPCMessage.response(responseData)
+        if let session = Session.current {
+            await session.handleResponse(response)
+        }
         return nil
     }
 
@@ -181,8 +184,11 @@ public extension MCPServer {
      - Returns: Always returns nil since we don't currently respond to error responses
      */
     private func handleErrorResponse(_ errorResponseData: JSONRPCMessage.JSONRPCErrorResponseData) async -> JSONRPCMessage? {
-        // In a typical server scenario, we don't usually respond to error responses
-        // This could be extended for scenarios where the server also acts as a client
+        // Route the error response to the current session for request/response matching
+        let response = JSONRPCMessage.errorResponse(errorResponseData)
+        if let session = Session.current {
+            await session.handleResponse(response)
+        }
         return nil
     }
 

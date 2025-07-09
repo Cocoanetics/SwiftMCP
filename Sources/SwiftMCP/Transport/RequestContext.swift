@@ -76,9 +76,11 @@ public final class RequestContext: @unchecked Sendable {
     /// Send a progress notification if a progress token was provided.
     public func reportProgress(_ progress: Double, total: Double? = nil, message: String? = nil) async {
         guard let progressToken = meta?.progressToken else { return }
-        await Session.current?.sendProgressNotification(progressToken: progressToken,
-                                                        progress: progress,
-                                                        total: total,
-                                                        message: message)
+        if let session = Session.current {
+            await session.sendProgressNotification(progressToken: progressToken,
+                                                  progress: progress,
+                                                  total: total,
+                                                  message: message)
+        }
     }
 }

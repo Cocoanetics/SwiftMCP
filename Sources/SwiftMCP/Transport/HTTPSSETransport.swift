@@ -177,9 +177,6 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         }
     }
 
-    /// Number used as identifier for output-bound JSONRPCRequests, e.g. ping
-    fileprivate var sequenceNumber = 1
-
     /// The number of active SSE channels currently connected to the server.
     var sseChannelCount: Int {
         get async { await sessionManager.channelCount }
@@ -276,7 +273,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     /// Start the keep-alive timer that sends messages every 30 seconds.
     private func startKeepAliveTimer() {
         keepAliveTimer = DispatchSource.makeTimerSource(queue: DispatchQueue.global())
-        keepAliveTimer?.schedule(deadline: .now(), repeating: .seconds(30))
+        keepAliveTimer?.schedule(deadline: .now(), repeating: .seconds(10))
         keepAliveTimer?.setEventHandler { [weak self] in
             self?.sendKeepAlive()
         }
@@ -300,15 +297,14 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
                 case .none:
                     return
                 case .sse:
-                    await self.sessionManager.broadcastSSE(SSEMessage(comment: "keep-alive"))
+                    await self.sessionManager.forEachSession { session in
+                        await session.sendSSE(SSEMessage(comment: "keep-alive"))
+                    }
                 case .ping:
-                    let ping = JSONRPCMessage.request(id: self.sequenceNumber, method: "ping")
-                    let encoder = JSONEncoder()
-                    let data = try! encoder.encode(ping)
-                    let string = String(data: data, encoding: .utf8)!
-                    let message = SSEMessage(data: string)
-                    await self.sessionManager.broadcastSSE(message)
-                    self.sequenceNumber += 1
+                    try await self.sessionManager.forEachSession { session in
+                        let ping = JSONRPCMessage.request(id: .string(UUID().uuidString), method: "ping")
+                        try await session.send(ping)
+                    }
             }
         }
     }
@@ -329,12 +325,6 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     }
 
     // MARK: - Handling SSE Connections
-    /// Broadcast a named event to all connected SSE clients.
-    func broadcastSSE(_ message: SSEMessage) {
-        Task {
-            await sessionManager.broadcastSSE(message)
-        }
-    }
 
     /// Register a new SSE channel.
     func registerSSEChannel(_ channel: Channel, id: UUID) {

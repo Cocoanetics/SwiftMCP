@@ -271,14 +271,13 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
 
                     // Process messages and stream responses via SSE
                     for message in messages {
-                        // Check if it's an empty ping response - ignore it
-                        if case .response(let responseData) = message,
-                                           let result = responseData.result,
-                                           result.isEmpty {
-                            continue
+                        // Route responses to Session continuations
+                        switch message {
+                        case .response, .errorResponse:
+                            await session.handleResponse(message)
+                        default:
+                            transport.handleJSONRPCRequest(message, from: sessionID)
                         }
-
-                        transport.handleJSONRPCRequest(message, from: sessionID)
                     }
                 } else {
                     // No SSE connection - use immediate HTTP response
