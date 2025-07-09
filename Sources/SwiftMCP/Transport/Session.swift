@@ -17,11 +17,8 @@ public actor Session {
     public var channel: Channel?
 
     // MARK: - Request/Response Tracking
-    /// Request ID sequence counter for outgoing requests
-    private var requestIdSequence: Int = 0
-    
     /// Continuations for sent requests, to match up responses
-    private var responseTasks: [Int: CheckedContinuation<JSONRPCMessage, Error>] = [:]
+    private var responseTasks: [String: CheckedContinuation<JSONRPCMessage, Error>] = [:]
 
     // MARK: - OAuth token (light-weight session storage)
     /// Access-token issued for this session (if any).
@@ -131,14 +128,13 @@ public actor Session {
             throw SessionError.messageMustHaveID
         }
         
-        // Extract the integer ID for tracking
-        let id: Int
+        // Extract the string ID for tracking
+        let id: String
         switch messageId {
         case .int(let intId):
-            id = intId
+            id = String(intId)
         case .string(let stringId):
-            // For string IDs, we'll use a hash value for tracking
-            id = stringId.hashValue
+            id = stringId
         }
         
         return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<JSONRPCMessage, Error>) in
@@ -165,12 +161,12 @@ public actor Session {
     internal func handleResponse(_ response: JSONRPCMessage) {
         guard let messageId = response.id else { return }
         
-        let id: Int
+        let id: String
         switch messageId {
         case .int(let intId):
-            id = intId
+            id = String(intId)
         case .string(let stringId):
-            id = stringId.hashValue
+            id = stringId
         }
         
         if let continuation = responseTasks[id] {
@@ -180,10 +176,9 @@ public actor Session {
     }
     
     /// Gets the next request ID for outgoing requests.
-    /// - Returns: The next request ID as an integer
-    internal func nextRequestId() -> Int {
-        requestIdSequence += 1
-        return requestIdSequence
+    /// - Returns: The next request ID as a string UUID
+    internal func nextRequestId() -> String {
+        return UUID().uuidString
     }
     
     /// Sends a JSON-RPC request with an auto-generated ID and waits for the response.
@@ -194,7 +189,7 @@ public actor Session {
     /// - Throws: An error if the request fails or if no response is received
     public func request(method: String, params: [String: AnyCodable]? = nil) async throws -> JSONRPCMessage {
         let requestId = nextRequestId()
-        let message = JSONRPCMessage.request(id: requestId, method: method, params: params)
+        let message = JSONRPCMessage.request(id: .string(requestId), method: method, params: params)
         return try await send(message)
     }
     
