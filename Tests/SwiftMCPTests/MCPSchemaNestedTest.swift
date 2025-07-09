@@ -2,6 +2,18 @@ import Foundation
 import Testing
 @testable import SwiftMCP
 
+// Test struct with missing @Schema on nested struct (should generate warning)
+@Schema
+struct TestStructWithMissingNestedSchema: Codable, Sendable {
+    @Schema  // Adding this should make the warning go away
+    struct NestedWithoutSchema: Codable, Sendable {
+        let value: String
+    }
+    
+    let nested: NestedWithoutSchema
+    let name: String
+}
+
 @Test("Nested @Schema annotations work correctly")
 func testNestedSchemaAnnotations() {
     // Test that ModelPreferences has schema metadata
