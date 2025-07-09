@@ -64,14 +64,20 @@ actor SessionManager {
         return false
     }
 
-    /// Broadcast an SSE message to all channels.
-    /// - Parameter message: The SSE message to send.
-    func broadcastSSE(_ message: SSEMessage) {
+    /// Enumerate all sessions and call the provided block for each one.
+    /// The session context is activated for each call.
+    /// - Parameter block: The block to call for each session
+    @discardableResult func forEachSession<T: Sendable>(_ block: @Sendable @escaping (Session) async throws -> T) async rethrows -> [T] {
+        var results: [T] = []
         for session in sessions.values {
-            session.sendSSE(message)
+            let result = try await session.work { session in
+                try await block(session)
+            }
+            results.append(result)
         }
+        return results
     }
-
+    
     /// Retrieve the channel for a given session identifier.
     /// - Parameter sessionID: The session identifier.
     /// - Returns: The channel if found.
@@ -95,6 +101,7 @@ actor SessionManager {
             if let channel = session.channel {
                 channel.close(promise: nil)
             }
+            session.cancelAllWaitingTasks()
         }
         sessions.removeAll()
     }
@@ -108,7 +115,15 @@ actor SessionManager {
 
     /// Remove a session entirely.
     func removeSession(id: UUID) {
+        if let session = sessions[id] {
+            session.cancelAllWaitingTasks()
+        }
         sessions.removeValue(forKey: id)
+    }
+    
+    /// Get all session IDs.
+    var sessionIDs: [UUID] {
+        Array(sessions.keys)
     }
 
     // MARK: - OAuth State Management (Removed - using transparent proxy)

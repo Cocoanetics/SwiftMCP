@@ -16,6 +16,13 @@ public final class Session: @unchecked Sendable {
     /// The SSE channel associated with this session, if any.
     public var channel: Channel?
 
+    // MARK: - Request/Response Tracking
+    /// Request ID sequence counter for outgoing requests
+    private var requestIdSequence: Int = 0
+    
+    /// Continuations for sent requests, to match up responses
+    private var responseTasks: [Int: CheckedContinuation<JSONRPCMessage, Error>] = [:]
+
     // MARK: - OAuth token (light-weight session storage)
     /// Access-token issued for this session (if any).
     public var accessToken: String?
@@ -75,6 +82,93 @@ public final class Session: @unchecked Sendable {
         guard let channel, channel.isActive else { return }
         channel.sendSSE(message)
     }
+    
+    /// Sends a JSON-RPC message to the client and waits for the response.
+    /// - Parameter message: The JSON-RPC message to send
+    /// - Returns: The response message from the client
+    /// - Throws: An error if the message fails to send or if no response is received
+    @discardableResult public func send(_ message: JSONRPCMessage) async throws -> JSONRPCMessage {
+        guard let messageId = message.id else {
+            throw SessionError.messageMustHaveID
+        }
+        
+        // Extract the integer ID for tracking
+        let id: Int
+        switch messageId {
+        case .int(let intId):
+            id = intId
+        case .string(let stringId):
+            // For string IDs, we'll use a hash value for tracking
+            id = stringId.hashValue
+        }
+        
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<JSONRPCMessage, Error>) in
+            responseTasks[id] = continuation
+            
+            // Send the message via the transport, activating the session context
+            Task {
+                do {
+                    try await self.work { _ in
+                        try await transport?.send(message)
+                    }
+                } catch {
+                    if responseTasks[id] != nil {
+                        responseTasks.removeValue(forKey: id)
+                        continuation.resume(throwing: error)
+                    }
+                }
+            }
+        }
+    }
+    
+    /// Handles an incoming JSON-RPC response by matching it with a waiting continuation.
+    /// - Parameter response: The response message to handle
+    internal func handleResponse(_ response: JSONRPCMessage) {
+        guard let messageId = response.id else { return }
+        
+        let id: Int
+        switch messageId {
+        case .int(let intId):
+            id = intId
+        case .string(let stringId):
+            id = stringId.hashValue
+        }
+        
+        if let continuation = responseTasks[id] {
+            responseTasks.removeValue(forKey: id)
+            continuation.resume(returning: response)
+        }
+    }
+    
+    /// Gets the next request ID for outgoing requests.
+    /// - Returns: The next request ID as an integer
+    internal func nextRequestId() -> Int {
+        requestIdSequence += 1
+        return requestIdSequence
+    }
+    
+    /// Sends a JSON-RPC request with an auto-generated ID and waits for the response.
+    /// - Parameters:
+    ///   - method: The method name to call
+    ///   - params: Optional parameters for the request
+    /// - Returns: The response message from the client
+    /// - Throws: An error if the request fails or if no response is received
+    public func request(method: String, params: [String: AnyCodable]? = nil) async throws -> JSONRPCMessage {
+        let requestId = nextRequestId()
+        let message = JSONRPCMessage.request(id: requestId, method: method, params: params)
+        return try await send(message)
+    }
+    
+    /// Cancels all waiting continuations when the session is being removed.
+    /// This prevents continuation leaks when sessions are disconnected.
+    internal func cancelAllWaitingTasks() {
+        let tasks = responseTasks
+        responseTasks.removeAll()
+        
+        for (_, continuation) in tasks {
+            continuation.resume(throwing: SessionError.sessionRemoved)
+        }
+    }
 }
 
 
@@ -121,6 +215,21 @@ extension Session {
             try await transport?.send(notification)
         } catch {
             // Intentionally ignore send errors in tests
+        }
+    }
+}
+
+/// Errors that can occur during session operations
+public enum SessionError: Error, LocalizedError {
+    case messageMustHaveID
+    case sessionRemoved
+    
+    public var errorDescription: String? {
+        switch self {
+        case .messageMustHaveID:
+            return "JSON-RPC message must have an ID for request/response tracking"
+        case .sessionRemoved:
+            return "Session was removed while waiting for response"
         }
     }
 }
