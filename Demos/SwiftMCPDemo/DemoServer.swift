@@ -157,6 +157,42 @@ actor DemoServer {
 		]))
 	}
 	
+	/**
+	 Performs a 30-second countdown with progress notifications every second.
+	 
+	 This function demonstrates long-running operations with progress tracking.
+	 It counts down from 30 to 0, sending a progress notification each second.
+	 
+	 - Returns: A completion message
+	 */
+	@MCPTool(description: "Performs a 30-second countdown with progress updates")
+	func countdown() async -> String {
+		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+			"function": "countdown",
+			"message": "Starting 30-second countdown"
+		]))
+		
+		let totalSeconds = 30
+		
+		for second in (0...totalSeconds).reversed() {
+			let progress = Double(totalSeconds - second) / Double(totalSeconds)
+			let message = second == 0 ? "Countdown complete!" : "\(second) seconds remaining"
+			
+			await RequestContext.current?.reportProgress(progress, total: 1.0, message: message)
+			
+			if second > 0 {
+				try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+			}
+		}
+		
+		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+			"function": "countdown",
+			"message": "Countdown completed successfully"
+		]))
+		
+		return "Countdown completed! 🎉"
+	}
+	
 	/** A function returning a random file
 	 - returns: A multiple simple text files */
 	@MCPTool
