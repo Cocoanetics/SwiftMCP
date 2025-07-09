@@ -62,8 +62,8 @@ struct OAuthTests {
         
         // Create a session and store a token
         let session = await sessionManager.session(id: sessionID)
-        session.accessToken = "test-token"
-        session.accessTokenExpiry = Date().addingTimeInterval(3600)
+        await session.setAccessToken("test-token")
+        await session.setAccessTokenExpiry(Date().addingTimeInterval(3600))
         
         // Fetch user info
         await sessionManager.fetchAndStoreUserInfo(for: sessionID, oauthConfiguration: config)
@@ -73,7 +73,7 @@ struct OAuthTests {
         // when the userinfo endpoint is not available or returns an error
         
         // The userInfo should be nil since we're not actually making a network request
-        #expect(session.userInfo == nil)
+        #expect(await session.userInfo == nil)
     }
     
     @Test("UserInfo struct can be decoded from JSON")

@@ -264,21 +264,20 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
 
             let responseHeaders = headers
             await transport.sessionManager.session(id: sessionID).work { session in
-                if session.hasActiveConnection {
+                if await session.hasActiveConnection {
 
                     // Send 202 Accepted immediately
                     await self.sendResponseAsync(channel: channel, status: .accepted, headers: responseHeaders, body: nil)
 
                     // Process messages and stream responses via SSE
                     for message in messages {
-                        // Check if it's an empty ping response - ignore it
-                        if case .response(let responseData) = message,
-                                           let result = responseData.result,
-                                           result.isEmpty {
-                            continue
+                        // Route responses to Session continuations
+                        switch message {
+                        case .response, .errorResponse:
+                            await session.handleResponse(message)
+                        default:
+                            transport.handleJSONRPCRequest(message, from: sessionID)
                         }
-
-                        transport.handleJSONRPCRequest(message, from: sessionID)
                     }
                 } else {
                     // No SSE connection - use immediate HTTP response
@@ -1026,9 +1025,9 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
                     if isValidToken {
                         let expiresIn = tokenResponse.expiresIn ?? (24 * 60 * 60)
                         await transport.sessionManager.session(id: sessionUUID).work { s in
-                            s.accessToken = tokenResponse.accessToken
-                            s.accessTokenExpiry = Date().addingTimeInterval(TimeInterval(expiresIn))
-                            s.idToken = tokenResponse.idToken
+                            await s.setAccessToken(tokenResponse.accessToken)
+                            await s.setAccessTokenExpiry(Date().addingTimeInterval(TimeInterval(expiresIn)))
+                            await s.setIDToken(tokenResponse.idToken)
                         }
                         
                         // Fetch and store user info

@@ -20,20 +20,28 @@ actor SessionManager {
 
     /// Returns the current number of active SSE channels.
     var channelCount: Int {
-        sessions.values.filter { $0.channel != nil }.count
+        get async {
+            var count = 0
+            for session in sessions.values {
+                if await session.channel != nil {
+                    count += 1
+                }
+            }
+            return count
+        }
     }
 
     /// Retrieve or create a session for the given identifier.
-    func session(id: UUID) -> Session {
+    func session(id: UUID) async -> Session {
         if let existing = sessions[id] {
-            if existing.transport == nil {
-                existing.transport = transport
+            if await existing.transport == nil {
+                await existing.setTransport(transport)
             }
             return existing
         }
 
         let session = Session(id: id)
-        session.transport = transport
+        await session.setTransport(transport)
         sessions[id] = session
         return session
     }
@@ -43,12 +51,20 @@ actor SessionManager {
     ///   - channel: The channel to register.
     ///   - id: The unique identifier for the channel.
     ///   - transport: Transport associated with the session.
-    func register(channel: Channel, id: UUID) {
-        let session = sessions[id] ?? Session(id: id, channel: channel)
-        session.channel = channel
-        if session.transport == nil {
-            session.transport = transport
+    func register(channel: Channel, id: UUID) async {
+        let session: Session
+        if let existing = sessions[id] {
+            session = existing
+        } else {
+            session = Session(id: id, channel: channel)
         }
+
+        await session.setChannel(channel)
+
+        if await session.transport == nil {
+            await session.setTransport(transport)
+        }
+
         sessions[id] = session
     }
 
@@ -56,9 +72,9 @@ actor SessionManager {
     /// - Parameter id: The unique identifier of the channel.
     /// - Returns: True if a channel was removed.
     @discardableResult
-    func removeChannel(id: UUID) -> Bool {
+    func removeChannel(id: UUID) async -> Bool {
         if let session = sessions[id] {
-            session.channel = nil
+            await session.setChannel(nil)
             return true
         }
         return false
@@ -66,35 +82,50 @@ actor SessionManager {
 
     /// Broadcast an SSE message to all channels.
     /// - Parameter message: The SSE message to send.
-    func broadcastSSE(_ message: SSEMessage) {
+    func broadcastSSE(_ message: SSEMessage) async {
         for session in sessions.values {
-            session.sendSSE(message)
+            await session.sendSSE(message)
         }
     }
 
+    /// Enumerate all sessions and call the provided block for each one.
+    /// The session context is activated for each call.
+    /// - Parameter block: The block to call for each session
+    @discardableResult func forEachSession<T: Sendable>(_ block: @Sendable @escaping (Session) async throws -> T) async rethrows -> [T] {
+        var results: [T] = []
+        for session in sessions.values {
+            let result = try await session.work { session in
+                try await block(session)
+            }
+            results.append(result)
+        }
+        return results
+    }
+    
     /// Retrieve the channel for a given session identifier.
     /// - Parameter sessionID: The session identifier.
     /// - Returns: The channel if found.
-    func getChannel(for sessionID: UUID) -> Channel? {
-        sessions[sessionID]?.channel
+    func getChannel(for sessionID: UUID) async -> Channel? {
+        return await sessions[sessionID]?.channel
     }
 
     /// Close all channels and remove them.
-    func stopAllChannels() {
+    func stopAllChannels() async {
         for session in sessions.values {
-            if let channel = session.channel {
+            if let channel = await session.channel {
                 channel.close(promise: nil)
-                session.channel = nil
+                await session.setChannel(nil)
             }
         }
     }
 
     /// Close all channels and remove all sessions.
-    func removeAllSessions() {
+    func removeAllSessions() async {
         for session in sessions.values {
-            if let channel = session.channel {
+            if let channel = await session.channel {
                 channel.close(promise: nil)
             }
+            await session.cancelAllWaitingTasks()
         }
         sessions.removeAll()
     }
@@ -102,13 +133,24 @@ actor SessionManager {
     /// Check if there's an active SSE connection for a given session.
     /// - Parameter sessionID: The session identifier.
     /// - Returns: `true` if there's an active channel for this session.
-    func hasActiveConnection(for sessionID: UUID) -> Bool {
-        sessions[sessionID]?.channel?.isActive ?? false
+    func hasActiveConnection(for sessionID: UUID) async -> Bool {
+        if let session = sessions[sessionID], let channel = await session.channel {
+            return channel.isActive
+        }
+        return false
     }
 
     /// Remove a session entirely.
-    func removeSession(id: UUID) {
+    func removeSession(id: UUID) async {
+        if let session = sessions[id] {
+            await session.cancelAllWaitingTasks()
+        }
         sessions.removeValue(forKey: id)
+    }
+    
+    /// Get all session IDs.
+    var sessionIDs: [UUID] {
+        Array(sessions.keys)
     }
 
     // MARK: - OAuth State Management (Removed - using transparent proxy)
@@ -116,11 +158,11 @@ actor SessionManager {
     // MARK: - Token lookup
 
     /// Return the first session whose stored accessToken matches `token` and is not expired.
-    func session(forToken token: String) -> Session? {
+    func session(forToken token: String) async -> Session? {
         for session in sessions.values {
-            if let stored = session.accessToken,
+            if let stored = await session.accessToken,
                stored == token,
-               (session.accessTokenExpiry ?? Date.distantFuture) > Date() {
+               (await session.accessTokenExpiry ?? Date.distantFuture) > Date() {
                 return session
             }
         }
@@ -133,14 +175,14 @@ actor SessionManager {
     ///   - oauthConfiguration: The OAuth configuration to use for fetching user info
     func fetchAndStoreUserInfo(for sessionID: UUID, oauthConfiguration: OAuthConfiguration) async {
         guard let session = sessions[sessionID],
-              let accessToken = session.accessToken else {
+              let accessToken = await session.accessToken else {
             return
         }
-        
+
         // Only fetch user info if we don't already have it
-        if session.userInfo == nil {
+        if await session.userInfo == nil {
             if let userInfo = await oauthConfiguration.fetchUserInfo(token: accessToken) {
-                session.userInfo = userInfo
+                await session.setUserInfo(userInfo)
             }
         }
     }

@@ -79,8 +79,8 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         // 1. If we have a session ID, check token against session-stored value
         if let id = sessionID {
             let session = await sessionManager.session(id: id)
-            if let stored = session.accessToken {
-                if stored == token, (session.accessTokenExpiry ?? Date.distantFuture) > Date() {
+            if let stored = await session.accessToken {
+                if stored == token, (await session.accessTokenExpiry ?? Date.distantFuture) > Date() {
                     return .authorized
                 } else {
                     return .unauthorized("Invalid or expired token")
@@ -89,9 +89,9 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
                 // First time we see a token for this session - validate it before accepting
                 let isValid = await validateNewToken(token)
                 if isValid {
-                    session.accessToken = token
+                    await session.setAccessToken(token)
                     // Without expires_in we can't know exact lifetime; fall back to 24 h.
-                    session.accessTokenExpiry = Date().addingTimeInterval(24 * 60 * 60)
+                    await session.setAccessTokenExpiry(Date().addingTimeInterval(24 * 60 * 60))
                     
                     // Fetch and store user info if we have OAuth configuration
                     if let oauthConfiguration = oauthConfiguration {
@@ -176,9 +176,6 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
             }
         }
     }
-
-    /// Number used as identifier for output-bound JSONRPCRequests, e.g. ping
-    fileprivate var sequenceNumber = 1
 
     /// The number of active SSE channels currently connected to the server.
     var sseChannelCount: Int {
@@ -276,7 +273,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     /// Start the keep-alive timer that sends messages every 30 seconds.
     private func startKeepAliveTimer() {
         keepAliveTimer = DispatchSource.makeTimerSource(queue: DispatchQueue.global())
-        keepAliveTimer?.schedule(deadline: .now(), repeating: .seconds(30))
+        keepAliveTimer?.schedule(deadline: .now(), repeating: .seconds(10))
         keepAliveTimer?.setEventHandler { [weak self] in
             self?.sendKeepAlive()
         }
@@ -300,15 +297,14 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
                 case .none:
                     return
                 case .sse:
-                    await self.sessionManager.broadcastSSE(SSEMessage(comment: "keep-alive"))
+                    await self.sessionManager.forEachSession { session in
+                        await session.sendSSE(SSEMessage(comment: "keep-alive"))
+                    }
                 case .ping:
-                    let ping = JSONRPCMessage.request(id: self.sequenceNumber, method: "ping")
-                    let encoder = JSONEncoder()
-                    let data = try! encoder.encode(ping)
-                    let string = String(data: data, encoding: .utf8)!
-                    let message = SSEMessage(data: string)
-                    await self.sessionManager.broadcastSSE(message)
-                    self.sequenceNumber += 1
+                    try await self.sessionManager.forEachSession { session in
+                        let ping = JSONRPCMessage.request(id: .string(UUID().uuidString), method: "ping")
+                        try await session.send(ping)
+                    }
             }
         }
     }
@@ -329,12 +325,6 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     }
 
     // MARK: - Handling SSE Connections
-    /// Broadcast a named event to all connected SSE clients.
-    func broadcastSSE(_ message: SSEMessage) {
-        Task {
-            await sessionManager.broadcastSSE(message)
-        }
-    }
 
     /// Register a new SSE channel.
     func registerSSEChannel(_ channel: Channel, id: UUID) {
@@ -360,7 +350,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     func sendSSE(_ message: SSEMessage, to sessionID: UUID) {
         Task {
             let session = await sessionManager.session(id: sessionID)
-            session.sendSSE(message)
+            await session.sendSSE(message)
         }
     }
 
@@ -381,6 +371,6 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
 
         let string = String(data: data, encoding: .utf8) ?? ""
         let message = SSEMessage(data: string)
-        session.sendSSE(message)
+        await session.sendSSE(message)
     }
 }
