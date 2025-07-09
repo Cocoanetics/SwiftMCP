@@ -46,6 +46,9 @@ public protocol MCPServer {
      - Returns: A response message if one should be sent, nil otherwise
      */
     func handleMessage(_ message: JSONRPCMessage) async -> JSONRPCMessage?
+
+    /// Called when the roots list has changed. Default implementation does nothing.
+    func handleRootsListChanged() async
 }
 
 // MARK: - Default Implementations
@@ -102,7 +105,7 @@ public extension MCPServer {
         // Prepare the response based on the method
         switch requestData.method {
             case "initialize":
-                return createInitializeResponse(id: requestData.id)
+                return await handleInitializeRequest(requestData)
 
             case "ping":
                 return createPingResponse(id: requestData.id)
@@ -156,11 +159,19 @@ public extension MCPServer {
                 // Client has cancelled a request
                 return nil
 
+            case "notifications/roots/list_changed":
+                // Client's root list has changed
+                await self.handleRootsListChanged()
+                return nil
+
             default:
                 // Unknown notification - log it but don't respond
                 return nil
         }
     }
+    
+    /// Handles the roots list changed notification by retrieving the updated roots list.
+    func handleRootsListChanged() async {}
 
 /**
      Handles JSON-RPC responses from other parties.
@@ -190,6 +201,37 @@ public extension MCPServer {
             await session.handleResponse(response)
         }
         return nil
+    }
+
+/**
+     Handles an initialization request from the client.
+     
+     This processes the client capabilities and stores them in the current session,
+     then creates and returns an initialization response.
+     
+     - Parameter request: The initialization request data
+     - Returns: A JSON-RPC message containing the initialization response
+     */
+    private func handleInitializeRequest(_ request: JSONRPCMessage.JSONRPCRequestData) async -> JSONRPCMessage? {
+        // Extract and store client capabilities if provided
+        if let params = request.params,
+           let capabilitiesDict = params["capabilities"]?.value as? [String: Any] {
+            
+            do {
+                let capabilitiesData = try JSONSerialization.data(withJSONObject: capabilitiesDict)
+                let clientCapabilities = try JSONDecoder().decode(ClientCapabilities.self, from: capabilitiesData)
+                
+                // Store client capabilities in current session
+                if let session = Session.current {
+                    await session.setClientCapabilities(clientCapabilities)
+                }
+            } catch {
+                // If parsing fails, continue without client capabilities
+                // This is non-fatal as not all clients may send capabilities
+            }
+        }
+        
+        return createInitializeResponse(id: request.id)
     }
 
 /**

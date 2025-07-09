@@ -273,7 +273,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     /// Start the keep-alive timer that sends messages every 30 seconds.
     private func startKeepAliveTimer() {
         keepAliveTimer = DispatchSource.makeTimerSource(queue: DispatchQueue.global())
-        keepAliveTimer?.schedule(deadline: .now(), repeating: .seconds(10))
+        keepAliveTimer?.schedule(deadline: .now(), repeating: .seconds(30))
         keepAliveTimer?.setEventHandler { [weak self] in
             self?.sendKeepAlive()
         }
