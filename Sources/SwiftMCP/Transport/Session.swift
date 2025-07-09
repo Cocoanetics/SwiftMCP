@@ -256,7 +256,7 @@ extension Session {
     public func listRoots() async throws -> [Root] {
         // Check if client supports roots
         guard clientCapabilities?.roots != nil else {
-            return []
+            throw MCPServerError.clientHasNoRootsSupport
         }
         
         let response = try await request(method: "roots/list", params: [:])

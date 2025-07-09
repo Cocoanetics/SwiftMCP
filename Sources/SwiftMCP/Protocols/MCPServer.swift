@@ -137,6 +137,8 @@ public extension MCPServer {
             case "logging/setLevel":
                 return await handleLoggingSetLevel(requestData)
 
+
+
             default:
                 // Respond with JSON-RPC error for method not found
                 return JSONRPCMessage.errorResponse(id: requestData.id, error: .init(code: -32601, message: "Method not found"))
@@ -264,6 +266,8 @@ public extension MCPServer {
             capabilities.logging = .init(enabled: true)
         }
 
+
+
         // Advertise completion support
         capabilities.completions = AnyCodable([:])
 
@@ -273,7 +277,7 @@ public extension MCPServer {
         )
 
         let result = InitializeResult(
-            protocolVersion: "2024-11-05",
+            protocolVersion: "2025-06-18",
             capabilities: capabilities,
             serverInfo: serverInfo
         )
