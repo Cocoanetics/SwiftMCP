@@ -46,20 +46,16 @@ When you create a server using the `@MCPServer` macro, it automatically extracts
  This server exposes mathematical functions like addition, subtraction,
  multiplication and division through a JSON-RPC interface.
  */
-@MCPServer
+@MCPServer(name: "Calculator", version: "2.0.0")
 class Calculator {
-    /// The name of the server, defaults to class name if not specified
-    var serverName: String { "Calculator" }
-    
-    /// The version of the server, defaults to "1.0.0" if not specified
-    var serverVersion: String { "2.0.0" }
+    // Server implementation
 }
 ```
 
 The macro uses:
 - The class's documentation comment as the server description
-- The `serverName` property to identify the server (optional)
-- The `serverVersion` property for versioning (optional)
+- The `name` parameter to identify the server (optional, defaults to class name)
+- The `version` parameter for versioning (optional, defaults to "1.0.0")
 
 ## Tool Documentation
 

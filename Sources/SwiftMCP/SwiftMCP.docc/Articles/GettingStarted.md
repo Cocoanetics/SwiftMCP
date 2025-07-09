@@ -23,7 +23,7 @@ dependencies: [
 ```swift
 import SwiftMCP
 
-@MCPServer(version: "1.0.0")
+@MCPServer(name: "Calculator", version: "1.0.0")
 struct Calculator {
     @MCPTool(description: "Adds two numbers together")
     func add(a: Double, b: Double) -> Double {
@@ -38,9 +38,9 @@ struct Calculator {
 import SwiftMCP
 
 let calculator = Calculator()
-let transport = StdioTransport()
+let transport = StdioTransport(server: calculator)
 
-try await transport.start(server: calculator)
+try await transport.run()
 ```
 
 ## Next Steps

@@ -36,12 +36,7 @@ public struct ClientCapabilities: Codable, Sendable {
 
     /// Capabilities related to sampling.
     public struct SamplingCapabilities: Codable, Sendable {
-        /// Whether this client supports sampling functionality.
-        public var enabled: Bool?
-
-        public init(enabled: Bool? = nil) {
-            self.enabled = enabled
-        }
+        public init() {}
     }
 
     public init(experimental: [String: AnyCodable]? = nil, roots: RootsCapabilities? = nil, sampling: SamplingCapabilities? = nil) {

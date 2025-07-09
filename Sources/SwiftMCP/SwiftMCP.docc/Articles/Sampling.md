@@ -1,31 +1,29 @@
 # Sampling
 
-Request small samples of client data without transferring entire files.
+Request LLM-generated responses from the client during tool execution.
 
 ## Overview
 
-SwiftMCP clients can advertise sampling functionality during initialization. When `ClientCapabilities.sampling` is present the server may ask for short snippets of a file instead of the whole resource. The demo server shows how this can be used for quick previews before loading the full content. The capability is available at runtime as `Session.current.clientCapabilities.sampling`.
+Sampling is a client capability that allows servers to request text generation from the client's LLM during tool execution. This enables servers to incorporate AI-generated content in their responses.
 
-The capability is defined alongside other client features:
+## Basic Usage
 
 ```swift
-public struct ClientCapabilities: Codable, Sendable {
-    /// Present if the client supports sampling functionality.
-    public var sampling: SamplingCapabilities?
-    
-    public struct SamplingCapabilities: Codable, Sendable {
-        /// Whether this client supports sampling functionality.
-        public var enabled: Bool?
+@MCPTool
+func generateSummary(data: String) async throws -> String {
+    // Check if client supports sampling
+    guard Session.current?.clientCapabilities?.sampling != nil else {
+        return "Cannot generate summary: client does not support sampling"
     }
+    
+    let summary = try await RequestContext.current?.sample(
+        prompt: "Summarize this data briefly: \(data)"
+    ) ?? "No response"
+    
+    return "Summary: \(summary)"
 }
 ```
 
-## Requesting Samples
+## See Also
 
-A server can call into `Session.current` to request a sample of a given resource. The client responds with the requested number of bytes which can then be inspected or processed.
-
-```swift
-let preview = try await Session.current?.sample(uri: fileURL, length: 512)
-```
-
-Sampling keeps network usage low and allows tools to operate on very large files efficiently.
+For comprehensive information about sampling and other client capabilities, see <doc:ClientCapabilities>.
