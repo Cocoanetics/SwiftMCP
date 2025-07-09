@@ -122,13 +122,23 @@ public actor Session {
         self.idToken = token
     }
     
+    /// Update the client capabilities stored for this session.
+    public func setClientCapabilities(_ capabilities: ClientCapabilities?) {
+        self.clientCapabilities = capabilities
+    }
+    
+    /// Get the client capabilities stored for this session.
+    public func getClientCapabilities() -> ClientCapabilities? {
+        return self.clientCapabilities
+    }
+    
     /// Sends a JSON-RPC message to the client and waits for the response.
     /// - Parameter message: The JSON-RPC message to send
     /// - Returns: The response message from the client
     /// - Throws: An error if the message fails to send or if no response is received
     @discardableResult public func send(_ message: JSONRPCMessage) async throws -> JSONRPCMessage {
         guard let messageId = message.id else {
-            throw SessionError.messageMustHaveID
+            preconditionFailure("Message requires an id")
         }
         
         // Extract the string ID for tracking
@@ -178,12 +188,6 @@ public actor Session {
         }
     }
     
-    /// Gets the next request ID for outgoing requests.
-    /// - Returns: The next request ID as a string UUID
-    internal func nextRequestId() -> String {
-        return UUID().uuidString
-    }
-    
     /// Sends a JSON-RPC request with an auto-generated ID and waits for the response.
     /// - Parameters:
     ///   - method: The method name to call
@@ -191,8 +195,7 @@ public actor Session {
     /// - Returns: The response message from the client
     /// - Throws: An error if the request fails or if no response is received
     public func request(method: String, params: [String: AnyCodable]? = nil) async throws -> JSONRPCMessage {
-        let requestId = nextRequestId()
-        let message = JSONRPCMessage.request(id: .string(requestId), method: method, params: params)
+        let message = JSONRPCMessage.request(id: .string(UUID().uuidString), method: method, params: params)
         return try await send(message)
     }
     
@@ -203,7 +206,7 @@ public actor Session {
         responseTasks.removeAll()
         
         for (_, continuation) in tasks {
-            continuation.resume(throwing: SessionError.sessionRemoved)
+            continuation.resume(throwing: CancellationError())
         }
     }
 }
@@ -229,11 +232,7 @@ extension Session {
 
         let notification = JSONRPCMessage.notification(method: "notifications/progress",
                                                        params: params)
-        do {
-            try await transport?.send(notification)
-        } catch {
-            // Intentionally ignore send errors in tests
-        }
+        try? await transport?.send(notification)
     }
 
     /// Send a log message notification to the client associated with this session, filtered by minimumLogLevel.
@@ -248,73 +247,34 @@ extension Session {
 
         let notification = JSONRPCMessage.notification(method: "notifications/message",
                                                        params: params)
-        do {
-            try await transport?.send(notification)
-        } catch {
-            // Intentionally ignore send errors in tests
-        }
+        try? await transport?.send(notification)
     }
 
     /// Send a roots/list request to the client and return the roots.
     /// - Returns: The list of roots available to the client
-    /// - Throws: An error if the client doesn't support roots or the request fails
-    public func listRoots() async throws -> RootsList {
+    /// - Throws: An error if the request fails
+    public func listRoots() async throws -> [Root] {
         // Check if client supports roots
         guard clientCapabilities?.roots != nil else {
-            throw RootsError.clientDoesNotSupportRoots
+            return []
         }
-
-        let request = JSONRPCMessage.request(id: .string(UUID().uuidString), method: "roots/list")
         
-        do {
-            try await transport?.send(request)
-            // Note: In a real implementation, we would need to wait for the response
-            // For now, we'll return an empty list as this is a server-side implementation
-            // and the actual response handling would need to be implemented in the transport layer
-            return RootsList(roots: [])
-        } catch {
-            throw RootsError.requestFailed(error)
+        let response = try await request(method: "roots/list", params: [:])
+        
+        // Parse the response to extract the roots list
+        guard case .response(let responseData) = response else {
+            preconditionFailure("Expected response but got different message type")
         }
-    }
-
-    /// Send a notification that the roots list has changed.
-    /// This should be called by clients when their available roots change.
-    public func sendRootsListChangedNotification() async {
-        let notification = JSONRPCMessage.notification(method: "notifications/roots/list_changed")
-        do {
-            try await transport?.send(notification)
-        } catch {
-            // Intentionally ignore send errors in tests
+        
+        guard let result = responseData.result,
+              let rootsAnyCodable = result["roots"],
+              let rootsArray = rootsAnyCodable.value as? [[String: Any]] else {
+            preconditionFailure("Malformed roots response")
         }
-    }
-}
-
-/// Errors related to roots functionality.
-public enum RootsError: Error, LocalizedError {
-    case clientDoesNotSupportRoots
-    case requestFailed(Error)
-    
-    public var errorDescription: String? {
-        switch self {
-        case .clientDoesNotSupportRoots:
-            return "Client does not support roots capability"
-        case .requestFailed(let error):
-            return "Roots request failed: \(error.localizedDescription)"
-        }
-    }
-}
-
-/// Errors that can occur during session operations
-public enum SessionError: Error, LocalizedError {
-    case messageMustHaveID
-    case sessionRemoved
-    
-    public var errorDescription: String? {
-        switch self {
-        case .messageMustHaveID:
-            return "JSON-RPC message must have an ID for request/response tracking"
-        case .sessionRemoved:
-            return "Session was removed while waiting for response"
-        }
+        
+        let data = try JSONSerialization.data(withJSONObject: rootsArray)
+        let roots = try JSONDecoder().decode([Root].self, from: data)
+        
+        return roots
     }
 }

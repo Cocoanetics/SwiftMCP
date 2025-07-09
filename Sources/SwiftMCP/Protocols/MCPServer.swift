@@ -46,6 +46,9 @@ public protocol MCPServer {
      - Returns: A response message if one should be sent, nil otherwise
      */
     func handleMessage(_ message: JSONRPCMessage) async -> JSONRPCMessage?
+
+    /// Called when the roots list has changed. Default implementation does nothing.
+    func handleRootsListChanged() async
 }
 
 // MARK: - Default Implementations
@@ -158,7 +161,7 @@ public extension MCPServer {
 
             case "notifications/roots/list_changed":
                 // Client's root list has changed
-                // This notification doesn't require a response, just log it
+                await self.handleRootsListChanged()
                 return nil
 
             default:
@@ -166,6 +169,9 @@ public extension MCPServer {
                 return nil
         }
     }
+    
+    /// Handles the roots list changed notification by retrieving the updated roots list.
+    func handleRootsListChanged() async {}
 
 /**
      Handles JSON-RPC responses from other parties.
@@ -216,7 +222,9 @@ public extension MCPServer {
                 let clientCapabilities = try JSONDecoder().decode(ClientCapabilities.self, from: capabilitiesData)
                 
                 // Store client capabilities in current session
-                Session.current?.clientCapabilities = clientCapabilities
+                if let session = Session.current {
+                    await session.setClientCapabilities(clientCapabilities)
+                }
             } catch {
                 // If parsing fails, continue without client capabilities
                 // This is non-fatal as not all clients may send capabilities

@@ -273,5 +273,40 @@ actor DemoServer {
         
         return text
     }
+
+    /**
+     Handles the roots list changed notification from the client.
+     
+     This implementation retrieves the updated list of roots from the client session
+     whenever a 'roots/list_changed' notification is received. It then logs the new
+     list of roots (including their URIs and names) for debugging and verification.
+     If an error occurs while retrieving the roots, it logs a warning with the error message.
+     */
+    func handleRootsListChanged() async {
+        guard let session = Session.current else { return }
+        do {
+            let updatedRoots = try await session.listRoots()
+            await session.sendLogNotification(LogMessage(
+                level: .info,
+                data: [
+                    "message": "Roots list updated",
+                    "roots": updatedRoots.map { root in
+                        [
+                            "uri": root.uri,
+                            "name": root.name ?? "unnamed"
+                        ]
+                    }
+                ]
+            ))
+        } catch {
+            await session.sendLogNotification(LogMessage(
+                level: .warning,
+                data: [
+                    "message": "Failed to retrieve updated roots list",
+                    "error": error.localizedDescription
+                ]
+            ))
+        }
+    }
 }
 

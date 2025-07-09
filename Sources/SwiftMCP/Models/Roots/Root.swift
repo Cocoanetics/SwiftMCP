@@ -28,15 +28,3 @@ public struct Root: Codable, Sendable, Hashable {
         self.name = name
     }
 }
-
-/// Response structure for roots/list requests.
-public struct RootsList: Codable, Sendable {
-    /// Array of available roots.
-    public let roots: [Root]
-    
-    /// Creates a new roots list response.
-    /// - Parameter roots: The array of available roots.
-    public init(roots: [Root]) {
-        self.roots = roots
-    }
-} 

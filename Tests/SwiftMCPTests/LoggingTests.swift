@@ -16,9 +16,7 @@ class TestLoggingServer: MCPLoggingProviding {
         guard message.level.isAtLeast(minimumLogLevel) else {
             return
         }
-        
-        // For testing, we'll just print the message
-        print("LOG [\(message.level.rawValue.uppercased())] \(message.logger ?? "default"): \(message.data)")
+        // For testing, do nothing (was: print log message)
     }
     
     @MCPTool(description: "Test logging functionality with different log levels")
