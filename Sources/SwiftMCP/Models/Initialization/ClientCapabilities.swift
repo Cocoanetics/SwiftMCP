@@ -16,7 +16,7 @@ import Foundation
 /// about what functionalities are available on the client.
 public struct ClientCapabilities: Codable, Sendable {
     /// Experimental, non-standard capabilities that the client supports.
-    public var experimental: [String: AnyCodable] = [:]
+    public var experimental: [String: AnyCodable]?
 
     /// Present if the client supports roots functionality.
     public var roots: RootsCapabilities?
@@ -44,7 +44,7 @@ public struct ClientCapabilities: Codable, Sendable {
         }
     }
 
-    public init(experimental: [String: AnyCodable] = [:], roots: RootsCapabilities? = nil, sampling: SamplingCapabilities? = nil) {
+    public init(experimental: [String: AnyCodable]? = nil, roots: RootsCapabilities? = nil, sampling: SamplingCapabilities? = nil) {
         self.experimental = experimental
         self.roots = roots
         self.sampling = sampling
