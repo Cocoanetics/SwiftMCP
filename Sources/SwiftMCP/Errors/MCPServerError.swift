@@ -17,6 +17,9 @@ public enum MCPServerError: LocalizedError {
     /// Client returned an error response with specific code and message.
     case clientError(code: Int, message: String)
     
+    /// Received an unexpected message type from the client.
+    case unexpectedMessageType(method: String)
+    
     public var errorDescription: String? {
         switch self {
         case .noActiveSession:
@@ -29,6 +32,8 @@ public enum MCPServerError: LocalizedError {
             return "Client does not support sampling functionality"
         case .clientError(let code, let message):
             return "Client error \(code): \(message)"
+        case .unexpectedMessageType(let method):
+            return "Unexpected message type received for method: \(method)"
         }
     }
 } 

@@ -117,7 +117,7 @@ public final class RequestContext: @unchecked Sendable {
         // Parse the response
         guard case .response(let responseData) = response,
               let result = responseData.result else {
-            throw MCPToolError.unknownTool(name: "sampling/createMessage")
+            throw MCPServerError.unexpectedMessageType(method: "sampling/createMessage")
         }
         
         // Convert AnyCodable dictionary to [String: Any] for decoding

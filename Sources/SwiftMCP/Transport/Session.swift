@@ -263,7 +263,7 @@ extension Session {
         
         // Parse the response to extract the roots list
         guard case .response(let responseData) = response else {
-            preconditionFailure("Expected response but got different message type")
+            throw MCPServerError.unexpectedMessageType(method: "roots/list")
         }
         
         guard let result = responseData.result,
