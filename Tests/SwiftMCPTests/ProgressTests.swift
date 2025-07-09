@@ -5,7 +5,7 @@ import Logging
 import AnyCodable
 
 /// Simple transport that records JSON-RPC messages sent through it.
-final class RecordingTransport: Transport {
+final class RecordingTransport: Transport, @unchecked Sendable {
     let server: MCPServer
     var sentMessages: [JSONRPCMessage] = []
     var logger = Logger(label: "RecordingTransport")
@@ -48,7 +48,7 @@ func testProgressNotification() async throws {
     let server = Calculator()
     let transport = RecordingTransport(server: server)
     let session = Session(id: UUID())
-    session.transport = transport
+    await session.setTransport(transport)
 
     let message = JSONRPCMessage.request(
         id: 2,

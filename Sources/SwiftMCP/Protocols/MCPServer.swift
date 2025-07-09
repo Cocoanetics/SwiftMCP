@@ -171,7 +171,9 @@ public extension MCPServer {
     private func handleResponse(_ responseData: JSONRPCMessage.JSONRPCResponseData) async -> JSONRPCMessage? {
         // Route the response to the current session for request/response matching
         let response = JSONRPCMessage.response(responseData)
-        Session.current?.handleResponse(response)
+        if let session = Session.current {
+            await session.handleResponse(response)
+        }
         return nil
     }
 
@@ -184,7 +186,9 @@ public extension MCPServer {
     private func handleErrorResponse(_ errorResponseData: JSONRPCMessage.JSONRPCErrorResponseData) async -> JSONRPCMessage? {
         // Route the error response to the current session for request/response matching
         let response = JSONRPCMessage.errorResponse(errorResponseData)
-        Session.current?.handleResponse(response)
+        if let session = Session.current {
+            await session.handleResponse(response)
+        }
         return nil
     }
 
@@ -598,7 +602,7 @@ public extension MCPServer {
         }
 
         // Set the minimum log level for this session
-        session.minimumLogLevel = level
+        await session.setMinimumLogLevel(level)
 
         // Return empty result for success
         return JSONRPCMessage.response(id: request.id, result: [:])

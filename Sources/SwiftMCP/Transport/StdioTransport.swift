@@ -58,7 +58,7 @@ public final class StdioTransport: Transport, @unchecked Sendable {
         // Capture immutable properties in a @Sendable closure.
         Task { @Sendable in
             let session = Session(id: UUID())
-            session.transport = self
+            await session.setTransport(self)
             do {
                 try await session.work { _ in
                     while await state.isCurrentlyRunning() {
@@ -92,7 +92,7 @@ public final class StdioTransport: Transport, @unchecked Sendable {
         await state.start()
 
         let session = Session(id: UUID())
-        session.transport = self
+        await session.setTransport(self)
         try await session.work { _ in
             while await state.isCurrentlyRunning() {
                 if let input = readLine(),
@@ -147,7 +147,14 @@ public final class StdioTransport: Transport, @unchecked Sendable {
     public func send(_ data: Data) async throws
     {
         precondition(Session.current != nil)
-        precondition(Session.current.transport === self)
+        let currentSession = Session.current!
+        let sameTransport: Bool
+        if let t = await currentSession.transport {
+            sameTransport = t === self
+        } else {
+            sameTransport = false
+        }
+        precondition(sameTransport)
 
         let string = String(data: data, encoding: .utf8)!
         logger.trace("STDOUT:\n\n\(string)")

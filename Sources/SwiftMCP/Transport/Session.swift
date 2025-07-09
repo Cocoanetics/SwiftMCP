@@ -6,7 +6,7 @@ import NIO
 ///
 /// A session tracks the client identifier and the transport that should be used
 /// for sending responses back to this client.
-public final class Session: @unchecked Sendable {
+public actor Session {
     /// Unique identifier of the session/client.
     public let id: UUID
 
@@ -17,11 +17,8 @@ public final class Session: @unchecked Sendable {
     public var channel: Channel?
 
     // MARK: - Request/Response Tracking
-    /// Request ID sequence counter for outgoing requests
-    private var requestIdSequence: Int = 0
-    
     /// Continuations for sent requests, to match up responses
-    private var responseTasks: [Int: CheckedContinuation<JSONRPCMessage, Error>] = [:]
+    private var responseTasks: [String: CheckedContinuation<JSONRPCMessage, Error>] = [:]
 
     // MARK: - OAuth token (light-weight session storage)
     /// Access-token issued for this session (if any).
@@ -65,7 +62,7 @@ public final class Session: @unchecked Sendable {
     }
 
     /// Runs `operation` with this session bound to `Session.current`.
-    public func work<T>(_ operation: @Sendable (Session) async throws -> T) async rethrows -> T {
+    public func work<T: Sendable>(_ operation: @Sendable (Session) async throws -> T) async rethrows -> T {
         try await Self.$taskSession.withValue(self) {
             try await operation(self)
         }
@@ -82,6 +79,45 @@ public final class Session: @unchecked Sendable {
         guard let channel, channel.isActive else { return }
         channel.sendSSE(message)
     }
+
+    // MARK: - Convenience Mutators
+
+    /// Update the access token stored for this session.
+    /// - Parameter token: The new access token value.
+    public func setAccessToken(_ token: String?) {
+        self.accessToken = token
+    }
+
+    /// Update the expiry date for the stored access token.
+    /// - Parameter date: The new expiry date.
+    public func setAccessTokenExpiry(_ date: Date?) {
+        self.accessTokenExpiry = date
+    }
+
+    /// Update the associated transport (weak reference) for this session.
+    public func setTransport(_ transport: (any Transport)?) {
+        self.transport = transport
+    }
+
+    /// Update the channel associated with this session.
+    public func setChannel(_ channel: Channel?) {
+        self.channel = channel
+    }
+
+    /// Update the userInfo stored for this session.
+    public func setUserInfo(_ info: UserInfo?) {
+        self.userInfo = info
+    }
+
+    /// Update the minimum log level for this session.
+    public func setMinimumLogLevel(_ level: LogLevel) {
+        self.minimumLogLevel = level
+    }
+
+    /// Update the ID token stored for this session.
+    public func setIDToken(_ token: String?) {
+        self.idToken = token
+    }
     
     /// Sends a JSON-RPC message to the client and waits for the response.
     /// - Parameter message: The JSON-RPC message to send
@@ -92,14 +128,13 @@ public final class Session: @unchecked Sendable {
             throw SessionError.messageMustHaveID
         }
         
-        // Extract the integer ID for tracking
-        let id: Int
+        // Extract the string ID for tracking
+        let id: String
         switch messageId {
         case .int(let intId):
-            id = intId
+            id = String(intId)
         case .string(let stringId):
-            // For string IDs, we'll use a hash value for tracking
-            id = stringId.hashValue
+            id = stringId
         }
         
         return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<JSONRPCMessage, Error>) in
@@ -126,12 +161,12 @@ public final class Session: @unchecked Sendable {
     internal func handleResponse(_ response: JSONRPCMessage) {
         guard let messageId = response.id else { return }
         
-        let id: Int
+        let id: String
         switch messageId {
         case .int(let intId):
-            id = intId
+            id = String(intId)
         case .string(let stringId):
-            id = stringId.hashValue
+            id = stringId
         }
         
         if let continuation = responseTasks[id] {
@@ -141,10 +176,9 @@ public final class Session: @unchecked Sendable {
     }
     
     /// Gets the next request ID for outgoing requests.
-    /// - Returns: The next request ID as an integer
-    internal func nextRequestId() -> Int {
-        requestIdSequence += 1
-        return requestIdSequence
+    /// - Returns: The next request ID as a string UUID
+    internal func nextRequestId() -> String {
+        return UUID().uuidString
     }
     
     /// Sends a JSON-RPC request with an auto-generated ID and waits for the response.
@@ -155,7 +189,7 @@ public final class Session: @unchecked Sendable {
     /// - Throws: An error if the request fails or if no response is received
     public func request(method: String, params: [String: AnyCodable]? = nil) async throws -> JSONRPCMessage {
         let requestId = nextRequestId()
-        let message = JSONRPCMessage.request(id: requestId, method: method, params: params)
+        let message = JSONRPCMessage.request(id: .string(requestId), method: method, params: params)
         return try await send(message)
     }
     
