@@ -4,14 +4,28 @@ A Swift implementation of the MCP (Model Context Protocol) for JSON-RPC over var
 
 ## Features
 
-- Multiple transport options:
+- Multiple transport options
   - Standard I/O (stdio) for command-line usage
   - HTTP+SSE (Server-Sent Events) for web applications
-- JSON-RPC 2.0 compliant
-- Asynchronous response handling via SSE
-- Built-in authorization support
-- Optional OAuth 2.0 validation with well-known endpoints
+- JSON-RPC 2.0 compliant with OpenAPI generation
+- Built-in authorization and optional OAuth validation
+- Transparent OAuth proxy mode for MCP and OpenAPI
 - Cross-platform compatibility
+
+### Server Features
+
+- **Tools** – expose functions with `@MCPTool`
+- **Resources** – publish data with `@MCPResource`
+- **Prompts** – build prompts using `@MCPPrompt`
+- **Utilities**
+  - Progress notifications via `RequestContext.current`
+  - Structured logging streamed through `Session.current`
+  - Completion suggestions for parameters (defaults for `Bool` and `CaseIterable`)
+
+### Client Features
+
+- **Roots** – dynamic filesystem roots announced by the client
+- **Sampling** – request small previews of client files
 
 ## Installation
 
@@ -72,6 +86,14 @@ Validation can use an introspection endpoint or by checking JWT claims against
 the provider's JWKS when introspection is not available. The transport also
 serves metadata at `/.well-known/oauth-authorization-server` and
 `/.well-known/oauth-protected-resource` for discovery by clients.
+
+## Progress, Logging, Roots and Sampling
+
+SwiftMCP can send progress updates while a tool is running, stream structured
+log messages to connected clients, handle dynamic filesystem roots announced
+by the client and request small data samples for preview. See the demo server for
+simple implementations of these features. The <doc:ServerCapabilities> and <doc:Sampling>
+articles describe the APIs in detail.
 
 ## Custom Server Implementation
 
