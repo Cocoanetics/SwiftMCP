@@ -30,7 +30,7 @@ struct MCPServerParametersTests {
             id: 1,
             method: "initialize",
             params: [
-                "protocolVersion": AnyCodable("2024-11-05"),
+                "protocolVersion": AnyCodable("2025-06-18"),
                 "capabilities": AnyCodable([
                     "experimental": [:],
                     "resources": ["listChanged": false],
@@ -66,7 +66,7 @@ struct MCPServerParametersTests {
             id: 1,
             method: "initialize",
             params: [
-                "protocolVersion": AnyCodable("2024-11-05"),
+                "protocolVersion": AnyCodable("2025-06-18"),
                 "capabilities": AnyCodable([
                     "experimental": [:],
                     "resources": ["listChanged": false],
