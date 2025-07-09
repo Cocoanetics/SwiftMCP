@@ -163,4 +163,59 @@ public final class RequestContext: @unchecked Sendable {
         
         return text
     }
+    
+    /// Request information from the user through the client.
+    ///
+    /// This method sends an elicitation request to the client asking for structured user input.
+    /// The client is responsible for presenting the request to the user and validating their response.
+    ///
+    /// - Parameter request: The elicitation request containing message and schema
+    /// - Returns: The elicitation response with user action and optional content
+    /// - Throws: An error if the elicitation request fails
+    public func elicit(_ request: ElicitationCreateRequest) async throws -> ElicitationCreateResponse {
+        guard let session = Session.current else {
+            throw MCPServerError.noActiveSession
+        }
+        
+        // Check if client supports elicitation
+        guard await session.clientCapabilities?.elicitation != nil else {
+            throw MCPServerError.clientHasNoElicitationSupport
+        }
+        
+        // Encode the request parameters
+        let encoder = DictionaryEncoder()
+        let params = try encoder.encode(request)
+        
+        // Send the elicitation request to the client
+        let response = try await session.request(method: "elicitation/create", params: params)
+        
+        // Check for error responses from the client
+        if case .errorResponse(let errorData) = response {
+            throw MCPServerError.clientError(code: errorData.error.code, message: errorData.error.message)
+        }
+        
+        // Parse the response
+        guard case .response(let responseData) = response,
+              let result = responseData.result else {
+            throw MCPServerError.unexpectedMessageType(method: "elicitation/create")
+        }
+        
+        // Convert AnyCodable dictionary to [String: Any] for decoding
+        let resultDict = result.mapValues { $0.value }
+        
+        // Decode the response using the Dictionary extension
+        return try resultDict.decode(ElicitationCreateResponse.self)
+    }
+    
+    /// Convenience method for simple elicitation with basic schema.
+    ///
+    /// - Parameters:
+    ///   - message: The message explaining what information is being requested
+    ///   - schema: The JSON schema defining the expected response structure
+    /// - Returns: The elicitation response with user action and optional content
+    /// - Throws: An error if the elicitation request fails
+    public func elicit(message: String, schema: JSONSchema) async throws -> ElicitationCreateResponse {
+        let request = ElicitationCreateRequest(message: message, requestedSchema: schema)
+        return try await elicit(request)
+    }
 }

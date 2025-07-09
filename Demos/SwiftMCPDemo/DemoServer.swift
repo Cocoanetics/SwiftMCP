@@ -335,6 +335,108 @@ actor DemoServer {
         return try await RequestContext.current?.sample(prompt: prompt, modelPreferences: modelPreferences) ?? "No response from client"
     }
 
+    // MARK: - Elicitation
+
+    /**
+     Requests basic contact information from the user using the MCP Elicitation feature.
+     - Returns: A string describing the user's response or the action they took
+     */
+    @MCPTool(description: "Requests contact information from the user")
+    func requestContactInfo() async throws -> String {
+        await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+            "function": "requestContactInfo",
+            "message": "requestContactInfo called"
+        ]))
+        
+        // Create a schema for contact information
+        let schema = JSONSchema.object(JSONSchema.Object(
+            properties: [
+                "name": .string(description: "Your full name"),
+                "email": .string(description: "Your email address", format: "email"),
+                "age": .number(description: "Your age")
+            ],
+            required: ["name", "email"],
+            description: "Contact information"
+        ))
+        
+        let response = try await RequestContext.current?.elicit(
+            message: "Please provide your contact information",
+            schema: schema
+        )
+        
+        guard let elicitationResponse = response else {
+            return "No elicitation response received"
+        }
+        
+        switch elicitationResponse.action {
+        case .accept:
+            if let content = elicitationResponse.content {
+                let name = content["name"]?.value as? String ?? "Unknown"
+                let email = content["email"]?.value as? String ?? "Unknown"
+                let age = content["age"]?.value as? Double ?? 0
+                return "Thank you! Contact info received: \(name) (\(email)), age: \(Int(age))"
+            } else {
+                return "User accepted but no content was provided"
+            }
+        case .decline:
+            return "User declined to provide contact information"
+        case .cancel:
+            return "User cancelled the contact information request"
+        }
+    }
+    
+    /**
+     Requests project preferences from the user using predefined options.
+     - Returns: A string describing the user's project preferences or their action
+     */
+    @MCPTool(description: "Requests project preferences from the user")
+    func requestProjectPreferences() async throws -> String {
+        await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+            "function": "requestProjectPreferences",
+            "message": "requestProjectPreferences called"
+        ]))
+        
+        // Create a schema for project preferences with enum values
+        let schema = JSONSchema.object(JSONSchema.Object(
+            properties: [
+                "projectType": .enum(values: ["web", "mobile", "desktop", "api"], description: "Type of project"),
+                "framework": .string(description: "Preferred framework or technology"),
+                "priority": .enum(values: ["speed", "cost", "quality"], description: "Main priority for the project"),
+                "hasDeadline": .boolean(description: "Whether the project has a specific deadline")
+            ],
+            required: ["projectType", "priority"],
+            description: "Project preferences and requirements"
+        ))
+        
+        let response = try await RequestContext.current?.elicit(
+            message: "Please tell us about your project preferences",
+            schema: schema
+        )
+        
+        guard let elicitationResponse = response else {
+            return "No elicitation response received"
+        }
+        
+        switch elicitationResponse.action {
+        case .accept:
+            if let content = elicitationResponse.content {
+                let projectType = content["projectType"]?.value as? String ?? "unspecified"
+                let framework = content["framework"]?.value as? String ?? "not specified"
+                let priority = content["priority"]?.value as? String ?? "unspecified"
+                let hasDeadline = content["hasDeadline"]?.value as? Bool ?? false
+                
+                return "Project preferences received: \(projectType) project using \(framework), prioritizing \(priority)" + 
+                       (hasDeadline ? " with a deadline" : " without a specific deadline")
+            } else {
+                return "User accepted but no content was provided"
+            }
+        case .decline:
+            return "User declined to provide project preferences"
+        case .cancel:
+            return "User cancelled the project preferences request"
+        }
+    }
+
     // MARK: - Notifications
     
     /**

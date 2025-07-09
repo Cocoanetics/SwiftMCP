@@ -14,6 +14,9 @@ public enum MCPServerError: LocalizedError {
     /// The client does not support sampling functionality.
     case clientHasNoSamplingSupport
     
+    /// The client does not support elicitation functionality.
+    case clientHasNoElicitationSupport
+    
     /// Client returned an error response with specific code and message.
     case clientError(code: Int, message: String)
     
@@ -30,6 +33,8 @@ public enum MCPServerError: LocalizedError {
             return "Client does not support roots functionality"
         case .clientHasNoSamplingSupport:
             return "Client does not support sampling functionality"
+        case .clientHasNoElicitationSupport:
+            return "Client does not support elicitation functionality"
         case .clientError(let code, let message):
             return "Client error \(code): \(message)"
         case .unexpectedMessageType(let method):
