@@ -103,7 +103,12 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
                     return .unauthorized("Invalid token - token exchange required")
                 }
             } else {
-                // No token provided for this session - fall back to authorization handler
+                // No token provided for this session
+                // If OAuth is configured, require authentication
+                if oauthConfiguration != nil {
+                    return .unauthorized("Authentication required")
+                }
+                // Otherwise use legacy handler (for unauthenticated mode)
                 return authorizationHandler(token)
             }
         }
@@ -121,7 +126,15 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
             return isValid ? .authorized : .unauthorized("Invalid token - token exchange required")
         }
 
-        // 4. Otherwise use legacy handler
+        // 4. If OAuth is configured, require authentication
+        if oauthConfiguration != nil {
+            guard let token = token, !token.isEmpty else {
+                return .unauthorized("Authentication required")
+            }
+            return .unauthorized("Invalid token - token exchange required")
+        }
+        
+        // 5. Otherwise use legacy handler (for unauthenticated mode)
         return authorizationHandler(token)
     }
     
