@@ -140,10 +140,19 @@ actor SessionManager {
         return false
     }
 
-    /// Remove a session entirely.
+    /// Remove a session entirely, including closing its channel.
     func removeSession(id: UUID) async {
         if let session = sessions[id] {
+            // Cancel all waiting tasks (like ping continuations)
             await session.cancelAllWaitingTasks()
+            
+            // Close the channel if it exists
+            if let channel = await session.channel {
+                channel.close(promise: nil)
+            }
+            
+            // Clear the channel reference
+            await session.setChannel(nil)
         }
         sessions.removeValue(forKey: id)
     }

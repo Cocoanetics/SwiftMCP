@@ -265,6 +265,9 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             let responseHeaders = headers
             await transport.sessionManager.session(id: sessionID).work { session in
                 
+                /*
+                 
+                 // this terminates a connection when there are no client capabilities. Commented out, because we treat is as known issue for now
                 
                 if await session.clientCapabilities == nil
                 {
@@ -280,9 +283,15 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
                         logger.error("Session is not initialized \(sessionID)")
                         let response = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32603, message: "Session not initialized"))
                         await self.sendJSONResponseAsync(channel: channel, status: .notFound, json: response, sessionId: sessionID.uuidString)
+                        
+                        // Terminate the session to close the channel and disconnect the client
+                        await transport.sessionManager.removeSession(id: sessionID)
+                        logger.info("Terminated uninitialized session \(sessionID)")
+                        
                         return
                     }
                 }
+                 */
                 
                 if await session.hasActiveConnection {
 
@@ -459,6 +468,10 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             
             await transport.sessionManager.session(id: sessionID).work { session in
                 
+                /*
+                 
+                 // this terminates a connection when there are no client capabilities. Commented out, because we treat is as known issue for now
+                
                 if await session.clientCapabilities == nil
                 {
                     // find if there's an initialize in the batch
@@ -473,22 +486,28 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
                         logger.error("Session is not initialized \(sessionID)")
                         let response = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32603, message: "Session not initialized"))
                         await self.sendJSONResponseAsync(channel: channel, status: .notFound, json: response, sessionId: sessionID.uuidString)
+                        
+                        // Terminate the session to close the channel and disconnect the client
+                        await transport.sessionManager.removeSession(id: sessionID)
+                        logger.info("Terminated uninitialized session \(sessionID)")
+                        
                         return
                     }
                 }
+                 */
                 
                 // Send Accepted first
                 await self.sendResponseAsync(channel: channel, status: .accepted)
                 
                 for message in messages {
-                    // Check if it's an empty ping response - ignore it
-                    if case .response(let responseData) = message,
-                       let result = responseData.result,
-                       result.isEmpty {
-                        continue
-                    }
                     
-                    transport.handleJSONRPCRequest(message, from: sessionID)
+                    // Route responses to Session continuations
+                    switch message {
+                        case .response, .errorResponse:
+                            await session.handleResponse(message)
+                        default:
+                            transport.handleJSONRPCRequest(message, from: sessionID)
+                    }
                 }
             }
         } catch {

@@ -302,9 +302,16 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
                         await session.sendSSE(SSEMessage(comment: "keep-alive"))
                     }
                 case .ping:
-                    try await self.sessionManager.forEachSession { session in
-                        let ping = JSONRPCMessage.request(id: .string(UUID().uuidString), method: "ping")
-                        try await session.send(ping)
+                    await self.sessionManager.forEachSession { session in
+                        Task {
+                            let ping = JSONRPCMessage.request(id: .string(UUID().uuidString), method: "ping")
+                            do {
+                                try await session.send(ping)
+                            } catch {
+                                // Log error but don't fail the keep-alive cycle
+                                print("Failed to send ping to session \(session.id): \(error)")
+                            }
+                        }
                     }
             }
         }
@@ -336,11 +343,10 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         channel.closeFuture.whenComplete { [weak self] _ in
             guard let self = self else { return }
             Task {
-                let removed = await self.sessionManager.removeChannel(id: id)
-                if removed {
-                    let count = await self.sessionManager.channelCount
-                    self.logger.info("SSE channel removed (remaining: \(count))")
-                }
+                // Remove the entire session when the channel closes
+                await self.sessionManager.removeSession(id: id)
+                let count = await self.sessionManager.channelCount
+                self.logger.info("SSE channel removed (remaining: \(count))")
             }
         }
     }
