@@ -103,7 +103,8 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
                     return .unauthorized("Invalid token - token exchange required")
                 }
             } else {
-                return .unauthorized("No token provided")
+                // No token provided for this session - fall back to authorization handler
+                return authorizationHandler(token)
             }
         }
 
@@ -270,10 +271,10 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         logger.info("Server stopped")
     }
 
-    /// Start the keep-alive timer that sends messages every 30 seconds.
+    /// Start the keep-alive timer that sends messages every 60 seconds.
     private func startKeepAliveTimer() {
         keepAliveTimer = DispatchSource.makeTimerSource(queue: DispatchQueue.global())
-        keepAliveTimer?.schedule(deadline: .now(), repeating: .seconds(30))
+        keepAliveTimer?.schedule(deadline: .now(), repeating: .seconds(60))
         keepAliveTimer?.setEventHandler { [weak self] in
             self?.sendKeepAlive()
         }
@@ -301,9 +302,16 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
                         await session.sendSSE(SSEMessage(comment: "keep-alive"))
                     }
                 case .ping:
-                    try await self.sessionManager.forEachSession { session in
-                        let ping = JSONRPCMessage.request(id: .string(UUID().uuidString), method: "ping")
-                        try await session.send(ping)
+                    await self.sessionManager.forEachSession { session in
+                        Task {
+                            let ping = JSONRPCMessage.request(id: .string(UUID().uuidString), method: "ping")
+                            do {
+                                try await session.send(ping)
+                            } catch {
+                                // Log error but don't fail the keep-alive cycle
+                                print("Failed to send ping to session \(session.id): \(error)")
+                            }
+                        }
                     }
             }
         }
@@ -313,14 +321,12 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     /// Handle a JSON-RPC request and send the response through the SSE channels.
     func handleJSONRPCRequest(_ request: JSONRPCMessage, from sessionID: UUID) {
         Task {
-            try await sessionManager.session(id: sessionID).work { _ in
-                guard let response = await server.handleMessage(request) else {
-                    // No response to send (e.g., notification)
-                    return
-                }
-
-                try await send(response)
+            guard let response = await server.handleMessage(request) else {
+                // No response to send (e.g., notification)
+                return
             }
+            
+            try await send(response)
         }
     }
 
@@ -337,11 +343,10 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         channel.closeFuture.whenComplete { [weak self] _ in
             guard let self = self else { return }
             Task {
-                let removed = await self.sessionManager.removeChannel(id: id)
-                if removed {
-                    let count = await self.sessionManager.channelCount
-                    self.logger.info("SSE channel removed (remaining: \(count))")
-                }
+                // Remove the entire session when the channel closes
+                await self.sessionManager.removeSession(id: id)
+                let count = await self.sessionManager.channelCount
+                self.logger.info("SSE channel removed (remaining: \(count))")
             }
         }
     }

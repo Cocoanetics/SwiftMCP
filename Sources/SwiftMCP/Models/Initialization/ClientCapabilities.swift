@@ -23,6 +23,9 @@ public struct ClientCapabilities: Codable, Sendable {
 
     /// Present if the client supports sampling functionality.
     public var sampling: SamplingCapabilities?
+    
+    /// Present if the client supports elicitation functionality.
+    public var elicitation: ElicitationCapabilities?
 
     /// Capabilities related to roots.
     public struct RootsCapabilities: Codable, Sendable {
@@ -38,10 +41,16 @@ public struct ClientCapabilities: Codable, Sendable {
     public struct SamplingCapabilities: Codable, Sendable {
         public init() {}
     }
+    
+    /// Capabilities related to elicitation.
+    public struct ElicitationCapabilities: Codable, Sendable {
+        public init() {}
+    }
 
-    public init(experimental: [String: AnyCodable]? = nil, roots: RootsCapabilities? = nil, sampling: SamplingCapabilities? = nil) {
+    public init(experimental: [String: AnyCodable]? = nil, roots: RootsCapabilities? = nil, sampling: SamplingCapabilities? = nil, elicitation: ElicitationCapabilities? = nil) {
         self.experimental = experimental
         self.roots = roots
         self.sampling = sampling
+        self.elicitation = elicitation
     }
 } 

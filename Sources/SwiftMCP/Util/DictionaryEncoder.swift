@@ -97,9 +97,16 @@ fileprivate struct DictionaryKeyedEncodingContainer<K: CodingKey>: KeyedEncoding
         -> KeyedEncodingContainer<NestedKey> {
         encoder.codingPath.append(key)
         defer { encoder.codingPath.removeLast() }
-        let container = DictionaryKeyedEncodingContainer<NestedKey>(referencing: encoder)
-        self.container[key.stringValue] = encoder.storage.topContainer!
-        return KeyedEncodingContainer(container)
+        
+        // Create a nested container that will populate the parent
+        let nestedContainer = DictionaryKeyedEncodingContainer<NestedKey>(referencing: encoder)
+        
+        // Store the nested container's result in the parent container
+        // We need to capture the result when the nested container is finished
+        let nestedResult = nestedContainer.container
+        self.container[key.stringValue] = nestedResult
+        
+        return KeyedEncodingContainer(nestedContainer)
     }
 
     mutating func nestedUnkeyedContainer(forKey key: K) -> UnkeyedEncodingContainer {
@@ -196,6 +203,14 @@ fileprivate func _box<T: Encodable>(_ value: T, encoder: _DictionaryEncoder) thr
     } else {
         let depthEncoder = _DictionaryEncoder()
         try value.encode(to: depthEncoder)
+        // Return the *root* container rather than the last pushed one to
+        // preserve nested structure (e.g. for JSONSchema objects with
+        // nested `properties`). The root container is the first one in the
+        // storage stack.
+        if let root = depthEncoder.storage.containers.first {
+            return root
+        }
+        // Fallback to the last container (should not normally happen)
         return depthEncoder.storage.popContainer()
     }
 } 

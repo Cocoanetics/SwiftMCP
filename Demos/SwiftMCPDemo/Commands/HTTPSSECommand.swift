@@ -170,6 +170,10 @@ final class HTTPSSECommand: AsyncParsableCommand {
             }
             print("Simple token validation enabled")
         } else {
+            // Explicitly allow all requests when no authentication is configured
+            transport.authorizationHandler = { _ in
+                return .authorized
+            }
             print("No authentication configured - all requests will be accepted")
         }
 

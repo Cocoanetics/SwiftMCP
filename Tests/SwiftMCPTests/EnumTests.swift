@@ -306,7 +306,7 @@ struct EnumTests {
             
             let prioritySchema = try #require(object.properties["priority"])
             
-            guard case .enum(let enumValues, description: _) = prioritySchema else {
+            guard case .enum(let enumValues, title: _, description: _, enumNames: _) = prioritySchema else {
                 throw TestError("Expected enum schema")
             }
             

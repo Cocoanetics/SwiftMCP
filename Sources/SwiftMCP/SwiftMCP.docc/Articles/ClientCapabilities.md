@@ -10,6 +10,7 @@ Client capabilities are accessible through `Session.current?.clientCapabilities`
 
 - **Roots**: Dynamic filesystem locations announced by the client  
 - **Sampling**: LLM text generation requests the server can make to the client
+- **Elicitation**: Interactive user input requests for structured data collection
 
 In JSON, client capabilities are announced like this:
 
@@ -19,7 +20,8 @@ In JSON, client capabilities are announced like this:
     "roots": {
       "listChanged": true
     },
-    "sampling": {}
+    "sampling": {},
+    "elicitation": {}
   }
 }
 ```
@@ -49,6 +51,16 @@ func myTool() async throws -> String {
         // Client supports sampling - safe to request generation
         let response = try await RequestContext.current?.sample(prompt: "Hello")
         // Use response...
+    }
+    
+    if capabilities?.elicitation != nil {
+        // Client supports elicitation - safe to request user input
+        let schema = JSONSchema.object(JSONSchema.Object(
+            properties: ["name": .string(description: "Your name")],
+            required: ["name"]
+        ))
+        let response = try await RequestContext.current?.elicit(message: "Please enter your name", schema: schema)
+        // Handle response...
     }
     
     return "Tool completed"
@@ -151,6 +163,110 @@ func generateCreativeContent(topic: String) async throws -> String {
 }
 ```
 
+## Elicitation
+
+Elicitation allows servers to request structured information from users through the client during tool execution. This enables servers to gather necessary data dynamically while maintaining client control over user interactions.
+
+### Basic Elicitation
+
+```swift
+@MCPTool
+func collectUserInfo() async throws -> String {
+    // Check if client supports elicitation
+    guard Session.current?.clientCapabilities?.elicitation != nil else {
+        return "Cannot collect user info: client does not support elicitation"
+    }
+    
+    // Create a schema for the requested information
+    let schema = JSONSchema.object(JSONSchema.Object(
+        properties: [
+            "name": .string(description: "Your full name"),
+            "email": .string(description: "Your email address", format: "email")
+        ],
+        required: ["name"],
+        description: "Basic contact information"
+    ))
+    
+    let response = try await RequestContext.current?.elicit(
+        message: "Please provide your contact information",
+        schema: schema
+    ) ?? ElicitationCreateResponse(action: .cancel)
+    
+    switch response.action {
+    case .accept:
+        if let content = response.content {
+            let name = content["name"]?.value as? String ?? "Unknown"
+            let email = content["email"]?.value as? String ?? "Not provided"
+            return "Thank you, \(name)! Email: \(email)"
+        } else {
+            return "User accepted but no data provided"
+        }
+    case .decline:
+        return "User declined to provide information"
+    case .cancel:
+        return "User cancelled the request"
+    }
+}
+```
+
+### Advanced Elicitation with Enums
+
+```swift
+@MCPTool
+func collectProjectPreferences() async throws -> String {
+    guard Session.current?.clientCapabilities?.elicitation != nil else {
+        throw MCPServerError.clientHasNoElicitationSupport
+    }
+    
+    let schema = JSONSchema.object(JSONSchema.Object(
+        properties: [
+            "projectType": .enum(values: ["web", "mobile", "desktop"], description: "Type of project"),
+            "priority": .enum(values: ["speed", "cost", "quality"], description: "Main priority"),
+            "hasDeadline": .boolean(description: "Has specific deadline"),
+            "budget": .number(description: "Budget in USD")
+        ],
+        required: ["projectType", "priority"],
+        description: "Project requirements and preferences"
+    ))
+    
+    let response = try await RequestContext.current?.elicit(
+        message: "Please specify your project requirements",
+        schema: schema
+    )
+    
+    guard let elicitationResponse = response else {
+        return "No response received"
+    }
+    
+    switch elicitationResponse.action {
+    case .accept:
+        if let content = elicitationResponse.content {
+            let projectType = content["projectType"]?.value as? String ?? "unspecified"
+            let priority = content["priority"]?.value as? String ?? "unspecified"
+            return "Project: \(projectType), Priority: \(priority)"
+        } else {
+            return "Data accepted but content missing"
+        }
+    case .decline:
+        return "User declined to specify requirements"
+    case .cancel:
+        return "User cancelled the requirements form"
+    }
+}
+```
+
+### Schema Types
+
+Elicitation supports these JSON Schema types for flat object structures:
+
+- **String**: `JSONSchema.string(description: "Field description", format: "email", minLength: 3, maxLength: 50)`
+- **Number**: `JSONSchema.number(description: "Numeric value")`
+- **Boolean**: `JSONSchema.boolean(description: "True/false value")`
+- **Enum**: `JSONSchema.enum(values: ["option1", "option2"], description: "Selection")`
+
+Supported string formats include: `email`, `uri`, `date`, `date-time`.
+String constraints like `minLength` and `maxLength` are also supported for validation.
+
 ## Best Practices
 
 1. **Always check capabilities** before using client features
@@ -158,6 +274,9 @@ func generateCreativeContent(topic: String) async throws -> String {
 3. **Handle errors gracefully** when client requests fail
 4. **Use appropriate logging** to track capability usage
 5. **Respect client limitations** like token limits for sampling
+6. **Handle all elicitation actions** (accept, decline, cancel) appropriately
+7. **Use clear, descriptive messages** in elicitation requests
+8. **Design schemas carefully** to collect only necessary information
 
 ## Error Handling
 
@@ -168,14 +287,30 @@ func robustTool() async -> String {
         if let capabilities = await Session.current?.clientCapabilities {
             if capabilities.sampling != nil {
                 return try await RequestContext.current?.sample(prompt: "Hello") ?? "No response"
+            } else if capabilities.elicitation != nil {
+                let schema = JSONSchema.object(JSONSchema.Object(
+                    properties: ["input": .string(description: "Your input")],
+                    required: ["input"]
+                ))
+                let response = try await RequestContext.current?.elicit(message: "Please provide input", schema: schema)
+                switch response?.action {
+                case .accept:
+                    return "Input received via elicitation"
+                case .decline:
+                    return "User declined to provide input"
+                case .cancel, .none:
+                    return "Input request cancelled"
+                }
             } else {
-                return "Sampling not supported by client"
+                return "Neither sampling nor elicitation supported by client"
             }
         } else {
             return "No client capabilities available"
         }
     } catch MCPServerError.clientHasNoSamplingSupport {
         return "Client does not support sampling"
+    } catch MCPServerError.clientHasNoElicitationSupport {
+        return "Client does not support elicitation"
     } catch {
         return "Error: \(error.localizedDescription)"
     }
