@@ -264,6 +264,26 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
 
             let responseHeaders = headers
             await transport.sessionManager.session(id: sessionID).work { session in
+                
+                
+                if await session.clientCapabilities == nil
+                {
+                    // find if there's an initialize in the batch
+                    let hasInitializeRequest = messages.contains { message in
+                        if case .request(let requestData) = message {
+                            return requestData.method == "initialize"
+                        }
+                        return false
+                    }
+                    
+                    if !hasInitializeRequest {
+                        logger.error("Session is not initialized \(sessionID)")
+                        let response = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32603, message: "Session not initialized"))
+                        await self.sendJSONResponseAsync(channel: channel, status: .notFound, json: response, sessionId: sessionID.uuidString)
+                        return
+                    }
+                }
+                
                 if await session.hasActiveConnection {
 
                     // Send 202 Accepted immediately
@@ -273,10 +293,10 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
                     for message in messages {
                         // Route responses to Session continuations
                         switch message {
-                        case .response, .errorResponse:
-                            await session.handleResponse(message)
-                        default:
-                            transport.handleJSONRPCRequest(message, from: sessionID)
+                            case .response, .errorResponse:
+                                await session.handleResponse(message)
+                            default:
+                                transport.handleJSONRPCRequest(message, from: sessionID)
                         }
                     }
                 } else {
@@ -402,10 +422,10 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             await self.sendResponseAsync(channel: channel, status: .badRequest)
             return
         }
-
+        
         // Check authorization if handler is set
         var token: String?
-
+        
         // First try to get token from Authorization header
         if let authHeader = head.headers["Authorization"].first {
             let parts = authHeader.split(separator: " ")
@@ -428,27 +448,48 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             case .authorized:
                 break
         }
-
+        
         guard let body = body else {
             await self.sendResponseAsync(channel: channel, status: .badRequest)
             return
         }
-
-        // Send Accepted first
-        await self.sendResponseAsync(channel: channel, status: .accepted)
-
+        
         do {
             let messages = try JSONRPCMessage.decodeMessages(from: body)
-
-            for message in messages {
-                // Check if it's an empty ping response - ignore it
-                if case .response(let responseData) = message,
-                                   let result = responseData.result,
-                                   result.isEmpty {
-                    continue
+            
+            await transport.sessionManager.session(id: sessionID).work { session in
+                
+                if await session.clientCapabilities == nil
+                {
+                    // find if there's an initialize in the batch
+                    let hasInitializeRequest = messages.contains { message in
+                        if case .request(let requestData) = message {
+                            return requestData.method == "initialize"
+                        }
+                        return false
+                    }
+                    
+                    if !hasInitializeRequest {
+                        logger.error("Session is not initialized \(sessionID)")
+                        let response = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32603, message: "Session not initialized"))
+                        await self.sendJSONResponseAsync(channel: channel, status: .notFound, json: response, sessionId: sessionID.uuidString)
+                        return
+                    }
                 }
-
-                transport.handleJSONRPCRequest(message, from: sessionID)
+                
+                // Send Accepted first
+                await self.sendResponseAsync(channel: channel, status: .accepted)
+                
+                for message in messages {
+                    // Check if it's an empty ping response - ignore it
+                    if case .response(let responseData) = message,
+                       let result = responseData.result,
+                       result.isEmpty {
+                        continue
+                    }
+                    
+                    transport.handleJSONRPCRequest(message, from: sessionID)
+                }
             }
         } catch {
             logger.error("Failed to decode JSON-RPC message in SSE context: \(error)")

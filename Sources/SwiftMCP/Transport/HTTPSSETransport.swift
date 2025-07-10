@@ -314,14 +314,12 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     /// Handle a JSON-RPC request and send the response through the SSE channels.
     func handleJSONRPCRequest(_ request: JSONRPCMessage, from sessionID: UUID) {
         Task {
-            try await sessionManager.session(id: sessionID).work { _ in
-                guard let response = await server.handleMessage(request) else {
-                    // No response to send (e.g., notification)
-                    return
-                }
-
-                try await send(response)
+            guard let response = await server.handleMessage(request) else {
+                // No response to send (e.g., notification)
+                return
             }
+            
+            try await send(response)
         }
     }
 
