@@ -103,7 +103,8 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
                     return .unauthorized("Invalid token - token exchange required")
                 }
             } else {
-                return .unauthorized("No token provided")
+                // No token provided for this session - fall back to authorization handler
+                return authorizationHandler(token)
             }
         }
 

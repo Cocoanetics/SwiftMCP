@@ -351,12 +351,13 @@ actor DemoServer {
         // Create a schema for contact information
         let schema = JSONSchema.object(JSONSchema.Object(
             properties: [
-                "name": .string(description: "Your full name", format: nil, minLength: 2, maxLength: 50),
-                "email": .string(description: "Your email address", format: "email", minLength: nil, maxLength: nil),
-                "age": .number(description: "Your age")
+                "name": .string(title: "Full Name", description: "Your full name", format: nil, minLength: 2, maxLength: 50),
+                "email": .string(title: "Email Address", description: "Your email address", format: "email", minLength: nil, maxLength: nil),
+                "age": .number(title: "Age", description: "Your age", minimum: 13, maximum: 120)
             ],
             required: ["name", "email"],
-            description: "Contact information"
+            title: "Contact Information",
+            description: "Basic contact details"
         ))
         
         let response = try await RequestContext.current?.elicit(
@@ -448,15 +449,18 @@ actor DemoServer {
             "message": "requestUserCredentials called"
         ]))
         
-        // Create a schema with string length constraints
+        // Create a schema with string length constraints and boolean defaults
         let schema = JSONSchema.object(JSONSchema.Object(
             properties: [
-                "username": .string(description: "Username (3-20 characters)", format: nil, minLength: 3, maxLength: 20),
-                "password": .string(description: "Password (8-50 characters)", format: nil, minLength: 8, maxLength: 50),
-                "confirmPassword": .string(description: "Confirm password", format: nil, minLength: 8, maxLength: 50),
-                "email": .string(description: "Email address", format: "email", minLength: 5, maxLength: 100)
+                "username": .string(title: "Username", description: "Username (3-20 characters)", format: nil, minLength: 3, maxLength: 20),
+                "password": .string(title: "Password", description: "Password (8-50 characters)", format: nil, minLength: 8, maxLength: 50),
+                "confirmPassword": .string(title: "Confirm Password", description: "Confirm password", format: nil, minLength: 8, maxLength: 50),
+                "email": .string(title: "Email", description: "Email address", format: "email", minLength: 5, maxLength: 100),
+                "agreeToTerms": .boolean(title: "Terms & Conditions", description: "I agree to the terms and conditions", default: false),
+                "receiveNewsletter": .boolean(title: "Newsletter", description: "Receive newsletter updates", default: true)
             ],
-            required: ["username", "password", "confirmPassword", "email"],
+            required: ["username", "password", "confirmPassword", "email", "agreeToTerms"],
+            title: "Account Registration",
             description: "User credentials with validation constraints"
         ))
         
@@ -490,6 +494,77 @@ actor DemoServer {
             return "User declined to create account"
         case .cancel:
             return "User cancelled the account creation"
+        }
+    }
+    
+    /**
+     Requests user preferences with enum options and display names.
+     - Returns: A string describing the user's response or the action they took
+     */
+    @MCPTool(description: "Requests user preferences with enum options")
+    func requestUserPreferences() async throws -> String {
+        await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+            "function": "requestUserPreferences",
+            "message": "requestUserPreferences called"
+        ]))
+        
+        // Create a schema with enum values and display names
+        let schema = JSONSchema.object(JSONSchema.Object(
+            properties: [
+                "theme": .enum(
+                    values: ["light", "dark", "auto"],
+                    title: "Theme Preference",
+                    description: "Choose your preferred theme",
+                    enumNames: ["Light Mode", "Dark Mode", "Auto (System)"]
+                ),
+                "language": .enum(
+                    values: ["en", "es", "fr", "de", "ja"],
+                    title: "Language",
+                    description: "Select your preferred language",
+                    enumNames: ["English", "Español", "Français", "Deutsch", "日本語"]
+                ),
+                "notifications": .boolean(
+                    title: "Enable Notifications",
+                    description: "Receive push notifications",
+                    default: true
+                ),
+                "maxItems": .number(
+                    title: "Max Items per Page",
+                    description: "Number of items to display per page",
+                    minimum: 10,
+                    maximum: 100
+                )
+            ],
+            required: ["theme", "language"],
+            title: "User Preferences",
+            description: "Customize your application experience"
+        ))
+        
+        let response = try await RequestContext.current?.elicit(
+            message: "Please configure your preferences",
+            schema: schema
+        )
+        
+        guard let elicitationResponse = response else {
+            return "No elicitation response received"
+        }
+        
+        switch elicitationResponse.action {
+        case .accept:
+            if let content = elicitationResponse.content {
+                let theme = content["theme"]?.value as? String ?? "unknown"
+                let language = content["language"]?.value as? String ?? "unknown"
+                let notifications = content["notifications"]?.value as? Bool ?? false
+                let maxItems = content["maxItems"]?.value as? Double ?? 25.0
+                
+                return "Preferences saved! Theme: \(theme), Language: \(language), Notifications: \(notifications), Max items: \(Int(maxItems))"
+            } else {
+                return "User accepted but no content was provided"
+            }
+        case .decline:
+            return "User declined to set preferences"
+        case .cancel:
+            return "User cancelled preference configuration"
         }
     }
 

@@ -60,7 +60,7 @@ public struct SchemaPropertyInfo: Sendable {
         }
 
         // Default to string for unknown types
-        return JSONSchema.string(description: description, format: nil, minLength: nil, maxLength: nil)
+        return JSONSchema.string(title: nil, description: description, format: nil, minLength: nil, maxLength: nil)
     }
 
     public var jsonSchema: JSONSchema {

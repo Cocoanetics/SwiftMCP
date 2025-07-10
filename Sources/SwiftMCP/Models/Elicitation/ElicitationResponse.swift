@@ -3,7 +3,6 @@ import Foundation
 
 /// Represents the response to an elicitation request.
 public struct ElicitationCreateResponse: Codable, Sendable {
-    /// The action taken by the user in response to the elicitation request.
     public enum Action: String, Codable, Sendable {
         /// User explicitly approved and submitted with data
         case accept
@@ -12,7 +11,7 @@ public struct ElicitationCreateResponse: Codable, Sendable {
         /// User dismissed without making an explicit choice
         case cancel
     }
-    
+
     /// The action taken by the user.
     public let action: Action
     

@@ -19,18 +19,28 @@ extension JSONSchema: Codable {
         case properties
         /// The required properties of an object schema
         case required
+        /// A title for the schema
+        case title
         /// A description of the schema
         case description
         /// The schema for array items
         case items
         /// The possible values for an enum schema
         case enumValues = "enum"
+        /// Display names for enum values
+        case enumNames
         /// The format of the content
         case format
         /// Minimum length for string values
         case minLength
         /// Maximum length for string values
         case maxLength
+        /// Minimum value for numeric types
+        case minimum
+        /// Maximum value for numeric types
+        case maximum
+        /// Default value for boolean types
+        case `default`
         /// If additional properties are allowed (optional, needed for structured responses, not for MCP)
         case additionalProperties
     }
@@ -44,6 +54,7 @@ extension JSONSchema: Codable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let type = try container.decode(String.self, forKey: .type)
+        let title = try container.decodeIfPresent(String.self, forKey: .title)
         let description = try container.decodeIfPresent(String.self, forKey: .description)
 
         switch type {
@@ -51,23 +62,27 @@ extension JSONSchema: Codable {
 
                 if let enumValues = try container.decodeIfPresent([String].self, forKey: .enumValues)
 				{
-                    self = .enum(values: enumValues, description: description)
+                    let enumNames = try container.decodeIfPresent([String].self, forKey: .enumNames)
+                    self = .enum(values: enumValues, title: title, description: description, enumNames: enumNames)
                 }
 				else
 				{
                     let format = try container.decodeIfPresent(String.self, forKey: .format)
                     let minLength = try container.decodeIfPresent(Int.self, forKey: .minLength)
                     let maxLength = try container.decodeIfPresent(Int.self, forKey: .maxLength)
-                    self = .string(description: description, format: format, minLength: minLength, maxLength: maxLength)
+                    self = .string(title: title, description: description, format: format, minLength: minLength, maxLength: maxLength)
                 }
 
-            case "number":
-                self = .number(description: description)
+            case "number", "integer":
+                let minimum = try container.decodeIfPresent(Double.self, forKey: .minimum)
+                let maximum = try container.decodeIfPresent(Double.self, forKey: .maximum)
+                self = .number(title: title, description: description, minimum: minimum, maximum: maximum)
             case "boolean":
-                self = .boolean(description: description)
+                let defaultValue = try container.decodeIfPresent(Bool.self, forKey: .default)
+                self = .boolean(title: title, description: description, default: defaultValue)
             case "array":
                 let items = try container.decode(JSONSchema.self, forKey: .items)
-                self = .array(items: items, description: description)
+                self = .array(items: items, title: title, description: description)
             case "object":
                 var properties: [String: JSONSchema] = [:]
                 if let propertiesContainer = try? container.nestedContainer(keyedBy: AnyCodingKey.self, forKey: .properties) {
@@ -79,7 +94,7 @@ extension JSONSchema: Codable {
 
                 let additionalPropertes = try container.decodeIfPresent(Bool.self, forKey: .additionalProperties)
 
-                self = .object(JSONSchema.Object(properties: properties, required: required, description: description, additionalProperties: additionalPropertes))
+                self = .object(JSONSchema.Object(properties: properties, required: required, title: title, description: description, additionalProperties: additionalPropertes))
             default:
                 throw DecodingError.dataCorruptedError(
 					forKey: .type,
@@ -99,21 +114,28 @@ extension JSONSchema: Codable {
         var container = encoder.container(keyedBy: CodingKeys.self)
 
         switch self {
-            case .string(let description, let format, let minLength, let maxLength):
+            case .string(let title, let description, let format, let minLength, let maxLength):
                 try container.encode("string", forKey: .type)
+                try container.encodeIfPresent(title, forKey: .title)
+                try container.encodeIfPresent(description, forKey: .description)
                 try container.encodeIfPresent(format, forKey: .format)
                 try container.encodeIfPresent(minLength, forKey: .minLength)
                 try container.encodeIfPresent(maxLength, forKey: .maxLength)
-                try container.encodeIfPresent(description, forKey: .description)
-            case .number(let description):
+            case .number(let title, let description, let minimum, let maximum):
                 try container.encode("number", forKey: .type)
+                try container.encodeIfPresent(title, forKey: .title)
                 try container.encodeIfPresent(description, forKey: .description)
-            case .boolean(let description):
+                try container.encodeIfPresent(minimum, forKey: .minimum)
+                try container.encodeIfPresent(maximum, forKey: .maximum)
+            case .boolean(let title, let description, let defaultValue):
                 try container.encode("boolean", forKey: .type)
+                try container.encodeIfPresent(title, forKey: .title)
                 try container.encodeIfPresent(description, forKey: .description)
-            case .array(let items, let description):
+                try container.encodeIfPresent(defaultValue, forKey: .default)
+            case .array(let items, let title, let description):
                 try container.encode("array", forKey: .type)
                 try container.encode(items, forKey: .items)
+                try container.encodeIfPresent(title, forKey: .title)
                 try container.encodeIfPresent(description, forKey: .description)
             case .object(let object):
                 try container.encode("object", forKey: .type)
@@ -127,14 +149,17 @@ extension JSONSchema: Codable {
                     try container.encode(object.required, forKey: .required)
                 }
 
+                try container.encodeIfPresent(object.title, forKey: .title)
                 try container.encodeIfPresent(object.description, forKey: .description)
 
                 try container.encodeIfPresent(object.additionalProperties, forKey: .additionalProperties)
 
-            case .enum(let values, let description):
+            case .enum(let values, let title, let description, let enumNames):
                 try container.encode("string", forKey: .type)
+                try container.encodeIfPresent(title, forKey: .title)
                 try container.encodeIfPresent(description, forKey: .description)
                 try container.encode(values, forKey: .enumValues)
+                try container.encodeIfPresent(enumNames, forKey: .enumNames)
         }
     }
 }

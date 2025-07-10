@@ -20,6 +20,9 @@ public indirect enum JSONSchema: Sendable {
         /// Which if the properties are mandatory
         public var required: [String] = []
 
+        /// Title of the type
+        public var title: String? = nil
+
         /// Description of the type
         public var description: String? = nil
 
@@ -27,31 +30,32 @@ public indirect enum JSONSchema: Sendable {
         public var additionalProperties: Bool? = false
 
         /// public initializer
-        public init(properties: [String : JSONSchema], required: [String], description: String? = nil, additionalProperties: Bool? = nil) {
+        public init(properties: [String : JSONSchema], required: [String], title: String? = nil, description: String? = nil, additionalProperties: Bool? = nil) {
             self.properties = properties
             self.required = required
+            self.title = title
             self.description = description
             self.additionalProperties = additionalProperties
         }
     }
 
     /// A string schema
-    case string(description: String? = nil, format: String? = nil, minLength: Int? = nil, maxLength: Int? = nil)
+    case string(title: String? = nil, description: String? = nil, format: String? = nil, minLength: Int? = nil, maxLength: Int? = nil)
 
     /// A number schema
-    case number(description: String? = nil)
+    case number(title: String? = nil, description: String? = nil, minimum: Double? = nil, maximum: Double? = nil)
 
     /// A boolean schema
-    case boolean(description: String? = nil)
+    case boolean(title: String? = nil, description: String? = nil, default: Bool? = nil)
 
     /// An array schema
-    case array(items: JSONSchema, description: String? = nil)
+    case array(items: JSONSchema, title: String? = nil, description: String? = nil)
 
     /// An object schema
     case object(Object)
 
     /// An enum schema with possible values
-    case `enum`(values: [String], description: String? = nil)
+    case `enum`(values: [String], title: String? = nil, description: String? = nil, enumNames: [String]? = nil)
 }
 
 // Extension to remove required fields from a schema
@@ -66,9 +70,9 @@ extension JSONSchema {
 									  description: object.description,
 									  additionalProperties: object.additionalProperties))
 
-            case .array(let items, let description):
+            case .array(let items, let title, let description):
                 // For array schemas, recursively apply to items
-                return .array(items: items.withoutRequired, description: description)
+                return .array(items: items.withoutRequired, title: title, description: description)
 
             // For other schema types, return as is since they don't have required fields
             case .string, .number, .boolean, .enum:
@@ -88,9 +92,9 @@ extension JSONSchema {
 									  description: object.description,
 									  additionalProperties: false))
 
-            case .array(let items, let description):
+            case .array(let items, let title, let description):
                 // For array schemas, recursively apply to items
-                return .array(items: items.addingAdditionalPropertiesRestrictionToObjects, description: description)
+                return .array(items: items.addingAdditionalPropertiesRestrictionToObjects, title: title, description: description)
 
             // For other schema types, return as is since they don't have required fields
             default:

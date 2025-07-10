@@ -178,13 +178,19 @@ public final class RequestContext: @unchecked Sendable {
         }
         
         // Check if client supports elicitation
-        guard await session.clientCapabilities?.elicitation != nil else {
+        let capabilities = await session.clientCapabilities
+        print("DEBUG: Client capabilities: \(String(describing: capabilities))")
+        print("DEBUG: Elicitation support: \(String(describing: capabilities?.elicitation))")
+        guard capabilities?.elicitation != nil else {
             throw MCPServerError.clientHasNoElicitationSupport
         }
         
         // Encode the request parameters
         let encoder = DictionaryEncoder()
         let params = try encoder.encode(request)
+        
+        // Debug: Print the encoded parameters
+        print("DEBUG: Encoded elicitation params: \(params)")
         
         // Send the elicitation request to the client
         let response = try await session.request(method: "elicitation/create", params: params)

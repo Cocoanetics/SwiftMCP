@@ -13,8 +13,8 @@ struct ElicitationTests {
         func elicitationCreateRequestCodableTest() throws {
             let schema = JSONSchema.object(JSONSchema.Object(
                 properties: [
-                    "name": .string(description: "User's name"),
-                    "age": .number(description: "User's age")
+                    "name": .string(title: nil, description: "User's name", format: nil, minLength: nil, maxLength: nil),
+                    "age": .number(title: nil, description: "User's age", minimum: nil, maximum: nil)
                 ],
                 required: ["name"]
             ))
@@ -214,7 +214,7 @@ struct ElicitationTests {
         func simpleStringSchemaTest() throws {
             let schema = JSONSchema.object(JSONSchema.Object(
                 properties: [
-                    "name": .string(description: "User's name")
+                    "name": .string(title: nil, description: "User's name", format: nil, minLength: nil, maxLength: nil)
                 ],
                 required: ["name"],
                 description: "Simple name request"
@@ -239,9 +239,9 @@ struct ElicitationTests {
         func complexSchemaTest() throws {
             let schema = JSONSchema.object(JSONSchema.Object(
                 properties: [
-                    "name": .string(description: "User's name"),
-                    "age": .number(description: "User's age"),
-                    "isActive": .boolean(description: "Whether user is active"),
+                    "name": .string(title: nil, description: "User's name", format: nil, minLength: nil, maxLength: nil),
+                    "age": .number(title: nil, description: "User's age", minimum: nil, maximum: nil),
+                    "isActive": .boolean(title: nil, description: "Whether user is active", default: nil),
                     "category": .enum(values: ["premium", "standard", "basic"], description: "User category")
                 ],
                 required: ["name", "category"],
@@ -269,7 +269,7 @@ struct ElicitationTests {
         func emailFormatSchemaTest() throws {
             let schema = JSONSchema.object(JSONSchema.Object(
                 properties: [
-                    "email": .string(description: "Email address", format: "email", minLength: nil, maxLength: nil)
+                    "email": .string(title: nil, description: "Email address", format: "email", minLength: nil, maxLength: nil)
                 ],
                 required: ["email"]
             ))
@@ -282,7 +282,7 @@ struct ElicitationTests {
             let decodedSchema = try decoder.decode(JSONSchema.self, from: data)
             
             if case .object(let obj) = decodedSchema {
-                if case .string(let description, let format, let minLength, let maxLength) = obj.properties["email"] {
+                if case .string(_, let description, let format, let minLength, let maxLength) = obj.properties["email"] {
                     #expect(description == "Email address")
                     #expect(format == "email")
                     #expect(minLength == nil)
@@ -299,7 +299,7 @@ struct ElicitationTests {
         func stringSchemaWithLengthConstraintsTest() throws {
             let schema = JSONSchema.object(JSONSchema.Object(
                 properties: [
-                    "username": .string(description: "Username", format: nil, minLength: 3, maxLength: 20)
+                    "username": .string(title: nil, description: "Username", format: nil, minLength: 3, maxLength: 20)
                 ],
                 required: ["username"]
             ))
@@ -312,7 +312,7 @@ struct ElicitationTests {
             let decodedSchema = try decoder.decode(JSONSchema.self, from: data)
             
             if case .object(let obj) = decodedSchema {
-                if case .string(let description, let format, let minLength, let maxLength) = obj.properties["username"] {
+                if case .string(_, let description, let format, let minLength, let maxLength) = obj.properties["username"] {
                     #expect(description == "Username")
                     #expect(format == nil)
                     #expect(minLength == 3)
@@ -336,7 +336,7 @@ struct ElicitationTests {
             
             // Create a simple schema for testing
             let schema = JSONSchema.object(JSONSchema.Object(
-                properties: ["name": .string(description: "Name")],
+                properties: ["name": .string(title: nil, description: "Name", format: nil, minLength: nil, maxLength: nil)],
                 required: ["name"]
             ))
             

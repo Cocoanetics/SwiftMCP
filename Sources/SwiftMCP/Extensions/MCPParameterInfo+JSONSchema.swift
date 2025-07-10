@@ -46,13 +46,13 @@ extension MCPParameterInfo {
             let schema: JSONSchema
 
             if type == Int.self || type == Double.self {
-                schema = JSONSchema.number()
+                schema = JSONSchema.number(title: nil, description: nil, minimum: nil, maximum: nil)
             } else if type == Bool.self {
-                schema = JSONSchema.boolean()
+                schema = JSONSchema.boolean(title: nil, description: nil, default: nil)
             } else if let schemaType = type as? any SchemaRepresentable.Type {
                 schema = schemaType.schemaMetadata.schema
             } else {
-                schema = JSONSchema.string(description: nil, format: nil, minLength: nil, maxLength: nil)
+                schema = JSONSchema.string(title: nil, description: nil, format: nil, minLength: nil, maxLength: nil)
             }
 
             return JSONSchema.array(items: schema, description: description)
@@ -61,11 +61,11 @@ extension MCPParameterInfo {
         // Handle basic types
         switch type {
             case is Int.Type, is Double.Type:
-                return JSONSchema.number(description: description)
+                return JSONSchema.number(title: nil, description: description, minimum: nil, maximum: nil)
             case is Bool.Type:
-                return JSONSchema.boolean(description: description)
+                return JSONSchema.boolean(title: nil, description: description, default: nil)
             default:
-                return JSONSchema.string(description: description, format: nil, minLength: nil, maxLength: nil)
+                return JSONSchema.string(title: nil, description: description, format: nil, minLength: nil, maxLength: nil)
         }
     }
 }

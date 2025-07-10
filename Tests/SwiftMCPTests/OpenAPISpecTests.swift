@@ -122,14 +122,14 @@ func testThrowingFunctionSpec() {
 		#expect(object.required.contains("count"))
         
         // Check name parameter
-		          guard case let .string(description: nameDesc, format: _, minLength: _, maxLength: _) = object.properties["name"] else {
+		          guard case let .string(title: _, description: nameDesc, format: _, minLength: _, maxLength: _) = object.properties["name"] else {
             #expect(Bool(false), "name parameter should be a string")
             return
         }
         #expect(nameDesc == "The name to greet")
         
         // Check count parameter
-		guard case let .number(description: countDesc) = object.properties["count"] else {
+		guard case let .number(title: _, description: countDesc, minimum: _, maximum: _) = object.properties["count"] else {
             #expect(Bool(false), "count parameter should be a number")
             return
         }
@@ -170,7 +170,7 @@ func testVoidFunctionSpec() {
     // Check parameter schema
     if case .object(let object) = content.schema {
 		#expect(object.properties["message"] != nil)
-		          if case let .string(description: description, _, _, _) = object.properties["message"] {
+		          if case let .string(title: _, description: description, _, _, _) = object.properties["message"] {
             #expect(description == "Message to process")
         } else {
             #expect(Bool(false), "Message parameter should be a string")
@@ -187,7 +187,7 @@ func testVoidFunctionSpec() {
     // Check response schema
     let schema = response?.content?["application/json"]?.schema
     #expect(schema != nil)
-    if case let .string(description: description, format: _, minLength: _, maxLength: _) = schema {
+    if case let .string(title: _, description: description, format: _, minLength: _, maxLength: _) = schema {
         #expect(description == "Empty string (void function)")
     } else {
         #expect(Bool(false), "Response schema should be a string")
@@ -306,7 +306,7 @@ func testOpenAPISpecGeneration() throws {
         return
     }
     #expect(multipleForecastsSchema.type == "array", "Expected array schema for multiple forecasts")
-    if case .array(let items, _) = multipleForecastsSchema {
+    if case .array(let items, title: _, description: _) = multipleForecastsSchema {
         #expect(items.type == "object", "Expected object schema for array items")
     } else {
         #expect(Bool(false), "Expected array schema")
@@ -320,7 +320,7 @@ func testOpenAPISpecGeneration() throws {
     }
 	
     #expect(singleConditionSchema.type == "string", "Expected string schema for single condition")
-    if case .enum(let enumValues, _) = singleConditionSchema {
+    if case .enum(let enumValues, title: _, description: _, enumNames: _) = singleConditionSchema {
         #expect(enumValues == ["sunny", "cloudy", "rainy", "snowy"],
                "Enum values don't match expected values")
     } else {
@@ -334,9 +334,9 @@ func testOpenAPISpecGeneration() throws {
         return
     }
     #expect(multipleConditionsSchema.type == "array", "Expected array schema for multiple conditions")
-    if case .array(let items, _) = multipleConditionsSchema {
+    if case .array(let items, title: _, description: _) = multipleConditionsSchema {
         #expect(items.type == "string", "Expected string schema for array items")
-        if case .enum(let enumValues, _) = items {
+        if case .enum(let enumValues, title: _, description: _, enumNames: _) = items {
             #expect(Set(enumValues) == Set(["sunny", "cloudy", "rainy", "snowy"]), 
                    "Array items enum values don't match expected values")
         } else {
@@ -354,7 +354,7 @@ func testOpenAPISpecGeneration() throws {
     }
 	
     #expect(basicArraySchema.type == "array", "Expected array schema for basic array")
-    if case .array(let items, _) = basicArraySchema {
+    if case .array(let items, title: _, description: _) = basicArraySchema {
         #expect(items.type == "string", "Expected string schema for array items")
     } else {
         #expect(Bool(false), "Expected array schema")
