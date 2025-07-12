@@ -80,7 +80,7 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
         var propertyString = ""
         var propertyInfos: [(name: String, type: String, defaultValue: String?)] = []
 
-        // Process all members including nested structs
+        // Process all members, but only properties (ignore nested structs)
         for member in structDecl.memberBlock.members {
             if let property = member.decl.as(VariableDeclSyntax.self) {
                 // Process regular property
@@ -96,9 +96,25 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
                 propertyString += propertyStr
                 propertyInfos.append(propertyInfo)
             } else if let nestedStruct = member.decl.as(StructDeclSyntax.self) {
-                // Process nested struct
-                let nestedSchema = try processNestedStruct(nestedStruct, context: context)
-                propertyString += nestedSchema
+                // Check if nested struct has @Schema annotation
+                var hasSchemaAttribute = false
+                for attribute in nestedStruct.attributes {
+                    if let identifierAttr = attribute.as(AttributeSyntax.self),
+                       let identifier = identifierAttr.attributeName.as(IdentifierTypeSyntax.self),
+                       identifier.name.text == "Schema" {
+                        hasSchemaAttribute = true
+                        break
+                    }
+                }
+                
+                if !hasSchemaAttribute {
+                    // Create diagnostic warning about missing @Schema
+                    let diagnostic = Diagnostic(
+                        node: nestedStruct.structKeyword,
+                        message: SchemaDiagnostic.nestedStructNeedsSchema(nestedStruct.name.text)
+                    )
+                    context.diagnose(diagnostic)
+                }
             }
         }
 
@@ -238,55 +254,19 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
 
         return nil
     }
-
-    private static func processNestedStruct(
-        _ structDecl: StructDeclSyntax,
-        context: MacroExpansionContext
-    ) throws -> String {
-        let structName = structDecl.name.text
-        let documentation = Documentation(from: structDecl.leadingTrivia.description)
-
-        var propertyString = ""
-
-        // Process properties of nested struct
-        for member in structDecl.memberBlock.members {
-            if let property = member.decl.as(VariableDeclSyntax.self) {
-                let (propertyStr, _) = try processProperty(
-                    property: property,
-                    documentation: documentation,
-                    context: context
-                )
-
-                if !propertyString.isEmpty {
-                    propertyString += ", "
-                }
-                propertyString += propertyStr
-            }
-        }
-
-        // Create metadata for nested struct
-        return """
-        , SchemaPropertyInfo(
-            name: "\(structName)",
-            type: "\(structName)",
-            type: \(structName).self,
-            description: \(documentation.description.isEmpty ? "nil" : "\"\(documentation.description.escapedForSwiftString)\""),
-            defaultValue: nil,
-            enumValues: nil,
-            isRequired: true
-        )
-        """
-    }
 }
 
 // Diagnostic messages for the Schema macro
 enum SchemaDiagnostic: DiagnosticMessage {
     case onlyStructs
+    case nestedStructNeedsSchema(String)
 
     var message: String {
         switch self {
             case .onlyStructs:
                 return "@Schema can only be applied to struct declarations"
+            case .nestedStructNeedsSchema(let structName):
+                return "Nested struct '\(structName)' needs the @Schema annotation"
         }
     }
 
@@ -294,6 +274,8 @@ enum SchemaDiagnostic: DiagnosticMessage {
         switch self {
             case .onlyStructs:
                 return MessageID(domain: "SchemaMacro", id: "onlyStructs")
+            case .nestedStructNeedsSchema(_):
+                return MessageID(domain: "SchemaMacro", id: "nestedStructNeedsSchema")
         }
     }
 
@@ -301,6 +283,8 @@ enum SchemaDiagnostic: DiagnosticMessage {
         switch self {
             case .onlyStructs:
                 return .error
+            case .nestedStructNeedsSchema(_):
+                return .warning
         }
     }
 } 

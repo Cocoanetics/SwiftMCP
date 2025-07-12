@@ -12,7 +12,7 @@ func testInitializeRequest() async throws {
         id: 1,
         method: "initialize",
         params: [
-            "protocolVersion": AnyCodable("2024-11-05"),
+            "protocolVersion": AnyCodable("2025-06-18"),
             "capabilities": AnyCodable([
                 "experimental": [:],
                 "resources": ["listChanged": false],
@@ -49,7 +49,7 @@ func testInitializeRequest() async throws {
     guard let protocolVersion = result["protocolVersion"]?.value as? String else {
         throw TestError("protocolVersion not found")
     }
-    #expect(protocolVersion == "2024-11-05")
+    #expect(protocolVersion == "2025-06-18")
 
     // Extract the server capabilities
     guard let capabilitiesDict = result["capabilities"]?.value as? [String: Any] else {

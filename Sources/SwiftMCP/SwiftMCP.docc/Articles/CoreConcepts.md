@@ -46,20 +46,16 @@ When you create a server using the `@MCPServer` macro, it automatically extracts
  This server exposes mathematical functions like addition, subtraction,
  multiplication and division through a JSON-RPC interface.
  */
-@MCPServer
+@MCPServer(name: "Calculator", version: "2.0.0")
 class Calculator {
-    /// The name of the server, defaults to class name if not specified
-    var serverName: String { "Calculator" }
-    
-    /// The version of the server, defaults to "1.0.0" if not specified
-    var serverVersion: String { "2.0.0" }
+    // Server implementation
 }
 ```
 
 The macro uses:
 - The class's documentation comment as the server description
-- The `serverName` property to identify the server (optional)
-- The `serverVersion` property for versioning (optional)
+- The `name` parameter to identify the server (optional, defaults to class name)
+- The `version` parameter for versioning (optional, defaults to "1.0.0")
 
 ## Tool Documentation
 
@@ -113,6 +109,10 @@ Without proper documentation:
 - Parameters may receive invalid values
 - Return values may be misinterpreted
 
+## Session and Request Context
+
+`Session.current` represents the client connection for the active task and lets you send log messages or other notifications. `RequestContext.current` exists only for the lifetime of a single request and provides the `reportProgress` helper. You can also inspect `Session.current.clientCapabilities` to discover client features such as roots or sampling support. Use these globals anywhere in your tool implementations.
+
 ## Best Practices
 
 1. Always document your server class with:
@@ -135,5 +135,4 @@ Without proper documentation:
 
 - [Swift Documentation Comments Guide](https://github.com/swiftlang/swift/blob/main/docs/DocumentationComments.md)
 - <doc:GettingStarted>
-- ``MCPServer``
-- ``MCPTool`` 
+- ``MCPServer``- ``MCPTool`` 

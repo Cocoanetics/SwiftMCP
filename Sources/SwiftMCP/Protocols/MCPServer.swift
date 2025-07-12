@@ -46,6 +46,9 @@ public protocol MCPServer {
      - Returns: A response message if one should be sent, nil otherwise
      */
     func handleMessage(_ message: JSONRPCMessage) async -> JSONRPCMessage?
+
+    /// Called when the roots list has changed. Default implementation does nothing.
+    func handleRootsListChanged() async
 }
 
 // MARK: - Default Implementations
@@ -102,7 +105,7 @@ public extension MCPServer {
         // Prepare the response based on the method
         switch requestData.method {
             case "initialize":
-                return createInitializeResponse(id: requestData.id)
+                return await handleInitializeRequest(requestData)
 
             case "ping":
                 return createPingResponse(id: requestData.id)
@@ -131,6 +134,11 @@ public extension MCPServer {
             case "tools/call":
                 return await handleToolCall(requestData)
 
+            case "logging/setLevel":
+                return await handleLoggingSetLevel(requestData)
+
+
+
             default:
                 // Respond with JSON-RPC error for method not found
                 return JSONRPCMessage.errorResponse(id: requestData.id, error: .init(code: -32601, message: "Method not found"))
@@ -153,11 +161,19 @@ public extension MCPServer {
                 // Client has cancelled a request
                 return nil
 
+            case "notifications/roots/list_changed":
+                // Client's root list has changed
+                await self.handleRootsListChanged()
+                return nil
+
             default:
                 // Unknown notification - log it but don't respond
                 return nil
         }
     }
+    
+    /// Handles the roots list changed notification by retrieving the updated roots list.
+    func handleRootsListChanged() async {}
 
 /**
      Handles JSON-RPC responses from other parties.
@@ -166,8 +182,11 @@ public extension MCPServer {
      - Returns: Always returns nil since we don't currently respond to responses
      */
     private func handleResponse(_ responseData: JSONRPCMessage.JSONRPCResponseData) async -> JSONRPCMessage? {
-        // In a typical server scenario, we don't usually respond to responses
-        // This could be extended for scenarios where the server also acts as a client
+        // Route the response to the current session for request/response matching
+        let response = JSONRPCMessage.response(responseData)
+        if let session = Session.current {
+            await session.handleResponse(response)
+        }
         return nil
     }
 
@@ -178,9 +197,46 @@ public extension MCPServer {
      - Returns: Always returns nil since we don't currently respond to error responses
      */
     private func handleErrorResponse(_ errorResponseData: JSONRPCMessage.JSONRPCErrorResponseData) async -> JSONRPCMessage? {
-        // In a typical server scenario, we don't usually respond to error responses
-        // This could be extended for scenarios where the server also acts as a client
+        // Route the error response to the current session for request/response matching
+        let response = JSONRPCMessage.errorResponse(errorResponseData)
+        if let session = Session.current {
+            await session.handleResponse(response)
+        }
         return nil
+    }
+
+/**
+     Handles an initialization request from the client.
+     
+     This processes the client capabilities and stores them in the current session,
+     then creates and returns an initialization response.
+     
+     - Parameter request: The initialization request data
+     - Returns: A JSON-RPC message containing the initialization response
+     */
+    private func handleInitializeRequest(_ request: JSONRPCMessage.JSONRPCRequestData) async -> JSONRPCMessage? {
+        // Extract and store client capabilities if provided
+        if let params = request.params,
+           let capabilitiesDict = params["capabilities"]?.value as? [String: Any] {
+            
+            do {
+                let capabilitiesData = try JSONSerialization.data(withJSONObject: capabilitiesDict)
+                let clientCapabilities = try JSONDecoder().decode(ClientCapabilities.self, from: capabilitiesData)
+                
+                // Store client capabilities in current session
+                if let session = Session.current {
+                    await session.setClientCapabilities(clientCapabilities)
+                    print("DEBUG: Stored client capabilities in session: \(clientCapabilities)")
+                } else {
+                    print("DEBUG: No current session during initialization!")
+                }
+            } catch {
+                // If parsing fails, continue without client capabilities
+                // This is non-fatal as not all clients may send capabilities
+            }
+        }
+        
+        return createInitializeResponse(id: request.id)
     }
 
 /**
@@ -209,6 +265,12 @@ public extension MCPServer {
             capabilities.prompts = .init(listChanged: true)
         }
 
+        if self is MCPLoggingProviding {
+            capabilities.logging = .init(enabled: true)
+        }
+
+
+
         // Advertise completion support
         capabilities.completions = AnyCodable([:])
 
@@ -218,7 +280,7 @@ public extension MCPServer {
         )
 
         let result = InitializeResult(
-            protocolVersion: "2024-11-05",
+            protocolVersion: "2025-06-18",
             capabilities: capabilities,
             serverInfo: serverInfo
         )
@@ -557,6 +619,42 @@ public extension MCPServer {
      */
     func createPingResponse(id: JSONRPCID) -> JSONRPCMessage {
         return JSONRPCMessage.response(id: id, result: [:])
+    }
+
+    /**
+     Handles a logging level configuration request.
+     
+     - Parameter request: The JSON-RPC request containing the logging level details
+     - Returns: A JSON-RPC message containing the result
+     */
+    private func handleLoggingSetLevel(_ request: JSONRPCMessage.JSONRPCRequestData) async -> JSONRPCMessage? {
+        guard let session = Session.current else {
+            return JSONRPCMessage.errorResponse(
+                id: request.id,
+                error: .init(code: -32603, message: "No session context for logging/setLevel")
+            )
+        }
+
+        guard let params = request.params,
+              let levelString = params["level"]?.value as? String else {
+            return JSONRPCMessage.errorResponse(
+                id: request.id,
+                error: .init(code: -32602, message: "Invalid parameters: 'level' parameter is required")
+            )
+        }
+
+        guard let level = LogLevel(string: levelString) else {
+            return JSONRPCMessage.errorResponse(
+                id: request.id,
+                error: .init(code: -32602, message: "Invalid log level: '\(levelString)'. Valid levels are: \(LogLevel.allCases.map(\.rawValue).joined(separator: ", "))")
+            )
+        }
+
+        // Set the minimum log level for this session
+        await session.setMinimumLogLevel(level)
+
+        // Return empty result for success
+        return JSONRPCMessage.response(id: request.id, result: [:])
     }
 
     // MARK: - Internal Helpers

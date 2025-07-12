@@ -76,6 +76,7 @@ public final class RequestContext: @unchecked Sendable {
     /// Send a progress notification if a progress token was provided.
     public func reportProgress(_ progress: Double, total: Double? = nil, message: String? = nil) async {
         guard let progressToken = meta?.progressToken else { return }
+        
         await Session.current?.sendProgressNotification(progressToken: progressToken,
                                                         progress: progress,
                                                         total: total,
@@ -95,5 +96,146 @@ public final class RequestContext: @unchecked Sendable {
     /// Notify the client that the list of available prompts changed.
     public func sendPromptListChanged() async {
         await Session.current?.sendPromptListChanged()
+    
+    /// Request sampling from the client.
+    ///
+    /// This method sends a sampling request to the client and returns the generated response.
+    /// The client is responsible for model selection, user approval, and actual LLM generation.
+    ///
+    /// - Parameter request: The sampling request containing messages and preferences
+    /// - Returns: The generated sampling response
+    /// - Throws: An error if the sampling request fails
+    public func sample(_ request: SamplingCreateMessageRequest) async throws -> SamplingCreateMessageResponse {
+        guard let session = Session.current else {
+            throw MCPServerError.noActiveSession
+        }
+        
+        // Check if client supports sampling  
+        guard await session.clientCapabilities?.sampling != nil else {
+            throw MCPServerError.clientHasNoSamplingSupport
+        }
+        
+        // Encode the request parameters
+        let encoder = DictionaryEncoder()
+        let params = try encoder.encode(request)
+        
+        // Send the sampling request to the client
+        let response = try await session.request(method: "sampling/createMessage", params: params)
+        
+        // Check for error responses from the client
+        if case .errorResponse(let errorData) = response {
+            throw MCPServerError.clientError(code: errorData.error.code, message: errorData.error.message)
+        }
+        
+        // Parse the response
+        guard case .response(let responseData) = response,
+              let result = responseData.result else {
+            throw MCPServerError.unexpectedMessageType(method: "sampling/createMessage")
+        }
+        
+        // Convert AnyCodable dictionary to [String: Any] for decoding
+        let resultDict = result.mapValues { $0.value }
+        
+        // Decode the response using the Dictionary extension
+        return try resultDict.decode(SamplingCreateMessageResponse.self)
+    }
+    
+    /// Convenience method for simple text sampling.
+    ///
+    /// - Parameters:
+    ///   - prompt: The text prompt to send
+    ///   - systemPrompt: Optional system prompt
+    ///   - modelPreferences: Optional model preferences
+    ///   - maxTokens: Optional maximum tokens to generate (defaults to 1000)
+    /// - Returns: The generated text response
+    /// - Throws: An error if the sampling request fails
+    public func sample(
+        prompt: String,
+        systemPrompt: String? = nil,
+        modelPreferences: ModelPreferences? = nil,
+        maxTokens: Int? = 1000
+    ) async throws -> String {
+        let message = SamplingMessage(
+            role: .user,
+            content: SamplingContent(text: prompt)
+        )
+        
+        let request = SamplingCreateMessageRequest(
+            messages: [message],
+            modelPreferences: modelPreferences,
+            systemPrompt: systemPrompt,
+            maxTokens: maxTokens
+        )
+        
+        let response = try await sample(request)
+        
+        // Extract text content from response
+        guard response.content.type == .text,
+              let text = response.content.text else {
+            throw MCPToolError.unknownTool(name: "sampling/createMessage")
+        }
+        
+        return text
+    }
+    
+    /// Request information from the user through the client.
+    ///
+    /// This method sends an elicitation request to the client asking for structured user input.
+    /// The client is responsible for presenting the request to the user and validating their response.
+    ///
+    /// - Parameter request: The elicitation request containing message and schema
+    /// - Returns: The elicitation response with user action and optional content
+    /// - Throws: An error if the elicitation request fails
+    public func elicit(_ request: ElicitationCreateRequest) async throws -> ElicitationCreateResponse {
+        guard let session = Session.current else {
+            throw MCPServerError.noActiveSession
+        }
+        
+        // Check if client supports elicitation
+        let capabilities = await session.clientCapabilities
+        print("DEBUG: Client capabilities: \(String(describing: capabilities))")
+        print("DEBUG: Elicitation support: \(String(describing: capabilities?.elicitation))")
+        guard capabilities?.elicitation != nil else {
+            throw MCPServerError.clientHasNoElicitationSupport
+        }
+        
+        // Encode the request parameters
+        let encoder = DictionaryEncoder()
+        let params = try encoder.encode(request)
+        
+        // Debug: Print the encoded parameters
+        print("DEBUG: Encoded elicitation params: \(params)")
+        
+        // Send the elicitation request to the client
+        let response = try await session.request(method: "elicitation/create", params: params)
+        
+        // Check for error responses from the client
+        if case .errorResponse(let errorData) = response {
+            throw MCPServerError.clientError(code: errorData.error.code, message: errorData.error.message)
+        }
+        
+        // Parse the response
+        guard case .response(let responseData) = response,
+              let result = responseData.result else {
+            throw MCPServerError.unexpectedMessageType(method: "elicitation/create")
+        }
+        
+        // Convert AnyCodable dictionary to [String: Any] for decoding
+        let resultDict = result.mapValues { $0.value }
+        
+        // Decode the response using the Dictionary extension
+        return try resultDict.decode(ElicitationCreateResponse.self)
+    }
+    
+    /// Convenience method for simple elicitation with basic schema.
+    ///
+    /// - Parameters:
+    ///   - message: The message explaining what information is being requested
+    ///   - schema: The JSON schema defining the expected response structure
+    /// - Returns: The elicitation response with user action and optional content
+    /// - Throws: An error if the elicitation request fails
+    public func elicit(message: String, schema: JSONSchema) async throws -> ElicitationCreateResponse {
+        let request = ElicitationCreateRequest(message: message, requestedSchema: schema)
+        return try await elicit(request)
     }
 }

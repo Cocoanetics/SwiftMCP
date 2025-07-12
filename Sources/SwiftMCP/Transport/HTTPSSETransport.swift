@@ -4,6 +4,7 @@ import NIOHTTP1
 import NIOPosix
 import NIOFoundationCompat
 import Logging
+import AnyCodable
 
 /**
  A transport that exposes an HTTP server with Server-Sent Events (SSE) and JSON-RPC endpoints.
@@ -78,8 +79,8 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         // 1. If we have a session ID, check token against session-stored value
         if let id = sessionID {
             let session = await sessionManager.session(id: id)
-            if let stored = session.accessToken {
-                if stored == token, (session.accessTokenExpiry ?? Date.distantFuture) > Date() {
+            if let stored = await session.accessToken {
+                if stored == token, (await session.accessTokenExpiry ?? Date.distantFuture) > Date() {
                     return .authorized
                 } else {
                     return .unauthorized("Invalid or expired token")
@@ -88,9 +89,9 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
                 // First time we see a token for this session - validate it before accepting
                 let isValid = await validateNewToken(token)
                 if isValid {
-                    session.accessToken = token
+                    await session.setAccessToken(token)
                     // Without expires_in we can't know exact lifetime; fall back to 24 h.
-                    session.accessTokenExpiry = Date().addingTimeInterval(24 * 60 * 60)
+                    await session.setAccessTokenExpiry(Date().addingTimeInterval(24 * 60 * 60))
                     
                     // Fetch and store user info if we have OAuth configuration
                     if let oauthConfiguration = oauthConfiguration {
@@ -102,7 +103,13 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
                     return .unauthorized("Invalid token - token exchange required")
                 }
             } else {
-                return .unauthorized("No token provided")
+                // No token provided for this session
+                // If OAuth is configured, require authentication
+                if oauthConfiguration != nil {
+                    return .unauthorized("Authentication required")
+                }
+                // Otherwise use legacy handler (for unauthenticated mode)
+                return authorizationHandler(token)
             }
         }
 
@@ -119,7 +126,15 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
             return isValid ? .authorized : .unauthorized("Invalid token - token exchange required")
         }
 
-        // 4. Otherwise use legacy handler
+        // 4. If OAuth is configured, require authentication
+        if oauthConfiguration != nil {
+            guard let token = token, !token.isEmpty else {
+                return .unauthorized("Authentication required")
+            }
+            return .unauthorized("Invalid token - token exchange required")
+        }
+        
+        // 5. Otherwise use legacy handler (for unauthenticated mode)
         return authorizationHandler(token)
     }
     
@@ -175,9 +190,6 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
             }
         }
     }
-
-    /// Number used as identifier for output-bound JSONRPCRequests, e.g. ping
-    fileprivate var sequenceNumber = 1
 
     /// The number of active SSE channels currently connected to the server.
     var sseChannelCount: Int {
@@ -272,10 +284,10 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         logger.info("Server stopped")
     }
 
-    /// Start the keep-alive timer that sends messages every 30 seconds.
+    /// Start the keep-alive timer that sends messages every 60 seconds.
     private func startKeepAliveTimer() {
         keepAliveTimer = DispatchSource.makeTimerSource(queue: DispatchQueue.global())
-        keepAliveTimer?.schedule(deadline: .now(), repeating: .seconds(30))
+        keepAliveTimer?.schedule(deadline: .now(), repeating: .seconds(60))
         keepAliveTimer?.setEventHandler { [weak self] in
             self?.sendKeepAlive()
         }
@@ -299,15 +311,21 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
                 case .none:
                     return
                 case .sse:
-                    await self.sessionManager.broadcastSSE(SSEMessage(comment: "keep-alive"))
+                    await self.sessionManager.forEachSession { session in
+                        await session.sendSSE(SSEMessage(comment: "keep-alive"))
+                    }
                 case .ping:
-                    let ping = JSONRPCMessage.request(id: self.sequenceNumber, method: "ping")
-                    let encoder = JSONEncoder()
-                    let data = try! encoder.encode(ping)
-                    let string = String(data: data, encoding: .utf8)!
-                    let message = SSEMessage(data: string)
-                    await self.sessionManager.broadcastSSE(message)
-                    self.sequenceNumber += 1
+                    await self.sessionManager.forEachSession { session in
+                        Task {
+                            let ping = JSONRPCMessage.request(id: .string(UUID().uuidString), method: "ping")
+                            do {
+                                try await session.send(ping)
+                            } catch {
+                                // Log error but don't fail the keep-alive cycle
+                                print("Failed to send ping to session \(session.id): \(error)")
+                            }
+                        }
+                    }
             }
         }
     }
@@ -316,24 +334,16 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     /// Handle a JSON-RPC request and send the response through the SSE channels.
     func handleJSONRPCRequest(_ request: JSONRPCMessage, from sessionID: UUID) {
         Task {
-            try await sessionManager.session(id: sessionID).work { _ in
-                guard let response = await server.handleMessage(request) else {
-                    // No response to send (e.g., notification)
-                    return
-                }
-
-                try await send(response)
+            guard let response = await server.handleMessage(request) else {
+                // No response to send (e.g., notification)
+                return
             }
+            
+            try await send(response)
         }
     }
 
     // MARK: - Handling SSE Connections
-    /// Broadcast a named event to all connected SSE clients.
-    func broadcastSSE(_ message: SSEMessage) {
-        Task {
-            await sessionManager.broadcastSSE(message)
-        }
-    }
 
     /// Register a new SSE channel.
     func registerSSEChannel(_ channel: Channel, id: UUID) {
@@ -346,11 +356,10 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         channel.closeFuture.whenComplete { [weak self] _ in
             guard let self = self else { return }
             Task {
-                let removed = await self.sessionManager.removeChannel(id: id)
-                if removed {
-                    let count = await self.sessionManager.channelCount
-                    self.logger.info("SSE channel removed (remaining: \(count))")
-                }
+                // Remove the entire session when the channel closes
+                await self.sessionManager.removeSession(id: id)
+                let count = await self.sessionManager.channelCount
+                self.logger.info("SSE channel removed (remaining: \(count))")
             }
         }
     }
@@ -359,8 +368,15 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     func sendSSE(_ message: SSEMessage, to sessionID: UUID) {
         Task {
             let session = await sessionManager.session(id: sessionID)
-            session.sendSSE(message)
+            await session.sendSSE(message)
         }
+    }
+
+    /// Broadcast a log message to all connected clients.
+    /// - Parameter message: The log message to broadcast
+    public func broadcastLog(_ message: LogMessage) async {
+        // Send to all connected sessions, filtered by their minimumLogLevel
+        await sessionManager.broadcastLog(message)
     }
 
 
@@ -373,6 +389,6 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
 
         let string = String(data: data, encoding: .utf8) ?? ""
         let message = SSEMessage(data: string)
-        session.sendSSE(message)
+        await session.sendSSE(message)
     }
 }

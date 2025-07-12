@@ -161,7 +161,7 @@ struct OpenAPISpec: Codable {
             let voidDescription = "Empty string (void function)"
 
             if metadata.returnType == nil || metadata.returnType == Void.self {
-                responseSchema = .string(description: voidDescription)
+                responseSchema = .string(title: nil, description: voidDescription)
                 responseDescription = metadata.returnTypeDescription ?? "A void function that performs an action"
             } else {
                 // Convert Swift type to JSON Schema type
@@ -189,15 +189,15 @@ struct OpenAPISpec: Codable {
 
                     let itemSchema: JSONSchema
                     if elementType == Int.self || elementType == Double.self {
-                        itemSchema = .number()
+                        itemSchema = .number(title: nil, description: nil, minimum: nil, maximum: nil)
                     } else if elementType == Bool.self {
-                        itemSchema = .boolean()
+                        itemSchema = .boolean(title: nil, description: nil, default: nil)
                     } else if let schemaType = elementType as? any SchemaRepresentable.Type {
                         itemSchema = schemaType.schemaMetadata.schema
                     } else if let caseIterableType = elementType as? any CaseIterable.Type {
                         itemSchema = .enum(values: caseIterableType.caseLabels)
                     } else {
-                        itemSchema = .string()
+                        itemSchema = .string(title: nil, description: nil)
                     }
 
                     responseSchema = .array(items: itemSchema, description: metadata.returnTypeDescription)
@@ -205,38 +205,44 @@ struct OpenAPISpec: Codable {
                 } else {
                     switch returnType {
                         case is Int.Type, is Double.Type:
-                            responseSchema = .number(description: metadata.returnTypeDescription)
+                            responseSchema = .number(title: nil, description: metadata.returnTypeDescription)
                         case is Bool.Type:
-                            responseSchema = .boolean(description: metadata.returnTypeDescription)
+                            responseSchema = .boolean(title: nil, description: metadata.returnTypeDescription)
                         case is Array<Any>.Type:
                             if let elementType = (returnType as? Array<Any>.Type)?.elementType {
                                 let itemSchema: JSONSchema
                                 switch elementType {
                                     case is Int.Type, is Double.Type:
-                                        itemSchema = .number()
+                                        itemSchema = .number(title: nil, description: nil, minimum: nil, maximum: nil)
                                     case is Bool.Type:
-                                        itemSchema = .boolean()
+                                        itemSchema = .boolean(title: nil, description: nil, default: nil)
                                     default:
-                                        itemSchema = .string()
+                                        itemSchema = .string(title: nil, description: nil)
                                 }
                                 responseSchema = .array(items: itemSchema, description: metadata.returnTypeDescription)
                             } else {
-                                responseSchema = .array(items: .string(), description: metadata.returnTypeDescription)
+                                responseSchema = .array(items: .string(title: nil, description: nil), description: metadata.returnTypeDescription)
                             }
                         default:
-                            responseSchema = .string(description: metadata.returnTypeDescription)
+                            responseSchema = .string(title: nil, description: metadata.returnTypeDescription)
                     }
                     responseDescription = metadata.returnTypeDescription ?? "The returned value of the tool"
                 }
             }
 
-            // Create error response schema to match {"error": "error message"}
+            // Create error response schema matching {"error": {"code": Int, "message": String}}
             let errorSchema = JSONSchema.object(JSONSchema.Object(
                 properties: [
-                    "error": .string()  // No description needed as it will contain error.localizedDescription
+                    "error": .object(JSONSchema.Object(
+                        properties: [
+                            "code": .number(title: nil, description: nil, minimum: nil, maximum: nil),
+                            "message": .string(title: nil, description: nil)
+                        ],
+                        required: ["code", "message"]
+                    ))
                 ],
                 required: ["error"],
-                description: "Error response containing the error message"
+                description: "Error response containing the error code and message"
             ))
 
             // Create responses dictionary with success and error cases
