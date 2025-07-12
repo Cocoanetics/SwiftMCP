@@ -67,7 +67,7 @@ func testInitializeRequest() async throws {
     guard let listChanged = toolsDict["listChanged"] as? Bool else {
         throw TestError("listChanged not found in tools capabilities")
     }
-    #expect(listChanged == false, "Tools listChanged should be false")
+    #expect(listChanged == true, "Tools listChanged should be true")
 
     // Ensure completion capability is advertised
     #expect(capabilitiesDict["completions"] != nil)
