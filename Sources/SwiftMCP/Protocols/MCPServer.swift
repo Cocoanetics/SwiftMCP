@@ -198,15 +198,15 @@ public extension MCPServer {
         var capabilities = ServerCapabilities()
 
         if self is MCPToolProviding {
-            capabilities.tools = .init(listChanged: false)
+            capabilities.tools = .init(listChanged: true)
         }
 
         if self is MCPResourceProviding {
-            capabilities.resources = .init(listChanged: false)
+            capabilities.resources = .init(listChanged: true)
         }
 
         if self is MCPPromptProviding {
-            capabilities.prompts = .init(listChanged: false)
+            capabilities.prompts = .init(listChanged: true)
         }
 
         // Advertise completion support

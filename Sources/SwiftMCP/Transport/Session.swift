@@ -101,4 +101,37 @@ extension Session {
             // Intentionally ignore send errors in tests
         }
     }
+
+    /// Send a notification that the list of available tools changed.
+    public func sendToolListChanged() async {
+        let notification = JSONRPCMessage.notification(method: "notifications/tools/list_changed",
+                                                       params: [:])
+        do {
+            try await transport?.send(notification)
+        } catch {
+            // Intentionally ignore send errors in tests
+        }
+    }
+
+    /// Send a notification that the list of available resources changed.
+    public func sendResourceListChanged() async {
+        let notification = JSONRPCMessage.notification(method: "notifications/resources/list_changed",
+                                                       params: [:])
+        do {
+            try await transport?.send(notification)
+        } catch {
+            // Intentionally ignore send errors in tests
+        }
+    }
+
+    /// Send a notification that the list of available prompts changed.
+    public func sendPromptListChanged() async {
+        let notification = JSONRPCMessage.notification(method: "notifications/prompts/list_changed",
+                                                       params: [:])
+        do {
+            try await transport?.send(notification)
+        } catch {
+            // Intentionally ignore send errors in tests
+        }
+    }
 }

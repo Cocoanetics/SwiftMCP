@@ -81,4 +81,19 @@ public final class RequestContext: @unchecked Sendable {
                                                         total: total,
                                                         message: message)
     }
+
+    /// Notify the client that the list of available tools changed.
+    public func sendToolListChanged() async {
+        await Session.current?.sendToolListChanged()
+    }
+
+    /// Notify the client that the list of available resources changed.
+    public func sendResourceListChanged() async {
+        await Session.current?.sendResourceListChanged()
+    }
+
+    /// Notify the client that the list of available prompts changed.
+    public func sendPromptListChanged() async {
+        await Session.current?.sendPromptListChanged()
+    }
 }
