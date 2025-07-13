@@ -4,18 +4,26 @@ import Testing
 import Logging
 
 /// Simple transport to record sent JSON-RPC messages.
-final class RecordingTransportForNotifications: Transport {
+final class RecordingTransportForNotifications: Transport, @unchecked Sendable {
     let server: MCPServer
-    var sentMessages: [JSONRPCMessage] = []
-    var logger = Logger(label: "RecordingTransport")
+    private let queue = DispatchQueue(label: "sentMessages", attributes: .concurrent)
+    private var _sentMessages: [JSONRPCMessage] = []
+    let logger = Logger(label: "RecordingTransport")
 
     init(server: MCPServer) { self.server = server }
+    
+    var sentMessages: [JSONRPCMessage] {
+        queue.sync { _sentMessages }
+    }
+    
     func start() async throws {}
     func run() async throws {}
     func stop() async throws {}
     func send(_ data: Data) async throws {
         if let message = try? JSONDecoder().decode(JSONRPCMessage.self, from: data) {
-            sentMessages.append(message)
+            queue.async(flags: .barrier) {
+                self._sentMessages.append(message)
+            }
         }
     }
 }
@@ -25,7 +33,8 @@ func testToolListChangedNotification() async throws {
     let server = Calculator()
     let transport = RecordingTransportForNotifications(server: server)
     let session = Session(id: UUID())
-    session.transport = transport
+    
+    await session.setTransport(transport)
 
     let message = JSONRPCMessage.notification(method: "dummy")
     await session.work { _ in
@@ -47,7 +56,8 @@ func testResourceListChangedNotification() async throws {
     let server = Calculator()
     let transport = RecordingTransportForNotifications(server: server)
     let session = Session(id: UUID())
-    session.transport = transport
+    
+    await session.setTransport(transport)
 
     let message = JSONRPCMessage.notification(method: "dummy")
     await session.work { _ in
@@ -69,7 +79,8 @@ func testPromptListChangedNotification() async throws {
     let server = Calculator()
     let transport = RecordingTransportForNotifications(server: server)
     let session = Session(id: UUID())
-    session.transport = transport
+    
+    await session.setTransport(transport)
 
     let message = JSONRPCMessage.notification(method: "dummy")
     await session.work { _ in

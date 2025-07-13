@@ -96,7 +96,8 @@ public final class RequestContext: @unchecked Sendable {
     /// Notify the client that the list of available prompts changed.
     public func sendPromptListChanged() async {
         await Session.current?.sendPromptListChanged()
-    
+    }
+
     /// Request sampling from the client.
     ///
     /// This method sends a sampling request to the client and returns the generated response.
