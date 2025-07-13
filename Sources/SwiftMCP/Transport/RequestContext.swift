@@ -224,4 +224,19 @@ public final class RequestContext: @unchecked Sendable {
         let request = ElicitationCreateRequest(message: message, requestedSchema: schema)
         return try await elicit(request)
     }
+
+    /// Notify the client that the list of available tools changed.
+    public func sendToolListChanged() async throws {
+        try await Session.current?.sendToolListChanged()
+    }
+
+    /// Notify the client that the list of available resources changed.
+    public func sendResourceListChanged() async throws {
+        try await Session.current?.sendResourceListChanged()
+    }
+
+    /// Notify the client that the list of available prompts changed.
+    public func sendPromptListChanged() async throws {
+        try await Session.current?.sendPromptListChanged()
+    }
 }

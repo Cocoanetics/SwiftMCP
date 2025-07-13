@@ -273,4 +273,22 @@ extension Session {
         
         return roots
     }
+
+    /// Send a notification that the list of available tools changed.
+    public func sendToolListChanged() async throws {
+        let notification = JSONRPCMessage.notification(method: "notifications/tools/list_changed")
+        try await transport?.send(notification)
+    }
+
+    /// Send a notification that the list of available resources changed.
+    public func sendResourceListChanged() async throws {
+        let notification = JSONRPCMessage.notification(method: "notifications/resources/list_changed")
+        try await transport?.send(notification)
+    }
+
+    /// Send a notification that the list of available prompts changed.
+    public func sendPromptListChanged() async throws {
+        let notification = JSONRPCMessage.notification(method: "notifications/prompts/list_changed")
+        try await transport?.send(notification)
+    }
 }
