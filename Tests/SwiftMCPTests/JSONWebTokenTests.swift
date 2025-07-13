@@ -168,9 +168,10 @@ struct JSONWebTokenTests {
     func testVerifyUsingIssuer() async throws {
         let jwt = try JSONWebToken(token: Self.accessToken)
         
-        // Verify using issuer with valid time
+        // Verify using local JWKS instead of making network request
         let validDate = Date(timeIntervalSince1970: 1751206127) // iat time
-        let isValid = try await jwt.verify(using: Self.issuerURL, at: validDate)
+        let localJWKS = try loadTestJWKS()
+        let isValid = try jwt.verify(using: localJWKS, at: validDate)
         #expect(isValid == true)
     }
     

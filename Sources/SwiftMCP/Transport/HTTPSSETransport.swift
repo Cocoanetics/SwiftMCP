@@ -322,7 +322,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
                                 try await session.send(ping)
                             } catch {
                                 // Log error but don't fail the keep-alive cycle
-                                print("Failed to send ping to session \(session.id): \(error)")
+                                // Failed to send ping to session \(session.id): \(error)
                             }
                         }
                     }

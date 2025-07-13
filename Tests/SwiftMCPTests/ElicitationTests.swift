@@ -198,12 +198,8 @@ struct ElicitationTests {
         @Test("MCPServerError cases include elicitation")
         func mcpServerErrorCasesTest() throws {
             // Test that the elicitation error case exists and behaves correctly
-            switch MCPServerError.clientHasNoElicitationSupport {
-            case .clientHasNoElicitationSupport:
-                #expect(Bool(true)) // Success - the case exists
-            default:
-                #expect(Bool(false), "Elicitation error case not found")
-            }
+            let error = MCPServerError.clientHasNoElicitationSupport
+            #expect(error.errorDescription == "Client does not support elicitation functionality")
         }
     }
     

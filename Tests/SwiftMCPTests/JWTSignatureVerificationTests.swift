@@ -36,14 +36,14 @@ struct JWTSignatureVerificationTests {
     @Test("Verify JWT signature using CryptoKit framework")
     func testJWTSignatureVerification() async throws {
         // Test with the provided access token
-        let issuer = "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/"
         
         // Use a date within the token's validity period (iat: 1751206127)
         let validDate = Date(timeIntervalSince1970: 1751206127)
         
         let jwt = try JSONWebToken(token: Self.accessToken)
-        let issuerURL = URL(string: issuer)!
-        let isValid = try await jwt.verify(using: issuerURL, at: validDate)
+        // Use local JWKS instead of making network request
+        let localJWKS = try loadTestJWKS()
+        let isValid = try jwt.verify(using: localJWKS, at: validDate)
         
         #expect(isValid == true)
     }
@@ -51,14 +51,14 @@ struct JWTSignatureVerificationTests {
     @Test("Verify ID token signature using CryptoKit framework")
     func testIDTokenSignatureVerification() async throws {
         // Test with the provided ID token
-        let issuer = "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/"
         
         // Use a date within the token's validity period (iat: 1751206127)
         let validDate = Date(timeIntervalSince1970: 1751206127)
         
         let jwt = try JSONWebToken(token: Self.idToken)
-        let issuerURL = URL(string: issuer)!
-        let isValid = try await jwt.verify(using: issuerURL, at: validDate)
+        // Use local JWKS instead of making network request
+        let localJWKS = try loadTestJWKS()
+        let isValid = try jwt.verify(using: localJWKS, at: validDate)
         
         #expect(isValid == true)
     }
@@ -69,12 +69,11 @@ struct JWTSignatureVerificationTests {
         let segments = Self.accessToken.split(separator: ".")
         let modifiedToken = "\(segments[0]).\(segments[1]).invalid-signature"
         
-        let issuer = "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/"
-        
         do {
             let jwt = try JSONWebToken(token: modifiedToken)
-            let issuerURL = URL(string: issuer)!
-            _ = try await jwt.verify(using: issuerURL)
+            // Use local JWKS instead of making network request
+            let localJWKS = try loadTestJWKS()
+            _ = try jwt.verify(using: localJWKS)
             #expect(Bool(false), "Expected verification to fail")
         } catch {
             #expect(error is JWTError)
@@ -110,12 +109,11 @@ struct JWTSignatureVerificationTests {
         
         let invalidToken = "\(headerB64).\(payloadB64).signature"
         
-        let issuer = "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/"
-        
         do {
             let jwt = try JSONWebToken(token: invalidToken)
-            let issuerURL = URL(string: issuer)!
-            _ = try await jwt.verify(using: issuerURL)
+            // Use local JWKS instead of making network request
+            let localJWKS = try loadTestJWKS()
+            _ = try jwt.verify(using: localJWKS)
             #expect(Bool(false), "Expected verification to fail")
         } catch let error as JWTError {
             #expect(error == .unsupportedAlgorithm)
