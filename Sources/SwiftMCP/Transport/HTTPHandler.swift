@@ -314,7 +314,12 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
 
                     if responses.isEmpty {
                         await self.sendResponseAsync(channel: channel, status: .accepted, headers: responseHeaders)
-                    } else {
+                    }
+                    else if responses.count == 1
+                    {
+                        await self.sendJSONResponseAsync(channel: channel, status: .ok, json: responses.first!, sessionId: sessionID.uuidString)
+                    }
+                    else {
                         await self.sendJSONResponseAsync(channel: channel, status: .ok, json: responses, sessionId: sessionID.uuidString)
                 }
             }
