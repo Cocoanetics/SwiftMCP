@@ -26,7 +26,10 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     public let host: String
 
     /// The port number on which the HTTP server listens.
-    public let port: Int
+    /// If initialized with `0`, the system will select an available port
+    /// when the server starts. The actual bound port is then available
+    /// via this property after ``start()`` completes.
+    public private(set) var port: Int
 
     /// Logger for logging transport events and errors.
     public var logger = Logger(label: "com.cocoanetics.SwiftMCP.HTTPSSETransport")
@@ -228,8 +231,11 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
 			.childChannelOption(ChannelOptions.allowRemoteHalfClosure, value: true)
 
         do {
-            self.channel = try await bootstrap.bind(host: host, port: port).get()
-            logger.info("Server started and listening on \(host):\(port)")
+            self.channel = try await bootstrap.bind(host: host, port: self.port).get()
+            if let actualPort = self.channel?.localAddress?.port {
+                self.port = actualPort
+            }
+            logger.info("Server started and listening on \(host):\(self.port)")
             startKeepAliveTimer()
 
             self.channel?.closeFuture.whenComplete { [logger] result in
