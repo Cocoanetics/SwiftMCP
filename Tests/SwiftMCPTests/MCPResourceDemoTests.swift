@@ -1,4 +1,5 @@
-import XCTest
+import Foundation
+import Testing
 import SwiftMCP
 @testable import SwiftMCPMacros
 
@@ -88,123 +89,119 @@ actor DemoResourceTestServer {
     }
 }
 
-final class MCPResourceDemoTests: XCTestCase {
-    
-    func testDemoResourceMetadata() async throws {
+@Suite("MCP Resource Demo Tests", .tags(.unit))
+struct MCPResourceDemoTests {
+    @Test("Demo server registers all resources")
+    func demoResourceMetadata() {
         let server = DemoResourceTestServer()
         let metadata = server.mcpResourceMetadata
-        
+
         // Should have 6 resources
-        XCTAssertEqual(metadata.count, 6)
-        
+        #expect(metadata.count == 6)
+
         // Verify each resource is properly registered
-        XCTAssertNotNil(metadata.first { $0.uriTemplates.contains("server://info") })
-        XCTAssertNotNil(metadata.first { $0.uriTemplates.contains("users://profile/{user_id}") })
-        XCTAssertNotNil(metadata.first { $0.uriTemplates.contains("users://search?q={query}&page={page}&limit={limit}") })
-        XCTAssertNotNil(metadata.first { $0.uriTemplates.contains("metrics://system") })
-        XCTAssertNotNil(metadata.first { $0.uriTemplates.contains("features://{feature_name}/enabled") })
-        XCTAssertNotNil(metadata.first { $0.uriTemplates.contains("config://{env}") })
+        #expect(metadata.first { $0.uriTemplates.contains("server://info") } != nil)
+        #expect(metadata.first { $0.uriTemplates.contains("users://profile/{user_id}") } != nil)
+        #expect(metadata.first { $0.uriTemplates.contains("users://search?q={query}&page={page}&limit={limit}") } != nil)
+        #expect(metadata.first { $0.uriTemplates.contains("metrics://system") } != nil)
+        #expect(metadata.first { $0.uriTemplates.contains("features://{feature_name}/enabled") } != nil)
+        #expect(metadata.first { $0.uriTemplates.contains("config://{env}") } != nil)
     }
-    
-    func testStaticResource() async throws {
+
+    @Test("Static resource returns content")
+    func staticResource() async throws {
         let server = DemoResourceTestServer()
-        
+
         let infoURL = URL(string: "server://info")!
         let resources = try await server.getResource(uri: infoURL)
-        
-        XCTAssertEqual(resources.count, 1)
-        XCTAssertTrue(resources.first?.text?.contains("DemoResourceServer v1.0") ?? false)
+
+        #expect(resources.count == 1)
+        #expect(resources.first?.text?.contains("DemoResourceServer v1.0") == true)
     }
-    
-    func testPathParameterResource() async throws {
+
+    @Test("Path parameters populate templates")
+    func pathParameterResource() async throws {
         let server = DemoResourceTestServer()
-        
+
         let userURL = URL(string: "users://profile/42")!
         let resources = try await server.getResource(uri: userURL)
-        
-        XCTAssertEqual(resources.count, 1)
+
+        #expect(resources.count == 1)
         let text = resources.first?.text ?? ""
-        XCTAssertTrue(text.contains("\"id\": 42"))
-        XCTAssertTrue(text.contains("\"name\": \"User 42\""))
-        XCTAssertEqual(resources.first?.mimeType, "application/json")
+        #expect(text.contains("\"id\": 42"))
+        #expect(text.contains("\"name\": \"User 42\""))
+        #expect(resources.first?.mimeType == "application/json")
     }
-    
-    func testQueryParametersWithDefaults() async throws {
+
+    @Test("Query parameters support defaults")
+    func queryParametersWithDefaults() async throws {
         let server = DemoResourceTestServer()
-        
-        // Test with only required parameter
+
         let searchURL1 = URL(string: "users://search?q=john")!
         let resources1 = try await server.getResource(uri: searchURL1)
-        
+
         let text1 = resources1.first?.text ?? ""
-        XCTAssertTrue(text1.contains("\"query\": \"john\""))
-        XCTAssertTrue(text1.contains("\"page\": 1"))  // Default value
-        XCTAssertTrue(text1.contains("\"limit\": 10")) // Default value
-        
-        // Test with all parameters
+        #expect(text1.contains("\"query\": \"john\""))
+        #expect(text1.contains("\"page\": 1"))  // Default value
+        #expect(text1.contains("\"limit\": 10")) // Default value
+
         let searchURL2 = URL(string: "users://search?q=jane&page=2&limit=20")!
         let resources2 = try await server.getResource(uri: searchURL2)
-        
+
         let text2 = resources2.first?.text ?? ""
-        XCTAssertTrue(text2.contains("\"query\": \"jane\""))
-        XCTAssertTrue(text2.contains("\"page\": 2"))
-        XCTAssertTrue(text2.contains("\"limit\": 20"))
+        #expect(text2.contains("\"query\": \"jane\""))
+        #expect(text2.contains("\"page\": 2"))
+        #expect(text2.contains("\"limit\": 20"))
     }
-    
-    func testArrayReturnType() async throws {
+
+    @Test("Array return types stringify payloads")
+    func arrayReturnType() async throws {
         let server = DemoResourceTestServer()
-        
+
         let metricsURL = URL(string: "metrics://system")!
         let resources = try await server.getResource(uri: metricsURL)
-        
-        XCTAssertEqual(resources.count, 1)
+
+        #expect(resources.count == 1)
         let text = resources.first?.text ?? ""
-        
-        // The array should be converted to string representation
-        XCTAssertTrue(text.contains("0.75"))
-        XCTAssertTrue(text.contains("0.82"))
-        XCTAssertTrue(text.contains("0.91"))
+
+        #expect(text.contains("0.75"))
+        #expect(text.contains("0.82"))
+        #expect(text.contains("0.91"))
     }
-    
-    func testBooleanReturnType() async throws {
+
+    @Test("Boolean return values serialize")
+    func booleanReturnType() async throws {
         let server = DemoResourceTestServer()
-        
-        // Test enabled feature
+
         let darkModeURL = URL(string: "features://dark_mode/enabled")!
         let darkModeResources = try await server.getResource(uri: darkModeURL)
-        XCTAssertEqual(darkModeResources.first?.text, "true")
-        
-        // Test disabled feature
+        #expect(darkModeResources.first?.text == "true")
+
         let unknownURL = URL(string: "features://unknown_feature/enabled")!
         let unknownResources = try await server.getResource(uri: unknownURL)
-        XCTAssertEqual(unknownResources.first?.text, "false")
+        #expect(unknownResources.first?.text == "false")
     }
-    
-    func testComplexReturnType() async throws {
+
+    @Test("Complex return types serialize to JSON")
+    func complexReturnType() async throws {
         let server = DemoResourceTestServer()
-        
-        // Test with default environment
+
         let prodURL = URL(string: "config://prod")!
         let prodResources = try await server.getResource(uri: prodURL)
-        
+
         let prodText = prodResources.first?.text ?? ""
-        XCTAssertFalse(prodText.isEmpty, "Prod response text should not be empty")
-        
-        XCTAssertTrue(prodText.contains("\"theme\" : \"default\""), "Prod response should contain theme:default as JSON")
-        XCTAssertTrue(prodText.contains("\"maxUploadSize\" : 10000000"), "Prod response should contain maxUploadSize as JSON")
+        #expect(!prodText.isEmpty, "Prod response text should not be empty")
 
-        // Simplified assertion for prod features
-        XCTAssertTrue(prodText.contains("stable_features"), "Prod response should contain 'stable_features'")
+        #expect(prodText.contains("\"theme\" : \"default\""), "Prod response should contain theme:default as JSON")
+        #expect(prodText.contains("\"maxUploadSize\" : 10000000"), "Prod response should contain maxUploadSize as JSON")
+        #expect(prodText.contains("stable_features"), "Prod response should contain 'stable_features'")
 
-        // Test with dev environment
         let devURL = URL(string: "config://dev")!
         let devResources = try await server.getResource(uri: devURL)
         let devText = devResources.first?.text ?? ""
-        XCTAssertFalse(devText.isEmpty, "Dev response text should not be empty")
-        XCTAssertTrue(devText.contains("\"theme\" : \"debug\""), "Dev response should contain theme:debug as JSON")
-        XCTAssertTrue(devText.contains("\"maxUploadSize\" : 100000000"), "Dev response should contain maxUploadSize as JSON")
-
-        // Simplified assertion for dev features
-        XCTAssertTrue(devText.contains("debug_panel"), "Dev response should contain 'debug_panel'")
+        #expect(!devText.isEmpty, "Dev response text should not be empty")
+        #expect(devText.contains("\"theme\" : \"debug\""), "Dev response should contain theme:debug as JSON")
+        #expect(devText.contains("\"maxUploadSize\" : 100000000"), "Dev response should contain maxUploadSize as JSON")
+        #expect(devText.contains("debug_panel"), "Dev response should contain 'debug_panel'")
     }
-} 
+}
