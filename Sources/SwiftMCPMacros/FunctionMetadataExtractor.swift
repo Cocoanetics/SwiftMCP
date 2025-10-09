@@ -53,6 +53,7 @@ struct ExtractedFunctionMetadata {
     let returnDescription: String? // From documentation, already escaped for Swift string
     let isAsync: Bool
     let isThrowing: Bool
+    let propagatedAttributes: [String] // Attributes (e.g. @MainActor) to re-emit on generated wrappers
 }
 
 /// Utility to extract common metadata from a FunctionDeclSyntax.
@@ -68,6 +69,21 @@ struct FunctionMetadataExtractor {
     func extract() throws -> ExtractedFunctionMetadata {
         let functionName = funcDecl.name.text
         let documentation = Documentation(from: funcDecl.leadingTrivia.description)
+
+        var propagatedAttributes: [String] = []
+        for attr in funcDecl.attributes {
+            guard let attribute = attr.as(AttributeSyntax.self) else { continue }
+            let attributeName = attribute.attributeName.description.trimmingCharacters(in: .whitespacesAndNewlines)
+            if attributeName.isEmpty { continue }
+            // Skip the MCP macros themselves to avoid recursive generation.
+            if ["MCPTool", "MCPResource", "MCPPrompt", "MCPServer", "MCPToolProvider", "Schema"].contains(attributeName) {
+                continue
+            }
+            let trimmedDescription = attribute.description.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedDescription.isEmpty {
+                propagatedAttributes.append(trimmedDescription)
+            }
+        }
 
         var parsedParameters: [ParsedParameter] = []
 
@@ -166,7 +182,8 @@ struct FunctionMetadataExtractor {
             returnTypeString: returnTypeString,
             returnDescription: returnDocDescription,
             isAsync: isAsync,
-            isThrowing: isThrowing
+            isThrowing: isThrowing,
+            propagatedAttributes: propagatedAttributes
         )
     }
 
