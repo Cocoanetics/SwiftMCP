@@ -1,6 +1,6 @@
 import Testing
 
-#if !os(iOS)
+#if canImport(SwiftCompilerPlugin) && !os(iOS)
 
 // Note: on iOS the Documentation class from SwiftMCPMacros isn't available
 

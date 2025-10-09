@@ -1,7 +1,6 @@
 import Foundation
 import Testing
 import SwiftMCP
-@testable import SwiftMCPMacros
 
 /// Test server demonstrating various @MCPResource use cases
 @MCPServer(name: "DemoResourceServer", version: "1.0")

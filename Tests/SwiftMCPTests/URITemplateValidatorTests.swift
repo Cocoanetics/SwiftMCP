@@ -6,6 +6,8 @@
 //
 
 import Testing
+
+#if canImport(SwiftCompilerPlugin)
 @testable import SwiftMCPMacros
 
 @Suite("URI Template Validator")
@@ -441,4 +443,6 @@ struct URITemplateValidatorTests {
         // Should return empty array for invalid templates
         #expect(variables == [])
     }
-} 
+}
+
+#endif

@@ -1,7 +1,6 @@
 import Foundation
 import Testing
 import SwiftMCP
-@testable import SwiftMCPMacros
 
 // Define the enum for temperature settings
 public enum Temp: String, CaseIterable, Sendable {
