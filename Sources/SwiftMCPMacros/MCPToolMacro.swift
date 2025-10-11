@@ -117,7 +117,7 @@ public struct MCPToolMacro: PeerMacro {
         // Generate the metadata variable
         let metadataDeclaration = """
 /// Metadata for the \(functionName) tool
-nonisolated private let __mcpMetadata_\(functionName) = MCPToolMetadata(
+nonisolated private static let __mcpMetadata_\(functionName) = MCPToolMetadata(
    name: "\(functionName)",
    description: \(descriptionArg),
    parameters: [\(parameterInfoStrings.joined(separator: ", "))],

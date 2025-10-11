@@ -77,35 +77,18 @@ extension MCPResourceProviding {
     }
 
     /// Resource templates with zero parameters are listed together with mcpResources
-    var mcpStaticResources: [MCPResource]
-	{
-        // Find the resources without parameters
-        let mirror = Mirror(reflecting: self)
+    var mcpStaticResources: [MCPResource] {
+        let staticMetadata = mcpResourceMetadata.filter { $0.parameters.isEmpty }
 
-        let array: [MCPResourceMetadata] = mirror.children.compactMap { child in
-
-            guard let label = child.label,
-					label.hasPrefix("__mcpResourceMetadata_") else {
-                return nil
-            }
-
-            guard let metadata = child.value as? MCPResourceMetadata else {
-                return nil
-            }
-
-            guard metadata.parameters.isEmpty else
-			{
-                return nil
-            }
-
-            return metadata
-        }
-
-        // Create individual resources for each URI template
-        return array.flatMap { metadata in
+        return staticMetadata.flatMap { metadata in
             metadata.uriTemplates.compactMap { template in
                 guard let url = URL(string: template) else { return nil }
-                return SimpleResource(uri: url, name: metadata.name, description: metadata.description, mimeType: metadata.mimeType)
+                return SimpleResource(
+                    uri: url,
+                    name: metadata.name,
+                    description: metadata.description,
+                    mimeType: metadata.mimeType
+                )
             }
         }
     }

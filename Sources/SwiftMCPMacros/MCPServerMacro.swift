@@ -205,7 +205,7 @@ public func callTool(_ name: String, arguments: [String: Sendable]) async throws
 
         // Add static mcpToolMetadata property
         if !mcpTools.isEmpty {
-            let metadataArray = mcpTools.map { "__mcpMetadata_\($0)" }.joined(separator: ", ")
+            let metadataArray = mcpTools.map { "Self.__mcpMetadata_\($0)" }.joined(separator: ", ")
             let metadataProperty = """
 /// Returns an array of all available tool metadata
 nonisolated public var mcpToolMetadata: [MCPToolMetadata] {
@@ -218,7 +218,7 @@ nonisolated public var mcpToolMetadata: [MCPToolMetadata] {
         // Add resource-related properties and methods if there are MCPResources defined
         if !mcpResources.isEmpty {
             // Add mcpResourceMetadata property
-            let resourceMetadataArray = mcpResources.map { "__mcpResourceMetadata_\($0)" }.joined(separator: ", ")
+            let resourceMetadataArray = mcpResources.map { "Self.__mcpResourceMetadata_\($0)" }.joined(separator: ", ")
             let resourceMetadataProperty = """
 /// Returns an array of all available resource metadata
 nonisolated public var mcpResourceMetadata: [MCPResourceMetadata] {
@@ -353,7 +353,7 @@ public func getResource(uri: URL) async throws -> [MCPResourceContent] {
 
         // Add prompt related properties and methods if there are MCPPrompts defined
         if !mcpPrompts.isEmpty {
-            let promptMetadataArray = mcpPrompts.map { "__mcpPromptMetadata_\($0)" }.joined(separator: ", ")
+            let promptMetadataArray = mcpPrompts.map { "Self.__mcpPromptMetadata_\($0)" }.joined(separator: ", ")
             let promptMetadataProperty = """
 /// Returns an array of all available prompt metadata
 nonisolated public var mcpPromptMetadata: [MCPPromptMetadata] {
