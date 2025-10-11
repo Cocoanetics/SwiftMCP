@@ -147,7 +147,7 @@ public struct MCPResourceMacro: PeerMacro {
         // Generate the metadata variable
         let metadataDeclaration = """
 /// Metadata for the \(functionName) resource
-nonisolated private let __mcpResourceMetadata_\(functionName) = MCPResourceMetadata(
+nonisolated private static let __mcpResourceMetadata_\(functionName) = MCPResourceMetadata(
    uriTemplates: Set(\(templatesSetString)),
    name: "\(resourceName)",
    functionName: "\(functionName)",

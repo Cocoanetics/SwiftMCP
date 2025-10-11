@@ -196,6 +196,34 @@ enum Weekday: String, CaseIterable {
     case sunday
 }
 
+@MCPServer
+actor ExtensionToolServer {
+    /// Returns a marker value from the base actor.
+    @MCPTool
+    func baseTool() -> String {
+        "base"
+    }
+}
+
+extension ExtensionToolServer {
+    /// Returns a marker value from an extension.
+    @MCPTool
+    func extensionTool() -> String {
+        "extension"
+    }
+}
+
+@MCPServer
+actor ExtensionOnlyToolServer {}
+
+extension ExtensionOnlyToolServer {
+    /// Returns a marker value when defined solely in an extension.
+    @MCPTool
+    func onlyTool() -> String {
+        "only"
+    }
+}
+
 // MARK: - Tests
 
 @Test
@@ -458,6 +486,32 @@ func testSchemaRepresentableParameter() async throws {
     } else {
         #expect(Bool(false), "Could not find fetchReminders function")
     }
+}
+
+@Test("Tools declared in the base type and its extensions are discoverable")
+func testExtensionToolDiscovery() async throws {
+    let server = ExtensionToolServer()
+    let toolNames = server.mcpToolMetadata.map(\.name)
+
+    #expect(toolNames.contains("baseTool"))
+    #expect(toolNames.contains("extensionTool"))
+
+    let baseResult = try await server.callTool("baseTool", arguments: [:])
+    #expect(baseResult as? String == "base")
+
+    let extensionResult = try await server.callTool("extensionTool", arguments: [:])
+    #expect(extensionResult as? String == "extension")
+}
+
+@Test("Tools declared exclusively in extensions are discoverable")
+func testExtensionOnlyToolDiscovery() async throws {
+    let server = ExtensionOnlyToolServer()
+    let toolNames = server.mcpToolMetadata.map(\.name)
+
+    #expect(toolNames.contains("onlyTool"))
+
+    let result = try await server.callTool("onlyTool", arguments: [:])
+    #expect(result as? String == "only")
 }
 
 @Test
