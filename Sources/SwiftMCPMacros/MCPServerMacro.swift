@@ -157,10 +157,51 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
         }
 
         var declarations: [DeclSyntax] = [
-			DeclSyntax(stringLiteral: nameProperty),
-			DeclSyntax(stringLiteral: versionProperty),
-			DeclSyntax(stringLiteral: descriptionProperty),
-		]
+                        DeclSyntax(stringLiteral: nameProperty),
+                        DeclSyntax(stringLiteral: versionProperty),
+                        DeclSyntax(stringLiteral: descriptionProperty),
+                ]
+
+        let metadataProperty = """
+/// Metadata registry for this server type
+nonisolated public static var metadata: MCPFunctionRegistry.TypeMetadata {
+   __mcpEnsureToolMetadataRegistered()
+   __mcpEnsureResourceMetadataRegistered()
+   __mcpEnsurePromptMetadataRegistered()
+   return MCPFunctionRegistry.metadata(for: Self.self)
+}
+"""
+        declarations.append(DeclSyntax(stringLiteral: metadataProperty))
+
+        let toolInitializationLines = mcpTools.map { "   _ = Self.__mcpMetadata_\($0)" }.joined(separator: "\n")
+        let ensureToolBody = toolInitializationLines.isEmpty ? "   // No MCP tools registered." : toolInitializationLines
+        let ensureToolMethod = """
+/// Ensures all tool metadata has been registered
+nonisolated internal static func __mcpEnsureToolMetadataRegistered() {
+\(ensureToolBody)
+}
+"""
+        declarations.append(DeclSyntax(stringLiteral: ensureToolMethod))
+
+        let resourceInitializationLines = mcpResources.map { "   _ = Self.__mcpResourceMetadata_\($0)" }.joined(separator: "\n")
+        let ensureResourceBody = resourceInitializationLines.isEmpty ? "   // No MCP resources registered." : resourceInitializationLines
+        let ensureResourceMethod = """
+/// Ensures all resource metadata has been registered
+nonisolated internal static func __mcpEnsureResourceMetadataRegistered() {
+\(ensureResourceBody)
+}
+"""
+        declarations.append(DeclSyntax(stringLiteral: ensureResourceMethod))
+
+        let promptInitializationLines = mcpPrompts.map { "   _ = Self.__mcpPromptMetadata_\($0)" }.joined(separator: "\n")
+        let ensurePromptBody = promptInitializationLines.isEmpty ? "   // No MCP prompts registered." : promptInitializationLines
+        let ensurePromptMethod = """
+/// Ensures all prompt metadata has been registered
+nonisolated internal static func __mcpEnsurePromptMetadataRegistered() {
+\(ensurePromptBody)
+}
+"""
+        declarations.append(DeclSyntax(stringLiteral: ensurePromptMethod))
 
         // Only add callTool method if there are MCPTools defined
         if !mcpTools.isEmpty {
@@ -182,11 +223,13 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
 /// - Returns: The result of the tool call
 /// - Throws: MCPToolError if the tool doesn't exist or cannot be called
 public func callTool(_ name: String, arguments: [String: Sendable]) async throws -> (Encodable & Sendable) {
+   Self.__mcpEnsureToolMetadataRegistered()
+
    // Find the tool metadata by name
-   guard let metadata = mcpToolMetadata(for: name) else {
+   guard let metadata = Self.metadata.tool(named: name) else {
       throw MCPToolError.unknownTool(name: name)
    }
-   
+
    // Enrich arguments with default values
    let enrichedArguments = try metadata.enrichArguments(arguments)
    
@@ -205,11 +248,11 @@ public func callTool(_ name: String, arguments: [String: Sendable]) async throws
 
         // Add static mcpToolMetadata property
         if !mcpTools.isEmpty {
-            let metadataArray = mcpTools.map { "__mcpMetadata_\($0)" }.joined(separator: ", ")
             let metadataProperty = """
 /// Returns an array of all available tool metadata
 nonisolated public var mcpToolMetadata: [MCPToolMetadata] {
-   return [\(metadataArray)]
+   Self.__mcpEnsureToolMetadataRegistered()
+   return Self.metadata.tools
 }
 """
             declarations.append(DeclSyntax(stringLiteral: metadataProperty))
@@ -218,11 +261,11 @@ nonisolated public var mcpToolMetadata: [MCPToolMetadata] {
         // Add resource-related properties and methods if there are MCPResources defined
         if !mcpResources.isEmpty {
             // Add mcpResourceMetadata property
-            let resourceMetadataArray = mcpResources.map { "__mcpResourceMetadata_\($0)" }.joined(separator: ", ")
             let resourceMetadataProperty = """
 /// Returns an array of all available resource metadata
 nonisolated public var mcpResourceMetadata: [MCPResourceMetadata] {
-   return [\(resourceMetadataArray)]
+   Self.__mcpEnsureResourceMetadataRegistered()
+   return Self.metadata.resources
 }
 """
             declarations.append(DeclSyntax(stringLiteral: resourceMetadataProperty))
@@ -235,7 +278,8 @@ nonisolated public var mcpResourceMetadata: [MCPResourceMetadata] {
 /// Returns resource templates (resources with parameters)
 public var mcpResourceTemplates: [MCPResourceTemplate] {
    get async {
-      return mcpResourceMetadata.filter { !$0.parameters.isEmpty }.flatMap { $0.toResourceTemplates() }
+      Self.__mcpEnsureResourceMetadataRegistered()
+      return Self.metadata.resources.filter { !$0.parameters.isEmpty }.flatMap { $0.toResourceTemplates() }
    }
 }
 """
@@ -251,7 +295,7 @@ public var mcpResourceTemplates: [MCPResourceTemplate] {
                 }
             }
 
-            let internalCallResourceMethod = """
+let internalCallResourceMethod = """
 /// Internal helper method for calling resource functions directly
 /// - Parameters:
 ///   - name: The name of the resource function to call
@@ -261,6 +305,7 @@ public var mcpResourceTemplates: [MCPResourceTemplate] {
 /// - Returns: The resource content from the function call
 /// - Throws: MCPResourceError if the resource function doesn't exist or cannot be called
 internal func __callResourceFunction(_ name: String, enrichedArguments: [String: Sendable], requestedUri: URL, overrideMimeType: String?) async throws -> [MCPResourceContent] {
+   Self.__mcpEnsureResourceMetadataRegistered()
    // Call the appropriate wrapper method based on the resource name
    switch name {
 \(resourceFunctionSwitchCases)
@@ -279,8 +324,10 @@ internal func __callResourceFunction(_ name: String, enrichedArguments: [String:
 /// - Returns: The result of the resource function execution
 /// - Throws: An error if the resource function doesn't exist or cannot be called
 public func callResourceAsFunction(_ name: String, arguments: [String: Sendable]) async throws -> Encodable & Sendable {
+   Self.__mcpEnsureResourceMetadataRegistered()
+
    // Find the resource metadata by name
-   guard let metadata = mcpResourceMetadata.first(where: { $0.functionMetadata.name == name }) else {
+   guard let metadata = Self.metadata.resource(named: name) else {
       throw MCPResourceError.notFound(uri: "function://\\(name)")
    }
    
@@ -310,10 +357,11 @@ public func callResourceAsFunction(_ name: String, arguments: [String: Sendable]
 /// - Returns: The resource content if found
 /// - Throws: An error if the resource cannot be accessed or is not found
 public func getResource(uri: URL) async throws -> [MCPResourceContent] {
+   Self.__mcpEnsureResourceMetadataRegistered()
    // Find the best matching template across all resources
    var bestMatch: (metadata: MCPResourceMetadata, template: String, paramCount: Int)?
-   
-   for metadata in mcpResourceMetadata {
+
+   for metadata in Self.metadata.resources {
       for template in metadata.uriTemplates {
          if let params = uri.extractTemplateVariables(from: template) {
             let paramCount = params.count
@@ -353,11 +401,11 @@ public func getResource(uri: URL) async throws -> [MCPResourceContent] {
 
         // Add prompt related properties and methods if there are MCPPrompts defined
         if !mcpPrompts.isEmpty {
-            let promptMetadataArray = mcpPrompts.map { "__mcpPromptMetadata_\($0)" }.joined(separator: ", ")
             let promptMetadataProperty = """
 /// Returns an array of all available prompt metadata
 nonisolated public var mcpPromptMetadata: [MCPPromptMetadata] {
-   return [\(promptMetadataArray)]
+   Self.__mcpEnsurePromptMetadataRegistered()
+   return Self.metadata.prompts
 }
 """
             declarations.append(DeclSyntax(stringLiteral: promptMetadataProperty))
@@ -372,7 +420,8 @@ nonisolated public var mcpPromptMetadata: [MCPPromptMetadata] {
             let callPromptMethod = """
 /// Calls a prompt by name with the provided arguments
 public func callPrompt(_ name: String, arguments: [String: Sendable]) async throws -> [PromptMessage] {
-   guard let metadata = mcpPromptMetadata.first(where: { $0.name == name }) else {
+   Self.__mcpEnsurePromptMetadataRegistered()
+   guard let metadata = Self.metadata.prompt(named: name) else {
       throw MCPToolError.unknownTool(name: name)
    }
    let enrichedArguments = try metadata.enrichArguments(arguments)
@@ -477,6 +526,10 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
             type.type.trimmedDescription == "MCPPromptProviding"
         }
 
+        let alreadyConformsToMetadataProviding = inheritedTypes.contains { type in
+            type.type.trimmedDescription == "MCPFunctionRegistryProviding"
+        }
+
         // Determine which protocols need to be added
         var protocolsToAdd: [String] = []
 
@@ -494,6 +547,10 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
 
         if hasMCPPrompts && !alreadyConformsToPromptProviding {
             protocolsToAdd.append("MCPPromptProviding")
+        }
+
+        if !alreadyConformsToMetadataProviding {
+            protocolsToAdd.append("MCPFunctionRegistryProviding")
         }
 
         // If we have protocols to add, create a single extension with all needed conformances
