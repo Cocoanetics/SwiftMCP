@@ -147,18 +147,22 @@ public struct MCPResourceMacro: PeerMacro {
         // Generate the metadata variable
         let metadataDeclaration = """
 /// Metadata for the \(functionName) resource
-nonisolated private let __mcpResourceMetadata_\(functionName) = MCPResourceMetadata(
-   uriTemplates: Set(\(templatesSetString)),
-   name: "\(resourceName)",
-   functionName: "\(functionName)",
-   description: \(descriptionArg),
-   parameters: [\(parameterInfoStrings.joined(separator: ", "))],
-   returnType: \(returnTypeString).self,
-   returnTypeDescription: \(returnDescriptionString),
-   isAsync: \(commonMetadata.isAsync),
-   isThrowing: \(commonMetadata.isThrowing),
-   mimeType: \(mimeTypeArg)
-)
+nonisolated private static var __mcpResourceMetadata_\(functionName): MCPResourceMetadata {
+   let metadata = MCPResourceMetadata(
+      uriTemplates: Set(\(templatesSetString)),
+      name: "\(resourceName)",
+      functionName: "\(functionName)",
+      description: \(descriptionArg),
+      parameters: [\(parameterInfoStrings.joined(separator: ", "))],
+      returnType: \(returnTypeString).self,
+      returnTypeDescription: \(returnDescriptionString),
+      isAsync: \(commonMetadata.isAsync),
+      isThrowing: \(commonMetadata.isThrowing),
+      mimeType: \(mimeTypeArg)
+   )
+   MCPFunctionRegistry.registerResource(metadata, named: "\(functionName)", for: Self.self)
+   return metadata
+}
 """
 
         let callParameterList = wrapperParamDetails.map { param in

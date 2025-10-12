@@ -47,13 +47,17 @@ public struct MCPPromptMacro: PeerMacro {
 
         let metadataDeclaration = """
 /// Metadata for the \(functionName) prompt
-nonisolated private let __mcpPromptMetadata_\(functionName) = MCPPromptMetadata(
-   name: \"\(functionName)\",
-   description: \(descriptionArg),
-   parameters: [\(paramInfoStrings.joined(separator: ", "))],
-   isAsync: \(metadata.isAsync),
-   isThrowing: \(metadata.isThrowing)
-)
+nonisolated private static var __mcpPromptMetadata_\(functionName): MCPPromptMetadata {
+   let metadata = MCPPromptMetadata(
+      name: \"\(functionName)\",
+      description: \(descriptionArg),
+      parameters: [\(paramInfoStrings.joined(separator: ", "))],
+      isAsync: \(metadata.isAsync),
+      isThrowing: \(metadata.isThrowing)
+   )
+   MCPFunctionRegistry.registerPrompt(metadata, named: \"\(functionName)\", for: Self.self)
+   return metadata
+}
 """
 
         var wrapperFunc = """
