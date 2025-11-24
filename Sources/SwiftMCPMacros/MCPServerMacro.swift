@@ -41,11 +41,12 @@ import SwiftDiagnostics
  }
  ```
  
- - Note: The server description is automatically extracted from the documentation comment.
- 
+ - Note: The server description is automatically extracted from the documentation comment unless overridden via the `description` parameter.
+
  - Parameters:
    - name: The name of the server. Defaults to the declaration name.
    - version: The version of the server. Defaults to "1.0".
+   - description: Optional override for the documentation-derived description.
  
  - Throws: MCPToolError if a tool cannot be found or called
  
@@ -93,14 +94,32 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
         let nameArg = arguments?.first(where: { $0.label?.text == "name" })?.expression.description.trimmingCharacters(in: .punctuationCharacters)
         let versionArg = arguments?.first(where: { $0.label?.text == "version" })?.expression.description.trimmingCharacters(in: .punctuationCharacters)
 
+        var descriptionArg: String? = nil
+        if let arguments {
+            for argument in arguments {
+                if argument.label?.text == "description",
+                   let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
+                    let stringValue = stringLiteral.segments.description
+                    descriptionArg = "\"\(stringValue.escapedForSwiftString)\""
+                }
+            }
+        }
+
         let serverName = nameArg ?? declaration.as(ClassDeclSyntax.self)?.name.text ?? declaration.as(StructDeclSyntax.self)?.name.text ?? "UnnamedServer"
 
         let serverVersion = versionArg ?? "1.0"
 
-        // Extract description from leading documentation
+        // Extract description from leading documentation and allow override via macro argument
         let leadingTrivia = declaration.leadingTrivia.description
         let documentation = Documentation(from: leadingTrivia)
-        let serverDescription = documentation.description.isEmpty ? "nil" : "\"\(documentation.description.escapedForSwiftString)\""
+        let serverDescription: String
+        if let descriptionArg {
+            serverDescription = descriptionArg
+        } else if documentation.description.isEmpty {
+            serverDescription = "nil"
+        } else {
+            serverDescription = "\"\(documentation.description.escapedForSwiftString)\""
+        }
 
         let nameProperty = "private let __mcpServerName = \"\(serverName)\""
         let versionProperty = "private let __mcpServerVersion = \"\(serverVersion)\""

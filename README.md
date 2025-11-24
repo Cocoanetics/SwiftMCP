@@ -149,7 +149,7 @@ The `@MCPServer` and `@MCPTool` macros extract documentation comments to describ
 
 The macros in this repository provide functionality for defining and exposing tools and servers in the SwiftMCP framework. Here are the main functionalities of the macros:
 
-* `@MCPServer`: This macro is used to define a class or actor as an MCP server. It extracts documentation comments to describe the class, parameters, and return values. An example of its usage can be seen in the `Demos/SwiftMCPDemo/Calculator.swift` file, where the `Calculator` actor is annotated with `@MCPServer(name: "SwiftMCP Demo")`.
+* `@MCPServer`: This macro is used to define a class or actor as an MCP server. It extracts the server description from documentation comments (or the optional `description:` override). An example of its usage can be seen in the `Demos/SwiftMCPDemo/Calculator.swift` file, where the `Calculator` actor is annotated with `@MCPServer(name: "SwiftMCP Demo")`.
 * `@MCPTool`: This macro is used to define functions within an MCP server that can be called as tools. It also extracts documentation comments to describe the function, parameters, and return values. Examples of its usage can be seen in the `Demos/SwiftMCPDemo/Calculator.swift` file, where various functions such as `add`, `subtract`, `testArray`, `multiply`, `divide`, `greet`, `ping`, and `noop` are annotated with `@MCPTool`.
 * `@MCPResource`: This macro is used to expose read-only data through URI templates. Resources allow clients to access data using structured URIs with path and query parameters. The macro automatically generates the necessary infrastructure to match URIs against templates and extract parameters.
 
