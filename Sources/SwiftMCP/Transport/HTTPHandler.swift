@@ -8,7 +8,7 @@ import Logging
 
 
 /// HTTP request handler for the SSE transport
-final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @unchecked Sendable, URLSessionTaskDelegate {
+class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @unchecked Sendable, URLSessionTaskDelegate {
     typealias InboundIn = HTTPServerRequestPart
     typealias OutboundOut = HTTPServerResponsePart
 
@@ -47,7 +47,15 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
 
             // BODY Received after HEAD
             case (.body(let buffer), .head(let head)):
-                requestState = .body(head: head, data: buffer)
+                var copiedBuffer = context.channel.allocator.buffer(capacity: buffer.readableBytes)
+                copiedBuffer.writeBytes(buffer.readableBytesView)
+                requestState = .body(head: head, data: copiedBuffer)
+
+            // BODY Received after previous BODY
+            case (.body(let buffer), .body(let head, let existingBuffer)):
+                var mutableBuffer = existingBuffer
+                mutableBuffer.writeBytes(buffer.readableBytesView)
+                requestState = .body(head: head, data: mutableBuffer)
 
             // BODY Received in an unexpected state
             case (.body, _):
@@ -60,12 +68,12 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             // END Received after HEAD (no body)
             case (.end, .head(let head)):
                 defer { requestState = .idle }
-                handleRequest(context: context, head: head, body: nil)
+                processRequest(context: context, head: head, body: nil)
 
             // END Received after BODY
             case (.end, .body(let head, let buffer)):
                 defer { requestState = .idle }
-                handleRequest(context: context, head: head, body: buffer)
+                processRequest(context: context, head: head, body: buffer)
         }
     }
 
@@ -75,7 +83,11 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
 
     // MARK: - Handler
 
-    private func handleRequest(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?) {
+    func processRequest(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?) {
+        handleRequest(context: context, head: head, body: body)
+    }
+
+    func handleRequest(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?) {
 
         let serverPath = "/\(transport.server.serverName.asModelName)"
         let channel = context.channel
