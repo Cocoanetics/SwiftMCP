@@ -46,8 +46,13 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
                 requestState = .head(head)
 
             // BODY Received after HEAD
-            case (.body(let buffer), .head(let head)):
+			case (.body(let buffer), .head(let head)):
                 requestState = .body(head: head, data: buffer)
+
+            // Additional BODY chunks after initial BODY
+            case (.body(var newBuffer), .body(let head, var priorBuffer)):
+                priorBuffer.writeBuffer(&newBuffer)
+                requestState = .body(head: head, data: priorBuffer)
 
             // BODY Received in an unexpected state
             case (.body, _):
@@ -1260,5 +1265,4 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         sendResponse(channel: channel, status: .noContent)
     }
 }
-
 
