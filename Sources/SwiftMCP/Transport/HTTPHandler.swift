@@ -47,7 +47,16 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
 
             // BODY Received after HEAD
             case (.body(let buffer), .head(let head)):
-                requestState = .body(head: head, data: buffer)
+                var copy = buffer
+                let data = copy.readData(length: copy.readableBytes) ?? Data()
+                requestState = .body(head: head, data: data)
+
+            case (.body(let buffer), .body(let head, var data)):
+                var copy = buffer
+                if let chunk = copy.readData(length: copy.readableBytes) {
+                    data.append(chunk)
+                }
+                requestState = .body(head: head, data: data)
 
             // BODY Received in an unexpected state
             case (.body, _):
@@ -75,7 +84,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
 
     // MARK: - Handler
 
-    private func handleRequest(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?) {
+    private func handleRequest(context: ChannelHandlerContext, head: HTTPRequestHead, body: Data?) {
 
         let serverPath = "/\(transport.server.serverName.asModelName)"
         let channel = context.channel
@@ -206,7 +215,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         }
     }
 
-    private func handleSimpleResponse(channel: Channel, head: HTTPRequestHead, body: ByteBuffer?) async {
+    private func handleSimpleResponse(channel: Channel, head: HTTPRequestHead, body: Data?) async {
         precondition(head.method == .POST)
 
         // Extract or generate session ID
@@ -331,7 +340,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         }
     }
 
-    private func handleSSE(channel: Channel, head: HTTPRequestHead, body: ByteBuffer?, sendEndpoint: Bool = true) async {
+    private func handleSSE(channel: Channel, head: HTTPRequestHead, body: Data?, sendEndpoint: Bool = true) async {
         precondition(head.method == .GET)
 
         // Extract or generate session/client ID (they are the same thing)
@@ -426,7 +435,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
     }
 
     /// Async version of handleMessages that works with Sendable types
-    private func handleMessagesAsync(channel: Channel, head: HTTPRequestHead, body: ByteBuffer?) async {
+    private func handleMessagesAsync(channel: Channel, head: HTTPRequestHead, body: Data?) async {
         // Extract client ID from URL path using URLComponents
         guard let components = URLComponents(string: head.uri),
               let idString = components.path.components(separatedBy: "/").last,
@@ -467,7 +476,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             await self.sendResponseAsync(channel: channel, status: .badRequest)
             return
         }
-        
+
         do {
             let messages = try JSONRPCMessage.decodeMessages(from: body)
             
@@ -757,7 +766,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         }
     }
 
-    private func handleToolCall(context: ChannelHandlerContext, head: HTTPRequestHead, body: ByteBuffer?) {
+    private func handleToolCall(context: ChannelHandlerContext, head: HTTPRequestHead, body: Data?) {
         precondition(head.method == .POST)
         precondition(transport.serveOpenAPI)
 
@@ -776,9 +785,9 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
     }
 
     private func handleToolCallAsync(channel: Channel,
-								   allocator: ByteBufferAllocator,
-								   head: HTTPRequestHead,
-								   body: ByteBuffer?) async {
+                                                                   allocator: ByteBufferAllocator,
+                                                                   head: HTTPRequestHead,
+                                                                   body: Data?) async {
         // Split the URI into components and validate the necessary parts
         let pathComponents = head.uri.split(separator: "/").map(String.init)
 
@@ -820,12 +829,9 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             return
         }
 
-        // Get Data from ByteBuffer
-        let bodyData = Data(buffer: body)
-
         do {
             // Parse request body as JSON dictionary
-            guard let arguments = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Sendable] else {
+            guard let arguments = try? JSONSerialization.jsonObject(with: body) as? [String: Sendable] else {
                 throw MCPToolError.invalidJSONDictionary
             }
 
@@ -913,7 +919,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
 
     // MARK: - OAuth Proxy
 
-    private func handleOAuthProxy(channel: Channel, head: HTTPRequestHead, body: ByteBuffer?) async {
+    private func handleOAuthProxy(channel: Channel, head: HTTPRequestHead, body: Data?) async {
         logger.info("Handling OAuth proxy request for \(head.uri)")
         guard let config = transport.oauthConfiguration else {
             logger.error("OAuth not configured")
@@ -1034,7 +1040,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
 
         // Copy body if present
         if let requestBody = body {
-            proxyRequest.httpBody = Data(buffer: requestBody)
+            proxyRequest.httpBody = requestBody
         }
 
         do {

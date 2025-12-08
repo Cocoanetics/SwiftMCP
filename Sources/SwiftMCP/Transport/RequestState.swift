@@ -1,3 +1,4 @@
+import Foundation
 import NIOHTTP1
 import NIOCore
 
@@ -5,5 +6,5 @@ import NIOCore
 enum RequestState {
     case idle
     case head(HTTPRequestHead)
-    case body(head: HTTPRequestHead, data: ByteBuffer)
-} 
+    case body(head: HTTPRequestHead, data: Data)
+}
