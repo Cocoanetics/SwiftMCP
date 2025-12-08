@@ -43,18 +43,39 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
 
             // Initial HEAD Received
             case (.head(let head), _):
+                if let contentLength = head.headers.first(name: "content-length"), let length = Int(contentLength), length > transport.maxMessageSize {
+                    logger.warning("Rejecting request with Content-Length \(length) > max \(transport.maxMessageSize)")
+                    rejectOversizedRequest(context: context)
+                    requestState = .rejected
+                    return
+                }
                 requestState = .head(head)
 
             // BODY Received after HEAD
 			case (.body(let buffer), .head(let head)):
+                guard buffer.readableBytes <= transport.maxMessageSize else {
+                    logger.warning("Rejecting request: first body chunk size \(buffer.readableBytes) > max \(transport.maxMessageSize)")
+                    rejectOversizedRequest(context: context)
+                    requestState = .rejected
+                    return
+                }
                 requestState = .body(head: head, data: buffer)
 
             // Additional BODY chunks after initial BODY
             case (.body(var newBuffer), .body(let head, var priorBuffer)):
+                let combinedSize = priorBuffer.readableBytes + newBuffer.readableBytes
+                guard combinedSize <= transport.maxMessageSize else {
+                    logger.warning("Rejecting request: accumulated body size \(combinedSize) > max \(transport.maxMessageSize)")
+                    rejectOversizedRequest(context: context)
+                    requestState = .rejected
+                    return
+                }
                 priorBuffer.writeBuffer(&newBuffer)
                 requestState = .body(head: head, data: priorBuffer)
 
             // BODY Received in an unexpected state
+            case (.body, .rejected):
+                break
             case (.body, _):
                 logger.warning("Received unexpected body without a valid head")
 
@@ -71,11 +92,25 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             case (.end, .body(let head, let buffer)):
                 defer { requestState = .idle }
                 handleRequest(context: context, head: head, body: buffer)
+
+            // END Received after rejection
+            case (.end, .rejected):
+                requestState = .idle
         }
     }
 
     func channelReadComplete(context: ChannelHandlerContext) {
         context.flush()
+    }
+    
+    private func rejectOversizedRequest(context: ChannelHandlerContext) {
+        var headers = HTTPHeaders()
+        headers.add(name: "Connection", value: "close")
+        headers.add(name: "Content-Type", value: "text/plain; charset=utf-8")
+        let message = "Request body exceeds maximum allowed size of \(transport.maxMessageSize) bytes."
+        let buffer = stringBuffer(message, allocator: context.channel.allocator)
+        sendResponse(channel: context.channel, status: .payloadTooLarge, headers: headers, body: buffer)
+        context.close(promise: nil)
     }
 
     // MARK: - Handler
@@ -1238,7 +1273,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
     private func sendResponse(channel: Channel, status: HTTPResponseStatus, headers: HTTPHeaders? = nil, body: ByteBuffer? = nil) {
         var responseHeaders = headers ?? HTTPHeaders()
 
-        if body != nil {
+        if body != nil && responseHeaders["Content-Type"].isEmpty {
             responseHeaders.add(name: "Content-Type", value: "application/json")
         }
 
@@ -1265,4 +1300,3 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         sendResponse(channel: channel, status: .noContent)
     }
 }
-

@@ -6,4 +6,5 @@ enum RequestState {
     case idle
     case head(HTTPRequestHead)
     case body(head: HTTPRequestHead, data: ByteBuffer)
+    case rejected
 } 

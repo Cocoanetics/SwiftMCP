@@ -41,6 +41,9 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
 
     /// Flag to determine whether to serve OpenAPI endpoints.
     public var serveOpenAPI: Bool = false
+    
+    /// Maximum allowed HTTP message size in bytes (defaults to 4 MB).
+    public var maxMessageSize: Int = 4 * 1024 * 1024
 
     /// Result of an authorization check.
     public enum AuthorizationResult: Sendable {
