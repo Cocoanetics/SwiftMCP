@@ -35,6 +35,15 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         context.close(promise: nil)
     }
 
+    func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
+        if let channelEvent = event as? ChannelEvent, channelEvent == .inputClosed {
+            // Close the channel on remote half-closure to avoid lingering sockets.
+            context.close(promise: nil)
+            return
+        }
+        context.fireUserInboundEventTriggered(event)
+    }
+
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
 
         let requestPart = unwrapInboundIn(data)
