@@ -2,15 +2,11 @@ import Foundation
 
 /// Helpers for encoding native values into MCP tool argument payloads.
 public enum MCPToolArgumentEncoder {
-    private static let iso8601Formatter: ISO8601DateFormatter = {
+    public static func encode(_ value: Date) -> String {
         let formatter = ISO8601DateFormatter()
         formatter.timeZone = TimeZone.current
         formatter.formatOptions = [.withInternetDateTime, .withTimeZone]
-        return formatter
-    }()
-
-    public static func encode(_ value: Date) -> String {
-        iso8601Formatter.string(from: value)
+        return formatter.string(from: value)
     }
 
     public static func encode(_ value: URL) -> String {
