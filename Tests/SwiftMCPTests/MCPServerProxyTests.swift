@@ -1,6 +1,9 @@
 import Testing
 import SwiftMCP
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 struct MCPServerProxyTests {
     static let mcpServerURL = URL(string: "http://\(String.localHostname):8080/sse")!

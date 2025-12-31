@@ -1,7 +1,7 @@
 import Foundation
 
 @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, macCatalyst 15.0, *)
-struct SSEMessageSequence<Base: AsyncSequence>: AsyncSequence where Base.Element == String {
+struct SSEMessageSequence<Base: AsyncSequence>: AsyncSequence where Base.Element: StringProtocol {
     typealias Element = SSEClientMessage
     let base: Base
 
@@ -11,7 +11,8 @@ struct SSEMessageSequence<Base: AsyncSequence>: AsyncSequence where Base.Element
         var currentData: String = ""
 
         mutating func next() async throws -> SSEClientMessage? {
-            while let line = try await iterator.next() {
+            while let lineValue = try await iterator.next() {
+                let line = String(lineValue)
                 if line.isEmpty {
                     if !currentData.isEmpty {
                         return yieldCurrent()
@@ -56,7 +57,7 @@ struct SSEMessageSequence<Base: AsyncSequence>: AsyncSequence where Base.Element
 }
 
 @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, macCatalyst 15.0, *)
-extension AsyncSequence where Element == String {
+extension AsyncSequence where Element: StringProtocol {
     /// Transform a sequence of SSE lines into SSEClientMessage objects.
     func sseMessages() -> SSEMessageSequence<Self> {
         SSEMessageSequence(base: self)
