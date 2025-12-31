@@ -5,6 +5,10 @@ import Foundation
 struct MCPServerProxyTests {
     static let mcpServerURL = URL(string: "http://\(String.localHostname):8080/sse")!
 
+    init() {
+        TestLoggingBootstrap.install()
+    }
+
     @Test("Proxy config: SSE")
     func testSSEConfiguration() async {
         let url = Self.mcpServerURL
@@ -166,6 +170,27 @@ struct MCPServerProxyTests {
 
         await proxy.disconnect()
     }
+
+    @Test("STDIO external: local build", .enabled(if: isLocalSwiftMCPDemoAvailable()))
+    func testStdioConnectToLocalBuild() async throws {
+        guard let demoExecutable = localSwiftMCPDemoExecutable() else {
+            Issue.record("SwiftMCPDemo executable not found")
+            return
+        }
+        let stdioConfig = MCPServerStdioConfig(
+            command: demoExecutable,
+            args: ["stdio"],
+            workingDirectory: repositoryRootPath(),
+            environment: [:]
+        )
+        let config = MCPServerConfig.stdio(config: stdioConfig)
+        let proxy = MCPServerProxy(config: config)
+        try await proxy.connect()
+        let tools = try await proxy.listTools()
+        #expect(!tools.isEmpty)
+        try await proxy.ping()
+        await proxy.disconnect()
+    }
 }
 
 func isMCPServerAvailable(url: URL) -> Bool {
@@ -184,6 +209,31 @@ func isMCPServerAvailable(url: URL) -> Bool {
     task.resume()
     _ = semaphore.wait(timeout: .now() + 2)
     return availability.get()
+}
+
+private func repositoryRootPath() -> String {
+    URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .path
+}
+
+private func isLocalSwiftMCPDemoAvailable() -> Bool {
+    localSwiftMCPDemoExecutable() != nil
+}
+
+private func localSwiftMCPDemoExecutable() -> String? {
+    let repoPath = repositoryRootPath()
+    let debugPath = "\(repoPath)/.build/arm64-apple-macosx/debug/SwiftMCPDemo"
+    if FileManager.default.isExecutableFile(atPath: debugPath) {
+        return debugPath
+    }
+    let releasePath = "\(repoPath)/.build/arm64-apple-macosx/release/SwiftMCPDemo"
+    if FileManager.default.isExecutableFile(atPath: releasePath) {
+        return releasePath
+    }
+    return nil
 }
 
 @MCPServer(name: "SwiftMCP Test Server")
