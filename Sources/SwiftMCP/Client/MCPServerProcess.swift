@@ -2,8 +2,8 @@
 
 import Foundation
 
-/// Manages the lifecycle of an MCP server process running via stdio.
-public final actor MCPServerProcess {
+/// Manages a stdio connection to an MCP server, optionally backed by a process.
+public final actor MCPServerProcess: StdioConnection {
     private var process: Process?
     private var inputHandle: FileHandle?
     private var outputHandle: FileHandle?
@@ -71,11 +71,17 @@ public final actor MCPServerProcess {
         self.errorHandle = stderrPipe.fileHandleForReading
     }
 
-    /// Starts the MCP server process.
+    /// Initializes a new stdio connection using the provided handles.
+    public init(stdin: FileHandle, stdout: FileHandle) {
+        self.process = nil
+        self.inputHandle = stdin
+        self.outputHandle = stdout
+        self.errorHandle = nil
+    }
+
+    /// Starts the MCP server process (no-op for handle-based connections).
     public func start() async throws {
-        guard let process = process else {
-            throw MCPServerProxyError.communicationError("Process not initialized")
-        }
+        guard let process = process else { return }
 
         try process.run()
 
@@ -85,17 +91,30 @@ public final actor MCPServerProcess {
     }
 
     /// Writes data to the process's standard input.
-    public func write(_ data: Data) {
+    private func writeSync(_ data: Data) {
         inputHandle?.write(data)
     }
 
-    /// Terminates the MCP server process.
+    /// Terminates the MCP server process or detaches stdio handles.
     public func terminate() {
+        outputHandle?.readabilityHandler = nil
         process?.terminate()
         process = nil
         inputHandle = nil
         outputHandle = nil
         errorHandle = nil
+    }
+
+    public func write(_ data: Data) async {
+        writeSync(data)
+    }
+
+    public func stop() async {
+        terminate()
+    }
+
+    public func lines() async -> AsyncThrowingStream<String, Error> {
+        lines
     }
 }
 
@@ -104,8 +123,11 @@ public final actor MCPServerProcess {
 import Foundation
 
 /// Stub implementation for platforms where Process is unavailable.
-public final actor MCPServerProcess {
+public final actor MCPServerProcess: StdioConnection {
     public init(config: MCPServerStdioConfig) {
+    }
+
+    public init(stdin: FileHandle, stdout: FileHandle) {
     }
 
     public var lines: AsyncThrowingStream<String, Error> {
@@ -118,10 +140,17 @@ public final actor MCPServerProcess {
         throw MCPServerProxyError.unsupportedPlatform("Stdio-based MCP servers require Process support.")
     }
 
-    public func write(_ data: Data) {
+    public func terminate() {
     }
 
-    public func terminate() {
+    public func write(_ data: Data) async {
+    }
+
+    public func stop() async {
+    }
+
+    public func lines() async -> AsyncThrowingStream<String, Error> {
+        lines
     }
 }
 

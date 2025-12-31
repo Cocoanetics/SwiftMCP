@@ -5,7 +5,7 @@ import Foundation
 struct MCPServerProxyTests {
     static let mcpServerURL = URL(string: "http://\(String.localHostname):8080/sse")!
 
-    @Test("SSE Configuration")
+    @Test("Proxy config: SSE")
     func testSSEConfiguration() async {
         let url = Self.mcpServerURL
         let sseConfig = MCPServerSseConfig(url: url)
@@ -15,10 +15,10 @@ struct MCPServerProxyTests {
         let proxyConfig = await proxy.config
         let cacheToolsList = await proxy.cacheToolsList
 
-        #expect(proxyConfig == config)
         #expect(!cacheToolsList)
 
         if case .sse(let configuredConfig) = proxyConfig {
+            #expect(configuredConfig == sseConfig)
             #expect(configuredConfig.url == url)
             #expect(configuredConfig.headers == [:])
         } else {
@@ -26,7 +26,7 @@ struct MCPServerProxyTests {
         }
     }
 
-    @Test("SSE Configuration With Caching")
+    @Test("Proxy config: SSE with caching")
     func testSSEConfigurationWithCaching() async {
         let url = Self.mcpServerURL
         let sseConfig = MCPServerSseConfig(url: url, headers: ["Authorization": "Bearer token"])
@@ -36,10 +36,10 @@ struct MCPServerProxyTests {
         let proxyConfig = await proxy.config
         let cacheToolsList = await proxy.cacheToolsList
 
-        #expect(proxyConfig == config)
         #expect(cacheToolsList)
 
         if case .sse(let configuredConfig) = proxyConfig {
+            #expect(configuredConfig == sseConfig)
             #expect(configuredConfig.url == url)
             #expect(configuredConfig.headers == ["Authorization": "Bearer token"])
         } else {
@@ -47,7 +47,7 @@ struct MCPServerProxyTests {
         }
     }
 
-    @Test("STDIO Configuration")
+    @Test("Proxy config: STDIO")
     func testStdioConfiguration() async {
         let stdioConfig = MCPServerStdioConfig(
             command: "npx",
@@ -61,10 +61,10 @@ struct MCPServerProxyTests {
         let proxyConfig = await proxy.config
         let cacheToolsList = await proxy.cacheToolsList
 
-        #expect(proxyConfig == config)
         #expect(!cacheToolsList)
 
         if case .stdio(let configuredConfig) = proxyConfig {
+            #expect(configuredConfig == stdioConfig)
             #expect(configuredConfig.command == "npx")
             #expect(configuredConfig.args == ["-y", "@modelcontextprotocol/server-filesystem"])
             #expect(configuredConfig.workingDirectory == "/tmp")
@@ -74,7 +74,7 @@ struct MCPServerProxyTests {
         }
     }
 
-    @Test("SSE Connect", .enabled(if: isMCPServerAvailable(url: mcpServerURL)))
+    @Test("SSE live: connect", .enabled(if: isMCPServerAvailable(url: mcpServerURL)))
     func testConnect() async throws {
         let url = Self.mcpServerURL
         let sseConfig = MCPServerSseConfig(url: url)
@@ -86,7 +86,7 @@ struct MCPServerProxyTests {
         await proxy.disconnect()
     }
 
-    @Test("Ping", .enabled(if: isMCPServerAvailable(url: mcpServerURL)))
+    @Test("SSE live: ping", .enabled(if: isMCPServerAvailable(url: mcpServerURL)))
     func testPing() async throws {
         let url = Self.mcpServerURL
         let sseConfig = MCPServerSseConfig(url: url)
@@ -97,7 +97,7 @@ struct MCPServerProxyTests {
         await proxy.disconnect()
     }
 
-    @Test("List Tools", .enabled(if: isMCPServerAvailable(url: mcpServerURL)))
+    @Test("SSE live: list tools", .enabled(if: isMCPServerAvailable(url: mcpServerURL)))
     func testListTools() async throws {
         let url = Self.mcpServerURL
         let sseConfig = MCPServerSseConfig(url: url)
@@ -128,7 +128,7 @@ struct MCPServerProxyTests {
         await proxy.disconnect()
     }
 
-    @Test("Call Tool Whoami", .enabled(if: isMCPServerAvailable(url: mcpServerURL)))
+    @Test("SSE live: call whoami", .enabled(if: isMCPServerAvailable(url: mcpServerURL)))
     func testCallToolWhoami() async throws {
         let url = Self.mcpServerURL
         let sseConfig = MCPServerSseConfig(url: url)
@@ -145,24 +145,10 @@ struct MCPServerProxyTests {
         await proxy.disconnect()
     }
 
-    @Test("STDIO Connect to SwiftMCP Server", .enabled(if: isSwiftMCPDemoExecutableAvailable()))
+    @Test("STDIO in-process: connect")
     func testStdioConnectToSwiftMCPServer() async throws {
-        guard let demoExecutable = swiftMCPDemoExecutablePath() else {
-            Issue.record("SwiftMCPDemo executable not found")
-            return
-        }
-        let repoPath = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .path
-        let stdioConfig = MCPServerStdioConfig(
-            command: demoExecutable,
-            args: ["stdio"],
-            workingDirectory: repoPath,
-            environment: [:]
-        )
-        let config = MCPServerConfig.stdio(config: stdioConfig)
+        let server = LocalStdioServer()
+        let config = MCPServerConfig.stdioHandles(server: server)
         let proxy = MCPServerProxy(config: config)
         try await proxy.connect()
         let tools = try await proxy.listTools()
@@ -200,34 +186,16 @@ func isMCPServerAvailable(url: URL) -> Bool {
     return availability.get()
 }
 
-func isSwiftMCPDemoExecutableAvailable() -> Bool {
-    return swiftMCPDemoExecutablePath() != nil
+@MCPServer(name: "SwiftMCP Test Server")
+final class LocalStdioServer: Sendable {
+    /// Returns the current time in ISO 8601 format.
+    @MCPTool
+    func getCurrentDateTime() -> String {
+        let formatter = ISO8601DateFormatter()
+        return formatter.string(from: Date())
+    }
 }
 
-private func swiftMCPDemoExecutablePath() -> String? {
-    let repoPath = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()
-        .deletingLastPathComponent()
-        .deletingLastPathComponent()
-    let buildRoot = repoPath.appendingPathComponent(".build")
-    let defaultPath = buildRoot.appendingPathComponent("debug/SwiftMCPDemo").path
-    if FileManager.default.fileExists(atPath: defaultPath) {
-        return defaultPath
-    }
-    let archPath = buildRoot.appendingPathComponent("arm64-apple-macosx/debug/SwiftMCPDemo").path
-    if FileManager.default.fileExists(atPath: archPath) {
-        return archPath
-    }
-    if let enumerator = FileManager.default.enumerator(at: buildRoot, includingPropertiesForKeys: nil) {
-        for case let fileURL as URL in enumerator {
-            if fileURL.lastPathComponent == "SwiftMCPDemo",
-               fileURL.path.contains("/debug/") {
-                return fileURL.path
-            }
-        }
-    }
-    return nil
-}
 
 private final class AvailabilityFlag: @unchecked Sendable {
     private let lock = NSLock()

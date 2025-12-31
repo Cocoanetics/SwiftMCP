@@ -4,8 +4,7 @@ import Logging
 
 /// A proxy for interacting with an MCP server over stdio or SSE.
 public final actor MCPServerProxy: Sendable {
-    private let loggingEnabled: Bool
-    private let logger: Logger
+    public let logger = Logger(label: "com.cocoanetics.SwiftMCP.MCPServerProxy")
 
     /// The configuration for the MCP server.
     public let config: MCPServerConfig
@@ -30,106 +29,97 @@ public final actor MCPServerProxy: Sendable {
     public private(set) var serverVersion: String?
     private var serverCapabilities: ServerCapabilities?
 
-    private var stdioProcess: MCPServerProcess?
+    private var stdioConnection: (any StdioConnection)?
     private var endpointContinuation: CheckedContinuation<URL, Error>?
 
     public init(config: MCPServerConfig, cacheToolsList: Bool = false) {
         self.config = config
         self.cacheToolsList = cacheToolsList
-        let env = ProcessInfo.processInfo.environment
-        loggingEnabled = env["MCP_LOGS"] != nil || env["AGENT_LOGS"] != nil
-
-        var configuredLogger = Logger(label: "com.cocoanetics.SwiftMCP.MCPServerProxy")
-        configuredLogger.logLevel = loggingEnabled ? .info : .critical
-        logger = configuredLogger
     }
 
     /// Connects to the MCP server and establishes an SSE or stdio connection.
     public func connect() async throws {
         switch config {
-        case .stdio(let stdioConfig):
-            let serverProcess = MCPServerProcess(config: stdioConfig)
-            try await serverProcess.start()
-            self.stdioProcess = serverProcess
-
-            streamTask = Task {
-                do {
-                    for try await data in await serverProcess.lines {
-                        processIncomingMessage(data: data)
+            case .stdio(let stdioConfig):
+                stdioConnection = MCPServerProcess(config: stdioConfig)
+                try await startStdioConnection()
+                try await initialize()
+                
+            case .stdioHandles(let server):
+                stdioConnection = InProcessStdioBridge(server: server)
+                try await startStdioConnection()
+                try await initialize()
+                
+            case .sse(let sseConfig):
+                if #available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, macCatalyst 15.0, *) {
+                    let sessionConfig = URLSessionConfiguration.default
+                    sessionConfig.timeoutIntervalForRequest = .infinity
+                    sessionConfig.timeoutIntervalForResource = .infinity
+                    
+                    let session = URLSession(configuration: sessionConfig)
+                    var request = URLRequest(url: sseConfig.url)
+                    request.httpMethod = "GET"
+                    request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+                    
+                    for (key, value) in sseConfig.headers {
+                        request.setValue(value, forHTTPHeaderField: key)
                     }
-                } catch {
-                    logger.error("[MCP DEBUG] Stream error: \(error.localizedDescription)")
-                }
-            }
-
-            try await initialize()
-
-        case .sse(let sseConfig):
-            if #available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, macCatalyst 15.0, *) {
-                let sessionConfig = URLSessionConfiguration.default
-                sessionConfig.timeoutIntervalForRequest = .infinity
-                sessionConfig.timeoutIntervalForResource = .infinity
-
-                let session = URLSession(configuration: sessionConfig)
-                var request = URLRequest(url: sseConfig.url)
-                request.httpMethod = "GET"
-                request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
-
-                for (key, value) in sseConfig.headers {
-                    request.setValue(value, forHTTPHeaderField: key)
-                }
-
-                let (asyncBytes, response) = try await session.bytes(for: request)
-
-                if let response = response as? HTTPURLResponse, response.statusCode != 200 {
-                    let data = try await asyncBytes.reduce(into: Data()) { partialResult, byte in
-                        partialResult.append(byte)
-                    }
-                    throw MCPServerProxyError.communicationError("HTTP error \(response.statusCode): \(String(data: data, encoding: .utf8) ?? "Unknown error")")
-                }
-
-                if let response = response as? HTTPURLResponse,
-                   let sessionId = response.value(forHTTPHeaderField: "Mcp-Session-Id"),
-                   let endpoint = messageEndpointURL(baseURL: sseConfig.url, sessionId: sessionId) {
-                    endpointURL = endpoint
-                }
-
-                streamTask = Task {
-                    do {
-                        for try await message in asyncBytes.lines.sseMessages() {
-                            processIncomingMessage(event: message.event, data: message.data)
+                    
+                    let (asyncBytes, response) = try await session.bytes(for: request)
+                    
+                    if let response = response as? HTTPURLResponse, response.statusCode != 200 {
+                        let data = try await asyncBytes.reduce(into: Data()) { partialResult, byte in
+                            partialResult.append(byte)
                         }
-                    } catch {
-                        logger.error("[MCP DEBUG] SSE stream error: \(error)")
-                        endpointContinuation?.resume(throwing: error)
+                        throw MCPServerProxyError.communicationError("HTTP error \(response.statusCode): \(String(data: data, encoding: .utf8) ?? "Unknown error")")
                     }
-                }
-
-                if endpointURL == nil {
-                    let _ = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<URL, Error>) in
-                        self.endpointContinuation = continuation
-
-                        Task {
-                            try await Task.sleep(nanoseconds: 10_000_000_000)
-                            if let cont = self.endpointContinuation {
-                                self.endpointContinuation = nil
-                                cont.resume(throwing: MCPServerProxyError.communicationError("Timeout waiting for endpoint URL"))
+                    
+                    if let response = response as? HTTPURLResponse,
+                       let sessionId = response.value(forHTTPHeaderField: "Mcp-Session-Id"),
+                       let endpoint = messageEndpointURL(baseURL: sseConfig.url, sessionId: sessionId) {
+                        endpointURL = endpoint
+                    }
+                    
+                    streamTask = Task {
+                        do {
+                            for try await message in asyncBytes.lines.sseMessages() {
+                                processIncomingMessage(event: message.event, data: message.data)
+                            }
+                        } catch {
+                            logger.error("[MCP DEBUG] SSE stream error: \(error)")
+                            endpointContinuation?.resume(throwing: error)
+                        }
+                    }
+                    
+                    if endpointURL == nil {
+                        let _ = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<URL, Error>) in
+                            self.endpointContinuation = continuation
+                            
+                            Task {
+                                try await Task.sleep(nanoseconds: 10_000_000_000)
+                                if let cont = self.endpointContinuation {
+                                    self.endpointContinuation = nil
+                                    cont.resume(throwing: MCPServerProxyError.communicationError("Timeout waiting for endpoint URL"))
+                                }
                             }
                         }
                     }
+                    
+                    try await initialize()
+                } else {
+                    throw MCPServerProxyError.unsupportedPlatform("SSE client connections require newer OS availability.")
                 }
-
-                try await initialize()
-            } else {
-                throw MCPServerProxyError.unsupportedPlatform("SSE client connections require newer OS availability.")
-            }
         }
     }
 
     /// Disconnects from the MCP server.
     public func disconnect() async {
-        if case .stdio = config {
-            await stdioProcess?.terminate()
+        switch config {
+        case .stdio, .stdioHandles:
+            await stdioConnection?.stop()
+            stdioConnection = nil
+        case .sse:
+            break
         }
         streamTask?.cancel()
     }
@@ -232,10 +222,7 @@ public final actor MCPServerProxy: Sendable {
     public func send(_ message: JSONRPCMessage) async throws -> JSONRPCMessage {
         let messageId = message.id
         switch config {
-        case .stdio:
-            guard let serverProcess = stdioProcess else {
-                throw MCPServerProxyError.communicationError("Not connected to stdio server")
-            }
+        case .stdio, .stdioHandles:
             guard let messageId = messageId else {
                 throw MCPServerProxyError.communicationError("Message must have an ID")
             }
@@ -243,7 +230,10 @@ public final actor MCPServerProxy: Sendable {
             let data = try encoder.encode(message)
 
             let messageWithNewline = data + "\n".data(using: .utf8)!
-            await serverProcess.write(messageWithNewline)
+            guard let stdioConnection else {
+                throw MCPServerProxyError.communicationError("Not connected to stdio server")
+            }
+            await stdioConnection.write(messageWithNewline)
 
             return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<JSONRPCMessage, Error>) in
                 responseTasks[messageId] = continuation
@@ -293,6 +283,24 @@ public final actor MCPServerProxy: Sendable {
         let requestId = nextRequestID()
         let request = JSONRPCMessage.request(id: requestId, method: "ping", params: nil)
         _ = try await send(request)
+    }
+
+    private func startStdioConnection() async throws {
+        guard let stdioConnection else {
+            throw MCPServerProxyError.communicationError("Not connected to stdio server")
+        }
+        try await stdioConnection.start()
+
+        streamTask = Task {
+            do {
+                let lines = await stdioConnection.lines()
+                for try await data in lines {
+                    processIncomingMessage(data: data)
+                }
+            } catch {
+                logger.error("[MCP DEBUG] Stream error: \(error.localizedDescription)")
+            }
+        }
     }
 
     // MARK: - Internal
