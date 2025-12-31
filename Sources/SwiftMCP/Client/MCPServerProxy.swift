@@ -54,6 +54,9 @@ public final actor MCPServerProxy: Sendable {
                 try await initialize()
 
             case .sse(let sseConfig):
+#if os(Linux)
+                throw MCPServerProxyError.unsupportedPlatform("SSE client connections require URLSession.bytes support on Linux.")
+#else
                 if #available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, macCatalyst 15.0, *) {
                     let sessionConfig = URLSessionConfiguration.default
                     sessionConfig.timeoutIntervalForRequest = .infinity
@@ -112,6 +115,7 @@ public final actor MCPServerProxy: Sendable {
                 } else {
                     throw MCPServerProxyError.unsupportedPlatform("SSE client connections require newer OS availability.")
                 }
+#endif
         }
     }
 
