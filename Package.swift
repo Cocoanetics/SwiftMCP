@@ -72,7 +72,9 @@ let package = Package(
 			name: "SwiftMCPUtility",
 			dependencies: [
 				"SwiftMCP",
-				.product(name: "ArgumentParser", package: "swift-argument-parser")
+				.product(name: "ArgumentParser", package: "swift-argument-parser"),
+				.product(name: "SwiftSyntax", package: "swift-syntax"),
+				.product(name: "SwiftSyntaxBuilder", package: "swift-syntax")
 			],
 			path: "Utilities/SwiftMCPUtility"
 		),

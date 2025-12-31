@@ -15,6 +15,7 @@ struct MCPUtilityCommand: AsyncParsableCommand {
     SwiftMCPUtility tools --command "npx -y @modelcontextprotocol/server-filesystem"
     SwiftMCPUtility tools --config mcp.json
     SwiftMCPUtility capabilities --sse http://localhost:8080/sse -o caps.txt
+    SwiftMCPUtility generate-proxy --config mcp.json -o ToolsProxy.swift
 
   Config JSON format:
     {
@@ -28,6 +29,6 @@ struct MCPUtilityCommand: AsyncParsableCommand {
       "env": { "NODE_ENV": "development" }
     }
 """,
-        subcommands: [ToolsCommand.self, CapabilitiesCommand.self]
+        subcommands: [ToolsCommand.self, CapabilitiesCommand.self, GenerateProxyCommand.self]
     )
 }

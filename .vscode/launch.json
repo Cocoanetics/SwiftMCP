@@ -19,6 +19,26 @@
             "target": "SwiftMCPDemo",
             "configuration": "release",
             "preLaunchTask": "swift: Build Release SwiftMCPDemo"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:SwiftMCP}",
+            "name": "Debug SwiftMCPUtility",
+            "target": "SwiftMCPUtility",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug SwiftMCPUtility"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:SwiftMCP}",
+            "name": "Release SwiftMCPUtility",
+            "target": "SwiftMCPUtility",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release SwiftMCPUtility"
         }
     ]
 }

@@ -44,42 +44,42 @@ public final actor MCPServerProxy: Sendable {
                 stdioConnection = MCPServerProcess(config: stdioConfig)
                 try await startStdioConnection()
                 try await initialize()
-                
+
             case .stdioHandles(let server):
                 stdioConnection = InProcessStdioBridge(server: server)
                 try await startStdioConnection()
                 try await initialize()
-                
+
             case .sse(let sseConfig):
                 if #available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, macCatalyst 15.0, *) {
                     let sessionConfig = URLSessionConfiguration.default
                     sessionConfig.timeoutIntervalForRequest = .infinity
                     sessionConfig.timeoutIntervalForResource = .infinity
-                    
+
                     let session = URLSession(configuration: sessionConfig)
                     var request = URLRequest(url: sseConfig.url)
                     request.httpMethod = "GET"
                     request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
-                    
+
                     for (key, value) in sseConfig.headers {
                         request.setValue(value, forHTTPHeaderField: key)
                     }
-                    
+
                     let (asyncBytes, response) = try await session.bytes(for: request)
-                    
+
                     if let response = response as? HTTPURLResponse, response.statusCode != 200 {
                         let data = try await asyncBytes.reduce(into: Data()) { partialResult, byte in
                             partialResult.append(byte)
                         }
                         throw MCPServerProxyError.communicationError("HTTP error \(response.statusCode): \(String(data: data, encoding: .utf8) ?? "Unknown error")")
                     }
-                    
+
                     if let response = response as? HTTPURLResponse,
                        let sessionId = response.value(forHTTPHeaderField: "Mcp-Session-Id"),
                        let endpoint = messageEndpointURL(baseURL: sseConfig.url, sessionId: sessionId) {
                         endpointURL = endpoint
                     }
-                    
+
                     streamTask = Task {
                         do {
                             for try await message in asyncBytes.lines.sseMessages() {
@@ -90,11 +90,11 @@ public final actor MCPServerProxy: Sendable {
                             endpointContinuation?.resume(throwing: error)
                         }
                     }
-                    
+
                     if endpointURL == nil {
                         let _ = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<URL, Error>) in
                             self.endpointContinuation = continuation
-                            
+
                             Task {
                                 try await Task.sleep(nanoseconds: 10_000_000_000)
                                 if let cont = self.endpointContinuation {
@@ -104,7 +104,7 @@ public final actor MCPServerProxy: Sendable {
                             }
                         }
                     }
-                    
+
                     try await initialize()
                 } else {
                     throw MCPServerProxyError.unsupportedPlatform("SSE client connections require newer OS availability.")
