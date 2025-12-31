@@ -50,12 +50,8 @@ struct MCPCommand: AsyncParsableCommand {
      - Supports bearer token authentication and OpenAPI endpoints
      - Example: SwiftMCPDemo httpsse --port 8080
 
-  3. tools:
-     - Connects to an MCP server over stdio or HTTP+SSE
-     - Lists available tools and parameters
-     - Example: SwiftMCPDemo tools --sse http://localhost:8080/sse
 """,
-        subcommands: [StdioCommand.self, HTTPSSECommand.self, ToolsCommand.self],
+        subcommands: [StdioCommand.self, HTTPSSECommand.self],
         defaultSubcommand: StdioCommand.self
     )
 }

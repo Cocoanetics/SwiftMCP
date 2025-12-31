@@ -27,7 +27,7 @@ public final actor MCPServerProxy: Sendable {
 
     public private(set) var serverName: String?
     public private(set) var serverVersion: String?
-    private var serverCapabilities: ServerCapabilities?
+    public private(set) var serverCapabilities: ServerCapabilities?
 
     private var stdioConnection: (any StdioConnection)?
     private var endpointContinuation: CheckedContinuation<URL, Error>?

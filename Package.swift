@@ -21,6 +21,10 @@ let package = Package(
 		.executable(
 			name: "SwiftMCPDemo",
 			targets: ["SwiftMCPDemo"]
+		),
+		.executable(
+			name: "SwiftMCPUtility",
+			targets: ["SwiftMCPUtility"]
 		)
 	],
 	dependencies: [
@@ -63,6 +67,14 @@ let package = Package(
 				.product(name: "ArgumentParser", package: "swift-argument-parser")
 			],
 			path: "Demos/SwiftMCPDemo"
+		),
+		.executableTarget(
+			name: "SwiftMCPUtility",
+			dependencies: [
+				"SwiftMCP",
+				.product(name: "ArgumentParser", package: "swift-argument-parser")
+			],
+			path: "Utilities/SwiftMCPUtility"
 		),
 		.testTarget(
 			name: "SwiftMCPTests",
