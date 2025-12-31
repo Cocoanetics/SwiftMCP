@@ -32,7 +32,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     public private(set) var port: Int
 
     /// Logger for logging transport events and errors.
-    public var logger = Logger(label: "com.cocoanetics.SwiftMCP.HTTPSSETransport")
+    public let logger = Logger(label: "com.cocoanetics.SwiftMCP.HTTPSSETransport")
 
     private let group: EventLoopGroup
     private var channel: Channel?

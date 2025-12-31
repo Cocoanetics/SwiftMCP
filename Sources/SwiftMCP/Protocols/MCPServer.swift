@@ -226,9 +226,6 @@ public extension MCPServer {
                 // Store client capabilities in current session
                 if let session = Session.current {
                     await session.setClientCapabilities(clientCapabilities)
-                    print("DEBUG: Stored client capabilities in session: \(clientCapabilities)")
-                } else {
-                    print("DEBUG: No current session during initialization!")
                 }
             } catch {
                 // If parsing fails, continue without client capabilities
