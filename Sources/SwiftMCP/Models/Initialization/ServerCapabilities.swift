@@ -76,4 +76,39 @@ public struct ServerCapabilities: Codable, Sendable {
             self.enabled = enabled
         }
     }
+
+    public init(
+        experimental: [String: AnyCodable] = [:],
+        logging: LoggingCapabilities? = nil,
+        completions: AnyCodable? = nil,
+        prompts: PromptsCapabilities? = nil,
+        resources: ResourcesCapabilities? = nil,
+        tools: ToolsCapabilities? = nil
+    ) {
+        self.experimental = experimental
+        self.logging = logging
+        self.completions = completions
+        self.prompts = prompts
+        self.resources = resources
+        self.tools = tools
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case experimental
+        case logging
+        case completions
+        case prompts
+        case resources
+        case tools
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        experimental = try container.decodeIfPresent([String: AnyCodable].self, forKey: .experimental) ?? [:]
+        logging = try container.decodeIfPresent(LoggingCapabilities.self, forKey: .logging)
+        completions = try container.decodeIfPresent(AnyCodable.self, forKey: .completions)
+        prompts = try container.decodeIfPresent(PromptsCapabilities.self, forKey: .prompts)
+        resources = try container.decodeIfPresent(ResourcesCapabilities.self, forKey: .resources)
+        tools = try container.decodeIfPresent(ToolsCapabilities.self, forKey: .tools)
+    }
 }
