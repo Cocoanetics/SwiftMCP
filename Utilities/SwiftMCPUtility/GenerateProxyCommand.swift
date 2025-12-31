@@ -261,14 +261,27 @@ private enum ProxyGenerator {
     }
 
     private static func swiftIdentifier(from raw: String, lowerCamel: Bool) -> String {
-        let parts = raw.split { !$0.isLetter && !$0.isNumber }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if isValidIdentifier(trimmed) {
+            return reservedKeywords.contains(trimmed) ? "\(trimmed)_" : trimmed
+        }
+
+        let parts = trimmed.split { !$0.isLetter && !$0.isNumber }
         if parts.isEmpty {
             return "value"
         }
 
-        let first = parts.first!.lowercased()
-        let rest = parts.dropFirst().map { $0.lowercased().capitalized }
-        var combined = lowerCamel ? ([first] + rest).joined() : ([first.capitalized] + rest).joined()
+        let first = String(parts[0])
+        let rest = parts.dropFirst().map { part -> String in
+            let value = String(part)
+            guard let firstChar = value.first else { return value }
+            return String(firstChar).uppercased() + value.dropFirst()
+        }
+        var combined = ([first] + rest).joined()
+
+        if !lowerCamel, let firstChar = combined.first {
+            combined = String(firstChar).uppercased() + combined.dropFirst()
+        }
 
         if let firstChar = combined.first, firstChar.isNumber {
             combined = "_" + combined
@@ -279,6 +292,21 @@ private enum ProxyGenerator {
         }
 
         return combined
+    }
+
+    private static func isValidIdentifier(_ value: String) -> Bool {
+        guard let first = value.first else {
+            return false
+        }
+        guard first.isLetter || first == "_" else {
+            return false
+        }
+        for character in value.dropFirst() {
+            if !(character.isLetter || character.isNumber || character == "_") {
+                return false
+            }
+        }
+        return true
     }
 
     private static let reservedKeywords: Set<String> = [
