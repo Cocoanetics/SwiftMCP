@@ -132,8 +132,8 @@ struct MCPServerProxyTests {
         await proxy.disconnect()
     }
 
-    @Test("SSE live: call whoami", .enabled(if: isMCPServerAvailable(url: mcpServerURL)))
-    func testCallToolWhoami() async throws {
+    @Test("SSE live: call greet", .enabled(if: isMCPServerAvailable(url: mcpServerURL)))
+    func testCallToolGreet() async throws {
         let url = Self.mcpServerURL
         let sseConfig = MCPServerSseConfig(url: url)
         let config = MCPServerConfig.sse(config: sseConfig)
@@ -141,8 +141,8 @@ struct MCPServerProxyTests {
         try await proxy.connect()
         let tools = try await proxy.listTools()
         #expect(!tools.isEmpty)
-        if tools.contains(where: { $0.name == "whoami" }) {
-            let result = try await proxy.callTool("whoami", arguments: [:])
+        if tools.contains(where: { $0.name == "greet" }) {
+            let result = try await proxy.callTool("greet", arguments: ["name": "Oliver"])
             #expect(!result.isEmpty)
         }
 
