@@ -18,6 +18,11 @@ extension Array: ArraySchemaBridge {
 extension MCPParameterInfo {
 
     public var schema: JSONSchema {
+        // If this is a JSONSchemaTypeConvertible type, use its schema
+        if let convertibleType = type as? any JSONSchemaTypeConvertible.Type {
+            return convertibleType.jsonSchema(description: description)
+        }
+
         // If this is a SchemaRepresentable type, use its schema
         if let schemaType = type as? any SchemaRepresentable.Type {
             return schemaType.schemaMetadata.schema
@@ -45,10 +50,8 @@ extension MCPParameterInfo {
 
             let schema: JSONSchema
 
-            if type == Int.self || type == Double.self {
-                schema = JSONSchema.number(title: nil, description: nil, minimum: nil, maximum: nil)
-            } else if type == Bool.self {
-                schema = JSONSchema.boolean(title: nil, description: nil, default: nil)
+            if let convertibleType = type as? any JSONSchemaTypeConvertible.Type {
+                schema = convertibleType.jsonSchema(description: nil)
             } else if let schemaType = type as? any SchemaRepresentable.Type {
                 schema = schemaType.schemaMetadata.schema
             } else {

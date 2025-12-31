@@ -109,6 +109,24 @@ extension Data: JSONSchemaTypeConvertible {
     }
 }
 
+extension Date: JSONSchemaTypeConvertible {
+    public static func jsonSchema(description: String?) -> JSONSchema {
+        .string(title: nil, description: description, format: "date-time", minLength: nil, maxLength: nil)
+    }
+}
+
+extension URL: JSONSchemaTypeConvertible {
+    public static func jsonSchema(description: String?) -> JSONSchema {
+        .string(title: nil, description: description, format: "uri", minLength: nil, maxLength: nil)
+    }
+}
+
+extension UUID: JSONSchemaTypeConvertible {
+    public static func jsonSchema(description: String?) -> JSONSchema {
+        .string(title: nil, description: description, format: "uuid", minLength: nil, maxLength: nil)
+    }
+}
+
 extension Array: JSONSchemaTypeConvertible {
     public static func jsonSchema(description: String?) -> JSONSchema {
         let elementSchema: JSONSchema

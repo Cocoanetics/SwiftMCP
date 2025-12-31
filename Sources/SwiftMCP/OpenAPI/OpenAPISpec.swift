@@ -174,6 +174,9 @@ struct OpenAPISpec: Codable {
                 } else if let schemaType = returnType as? any SchemaRepresentable.Type {
                     responseSchema = schemaType.schemaMetadata.schema
                     responseDescription = metadata.returnTypeDescription ?? "A structured response"
+                } else if let jsonSchemaType = returnType as? any JSONSchemaTypeConvertible.Type {
+                    responseSchema = jsonSchemaType.jsonSchema(description: metadata.returnTypeDescription)
+                    responseDescription = metadata.returnTypeDescription ?? "A structured response"
                 } else if let caseIterableType = returnType as? any CaseIterable.Type {
                     responseSchema = .enum(values: caseIterableType.caseLabels, description: metadata.returnTypeDescription)
                     responseDescription = metadata.returnTypeDescription ?? "An enumerated value"
@@ -188,10 +191,8 @@ struct OpenAPISpec: Codable {
                     let elementType = arrayBridge.elementType
 
                     let itemSchema: JSONSchema
-                    if elementType == Int.self || elementType == Double.self {
-                        itemSchema = .number(title: nil, description: nil, minimum: nil, maximum: nil)
-                    } else if elementType == Bool.self {
-                        itemSchema = .boolean(title: nil, description: nil, default: nil)
+                    if let jsonSchemaType = elementType as? any JSONSchemaTypeConvertible.Type {
+                        itemSchema = jsonSchemaType.jsonSchema(description: nil)
                     } else if let schemaType = elementType as? any SchemaRepresentable.Type {
                         itemSchema = schemaType.schemaMetadata.schema
                     } else if let caseIterableType = elementType as? any CaseIterable.Type {
@@ -212,6 +213,8 @@ struct OpenAPISpec: Codable {
                             if let elementType = (returnType as? Array<Any>.Type)?.elementType {
                                 let itemSchema: JSONSchema
                                 switch elementType {
+                                    case let jsonSchemaType as any JSONSchemaTypeConvertible.Type:
+                                        itemSchema = jsonSchemaType.jsonSchema(description: nil)
                                     case is Int.Type, is Double.Type:
                                         itemSchema = .number(title: nil, description: nil, minimum: nil, maximum: nil)
                                     case is Bool.Type:
