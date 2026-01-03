@@ -141,6 +141,34 @@ transport.oauthConfiguration = OAuthConfiguration(
 try transport.run()
 ```
 
+## Typed Client Proxy
+
+SwiftMCP can generate a typed client proxy for any server. This proxy mirrors the
+`@MCPTool` signatures and forwards calls through `MCPServerProxy`. Enable it with
+`generateClient: true` on the server macro.
+
+```swift
+@MCPServer(generateClient: true)
+actor Calculator {
+    @MCPTool
+    func add(a: Int, b: Int) -> Int {
+        a + b
+    }
+}
+
+let url = URL(string: "http://localhost:8080/sse")!
+let config = MCPServerConfig.sse(config: MCPServerSseConfig(url: url))
+let proxy = MCPServerProxy(config: config)
+try await proxy.connect()
+
+let client = Calculator.Client(proxy: proxy)
+let result = try await client.add(a: 2, b: 3)
+```
+
+Notes:
+- Client generation is opt-in (`generateClient` defaults to `false`).
+- Client methods always `throw` to surface transport or server errors.
+
 ## Documentation Extraction
 
 The `@MCPServer` and `@MCPTool` macros extract documentation comments to describe class, parameters and return value.
