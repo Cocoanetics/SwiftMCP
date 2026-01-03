@@ -25,6 +25,10 @@ let package = Package(
 		.executable(
 			name: "SwiftMCPUtility",
 			targets: ["SwiftMCPUtility"]
+		),
+		.executable(
+			name: "ProxyDemoCLI",
+			targets: ["ProxyDemoCLI"]
 		)
 	],
 	dependencies: [
@@ -72,16 +76,33 @@ let package = Package(
 			name: "SwiftMCPUtility",
 			dependencies: [
 				"SwiftMCP",
-				.product(name: "ArgumentParser", package: "swift-argument-parser"),
+				"SwiftMCPUtilityCore",
+				.product(name: "ArgumentParser", package: "swift-argument-parser")
+			],
+			path: "Utilities/SwiftMCPUtility"
+		),
+		.executableTarget(
+			name: "ProxyDemoCLI",
+			dependencies: [
+				"SwiftMCP",
+				.product(name: "ArgumentParser", package: "swift-argument-parser")
+			],
+			path: "Demos/ProxyDemoCLI"
+		),
+		.target(
+			name: "SwiftMCPUtilityCore",
+			dependencies: [
+				"SwiftMCP",
 				.product(name: "SwiftSyntax", package: "swift-syntax"),
 				.product(name: "SwiftSyntaxBuilder", package: "swift-syntax")
 			],
-			path: "Utilities/SwiftMCPUtility"
+			path: "Utilities/SwiftMCPUtilityCore"
 		),
 		.testTarget(
 			name: "SwiftMCPTests",
 			dependencies: [
-				"SwiftMCP", 
+				"SwiftMCP",
+				"SwiftMCPUtilityCore",
 				"SwiftMCPMacros",
 				.product(name: "Crypto", package: "swift-crypto"),
 				.product(name: "_CryptoExtras", package: "swift-crypto"),

@@ -169,6 +169,38 @@ Notes:
 - Client generation is opt-in (`generateClient` defaults to `false`).
 - Client methods always `throw` to surface transport or server errors.
 
+## SwiftMCPUtility Proxy Generation
+
+Use `SwiftMCPUtility generate-proxy` to create a client proxy for any MCP server,
+including non-SwiftMCP servers. The generated proxy calls `MCPServerProxy` under
+the hood and always returns `String` because MCP does not include output schemas.
+Input parameters are inferred from the server's tool schemas, and only string
+formats such as `date-time`, `uri`, `uuid`, and `byte` can be mapped to native
+types (`Date`, `URL`, `UUID`, `Data`).
+
+```bash
+SwiftMCPUtility generate-proxy --sse http://localhost:8080/sse -o ToolsProxy.swift
+```
+
+All generated methods are `async throws` so transport and server errors are surfaced.
+
+### OpenAPI Return Types
+
+If the MCP server exposes an OpenAPI JSON document, pass its URL (or file path)
+to `--openapi` to enrich return types. The generator overlays OpenAPI response
+schemas onto the MCP tool list, produces Codable structs/enums for structured
+responses, and uses those types in the proxy's return signatures.
+
+```bash
+SwiftMCPUtility generate-proxy \
+  --sse http://localhost:8080/sse \
+  --openapi http://localhost:8080/openapi.json \
+  -o ToolsProxy.swift
+```
+
+The generated Codable types can be used as-is or replaced with your own models
+later if you have local definitions.
+
 ## Documentation Extraction
 
 The `@MCPServer` and `@MCPTool` macros extract documentation comments to describe class, parameters and return value.

@@ -358,8 +358,13 @@ public final actor MCPServerProxy: Sendable {
                 switch message {
                 case .request(let requestData):
                     if requestData.method == "ping" {
+                        logger.info("[MCP] Ping request received; sending response.")
                         await handlePingRequest(requestData)
+                    } else {
+                        logger.debug("[MCP DEBUG] Ignoring client request: \(requestData.method)")
                     }
+                case .notification(let notification):
+                    logger.trace("[MCP DEBUG] Received notification: \(notification.method)")
                 case .response, .errorResponse:
                     if let id = message.id, let waitingContinuation = responseTasks[id] {
                         responseTasks.removeValue(forKey: id)
@@ -367,8 +372,6 @@ public final actor MCPServerProxy: Sendable {
                     } else {
                         logger.error("[MCP DEBUG] No waiting continuation found for ID \(message.id?.stringValue ?? "nil")")
                     }
-                default:
-                    logger.error("[MCP DEBUG] Unhandled JSON-RPC message type")
                 }
             } else {
                 logger.error("[MCP DEBUG] Failed to decode JSON-RPC message")
