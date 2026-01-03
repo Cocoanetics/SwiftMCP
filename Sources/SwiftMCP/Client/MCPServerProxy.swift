@@ -173,13 +173,20 @@ public final actor MCPServerProxy: Sendable {
     }
 
     /// Calls a tool by name on the connected MCP server with the provided arguments.
-    public func callTool(_ name: String, arguments: [String: any Sendable] = [:]) async throws -> String {
+    public func callTool(
+        _ name: String,
+        arguments: [String: any Sendable] = [:],
+        progressToken: AnyCodable? = AnyCodable(UUID().uuidString)
+    ) async throws -> String {
         let requestId = nextRequestID()
         let encodableArguments = arguments.mapValues { AnyCodable($0) }
-        let params: [String: AnyCodable] = [
+        var params: [String: AnyCodable] = [
             "name": AnyCodable(name),
             "arguments": AnyCodable(encodableArguments)
         ]
+        if let progressToken {
+            params["_meta"] = AnyCodable(["progressToken": progressToken])
+        }
         let request = JSONRPCMessage.request(id: requestId, method: "tools/call", params: params)
         let responseMessage = try await send(request)
 
@@ -364,7 +371,11 @@ public final actor MCPServerProxy: Sendable {
                         logger.debug("[MCP DEBUG] Ignoring client request: \(requestData.method)")
                     }
                 case .notification(let notification):
-                    logger.trace("[MCP DEBUG] Received notification: \(notification.method)")
+                    if notification.method == "notifications/progress" {
+                        logProgressNotification(notification)
+                    } else {
+                        logger.trace("[MCP DEBUG] Received notification: \(notification.method)")
+                    }
                 case .response, .errorResponse:
                     if let id = message.id, let waitingContinuation = responseTasks[id] {
                         responseTasks.removeValue(forKey: id)
@@ -397,6 +408,55 @@ public final actor MCPServerProxy: Sendable {
             }
         } catch {
             return
+        }
+    }
+
+    private func logProgressNotification(_ notification: JSONRPCMessage.JSONRPCNotificationData) {
+        guard let params = notification.params else {
+            logger.info("[MCP] Progress notification received.")
+            return
+        }
+        let tokenValue = params["progressToken"]?.value
+        let progressValue = numericValue(params["progress"]?.value)
+        let totalValue = numericValue(params["total"]?.value)
+        let messageValue = params["message"]?.value as? String
+
+        var parts: [String] = []
+        if let messageValue, !messageValue.isEmpty {
+            parts.append(messageValue)
+        }
+        if let progressValue {
+            if let totalValue {
+                parts.append("progress \(progressValue)/\(totalValue)")
+            } else {
+                parts.append("progress \(progressValue)")
+            }
+        }
+        if let tokenValue {
+            parts.append("token \(tokenValue)")
+        }
+
+        if parts.isEmpty {
+            logger.info("[MCP] Progress notification received.")
+        } else {
+            logger.info("[MCP] Progress: \(parts.joined(separator: " | "))")
+        }
+    }
+
+    private func numericValue(_ value: Any?) -> Double? {
+        switch value {
+        case let double as Double:
+            return double
+        case let int as Int:
+            return Double(int)
+        case let int64 as Int64:
+            return Double(int64)
+        case let uint as UInt:
+            return Double(uint)
+        case let float as Float:
+            return Double(float)
+        default:
+            return nil
         }
     }
 

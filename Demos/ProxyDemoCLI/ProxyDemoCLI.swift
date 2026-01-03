@@ -155,19 +155,8 @@ struct ProxyDemoRunner {
     }
 
     private func runRandomFile() async {
-        do {
-            logCall("randomFile", args: [])
-            let items = try await client.randomFile()
-            logResult("randomFile", result: items)
-            print("[DBG] randomFile items:")
-            for item in items {
-                let uri = item.uri?.absoluteString ?? "nil"
-                let mimeType = item.mimeType ?? "nil"
-                let text = item.text ?? "nil"
-                print("[DBG]   uri=\(uri) mimeType=\(mimeType) text=\(text)")
-            }
-        } catch {
-            print("[ERR] randomFile: \(error)")
+        await runTool("randomFile") {
+            try await client.randomFile()
         }
     }
 
@@ -179,38 +168,186 @@ struct ProxyDemoRunner {
 
     private func runTool<T>(_ name: String, args: [(String, Any)] = [], _ action: () async throws -> T) async {
         do {
-            logCall(name, args: args)
+            print("")
+            print("---")
+            print("```")
+            print(callSignature(name, args: args))
+            print("```")
+            print("---")
             let result = try await action()
-            logResult(name, result: result)
+            print("result:")
+            print("```")
+            print(formatValue(result))
+            print("```")
         } catch {
-            print("[ERR] \(name): \(error)")
+            print("error:")
+            print("```")
+            print(String(describing: error))
+            print("```")
         }
     }
 
-    private func logCall(_ name: String, args: [(String, Any)]) {
+    private func callSignature(_ name: String, args: [(String, Any)]) -> String {
         let argsDescription = args
             .map { "\($0.0)=\(formatValue($0.1))" }
             .joined(separator: ", ")
-        let signature = argsDescription.isEmpty ? "\(name)()" : "\(name)(\(argsDescription))"
-        print("[DBG] call \(signature)")
-    }
-
-    private func logResult<T>(_ name: String, result: T) {
-        print("[DBG] result \(name): \(formatValue(result))")
+        return argsDescription.isEmpty ? "\(name)()" : "\(name)(\(argsDescription))"
     }
 
     private func formatValue(_ value: Any) -> String {
+        formatValue(value, depth: 0)
+    }
+
+    private func formatValue(_ value: Any, depth: Int) -> String {
+        if depth > 6 {
+            return "\"<max-depth>\""
+        }
+
         let mirrored = Mirror(reflecting: value)
         if mirrored.displayStyle == .optional {
             if let child = mirrored.children.first {
-                return formatValue(child.value)
+                return formatValue(child.value, depth: depth)
             }
-            return "nil"
+            return "null"
+        }
+
+        if let string = value as? String {
+            return "\"\(escapeString(string))\""
+        }
+        if let bool = value as? Bool {
+            return bool ? "true" : "false"
+        }
+        if let int = value as? Int {
+            return "\(int)"
+        }
+        if let number = value as? any BinaryInteger {
+            return "\(number)"
+        }
+        if let double = value as? Double {
+            return String(describing: double)
+        }
+        if let float = value as? Float {
+            return String(describing: float)
+        }
+        if let decimal = value as? Decimal {
+            return NSDecimalNumber(decimal: decimal).stringValue
         }
         if let date = value as? Date {
-            return "Date(\(formatDate(date)))"
+            return "Date(\"\(formatDate(date))\")"
         }
-        return "\(type(of: value))(\(String(reflecting: value)))"
+        if let url = value as? URL {
+            return "URL(\"\(escapeString(url.absoluteString))\")"
+        }
+        if let uuid = value as? UUID {
+            return "UUID(\"\(uuid.uuidString)\")"
+        }
+        if let data = value as? Data {
+            return "Data(\"\(data.base64EncodedString())\")"
+        }
+
+        switch mirrored.displayStyle {
+        case .collection, .set:
+            let items = mirrored.children.map { formatValue($0.value, depth: depth + 1) }
+            return formatArray(items)
+        case .dictionary:
+            var pairs: [(String, String)] = []
+            for child in mirrored.children {
+                let pair = Mirror(reflecting: child.value).children.map { $0.value }
+                guard pair.count == 2 else { continue }
+                let key = formatDictionaryKey(pair[0])
+                let value = formatValue(pair[1], depth: depth + 1)
+                pairs.append((key, value))
+            }
+            return formatObject(pairs)
+        case .struct, .class:
+            let fields = mirrored.children.compactMap { child -> (String, String)? in
+                guard let label = child.label else { return nil }
+                let value = formatValue(child.value, depth: depth + 1)
+                return ("\"\(escapeString(label))\"", value)
+            }
+            return formatObject(fields)
+        case .enum:
+            return "\"\(escapeString(String(describing: value)))\""
+        default:
+            return "\"\(escapeString(String(describing: value)))\""
+        }
+    }
+
+    private func formatDictionaryKey(_ value: Any) -> String {
+        if let key = value as? String {
+            return "\"\(escapeString(key))\""
+        }
+        return "\"\(escapeString(String(describing: value)))\""
+    }
+
+    private func formatArray(_ items: [String]) -> String {
+        guard !items.isEmpty else {
+            return "[]"
+        }
+        var lines: [String] = ["["]
+        for (index, item) in items.enumerated() {
+            let indented = indentMultiline(item, indent: "  ").split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+            if let last = indented.indices.last {
+                var linesWithComma = indented
+                if index < items.count - 1 {
+                    linesWithComma[last] = "\(linesWithComma[last]),"
+                }
+                lines.append(contentsOf: linesWithComma)
+            } else {
+                lines.append("  \(item)")
+            }
+        }
+        lines.append("]")
+        return lines.joined(separator: "\n")
+    }
+
+    private func formatObject(_ fields: [(String, String)]) -> String {
+        guard !fields.isEmpty else {
+            return "{}"
+        }
+        var lines: [String] = ["{"]
+        for (index, field) in fields.enumerated() {
+            let (key, value) = field
+            let valueLines = value.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+            if valueLines.count == 1 {
+                var line = "  \(key): \(valueLines[0])"
+                if index < fields.count - 1 {
+                    line += ","
+                }
+                lines.append(line)
+            } else {
+                let firstLine = "  \(key): \(valueLines[0])"
+                if index < fields.count - 1 {
+                    // We'll add the comma after the last line instead.
+                }
+                lines.append(firstLine)
+                for lineIndex in valueLines.indices.dropFirst() {
+                    lines.append("  \(valueLines[lineIndex])")
+                }
+                if index < fields.count - 1, let lastIndex = lines.indices.last {
+                    lines[lastIndex] += ","
+                }
+            }
+        }
+        lines.append("}")
+        return lines.joined(separator: "\n")
+    }
+
+    private func indentMultiline(_ text: String, indent: String) -> String {
+        text
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map { "\(indent)\($0)" }
+            .joined(separator: "\n")
+    }
+
+    private func escapeString(_ value: String) -> String {
+        var escaped = value
+        escaped = escaped.replacingOccurrences(of: "\\", with: "\\\\")
+        escaped = escaped.replacingOccurrences(of: "\"", with: "\\\"")
+        escaped = escaped.replacingOccurrences(of: "\n", with: "\\n")
+        escaped = escaped.replacingOccurrences(of: "\r", with: "\\r")
+        escaped = escaped.replacingOccurrences(of: "\t", with: "\\t")
+        return escaped
     }
 
     private func formatDate(_ date: Date) -> String {
