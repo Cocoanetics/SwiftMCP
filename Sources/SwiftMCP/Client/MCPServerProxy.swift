@@ -194,7 +194,7 @@ public final actor MCPServerProxy: Sendable {
                let text = firstContent["text"] as? String {
                 errorMessage = text
             }
-            throw MCPServerProxyError.communicationError(errorMessage)
+            throw MCPServerProxyError.toolError(errorMessage)
         }
 
         guard let contentArray = result["content"]?.value as? [Any] else {

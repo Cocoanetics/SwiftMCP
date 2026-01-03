@@ -46,9 +46,14 @@ public macro MCPTool(description: String? = nil, isConsequential: Bool = true) =
 ///     }
 /// }
 /// ```
-@attached(member, names: named(callTool), named(mcpToolMetadata), named(__mcpServerName), named(__mcpServerVersion), named(__mcpServerDescription), named(mcpResourceMetadata), named(mcpResources), named(mcpStaticResources), named(mcpResourceTemplates), named(getResource), named(__callResourceFunction), named(callResourceAsFunction), named(mcpPromptMetadata), named(callPrompt))
+@attached(member, names: named(callTool), named(mcpToolMetadata), named(__mcpServerName), named(__mcpServerVersion), named(__mcpServerDescription), named(mcpResourceMetadata), named(mcpResources), named(mcpStaticResources), named(mcpResourceTemplates), named(getResource), named(__callResourceFunction), named(callResourceAsFunction), named(mcpPromptMetadata), named(callPrompt), named(Client))
 @attached(extension, conformances: MCPServer, MCPToolProviding, MCPResourceProviding, MCPPromptProviding)
-public macro MCPServer(name: String? = nil, version: String? = nil, description: String? = nil) = #externalMacro(module: "SwiftMCPMacros", type: "MCPServerMacro")
+public macro MCPServer(
+    name: String? = nil,
+    version: String? = nil,
+    description: String? = nil,
+    generateClient: Bool = false
+) = #externalMacro(module: "SwiftMCPMacros", type: "MCPServerMacro")
 
 /// A macro that generates schema metadata for a struct.
 ///
