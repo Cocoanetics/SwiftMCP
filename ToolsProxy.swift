@@ -29,12 +29,12 @@ public actor SwiftMCPDemoProxy {
      - Parameter date: The starting date
      - Parameter hours: Hours to add
      */
-    public func addHours(date: Date, hours: Double) async throws -> String {
+    public func addHours(date: Date, hours: Int) async throws -> Date {
         var arguments: [String: any Sendable] = [:]
         arguments["date"] = MCPToolArgumentEncoder.encode(date)
         arguments["hours"] = hours
         let text = try await proxy.callTool("addHours", arguments: arguments)
-        return text
+        return try MCPClientResultDecoder.decode(Date.self, from: text)
     }
 
     /**
@@ -113,11 +113,11 @@ public actor SwiftMCPDemoProxy {
      Returns the normalized URL by removing fragments and resolving the path.
      - Parameter url: The URL to normalize
      */
-    public func normalizeURL(url: URL) async throws -> String {
+    public func normalizeURL(url: URL) async throws -> URL {
         var arguments: [String: any Sendable] = [:]
         arguments["url"] = MCPToolArgumentEncoder.encode(url)
         let text = try await proxy.callTool("normalizeURL", arguments: arguments)
-        return text
+        return try MCPClientResultDecoder.decode(URL.self, from: text)
     }
 
     /**
@@ -172,22 +172,22 @@ public actor SwiftMCPDemoProxy {
      Returns the same data after logging its size, demonstrating byte-string encoding.
      - Parameter data: The data to round-trip
      */
-    public func roundTripData(data: Data) async throws -> String {
+    public func roundTripData(data: Data) async throws -> Data {
         var arguments: [String: any Sendable] = [:]
         arguments["data"] = MCPToolArgumentEncoder.encode(data)
         let text = try await proxy.callTool("roundTripData", arguments: arguments)
-        return text
+        return try MCPClientResultDecoder.decode(Data.self, from: text)
     }
 
     /**
      Returns the same UUID after logging it, demonstrating UUID round-tripping.
      - Parameter uuid: The UUID to round-trip
      */
-    public func roundTripUUID(uuid: UUID) async throws -> String {
+    public func roundTripUUID(uuid: UUID) async throws -> UUID {
         var arguments: [String: any Sendable] = [:]
         arguments["uuid"] = MCPToolArgumentEncoder.encode(uuid)
         let text = try await proxy.callTool("roundTripUUID", arguments: arguments)
-        return text
+        return try MCPClientResultDecoder.decode(UUID.self, from: text)
     }
 
     /**

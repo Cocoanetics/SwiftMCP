@@ -70,6 +70,14 @@ public extension Dictionary where Key == String, Value == Sendable {
             let url = try extractURL(named: name)
             return url as! T
         }
+        else if T.self == UUID.self {
+            let uuid = try extractUUID(named: name)
+            return uuid as! T
+        }
+        else if T.self == Data.self {
+            let data = try extractData(named: name)
+            return data as! T
+        }
         else if let caseType = T.self as? any CaseIterable.Type {
             guard let string = anyValue as? String else {
                 throw MCPToolError.invalidArgumentType(
@@ -557,6 +565,56 @@ public extension Dictionary where Key == String, Value == Sendable {
         throw MCPToolError.invalidArgumentType(
             parameterName: name,
             expectedType: "URL",
+            actualType: String(describing: Swift.type(of: anyValue))
+        )
+    }
+
+    /// Extracts a UUID parameter from the dictionary, accepting both UUID objects and strings.
+    /// - Parameter name: The name of the parameter
+    /// - Returns: The extracted UUID value
+    /// - Throws: MCPToolError.invalidArgumentType if the parameter cannot be converted to a UUID
+    func extractUUID(named name: String) throws -> UUID {
+        guard let anyValue = self[name] else {
+            preconditionFailure("Failed to retrieve value for parameter \(name)")
+        }
+
+        if let uuid = anyValue as? UUID {
+            return uuid
+        }
+
+        if let stringValue = anyValue as? String,
+           let uuid = UUID(uuidString: stringValue) {
+            return uuid
+        }
+
+        throw MCPToolError.invalidArgumentType(
+            parameterName: name,
+            expectedType: "UUID",
+            actualType: String(describing: Swift.type(of: anyValue))
+        )
+    }
+
+    /// Extracts a Data parameter from the dictionary, accepting both Data objects and base64 strings.
+    /// - Parameter name: The name of the parameter
+    /// - Returns: The extracted Data value
+    /// - Throws: MCPToolError.invalidArgumentType if the parameter cannot be converted to Data
+    func extractData(named name: String) throws -> Data {
+        guard let anyValue = self[name] else {
+            preconditionFailure("Failed to retrieve value for parameter \(name)")
+        }
+
+        if let data = anyValue as? Data {
+            return data
+        }
+
+        if let stringValue = anyValue as? String,
+           let data = Data(base64Encoded: stringValue) {
+            return data
+        }
+
+        throw MCPToolError.invalidArgumentType(
+            parameterName: name,
+            expectedType: "Base64-encoded Data",
             actualType: String(describing: Swift.type(of: anyValue))
         )
     }
