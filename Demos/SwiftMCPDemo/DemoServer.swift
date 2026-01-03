@@ -6,7 +6,7 @@ import SwiftMCP
  
  Testing "quoted" stuff. And on multiple lines. 'single quotes'
  */
-@MCPServer(name: "SwiftMCP Demo")
+@MCPServer(name: "SwiftMCP Demo", generateClient: true)
 actor DemoServer {
 	
     // MARK: - Tools

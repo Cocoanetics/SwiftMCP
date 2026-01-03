@@ -43,10 +43,41 @@ struct GenerateProxyCommand: AsyncParsableCommand {
         try await proxy.connect()
         let tools = try await proxy.listTools()
         let serverName = await proxy.serverName
+        let serverVersion = await proxy.serverVersion
+        let serverDescription = await proxy.serverDescription
         let typeName = name ?? ProxyGenerator.defaultTypeName(serverName: serverName)
         let openAPIReturnInfo = try await OpenAPIProxyLoader.loadReturnSchemas(from: openapi)
-        let source = ProxyGenerator.generate(typeName: typeName, tools: tools, openapiReturnSchemas: openAPIReturnInfo)
+        let fileName = output.map { URL(fileURLWithPath: $0).lastPathComponent }
+        let sourceDescription = connectionSourceDescription()
+        let headerMetadata = ProxyGenerator.HeaderMetadata(
+            fileName: fileName ?? "\(typeName).swift",
+            serverName: serverName,
+            serverVersion: serverVersion,
+            serverDescription: serverDescription,
+            source: sourceDescription,
+            openAPI: openapi
+        )
+        let source = ProxyGenerator.generate(
+            typeName: typeName,
+            tools: tools,
+            openapiReturnSchemas: openAPIReturnInfo,
+            fileName: fileName,
+            headerMetadata: headerMetadata
+        )
         let outputText = source.description
         try UtilitySupport.writeOutput(outputText, to: output)
+    }
+
+    private func connectionSourceDescription() -> String? {
+        if let configPath = connection.config {
+            return "config \(configPath)"
+        }
+        if let sse = connection.sse {
+            return "sse \(sse)"
+        }
+        if let command = connection.command {
+            return "command \(command)"
+        }
+        return nil
     }
 }

@@ -273,7 +273,8 @@ public extension MCPServer {
 
         let serverInfo = InitializeResult.ServerInfo(
             name: serverName,
-            version: serverVersion
+            version: serverVersion,
+            description: serverDescription
         )
 
         let result = InitializeResult(

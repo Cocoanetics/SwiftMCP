@@ -8,10 +8,37 @@ import SwiftSyntax
 import SwiftSyntaxBuilder
 
 public enum ProxyGenerator {
+    public struct HeaderMetadata: Sendable {
+        public let fileName: String
+        public let serverName: String?
+        public let serverVersion: String?
+        public let serverDescription: String?
+        public let source: String?
+        public let openAPI: String?
+
+        public init(
+            fileName: String,
+            serverName: String?,
+            serverVersion: String?,
+            serverDescription: String?,
+            source: String?,
+            openAPI: String?
+        ) {
+            self.fileName = fileName
+            self.serverName = serverName
+            self.serverVersion = serverVersion
+            self.serverDescription = serverDescription
+            self.source = source
+            self.openAPI = openAPI
+        }
+    }
+
     public static func generate(
         typeName: String,
         tools: [MCPTool],
-        openapiReturnSchemas: [String: OpenAPIReturnInfo] = [:]
+        openapiReturnSchemas: [String: OpenAPIReturnInfo] = [:],
+        fileName: String? = nil,
+        headerMetadata: HeaderMetadata? = nil
     ) -> SourceFileSyntax {
         let registry = OpenAPITypeRegistry()
         let returnTypes = buildReturnTypes(
@@ -20,16 +47,29 @@ public enum ProxyGenerator {
             registry: registry
         )
         let typeDefinitions = registry.renderDefinitions()
+        let resolvedFileName = fileName ?? "\(typeName).swift"
+        let metadata = headerMetadata ?? HeaderMetadata(
+            fileName: resolvedFileName,
+            serverName: nil,
+            serverVersion: nil,
+            serverDescription: nil,
+            source: nil,
+            openAPI: nil
+        )
+        let headerComment = makeHeaderComment(metadata: metadata)
+        let typeDocComment = makeTypeDocCommentLines(metadata: metadata)
         let actorSource = makeActorSource(
             typeName: typeName,
             tools: tools,
             returnTypes: returnTypes,
-            typeDefinitions: typeDefinitions
+            typeDefinitions: typeDefinitions,
+            typeDocComment: typeDocComment
         )
 
+        let headerAndImports = "\(headerComment)\n\nimport Foundation\nimport SwiftMCP\n"
+
         return SourceFileSyntax {
-            DeclSyntax("import Foundation")
-            DeclSyntax("import SwiftMCP")
+            DeclSyntax(stringLiteral: headerAndImports)
             DeclSyntax(stringLiteral: "\n\(actorSource)")
         }
     }
@@ -43,9 +83,13 @@ public enum ProxyGenerator {
         typeName: String,
         tools: [MCPTool],
         returnTypes: [String: OpenAPIReturnInfo],
-        typeDefinitions: [String]
+        typeDefinitions: [String],
+        typeDocComment: [String]
     ) -> String {
         var lines: [String] = []
+        if !typeDocComment.isEmpty {
+            lines.append(contentsOf: typeDocComment)
+        }
         lines.append("public actor \(typeName) {")
         if !typeDefinitions.isEmpty {
             lines.append("    // MARK: - Declarations")
@@ -73,6 +117,71 @@ public enum ProxyGenerator {
 
         lines.append("}")
         return lines.joined(separator: "\n")
+    }
+
+    private static func makeHeaderComment(metadata: HeaderMetadata) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.timeZone = TimeZone.current
+        formatter.formatOptions = [.withInternetDateTime, .withTimeZone]
+        let timestamp = formatter.string(from: Date())
+
+        var lines: [String] = [
+            "//",
+            "//  \(metadata.fileName)",
+            "//  Generated: \(timestamp)",
+            "//  Server: \(serverDisplayName(from: metadata))"
+        ]
+
+        if let source = metadata.source, !source.isEmpty {
+            lines.append("//  Source: \(source)")
+        }
+        if let openAPI = metadata.openAPI, !openAPI.isEmpty {
+            lines.append("//  OpenAPI: \(openAPI)")
+        }
+
+        lines.append("//")
+        return lines.joined(separator: "\n")
+    }
+
+    private static func makeTypeDocCommentLines(metadata: HeaderMetadata) -> [String] {
+        let name = metadata.serverName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let version = metadata.serverVersion?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let summary: String
+        if !name.isEmpty {
+            if !version.isEmpty {
+                summary = "A generated proxy for the \(name) MCP server (\(version))."
+            } else {
+                summary = "A generated proxy for the \(name) MCP server."
+            }
+        } else {
+            summary = "A generated MCP server proxy."
+        }
+
+        var commentBody = summary
+        if let description = metadata.serverDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !description.isEmpty {
+            commentBody = description
+        }
+        if let openAPI = metadata.openAPI, !openAPI.isEmpty {
+            commentBody += "\n\nReturn types are enhanced using OpenAPI metadata."
+        }
+
+        return docBlockLines(commentBody)
+    }
+
+    private static func docBlockLines(_ text: String) -> [String] {
+        var lines: [String] = ["/**"]
+        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            lines.append(" \(line)")
+        }
+        lines.append("*/")
+        return lines
+    }
+
+    private static func serverDisplayName(from metadata: HeaderMetadata) -> String {
+        let name = metadata.serverName ?? "unknown"
+        let version = metadata.serverVersion ?? "unknown"
+        return "\(name) (\(version))"
     }
 
     private static func indentDefinitions(_ definitions: [String], indent: String) -> [String] {

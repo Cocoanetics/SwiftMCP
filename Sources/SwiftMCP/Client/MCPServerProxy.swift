@@ -30,7 +30,16 @@ public final actor MCPServerProxy: Sendable {
 
     public private(set) var serverName: String?
     public private(set) var serverVersion: String?
+    public private(set) var serverDescription: String?
     public private(set) var serverCapabilities: ServerCapabilities?
+
+    /// Optional handler for log notifications from the server.
+    public var logNotificationHandler: (any MCPServerProxyLogNotificationHandling)?
+
+    /// Updates the log notification handler.
+    public func setLogNotificationHandler(_ handler: (any MCPServerProxyLogNotificationHandling)?) {
+        logNotificationHandler = handler
+    }
 
     private var stdioConnection: (any StdioConnection)?
     private var endpointContinuation: CheckedContinuation<URL, Error>?
@@ -337,10 +346,12 @@ public final actor MCPServerProxy: Sendable {
             throw MCPServerProxyError.communicationError("Invalid initialize response")
         }
 
+        let rawServerDescription = extractServerDescription(from: result)
         let resultData = try JSONEncoder().encode(result)
         let initResult = try JSONDecoder().decode(InitializeResult.self, from: resultData)
         serverName = initResult.serverInfo.name
         serverVersion = initResult.serverInfo.version
+        serverDescription = initResult.serverInfo.description ?? rawServerDescription
         serverCapabilities = initResult.capabilities
         logger.info("Connected to MCP server: \(serverName ?? "unknown") version \(serverVersion ?? "unknown")")
     }
@@ -373,6 +384,8 @@ public final actor MCPServerProxy: Sendable {
                 case .notification(let notification):
                     if notification.method == "notifications/progress" {
                         logProgressNotification(notification)
+                    } else if notification.method == "notifications/message" {
+                        await handleLogNotification(notification)
                     } else {
                         logger.trace("[MCP DEBUG] Received notification: \(notification.method)")
                     }
@@ -426,7 +439,9 @@ public final actor MCPServerProxy: Sendable {
             parts.append(messageValue)
         }
         if let progressValue {
-            if let totalValue {
+            if let percentText = progressPercentText(progressValue: progressValue, totalValue: totalValue) {
+                parts.append("progress \(percentText)")
+            } else if let totalValue {
                 parts.append("progress \(progressValue)/\(totalValue)")
             } else {
                 parts.append("progress \(progressValue)")
@@ -440,6 +455,61 @@ public final actor MCPServerProxy: Sendable {
             logger.info("[MCP] Progress notification received.")
         } else {
             logger.info("[MCP] Progress: \(parts.joined(separator: " | "))")
+        }
+    }
+
+    func handleLogNotification(_ notification: JSONRPCMessage.JSONRPCNotificationData) async {
+        guard let params = notification.params else {
+            logger.info("[MCP] Log notification received.")
+            return
+        }
+
+        let levelValue = params["level"]?.value as? String
+        let level = levelValue.flatMap(LogLevel.init(string:)) ?? .info
+        let loggerName = params["logger"]?.value as? String
+        let dataValue = params["data"] ?? AnyCodable("")
+        let message = LogMessage(level: level, logger: loggerName, data: dataValue)
+
+        if let handler = logNotificationHandler {
+            await handler.mcpServerProxy(self, didReceiveLog: message)
+        } else {
+            logIncomingLogMessage(message)
+        }
+    }
+
+    private func logIncomingLogMessage(_ message: LogMessage) {
+        var parts: [String] = []
+        parts.append("level \(message.level.rawValue)")
+        if let loggerName = message.logger, !loggerName.isEmpty {
+            parts.append("logger \(loggerName)")
+        }
+        let dataDescription = String(describing: message.data.value)
+        if !dataDescription.isEmpty {
+            parts.append("data \(dataDescription)")
+        }
+
+        let level = loggerLevel(for: message.level)
+        if parts.isEmpty {
+            logger.log(level: level, "[MCP] Log notification received.")
+        } else {
+            logger.log(level: level, "[MCP] Log: \(parts.joined(separator: " | "))")
+        }
+    }
+
+    private func loggerLevel(for level: LogLevel) -> Logger.Level {
+        switch level {
+        case .debug:
+            return .debug
+        case .info:
+            return .info
+        case .notice:
+            return .notice
+        case .warning:
+            return .warning
+        case .error:
+            return .error
+        case .critical, .alert, .emergency:
+            return .critical
         }
     }
 
@@ -458,6 +528,34 @@ public final actor MCPServerProxy: Sendable {
         default:
             return nil
         }
+    }
+
+    private func extractServerDescription(from result: [String: AnyCodable]) -> String? {
+        guard let serverInfoValue = result["serverInfo"]?.value else {
+            return nil
+        }
+        if let info = serverInfoValue as? [String: AnyCodable] {
+            return info["description"]?.value as? String
+        }
+        if let info = serverInfoValue as? [String: Any] {
+            return info["description"] as? String
+        }
+        return nil
+    }
+
+    private func progressPercentText(progressValue: Double, totalValue: Double?) -> String? {
+        if let totalValue, totalValue > 0 {
+            return formatPercent((progressValue / totalValue) * 100)
+        }
+        if progressValue >= 0, progressValue <= 1 {
+            return formatPercent(progressValue * 100)
+        }
+        return nil
+    }
+
+    private func formatPercent(_ percent: Double) -> String {
+        let rounded = Int(percent.rounded())
+        return "\(rounded)%"
     }
 
     private func messageEndpointURL(baseURL: URL, sessionId: String) -> URL? {

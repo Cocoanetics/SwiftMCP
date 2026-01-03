@@ -26,9 +26,13 @@ public struct InitializeResult: Codable, Sendable {
         /// The version of the server
         public let version: String
 
-        public init(name: String, version: String) {
+        /// An optional description of the server
+        public let description: String?
+
+        public init(name: String, version: String, description: String? = nil) {
             self.name = name
             self.version = version
+            self.description = description
         }
     }
 
