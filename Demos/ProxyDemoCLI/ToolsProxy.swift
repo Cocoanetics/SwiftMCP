@@ -53,9 +53,9 @@ public actor SwiftMCPDemoProxy {
      - Parameter numerator: Number to be divided
      - Returns: The quotient of numerator divided by denominator
      */
-    public func divide(denominator: Double? = nil, numerator: Double) async throws -> Double {
+    public func divide(denominator: Double = 1, numerator: Double) async throws -> Double {
         var arguments: [String: any Sendable] = [:]
-        if let denominator { arguments["denominator"] = denominator }
+        arguments["denominator"] = denominator
         arguments["numerator"] = numerator
         let text = try await proxy.callTool("divide", arguments: arguments)
         return try MCPClientResultDecoder.decode(Double.self, from: text)
@@ -191,10 +191,10 @@ public actor SwiftMCPDemoProxy {
      - Parameter b: Number to subtract
      - Returns: The difference between a and b
      */
-    public func subtract(a: Double? = nil, b: Double? = nil) async throws -> Double {
+    public func subtract(a: Double = 5, b: Double = 3) async throws -> Double {
         var arguments: [String: any Sendable] = [:]
-        if let a { arguments["a"] = a }
-        if let b { arguments["b"] = b }
+        arguments["a"] = a
+        arguments["b"] = b
         let text = try await proxy.callTool("subtract", arguments: arguments)
         return try MCPClientResultDecoder.decode(Double.self, from: text)
     }
@@ -204,9 +204,9 @@ public actor SwiftMCPDemoProxy {
      - Parameter a: Array of integers to process
      - Returns: A string representation of the array
      */
-    public func testArray(a: [Double]? = nil) async throws -> String {
+    public func testArray(a: [Double] = [1, 2, 3]) async throws -> String {
         var arguments: [String: any Sendable] = [:]
-        if let a { arguments["a"] = a }
+        arguments["a"] = a
         let text = try await proxy.callTool("testArray", arguments: arguments)
         return text
     }

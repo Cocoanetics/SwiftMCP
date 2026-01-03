@@ -117,7 +117,7 @@ struct MCPServerProxyTests {
             #expect(!tools.isEmpty)
             for tool in tools {
                 #expect(!tool.name.isEmpty)
-                if case .object(_) = tool.inputSchema {
+                if case .object(_, _) = tool.inputSchema {
                 } else {
                     Issue.record("Tool schema should be an object type")
                 }

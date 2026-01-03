@@ -71,7 +71,7 @@ struct ToolsCommand: AsyncParsableCommand {
 
     private func appendSchemaDetails(_ schema: JSONSchema, to lines: inout [String]) {
         switch schema {
-            case .object(let object):
+            case .object(let object, _):
                 if object.properties.isEmpty {
                     lines.append("  Parameters: none")
                     return
@@ -97,7 +97,7 @@ struct ToolsCommand: AsyncParsableCommand {
 
     private func describeSchema(_ schema: JSONSchema) -> String {
         switch schema {
-            case .string(_, _, let format, _, _):
+            case .string(_, _, let format, _, _, _):
                 if let format, !format.isEmpty {
                     return "string (\(format))"
                 }
@@ -106,11 +106,11 @@ struct ToolsCommand: AsyncParsableCommand {
                 return "number"
             case .boolean:
                 return "boolean"
-            case .array(let items, _, _):
+            case .array(let items, _, _, _):
                 return "array<\(describeSchema(items))>"
             case .object:
                 return "object"
-            case .enum(let values, _, _, _):
+            case .enum(let values, _, _, _, _):
                 if values.isEmpty {
                     return "enum"
                 }
@@ -120,17 +120,17 @@ struct ToolsCommand: AsyncParsableCommand {
 
     private func schemaDescription(_ schema: JSONSchema) -> String? {
         switch schema {
-            case .string(_, let description, _, _, _):
+            case .string(_, let description, _, _, _, _):
                 return description
-            case .number(_, let description, _, _):
+            case .number(_, let description, _, _, _):
                 return description
             case .boolean(_, let description, _):
                 return description
-            case .array(_, _, let description):
+            case .array(_, _, let description, _):
                 return description
-            case .object(let object):
+            case .object(let object, _):
                 return object.description
-            case .enum(_, _, let description, _):
+            case .enum(_, _, let description, _, _):
                 return description
         }
     }

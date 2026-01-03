@@ -456,8 +456,8 @@ actor DemoServer {
                 "password": .string(title: "Password", description: "Password (8-50 characters)", format: nil, minLength: 8, maxLength: 50),
                 "confirmPassword": .string(title: "Confirm Password", description: "Confirm password", format: nil, minLength: 8, maxLength: 50),
                 "email": .string(title: "Email", description: "Email address", format: "email", minLength: 5, maxLength: 100),
-                "agreeToTerms": .boolean(title: "Terms & Conditions", description: "I agree to the terms and conditions", default: false),
-                "receiveNewsletter": .boolean(title: "Newsletter", description: "Receive newsletter updates", default: true)
+                "agreeToTerms": .boolean(title: "Terms & Conditions", description: "I agree to the terms and conditions", defaultValue: false),
+                "receiveNewsletter": .boolean(title: "Newsletter", description: "Receive newsletter updates", defaultValue: true)
             ],
             required: ["username", "password", "confirmPassword", "email", "agreeToTerms"],
             title: "Account Registration",
@@ -526,7 +526,7 @@ actor DemoServer {
                 "notifications": .boolean(
                     title: "Enable Notifications",
                     description: "Receive push notifications",
-                    default: true
+                    defaultValue: true
                 ),
                 "maxItems": .number(
                     title: "Max Items per Page",
@@ -600,4 +600,3 @@ actor DemoServer {
         }
     }
 }
-

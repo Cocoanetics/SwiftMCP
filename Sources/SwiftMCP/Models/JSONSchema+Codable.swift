@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import AnyCodable
 
 /**
  Extension to make JSONSchema conform to Codable
@@ -60,29 +61,32 @@ extension JSONSchema: Codable {
         switch type {
             case "string":
 
+                let defaultValue = try container.decodeIfPresent(AnyCodable.self, forKey: .default)
                 if let enumValues = try container.decodeIfPresent([String].self, forKey: .enumValues)
 				{
                     let enumNames = try container.decodeIfPresent([String].self, forKey: .enumNames)
-                    self = .enum(values: enumValues, title: title, description: description, enumNames: enumNames)
+                    self = .enum(values: enumValues, title: title, description: description, enumNames: enumNames, defaultValue: defaultValue)
                 }
 				else
 				{
                     let format = try container.decodeIfPresent(String.self, forKey: .format)
                     let minLength = try container.decodeIfPresent(Int.self, forKey: .minLength)
                     let maxLength = try container.decodeIfPresent(Int.self, forKey: .maxLength)
-                    self = .string(title: title, description: description, format: format, minLength: minLength, maxLength: maxLength)
+                    self = .string(title: title, description: description, format: format, minLength: minLength, maxLength: maxLength, defaultValue: defaultValue)
                 }
 
             case "number", "integer":
                 let minimum = try container.decodeIfPresent(Double.self, forKey: .minimum)
                 let maximum = try container.decodeIfPresent(Double.self, forKey: .maximum)
-                self = .number(title: title, description: description, minimum: minimum, maximum: maximum)
+                let defaultValue = try container.decodeIfPresent(AnyCodable.self, forKey: .default)
+                self = .number(title: title, description: description, minimum: minimum, maximum: maximum, defaultValue: defaultValue)
             case "boolean":
-                let defaultValue = try container.decodeIfPresent(Bool.self, forKey: .default)
-                self = .boolean(title: title, description: description, default: defaultValue)
+                let defaultValue = try container.decodeIfPresent(AnyCodable.self, forKey: .default)
+                self = .boolean(title: title, description: description, defaultValue: defaultValue)
             case "array":
                 let items = try container.decode(JSONSchema.self, forKey: .items)
-                self = .array(items: items, title: title, description: description)
+                let defaultValue = try container.decodeIfPresent(AnyCodable.self, forKey: .default)
+                self = .array(items: items, title: title, description: description, defaultValue: defaultValue)
             case "object":
                 var properties: [String: JSONSchema] = [:]
                 if let propertiesContainer = try? container.nestedContainer(keyedBy: AnyCodingKey.self, forKey: .properties) {
@@ -93,8 +97,9 @@ extension JSONSchema: Codable {
                 let required = try container.decodeIfPresent([String].self, forKey: .required) ?? []
 
                 let additionalPropertes = try container.decodeIfPresent(Bool.self, forKey: .additionalProperties)
+                let defaultValue = try container.decodeIfPresent(AnyCodable.self, forKey: .default)
 
-                self = .object(JSONSchema.Object(properties: properties, required: required, title: title, description: description, additionalProperties: additionalPropertes))
+                self = .object(JSONSchema.Object(properties: properties, required: required, title: title, description: description, additionalProperties: additionalPropertes), defaultValue: defaultValue)
             default:
                 throw DecodingError.dataCorruptedError(
 					forKey: .type,
@@ -114,30 +119,33 @@ extension JSONSchema: Codable {
         var container = encoder.container(keyedBy: CodingKeys.self)
 
         switch self {
-            case .string(let title, let description, let format, let minLength, let maxLength):
+            case .string(let title, let description, let format, let minLength, let maxLength, let defaultValue):
                 try container.encode("string", forKey: .type)
                 try container.encodeIfPresent(title, forKey: .title)
                 try container.encodeIfPresent(description, forKey: .description)
                 try container.encodeIfPresent(format, forKey: .format)
                 try container.encodeIfPresent(minLength, forKey: .minLength)
                 try container.encodeIfPresent(maxLength, forKey: .maxLength)
-            case .number(let title, let description, let minimum, let maximum):
+                try container.encodeIfPresent(defaultValue, forKey: .default)
+            case .number(let title, let description, let minimum, let maximum, let defaultValue):
                 try container.encode("number", forKey: .type)
                 try container.encodeIfPresent(title, forKey: .title)
                 try container.encodeIfPresent(description, forKey: .description)
                 try container.encodeIfPresent(minimum, forKey: .minimum)
                 try container.encodeIfPresent(maximum, forKey: .maximum)
+                try container.encodeIfPresent(defaultValue, forKey: .default)
             case .boolean(let title, let description, let defaultValue):
                 try container.encode("boolean", forKey: .type)
                 try container.encodeIfPresent(title, forKey: .title)
                 try container.encodeIfPresent(description, forKey: .description)
                 try container.encodeIfPresent(defaultValue, forKey: .default)
-            case .array(let items, let title, let description):
+            case .array(let items, let title, let description, let defaultValue):
                 try container.encode("array", forKey: .type)
                 try container.encode(items, forKey: .items)
                 try container.encodeIfPresent(title, forKey: .title)
                 try container.encodeIfPresent(description, forKey: .description)
-            case .object(let object):
+                try container.encodeIfPresent(defaultValue, forKey: .default)
+            case .object(let object, let defaultValue):
                 try container.encode("object", forKey: .type)
 
                 var propertiesContainer = container.nestedContainer(keyedBy: AnyCodingKey.self, forKey: .properties)
@@ -153,13 +161,15 @@ extension JSONSchema: Codable {
                 try container.encodeIfPresent(object.description, forKey: .description)
 
                 try container.encodeIfPresent(object.additionalProperties, forKey: .additionalProperties)
+                try container.encodeIfPresent(defaultValue, forKey: .default)
 
-            case .enum(let values, let title, let description, let enumNames):
+            case .enum(let values, let title, let description, let enumNames, let defaultValue):
                 try container.encode("string", forKey: .type)
                 try container.encodeIfPresent(title, forKey: .title)
                 try container.encodeIfPresent(description, forKey: .description)
                 try container.encode(values, forKey: .enumValues)
                 try container.encodeIfPresent(enumNames, forKey: .enumNames)
+                try container.encodeIfPresent(defaultValue, forKey: .default)
         }
     }
 }

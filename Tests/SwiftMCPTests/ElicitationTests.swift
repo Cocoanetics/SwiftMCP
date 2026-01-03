@@ -216,7 +216,7 @@ struct ElicitationTests {
             let decoder = JSONDecoder()
             let decodedSchema = try decoder.decode(JSONSchema.self, from: data)
             
-            if case .object(let obj) = decodedSchema {
+            if case .object(let obj, _) = decodedSchema {
                 #expect(obj.required.contains("name"))
                 #expect(obj.description == "Simple name request")
             } else {
@@ -230,7 +230,7 @@ struct ElicitationTests {
                 properties: [
                     "name": .string(title: nil, description: "User's name", format: nil, minLength: nil, maxLength: nil),
                     "age": .number(title: nil, description: "User's age", minimum: nil, maximum: nil),
-                    "isActive": .boolean(title: nil, description: "Whether user is active", default: nil),
+                    "isActive": .boolean(title: nil, description: "Whether user is active", defaultValue: nil),
                     "category": .enum(values: ["premium", "standard", "basic"], description: "User category")
                 ],
                 required: ["name", "category"],
@@ -244,7 +244,7 @@ struct ElicitationTests {
             let decoder = JSONDecoder()
             let decodedSchema = try decoder.decode(JSONSchema.self, from: data)
             
-            if case .object(let obj) = decodedSchema {
+            if case .object(let obj, _) = decodedSchema {
                 #expect(obj.required.contains("name"))
                 #expect(obj.required.contains("category"))
                 #expect(obj.required.count == 2)
@@ -270,8 +270,8 @@ struct ElicitationTests {
             let decoder = JSONDecoder()
             let decodedSchema = try decoder.decode(JSONSchema.self, from: data)
             
-            if case .object(let obj) = decodedSchema {
-                if case .string(_, let description, let format, let minLength, let maxLength) = obj.properties["email"] {
+            if case .object(let obj, _) = decodedSchema {
+                if case .string(_, let description, let format, let minLength, let maxLength, _) = obj.properties["email"] {
                     #expect(description == "Email address")
                     #expect(format == "email")
                     #expect(minLength == nil)
@@ -300,8 +300,8 @@ struct ElicitationTests {
             let decoder = JSONDecoder()
             let decodedSchema = try decoder.decode(JSONSchema.self, from: data)
             
-            if case .object(let obj) = decodedSchema {
-                if case .string(_, let description, let format, let minLength, let maxLength) = obj.properties["username"] {
+            if case .object(let obj, _) = decodedSchema {
+                if case .string(_, let description, let format, let minLength, let maxLength, _) = obj.properties["username"] {
                     #expect(description == "Username")
                     #expect(format == nil)
                     #expect(minLength == 3)

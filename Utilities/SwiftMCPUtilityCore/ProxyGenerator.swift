@@ -2,6 +2,7 @@ import Foundation
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
+import AnyCodable
 import SwiftMCP
 import SwiftSyntax
 import SwiftSyntaxBuilder
@@ -180,7 +181,7 @@ public enum ProxyGenerator {
     }
 
     private static func methodParameters(for tool: MCPTool) -> [MethodParameter] {
-        guard case .object(let object) = tool.inputSchema else {
+        guard case .object(let object, _) = tool.inputSchema else {
             return []
         }
 
@@ -192,9 +193,19 @@ public enum ProxyGenerator {
             }
             let swiftName = swiftIdentifier(from: key, lowerCamel: true)
             let typeInfo = swiftTypeInfo(for: schema)
-            let isOptional = !required.contains(key)
+            let defaultLiteral = defaultValueLiteral(for: schema, typeInfo: typeInfo)
+            let isDefaultNil = defaultLiteral == "nil"
+            let hasDefault = defaultLiteral != nil
+            let isOptional = isDefaultNil || (!required.contains(key) && !hasDefault)
             let typeName = isOptional ? "\(typeInfo.typeName)?" : typeInfo.typeName
-            let defaultValue = isOptional ? " = nil" : ""
+            let defaultValue: String
+            if let defaultLiteral {
+                defaultValue = " = \(defaultLiteral)"
+            } else if isOptional {
+                defaultValue = " = nil"
+            } else {
+                defaultValue = ""
+            }
             let signature = "\(swiftName): \(typeName)\(defaultValue)"
             let docLine = parameterDocLine(schema: schema)
             return MethodParameter(
@@ -215,7 +226,7 @@ public enum ProxyGenerator {
 
     private static func swiftTypeInfo(for schema: JSONSchema) -> SwiftTypeInfo {
         switch schema {
-            case .string(_, _, let format, _, _):
+            case .string(_, _, let format, _, _, _):
                 switch format ?? "" {
                     case "date-time":
                         return SwiftTypeInfo(typeName: "Date", needsEncoding: true)
@@ -232,7 +243,7 @@ public enum ProxyGenerator {
                 return SwiftTypeInfo(typeName: "Double", needsEncoding: false)
             case .boolean:
                 return SwiftTypeInfo(typeName: "Bool", needsEncoding: false)
-            case .array(let items, _, _):
+            case .array(let items, _, _, _):
                 let elementInfo = swiftTypeInfo(for: items)
                 return SwiftTypeInfo(typeName: "[\(elementInfo.typeName)]", needsEncoding: elementInfo.needsEncoding)
             case .object:
@@ -248,7 +259,7 @@ public enum ProxyGenerator {
             parts.append(description)
         }
 
-        if case .enum(let values, _, _, _) = schema, !values.isEmpty {
+        if case .enum(let values, _, _, _, _) = schema, !values.isEmpty {
             parts.append("Values: \(values.joined(separator: ", "))")
         }
 
@@ -260,19 +271,135 @@ public enum ProxyGenerator {
 
     private static func schemaDescription(_ schema: JSONSchema) -> String? {
         switch schema {
-            case .string(_, let description, _, _, _):
+            case .string(_, let description, _, _, _, _):
                 return description
-            case .number(_, let description, _, _):
+            case .number(_, let description, _, _, _):
                 return description
             case .boolean(_, let description, _):
                 return description
-            case .array(_, _, let description):
+            case .array(_, _, let description, _):
                 return description
-            case .object(let object):
+            case .object(let object, _):
                 return object.description
-            case .enum(_, _, let description, _):
+            case .enum(_, _, let description, _, _):
                 return description
         }
+    }
+
+    private static func defaultValueLiteral(for schema: JSONSchema, typeInfo: SwiftTypeInfo) -> String? {
+        guard let defaultValue = schemaDefaultValue(schema) else { return nil }
+        let value = defaultValue.value
+        if value is Void || value is NSNull {
+            return "nil"
+        }
+
+        if typeInfo.needsEncoding {
+            if let stringValue = value as? String {
+                return encodedLiteral(for: typeInfo.typeName, value: stringValue)
+            }
+        }
+
+        return swiftLiteral(from: value)
+    }
+
+    private static func schemaDefaultValue(_ schema: JSONSchema) -> AnyCodable? {
+        switch schema {
+        case .string(_, _, _, _, _, let defaultValue):
+            return defaultValue
+        case .number(_, _, _, _, let defaultValue):
+            return defaultValue
+        case .boolean(_, _, let defaultValue):
+            return defaultValue
+        case .array(_, _, _, let defaultValue):
+            return defaultValue
+        case .object(_, let defaultValue):
+            return defaultValue
+        case .enum(_, _, _, _, let defaultValue):
+            return defaultValue
+        }
+    }
+
+    private static func encodedLiteral(for typeName: String, value: String) -> String? {
+        let escaped = escapeSwiftString(value)
+        switch typeName {
+        case "Date":
+            return "ISO8601DateFormatter().date(from: \"\(escaped)\")!"
+        case "URL":
+            return "URL(string: \"\(escaped)\")!"
+        case "UUID":
+            return "UUID(uuidString: \"\(escaped)\")!"
+        case "Data":
+            return "Data(base64Encoded: \"\(escaped)\")!"
+        default:
+            return nil
+        }
+    }
+
+    private static func swiftLiteral(from value: Any) -> String? {
+        if let stringValue = value as? String {
+            return "\"\(escapeSwiftString(stringValue))\""
+        }
+        if let boolValue = value as? Bool {
+            return boolValue ? "true" : "false"
+        }
+        if let intValue = value as? Int {
+            return "\(intValue)"
+        }
+        if let intValue = value as? Int64 {
+            return "\(intValue)"
+        }
+        if let intValue = value as? UInt {
+            return "\(intValue)"
+        }
+        if let doubleValue = value as? Double {
+            return String(describing: doubleValue)
+        }
+        if let floatValue = value as? Float {
+            return String(describing: floatValue)
+        }
+        if let arrayValue = value as? [Any] {
+            var elements: [String] = []
+            for element in arrayValue {
+                guard let literal = swiftLiteral(from: element) else { return nil }
+                elements.append(literal)
+            }
+            return "[\(elements.joined(separator: ", "))]"
+        }
+        if let arrayValue = value as? [AnyCodable] {
+            var elements: [String] = []
+            for element in arrayValue {
+                guard let literal = swiftLiteral(from: element.value) else { return nil }
+                elements.append(literal)
+            }
+            return "[\(elements.joined(separator: ", "))]"
+        }
+        if let dictValue = value as? [String: Any] {
+            var pairs: [String] = []
+            for (key, value) in dictValue {
+                guard let literal = swiftLiteral(from: value) else { return nil }
+                pairs.append("\"\(escapeSwiftString(key))\": \(literal)")
+            }
+            return "[\(pairs.joined(separator: ", "))]"
+        }
+        if let dictValue = value as? [String: AnyCodable] {
+            var pairs: [String] = []
+            for (key, value) in dictValue {
+                guard let literal = swiftLiteral(from: value.value) else { return nil }
+                pairs.append("\"\(escapeSwiftString(key))\": \(literal)")
+            }
+            return "[\(pairs.joined(separator: ", "))]"
+        }
+        return nil
+    }
+
+    private static func escapeSwiftString(_ value: String) -> String {
+        var escaped = value
+        escaped = escaped.replacingOccurrences(of: "\\", with: "\\\\")
+        escaped = escaped.replacingOccurrences(of: "\"", with: "\\\"")
+        escaped = escaped.replacingOccurrences(of: "\n", with: "\\n")
+        escaped = escaped.replacingOccurrences(of: "\r", with: "\\r")
+        escaped = escaped.replacingOccurrences(of: "\t", with: "\\t")
+        return escaped
     }
 
     fileprivate static func pascalCase(_ string: String) -> String {
@@ -481,20 +608,20 @@ private final class OpenAPITypeRegistry {
 
     func swiftType(for schema: JSONSchema, suggestedName: String) -> String {
         switch schema {
-        case .string(_, _, let format, _, _):
+        case .string(_, _, let format, _, _, _):
             return stringType(for: format)
         case .number:
             return "Double"
         case .boolean:
             return "Bool"
-        case .array(let items, _, _):
+        case .array(let items, _, _, _):
             let itemType = swiftType(for: items, suggestedName: "\(suggestedName)Item")
             return "[\(itemType)]"
-        case .enum(let values, _, let description, _):
+        case .enum(let values, _, let description, _, _):
             let enumName = uniqueName(suggestedName)
             ensureEnum(name: enumName, values: values, description: description)
             return enumName
-        case .object(let object):
+        case .object(let object, _):
             if let knownType = knownSwiftMCPType(for: object) {
                 return knownType
             }
@@ -636,18 +763,18 @@ private final class OpenAPITypeRegistry {
 
     private func schemaDescription(_ schema: JSONSchema) -> String? {
         switch schema {
-        case .string(_, let description, _, _, _):
+        case .string(_, let description, _, _, _, _):
             return description
-        case .number(_, let description, _, _):
+        case .number(_, let description, _, _, _):
             return description
         case .boolean(_, let description, _):
             return description
-        case .array(_, _, let description):
+        case .array(_, _, let description, _):
             return description
-        case .object(let object):
+        case .object(let object, _):
             return object.description
-        case .enum(_, _, let description, _):
+        case .enum(_, _, let description, _, _):
             return description
-        }
     }
+}
 }

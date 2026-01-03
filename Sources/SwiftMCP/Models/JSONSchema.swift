@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import AnyCodable
 
 /// A simplified representation of JSON Schema for use in the macros
 public indirect enum JSONSchema: Sendable {
@@ -40,22 +41,41 @@ public indirect enum JSONSchema: Sendable {
     }
 
     /// A string schema
-    case string(title: String? = nil, description: String? = nil, format: String? = nil, minLength: Int? = nil, maxLength: Int? = nil)
+    case string(
+        title: String? = nil,
+        description: String? = nil,
+        format: String? = nil,
+        minLength: Int? = nil,
+        maxLength: Int? = nil,
+        defaultValue: AnyCodable? = nil
+    )
 
     /// A number schema
-    case number(title: String? = nil, description: String? = nil, minimum: Double? = nil, maximum: Double? = nil)
+    case number(
+        title: String? = nil,
+        description: String? = nil,
+        minimum: Double? = nil,
+        maximum: Double? = nil,
+        defaultValue: AnyCodable? = nil
+    )
 
     /// A boolean schema
-    case boolean(title: String? = nil, description: String? = nil, default: Bool? = nil)
+    case boolean(title: String? = nil, description: String? = nil, defaultValue: AnyCodable? = nil)
 
     /// An array schema
-    case array(items: JSONSchema, title: String? = nil, description: String? = nil)
+    case array(items: JSONSchema, title: String? = nil, description: String? = nil, defaultValue: AnyCodable? = nil)
 
     /// An object schema
-    case object(Object)
+    case object(Object, defaultValue: AnyCodable? = nil)
 
     /// An enum schema with possible values
-    case `enum`(values: [String], title: String? = nil, description: String? = nil, enumNames: [String]? = nil)
+    case `enum`(
+        values: [String],
+        title: String? = nil,
+        description: String? = nil,
+        enumNames: [String]? = nil,
+        defaultValue: AnyCodable? = nil
+    )
 }
 
 // Extension to remove required fields from a schema
@@ -63,20 +83,70 @@ extension JSONSchema {
     /// Returns a new schema with all required fields removed
     public var withoutRequired: JSONSchema {
         switch self {
-            case .object(let object):
+            case .object(let object, let defaultValue):
                 // For object schemas, create a new object with empty required array
                 return .object(Object(properties: object.properties.mapValues { $0.withoutRequired },
 									  required: [],
 									  description: object.description,
-									  additionalProperties: object.additionalProperties))
+									  additionalProperties: object.additionalProperties),
+                               defaultValue: defaultValue)
 
-            case .array(let items, let title, let description):
+            case .array(let items, let title, let description, let defaultValue):
                 // For array schemas, recursively apply to items
-                return .array(items: items.withoutRequired, title: title, description: description)
+                return .array(items: items.withoutRequired, title: title, description: description, defaultValue: defaultValue)
 
             // For other schema types, return as is since they don't have required fields
             case .string, .number, .boolean, .enum:
                 return self
+        }
+    }
+}
+
+// Extension to apply default values when available
+extension JSONSchema {
+    public func applyingDefault(_ defaultValue: AnyCodable?) -> JSONSchema {
+        guard let defaultValue else { return self }
+        switch self {
+        case .string(let title, let description, let format, let minLength, let maxLength, let existingDefault):
+            return .string(
+                title: title,
+                description: description,
+                format: format,
+                minLength: minLength,
+                maxLength: maxLength,
+                defaultValue: existingDefault ?? defaultValue
+            )
+        case .number(let title, let description, let minimum, let maximum, let existingDefault):
+            return .number(
+                title: title,
+                description: description,
+                minimum: minimum,
+                maximum: maximum,
+                defaultValue: existingDefault ?? defaultValue
+            )
+        case .boolean(let title, let description, let existingDefault):
+            return .boolean(
+                title: title,
+                description: description,
+                defaultValue: existingDefault ?? defaultValue
+            )
+        case .array(let items, let title, let description, let existingDefault):
+            return .array(
+                items: items,
+                title: title,
+                description: description,
+                defaultValue: existingDefault ?? defaultValue
+            )
+        case .object(let object, let existingDefault):
+            return .object(object, defaultValue: existingDefault ?? defaultValue)
+        case .enum(let values, let title, let description, let enumNames, let existingDefault):
+            return .enum(
+                values: values,
+                title: title,
+                description: description,
+                enumNames: enumNames,
+                defaultValue: existingDefault ?? defaultValue
+            )
         }
     }
 }
@@ -86,15 +156,16 @@ extension JSONSchema {
     /// Returns a new schema with all required fields removed
     public var addingAdditionalPropertiesRestrictionToObjects: JSONSchema {
         switch self {
-            case .object(let object):
+            case .object(let object, let defaultValue):
                 return .object(Object(properties: object.properties.mapValues { $0.addingAdditionalPropertiesRestrictionToObjects },
 									  required: object.required,
 									  description: object.description,
-									  additionalProperties: false))
+									  additionalProperties: false),
+                               defaultValue: defaultValue)
 
-            case .array(let items, let title, let description):
+            case .array(let items, let title, let description, let defaultValue):
                 // For array schemas, recursively apply to items
-                return .array(items: items.addingAdditionalPropertiesRestrictionToObjects, title: title, description: description)
+                return .array(items: items.addingAdditionalPropertiesRestrictionToObjects, title: title, description: description, defaultValue: defaultValue)
 
             // For other schema types, return as is since they don't have required fields
             default:
@@ -102,4 +173,3 @@ extension JSONSchema {
         }
     }
 }
-
