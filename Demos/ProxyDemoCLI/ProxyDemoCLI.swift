@@ -101,13 +101,13 @@ struct ProxyDemoRunner {
 
     private func runFormatDateAsString() async {
         let now = Date()
-        await runTool("formatDateAsString") {
+        await runTool("formatDateAsString", args: [("date", now)]) {
             try await client.formatDateAsString(date: now)
         }
     }
 
     private func runAdd() async {
-        await runTool("add") {
+        await runTool("add", args: [("a", 2), ("b", 3)]) {
             try await client.add(a: 2, b: 3)
         }
     }
@@ -119,25 +119,25 @@ struct ProxyDemoRunner {
     }
 
     private func runTestArray() async {
-        await runTool("testArray") {
+        await runTool("testArray", args: [("a", [1, 2, 3, 4])]) {
             try await client.testArray(a: [1, 2, 3, 4])
         }
     }
 
     private func runMultiply() async {
-        await runTool("multiply") {
+        await runTool("multiply", args: [("a", 4), ("b", 5)]) {
             try await client.multiply(a: 4, b: 5)
         }
     }
 
     private func runDivide() async {
-        await runTool("divide") {
+        await runTool("divide", args: [("numerator", 10), ("denominator", 2)]) {
             try await client.divide(denominator: 2, numerator: 10)
         }
     }
 
     private func runGreet() async {
-        await runTool("greet") {
+        await runTool("greet", args: [("name", "Taylor")]) {
             try await client.greet(name: "Taylor")
         }
     }
@@ -156,13 +156,15 @@ struct ProxyDemoRunner {
 
     private func runRandomFile() async {
         do {
+            logCall("randomFile", args: [])
             let items = try await client.randomFile()
-            print("[OK] randomFile: \(items.count) items")
+            logResult("randomFile", result: items)
+            print("[DBG] randomFile items:")
             for item in items {
                 let uri = item.uri?.absoluteString ?? "nil"
                 let mimeType = item.mimeType ?? "nil"
                 let text = item.text ?? "nil"
-                print("  uri=\(uri) mimeType=\(mimeType) text=\(text)")
+                print("[DBG]   uri=\(uri) mimeType=\(mimeType) text=\(text)")
             }
         } catch {
             print("[ERR] randomFile: \(error)")
@@ -175,12 +177,46 @@ struct ProxyDemoRunner {
         }
     }
 
-    private func runTool<T>(_ name: String, _ action: () async throws -> T) async {
+    private func runTool<T>(_ name: String, args: [(String, Any)] = [], _ action: () async throws -> T) async {
         do {
+            logCall(name, args: args)
             let result = try await action()
-            print("[OK] \(name): \(result)")
+            logResult(name, result: result)
         } catch {
             print("[ERR] \(name): \(error)")
         }
+    }
+
+    private func logCall(_ name: String, args: [(String, Any)]) {
+        let argsDescription = args
+            .map { "\($0.0)=\(formatValue($0.1))" }
+            .joined(separator: ", ")
+        let signature = argsDescription.isEmpty ? "\(name)()" : "\(name)(\(argsDescription))"
+        print("[DBG] call \(signature)")
+    }
+
+    private func logResult<T>(_ name: String, result: T) {
+        print("[DBG] result \(name): \(formatValue(result))")
+    }
+
+    private func formatValue(_ value: Any) -> String {
+        let mirrored = Mirror(reflecting: value)
+        if mirrored.displayStyle == .optional {
+            if let child = mirrored.children.first {
+                return formatValue(child.value)
+            }
+            return "nil"
+        }
+        if let date = value as? Date {
+            return "Date(\(formatDate(date)))"
+        }
+        return "\(type(of: value))(\(String(reflecting: value)))"
+    }
+
+    private func formatDate(_ date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.timeZone = TimeZone.current
+        formatter.formatOptions = [.withInternetDateTime, .withTimeZone]
+        return formatter.string(from: date)
     }
 }
