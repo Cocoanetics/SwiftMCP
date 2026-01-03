@@ -80,6 +80,10 @@ struct ProxyDemoRunner {
         print("Running proxy demo tools...")
         await runGetCurrentDateTime()
         await runFormatDateAsString()
+        await runAddHours()
+        await runNormalizeURL()
+        await runRoundTripUUID()
+        await runRoundTripData()
         await runAdd()
         await runSubtract()
         await runTestArray()
@@ -103,6 +107,34 @@ struct ProxyDemoRunner {
         let now = Date()
         await runTool("formatDateAsString", args: [("date", now)]) {
             try await client.formatDateAsString(date: now)
+        }
+    }
+
+    private func runAddHours() async {
+        let now = Date()
+        await runTool("addHours", args: [("date", now), ("hours", 6)]) {
+            try await client.addHours(date: now, hours: 6)
+        }
+    }
+
+    private func runNormalizeURL() async {
+        let url = URL(string: "https://example.com/path/./file#section")!
+        await runTool("normalizeURL", args: [("url", url)]) {
+            try await client.normalizeURL(url: url)
+        }
+    }
+
+    private func runRoundTripUUID() async {
+        let uuid = UUID()
+        await runTool("roundTripUUID", args: [("uuid", uuid)]) {
+            try await client.roundTripUUID(uuid: uuid)
+        }
+    }
+
+    private func runRoundTripData() async {
+        let data = Data("Hello, SwiftMCP!".utf8)
+        await runTool("roundTripData", args: [("data", data)]) {
+            try await client.roundTripData(data: data)
         }
     }
 
