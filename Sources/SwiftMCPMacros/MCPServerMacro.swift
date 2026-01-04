@@ -96,12 +96,14 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
         var generateClient = false
 
         var descriptionArg: String? = nil
+        var serverDescriptionText: String? = nil
         if let arguments {
             for argument in arguments {
                 if argument.label?.text == "description",
                    let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
                     let stringValue = stringLiteral.segments.description
                     descriptionArg = "\"\(stringValue.escapedForSwiftString)\""
+                    serverDescriptionText = stringValue
                 } else if argument.label?.text == "generateClient",
                           let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
                     generateClient = boolLiteral.literal.text == "true"
@@ -116,6 +118,10 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
         // Extract description from leading documentation and allow override via macro argument
         let leadingTrivia = declaration.leadingTrivia.description
         let documentation = Documentation(from: leadingTrivia)
+        if serverDescriptionText == nil, !documentation.description.isEmpty {
+            serverDescriptionText = documentation.description
+        }
+
         let serverDescription: String
         if let descriptionArg {
             serverDescription = descriptionArg
@@ -412,7 +418,10 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
         }
 
         if generateClient, !toolFunctions.isEmpty {
-            let clientType = makeClientType(toolFunctions: toolFunctions)
+            let clientType = makeClientType(
+                toolFunctions: toolFunctions,
+                serverDescription: serverDescriptionText
+            )
             declarations.append(DeclSyntax(stringLiteral: clientType))
         }
 
@@ -565,11 +574,16 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
         let propagatedAttributes: [String]
     }
 
-    private static func makeClientType(toolFunctions: [FunctionDeclSyntax]) -> String {
+    private static func makeClientType(
+        toolFunctions: [FunctionDeclSyntax],
+        serverDescription: String?
+    ) -> String {
         var lines: [String] = []
+        lines.append(contentsOf: clientTypeDocCommentLines(description: serverDescription))
         lines.append("public struct Client {")
         lines.append("    public let proxy: MCPServerProxy")
         lines.append("")
+        lines.append(contentsOf: initDocCommentLines())
         lines.append("    public init(proxy: MCPServerProxy) {")
         lines.append("        self.proxy = proxy")
         lines.append("    }")
@@ -719,6 +733,31 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
             lines.append("     \(bodyLine)")
         }
         lines.append("     */")
+        return lines
+    }
+
+    private static func clientTypeDocCommentLines(description: String?) -> [String] {
+        guard let description, !description.isEmpty else { return [] }
+        let bodyLines = description.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        return blockDocCommentLines(bodyLines, indent: "")
+    }
+
+    private static func initDocCommentLines() -> [String] {
+        let bodyLines = [
+            "Creates a client using the provided proxy.",
+            "- Parameter proxy: The proxy used to call server tools."
+        ]
+        return blockDocCommentLines(bodyLines, indent: "    ")
+    }
+
+    private static func blockDocCommentLines(_ bodyLines: [String], indent: String) -> [String] {
+        guard !bodyLines.isEmpty else { return [] }
+        var lines: [String] = []
+        lines.append("\(indent)/**")
+        for line in bodyLines {
+            lines.append("\(indent) \(line)")
+        }
+        lines.append("\(indent) */")
         return lines
     }
 
