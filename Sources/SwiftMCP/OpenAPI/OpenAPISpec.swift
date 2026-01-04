@@ -218,7 +218,7 @@ struct OpenAPISpec: Codable {
                                     case is Int.Type, is Double.Type:
                                         itemSchema = .number(title: nil, description: nil, minimum: nil, maximum: nil)
                                     case is Bool.Type:
-                                        itemSchema = .boolean(title: nil, description: nil, default: nil)
+                                        itemSchema = .boolean(title: nil, description: nil, defaultValue: nil)
                                     default:
                                         itemSchema = .string(title: nil, description: nil)
                                 }

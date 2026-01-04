@@ -1,0 +1,54 @@
+@Tutorial(time: 15) {
+    @Intro(title: "Building an MCP Client") {
+        Learn how to generate a typed client proxy from a SwiftMCP server and call tools
+        over JSON-RPC using `MCPServerProxy`.
+
+        The generated client mirrors your `@MCPTool` signatures and includes the
+        same documentation for autocompletion.
+
+        @Image(source: "placeholder.png", alt: "Illustration showing a SwiftMCP client calling tools")
+    }
+
+    @Section(title: "Enable Client Generation") {
+        @ContentAndMedia {
+            Opt in to client generation by passing `generateClient: true` to the
+            `@MCPServer` macro. This creates a nested `Client` type that mirrors
+            the `@MCPTool` functions.
+
+            @Image(source: "placeholder.png", alt: "Illustration showing a generated client nested type")
+        }
+
+        @Steps {
+            @Step {
+                Create a server with tools and enable client generation.
+
+                @Code(name: "Calculator.swift", file: "07-client-server.swift")
+            }
+        }
+    }
+
+    @Section(title: "Connect and Call Tools") {
+        @ContentAndMedia {
+            Use `MCPServerProxy` to connect to the server, then instantiate the
+            generated client and call tools with native types.
+
+            Client methods always throw to surface transport or server errors.
+
+            @Image(source: "placeholder.png", alt: "Illustration showing a client connection flow")
+        }
+
+        @Steps {
+            @Step {
+                Connect using SSE and create the client proxy.
+
+                @Code(name: "Client.swift", file: "08-client-connect.swift")
+            }
+
+            @Step {
+                Call tools with native input and output types.
+
+                @Code(name: "Client.swift", file: "09-client-calls.swift")
+            }
+        }
+    }
+}

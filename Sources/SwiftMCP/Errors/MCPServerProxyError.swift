@@ -4,6 +4,7 @@ import Foundation
 public enum MCPServerProxyError: Error, LocalizedError {
     case notImplemented(String)
     case communicationError(String)
+    case toolError(String)
     case unsupportedPlatform(String)
 
     public var errorDescription: String? {
@@ -12,6 +13,8 @@ public enum MCPServerProxyError: Error, LocalizedError {
             return "Functionality not implemented: \(message)"
         case .communicationError(let message):
             return "Communication error with MCP server: \(message)"
+        case .toolError(let message):
+            return "Tool call failed: \(message)"
         case .unsupportedPlatform(let message):
             return "Unsupported platform: \(message)"
         }

@@ -39,6 +39,26 @@
             "target": "SwiftMCPUtility",
             "configuration": "release",
             "preLaunchTask": "swift: Build Release SwiftMCPUtility"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:SwiftMCP}",
+            "name": "Debug ProxyDemoCLI",
+            "target": "ProxyDemoCLI",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug ProxyDemoCLI"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:SwiftMCP}",
+            "name": "Release ProxyDemoCLI",
+            "target": "ProxyDemoCLI",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release ProxyDemoCLI"
         }
     ]
 }

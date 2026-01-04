@@ -43,7 +43,7 @@ struct OpenAPIResourceTests {
         #expect(resourceOperation?.requestBody != nil)
         
         // The resource should have an 'id' parameter
-        if case let .object(inputSchema) = resourceOperation?.requestBody?.content["application/json"]?.schema {
+        if case let .object(inputSchema, _) = resourceOperation?.requestBody?.content["application/json"]?.schema {
             #expect(inputSchema.properties.keys.contains("id"))
             #expect(inputSchema.required.contains("id"))
         } else {

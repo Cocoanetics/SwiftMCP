@@ -6,7 +6,7 @@ import SwiftMCP
  
  Testing "quoted" stuff. And on multiple lines. 'single quotes'
  */
-@MCPServer(name: "SwiftMCP Demo")
+@MCPServer(name: "SwiftMCP Demo", generateClient: true)
 actor DemoServer {
 	
     // MARK: - Tools
@@ -41,6 +41,66 @@ actor DemoServer {
 		dateFormatter.timeStyle = .long
 		
 		return dateFormatter.string(from: date)
+	}
+
+	/**
+	 Adds the specified number of hours to a date and returns the result.
+	 - Parameter date: The starting date
+	 - Parameter hours: Hours to add
+	 - Returns: The adjusted date
+	 */
+	@MCPTool
+	func addHours(date: Date, hours: Int) async -> Date {
+		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+			"function": "addHours",
+			"hours": hours
+		]))
+		let seconds = TimeInterval(hours * 3600)
+		return date.addingTimeInterval(seconds)
+	}
+
+	/**
+	 Returns the normalized URL by removing fragments and resolving the path.
+	 - Parameter url: The URL to normalize
+	 - Returns: The normalized URL
+	 */
+	@MCPTool
+	func normalizeURL(url: URL) async -> URL {
+		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+			"function": "normalizeURL",
+			"url": url.absoluteString
+		]))
+		var components = URLComponents(url: url, resolvingAgainstBaseURL: true)
+		components?.fragment = nil
+		return components?.url ?? url
+	}
+
+	/**
+	 Returns the same UUID after logging it, demonstrating UUID round-tripping.
+	 - Parameter uuid: The UUID to round-trip
+	 - Returns: The same UUID
+	 */
+	@MCPTool
+	func roundTripUUID(uuid: UUID) async -> UUID {
+		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+			"function": "roundTripUUID",
+			"uuid": uuid.uuidString
+		]))
+		return uuid
+	}
+
+	/**
+	 Returns the same data after logging its size, demonstrating byte-string encoding.
+	 - Parameter data: The data to round-trip
+	 - Returns: The same data
+	 */
+	@MCPTool
+	func roundTripData(data: Data) async -> Data {
+		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+			"function": "roundTripData",
+			"byteCount": data.count
+		]))
+		return data
 	}
 	
 	/// Adds two integers and returns their sum
@@ -456,8 +516,8 @@ actor DemoServer {
                 "password": .string(title: "Password", description: "Password (8-50 characters)", format: nil, minLength: 8, maxLength: 50),
                 "confirmPassword": .string(title: "Confirm Password", description: "Confirm password", format: nil, minLength: 8, maxLength: 50),
                 "email": .string(title: "Email", description: "Email address", format: "email", minLength: 5, maxLength: 100),
-                "agreeToTerms": .boolean(title: "Terms & Conditions", description: "I agree to the terms and conditions", default: false),
-                "receiveNewsletter": .boolean(title: "Newsletter", description: "Receive newsletter updates", default: true)
+                "agreeToTerms": .boolean(title: "Terms & Conditions", description: "I agree to the terms and conditions", defaultValue: false),
+                "receiveNewsletter": .boolean(title: "Newsletter", description: "Receive newsletter updates", defaultValue: true)
             ],
             required: ["username", "password", "confirmPassword", "email", "agreeToTerms"],
             title: "Account Registration",
@@ -526,7 +586,7 @@ actor DemoServer {
                 "notifications": .boolean(
                     title: "Enable Notifications",
                     description: "Receive push notifications",
-                    default: true
+                    defaultValue: true
                 ),
                 "maxItems": .number(
                     title: "Max Items per Page",
@@ -600,4 +660,3 @@ actor DemoServer {
         }
     }
 }
-

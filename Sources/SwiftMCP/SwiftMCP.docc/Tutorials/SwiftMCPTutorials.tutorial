@@ -14,5 +14,6 @@
         @Image(source: "placeholder.png", alt: "Illustration showing a basic MCP server structure")
         
         @TutorialReference(tutorial: "doc:BuildingAnMCPServer")
+        @TutorialReference(tutorial: "doc:BuildingAnMCPClient")
     }
-} 
+}

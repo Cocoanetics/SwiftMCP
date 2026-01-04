@@ -93,14 +93,20 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
         let arguments = node.arguments?.as(LabeledExprListSyntax.self)
         let nameArg = arguments?.first(where: { $0.label?.text == "name" })?.expression.description.trimmingCharacters(in: .punctuationCharacters)
         let versionArg = arguments?.first(where: { $0.label?.text == "version" })?.expression.description.trimmingCharacters(in: .punctuationCharacters)
+        var generateClient = false
 
         var descriptionArg: String? = nil
+        var serverDescriptionText: String? = nil
         if let arguments {
             for argument in arguments {
                 if argument.label?.text == "description",
                    let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
                     let stringValue = stringLiteral.segments.description
                     descriptionArg = "\"\(stringValue.escapedForSwiftString)\""
+                    serverDescriptionText = stringValue
+                } else if argument.label?.text == "generateClient",
+                          let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
+                    generateClient = boolLiteral.literal.text == "true"
                 }
             }
         }
@@ -112,6 +118,10 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
         // Extract description from leading documentation and allow override via macro argument
         let leadingTrivia = declaration.leadingTrivia.description
         let documentation = Documentation(from: leadingTrivia)
+        if serverDescriptionText == nil, !documentation.description.isEmpty {
+            serverDescriptionText = documentation.description
+        }
+
         let serverDescription: String
         if let descriptionArg {
             serverDescription = descriptionArg
@@ -127,6 +137,7 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
 
         // Find all functions with the MCPTool macro
         var mcpTools: [String] = []
+        var toolFunctions: [FunctionDeclSyntax] = []
 
         for member in declaration.memberBlock.members {
             if let funcDecl = member.decl.as(FunctionDeclSyntax.self) {
@@ -136,6 +147,7 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
 					   let identifier = identifierAttr.attributeName.as(IdentifierTypeSyntax.self),
 					   identifier.name.text == "MCPTool" {
                         mcpTools.append(funcDecl.name.text)
+                        toolFunctions.append(funcDecl)
                         break
                     }
                 }
@@ -405,6 +417,14 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
             declarations.append(DeclSyntax(stringLiteral: callPromptMethod))
         }
 
+        if generateClient, !toolFunctions.isEmpty {
+            let clientType = makeClientType(
+                toolFunctions: toolFunctions,
+                serverDescription: serverDescriptionText
+            )
+            declarations.append(DeclSyntax(stringLiteral: clientType))
+        }
+
         return declarations
     }
 
@@ -532,5 +552,261 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
 		in context: some MacroExpansionContext
 	) throws -> [DeclSyntax] {
         try expansion(of: node, providingMembersOf: declaration, in: context)
+    }
+
+    private struct ClientParameter {
+        let name: String
+        let label: String
+        let typeString: String
+        let defaultValue: String?
+        let isOptional: Bool
+    }
+
+    private struct ClientFunctionMetadata {
+        let name: String
+        let documentation: Documentation
+        let parameters: [ClientParameter]
+        let returnTypeString: String
+        let hasReturnClause: Bool
+        let isAsync: Bool
+        let isThrowing: Bool
+        let throwsKeyword: String?
+        let propagatedAttributes: [String]
+    }
+
+    private static func makeClientType(
+        toolFunctions: [FunctionDeclSyntax],
+        serverDescription: String?
+    ) -> String {
+        var lines: [String] = []
+        lines.append(contentsOf: clientTypeDocCommentLines(description: serverDescription))
+        lines.append("public struct Client {")
+        lines.append("    public let proxy: MCPServerProxy")
+        lines.append("")
+        lines.append(contentsOf: initDocCommentLines())
+        lines.append("    public init(proxy: MCPServerProxy) {")
+        lines.append("        self.proxy = proxy")
+        lines.append("    }")
+
+        for funcDecl in toolFunctions {
+            let metadata = clientFunctionMetadata(from: funcDecl)
+            lines.append("")
+            lines.append(contentsOf: makeClientMethodLines(metadata: metadata))
+        }
+
+        lines.append("}")
+        return lines.joined(separator: "\n")
+    }
+
+    private static func clientFunctionMetadata(from funcDecl: FunctionDeclSyntax) -> ClientFunctionMetadata {
+        let documentation = Documentation(from: funcDecl.leadingTrivia.description)
+        let parameters = funcDecl.signature.parameterClause.parameters.map { param -> ClientParameter in
+            let name = param.secondName?.text ?? param.firstName.text
+            let label = param.firstName.text
+            let typeString = param.type.description.trimmingCharacters(in: .whitespacesAndNewlines)
+            let defaultValue = param.defaultValue?.value.description.trimmingCharacters(in: .whitespacesAndNewlines)
+            let isOptional = param.type.is(OptionalTypeSyntax.self)
+                || param.type.is(ImplicitlyUnwrappedOptionalTypeSyntax.self)
+                || typeString.hasSuffix("?")
+                || typeString.hasSuffix("!")
+            return ClientParameter(
+                name: name,
+                label: label,
+                typeString: typeString,
+                defaultValue: defaultValue,
+                isOptional: isOptional
+            )
+        }
+
+        let returnClause = funcDecl.signature.returnClause
+        let returnTypeString = returnClause?.type.description.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Void"
+        let effectSpecifiers = funcDecl.signature.effectSpecifiers
+        let isAsync = effectSpecifiers?.asyncSpecifier != nil
+        let throwsClause = effectSpecifiers?.throwsClause
+        let throwsKeyword = throwsClause?.description.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isThrowing = true
+
+        return ClientFunctionMetadata(
+            name: funcDecl.name.text,
+            documentation: documentation,
+            parameters: parameters,
+            returnTypeString: returnTypeString,
+            hasReturnClause: returnClause != nil,
+            isAsync: isAsync,
+            isThrowing: isThrowing,
+            throwsKeyword: throwsKeyword ?? "throws",
+            propagatedAttributes: propagatedAttributes(for: funcDecl)
+        )
+    }
+
+    private static func propagatedAttributes(for funcDecl: FunctionDeclSyntax) -> [String] {
+        var attributes: [String] = []
+        for attr in funcDecl.attributes {
+            guard let attribute = attr.as(AttributeSyntax.self) else { continue }
+            let attributeName = attribute.attributeName.description.trimmingCharacters(in: .whitespacesAndNewlines)
+            if attributeName.isEmpty { continue }
+            if ["MCPTool", "MCPResource", "MCPPrompt", "MCPServer", "MCPToolProvider", "Schema"].contains(attributeName) {
+                continue
+            }
+            let trimmed = attribute.description.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                attributes.append(trimmed)
+            }
+        }
+        return attributes
+    }
+
+    private static func makeClientMethodLines(metadata: ClientFunctionMetadata) -> [String] {
+        var lines: [String] = []
+        lines.append(contentsOf: docCommentLines(for: metadata))
+
+        for attribute in metadata.propagatedAttributes {
+            lines.append("    \(attribute)")
+        }
+
+        let signature = metadata.parameters.map { parameterSignature($0) }.joined(separator: ", ")
+        let effectSpecifiers = effectSpecifiersString(isAsync: metadata.isAsync, throwsKeyword: metadata.throwsKeyword)
+        let returnClause = metadata.hasReturnClause ? " -> \(metadata.returnTypeString)" : ""
+
+        lines.append("    public func \(metadata.name)(\(signature))\(effectSpecifiers)\(returnClause) {")
+
+        let hasParameters = !metadata.parameters.isEmpty
+        if hasParameters {
+            lines.append("        var arguments: [String: any Sendable] = [:]")
+            for parameter in metadata.parameters {
+                if parameter.isOptional {
+                    lines.append("        if let \(parameter.name) { arguments[\"\(parameter.name)\"] = MCPClientArgumentEncoder.encode(\(parameter.name)) }")
+                } else {
+                    lines.append("        arguments[\"\(parameter.name)\"] = MCPClientArgumentEncoder.encode(\(parameter.name))")
+                }
+            }
+        }
+
+        let argumentsName = (hasParameters && !metadata.isAsync) ? "capturedArguments" : "arguments"
+        if hasParameters && !metadata.isAsync {
+            lines.append("        let capturedArguments = arguments")
+        }
+
+        let callExpression = toolCallExpression(
+            toolName: metadata.name,
+            hasParameters: hasParameters,
+            argumentsName: argumentsName,
+            isAsync: metadata.isAsync,
+            isThrowing: metadata.isThrowing
+        )
+        lines.append("        let text = \(callExpression)")
+
+        if metadata.hasReturnClause {
+            lines.append("        return try MCPClientResultDecoder.decode(\(metadata.returnTypeString).self, from: text)")
+        } else {
+            lines.append("        _ = try MCPClientResultDecoder.decode(Void.self, from: text)")
+            lines.append("        return")
+        }
+
+        lines.append("    }")
+        return lines
+    }
+
+    private static func docCommentLines(for metadata: ClientFunctionMetadata) -> [String] {
+        var bodyLines: [String] = []
+        if !metadata.documentation.description.isEmpty {
+            for line in metadata.documentation.description.split(separator: "\n") {
+                bodyLines.append(String(line))
+            }
+        }
+
+        for parameter in metadata.parameters {
+            if let description = metadata.documentation.parameters[parameter.name], !description.isEmpty {
+                bodyLines.append("- Parameter \(parameter.name): \(description)")
+            }
+        }
+
+        if let returns = metadata.documentation.returns, !returns.isEmpty {
+            bodyLines.append("- Returns: \(returns)")
+        }
+
+        guard !bodyLines.isEmpty else { return [] }
+
+        var lines: [String] = []
+        lines.append("    /**")
+        for bodyLine in bodyLines {
+            lines.append("     \(bodyLine)")
+        }
+        lines.append("     */")
+        return lines
+    }
+
+    private static func clientTypeDocCommentLines(description: String?) -> [String] {
+        guard let description, !description.isEmpty else { return [] }
+        let bodyLines = description.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        return blockDocCommentLines(bodyLines, indent: "")
+    }
+
+    private static func initDocCommentLines() -> [String] {
+        let bodyLines = [
+            "Creates a client using the provided proxy.",
+            "- Parameter proxy: The proxy used to call server tools."
+        ]
+        return blockDocCommentLines(bodyLines, indent: "    ")
+    }
+
+    private static func blockDocCommentLines(_ bodyLines: [String], indent: String) -> [String] {
+        guard !bodyLines.isEmpty else { return [] }
+        var lines: [String] = []
+        lines.append("\(indent)/**")
+        for line in bodyLines {
+            lines.append("\(indent) \(line)")
+        }
+        lines.append("\(indent) */")
+        return lines
+    }
+
+    private static func parameterSignature(_ parameter: ClientParameter) -> String {
+        let label: String
+        if parameter.label == "_" {
+            label = "_ \(parameter.name)"
+        } else if parameter.label != parameter.name {
+            label = "\(parameter.label) \(parameter.name)"
+        } else {
+            label = parameter.name
+        }
+
+        var signature = "\(label): \(parameter.typeString)"
+        if let defaultValue = parameter.defaultValue, !defaultValue.isEmpty {
+            signature += " = \(defaultValue)"
+        }
+        return signature
+    }
+
+    private static func effectSpecifiersString(isAsync: Bool, throwsKeyword: String?) -> String {
+        var parts: [String] = []
+        if isAsync {
+            parts.append("async")
+        }
+        if let throwsKeyword {
+            parts.append(throwsKeyword)
+        }
+        guard !parts.isEmpty else { return "" }
+        return " " + parts.joined(separator: " ")
+    }
+
+    private static func toolCallExpression(
+        toolName: String,
+        hasParameters: Bool,
+        argumentsName: String,
+        isAsync: Bool,
+        isThrowing: Bool
+    ) -> String {
+        let call = hasParameters
+            ? "proxy.callTool(\"\(toolName)\", arguments: \(argumentsName))"
+            : "proxy.callTool(\"\(toolName)\")"
+
+        let tryPrefix = isThrowing ? "try " : "try! "
+
+        if isAsync {
+            return "\(tryPrefix)await \(call)"
+        }
+
+        return "\(tryPrefix)MCPClientBlocking.call { try await \(call) }"
     }
 }

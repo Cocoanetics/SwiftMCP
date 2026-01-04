@@ -87,7 +87,7 @@ extension Double: JSONSchemaTypeConvertible {
 
 extension Bool: JSONSchemaTypeConvertible {
     public static func jsonSchema(description: String?) -> JSONSchema {
-        .boolean(title: nil, description: description, default: nil)
+        .boolean(title: nil, description: description, defaultValue: nil)
     }
 }
 

@@ -1,4 +1,5 @@
 import Testing
+import AnyCodable
 @testable import SwiftMCP
 
 /**
@@ -6,11 +7,8 @@ import Testing
  
  It tests:
  1. Parameters with default values are correctly marked as optional (not required)
- 2. Parameters with default values have the correct type in the JSON schema
+ 2. Parameters with default values are stored in the JSON schema
  3. Multiple parameters with default values in the same function are handled correctly
- 
- Note: In the current implementation, the actual default values are not stored in the JSONSchema,
- only the fact that a parameter has a default value (by marking it as not required).
  */
 
 // MARK: - Test Classes
@@ -75,7 +73,7 @@ func testIntDefaultValue() throws {
         throw TestError("Could not find intDefault function")
     }
     
-    if case .object(let object) = intDefaultTool.inputSchema {
+    if case .object(let object, _) = intDefaultTool.inputSchema {
         // Check default values
 		if case .number = object.properties["a"] {
             // Parameter 'a' should not have a default value
@@ -83,9 +81,8 @@ func testIntDefaultValue() throws {
             #expect(Bool(false), "Expected number schema for parameter 'a'")
         }
         
-		if case .number = object.properties["b"] {
-            // Parameter 'b' should have a default value of 42
-            // Note: In the current implementation, default values are not stored in the JSONSchema
+		if case .number(title: _, description: _, minimum: _, maximum: _, defaultValue: let defaultValue) = object.properties["b"] {
+            #expect(defaultValue?.value as? Int == 42)
         } else {
             #expect(Bool(false), "Expected number schema for parameter 'b'")
         }
@@ -107,10 +104,9 @@ func testStringDefaultValue() throws {
         throw TestError("Could not find stringDefault function")
     }
     
-    if case .object(let object) = stringDefaultTool.inputSchema {
-		if case .string = object.properties["name"] {
-            // Parameter 'name' should have a default value of "John Doe"
-            // Note: In the current implementation, default values are not stored in the JSONSchema
+    if case .object(let object, _) = stringDefaultTool.inputSchema {
+		if case .string(title: _, description: _, format: _, minLength: _, maxLength: _, defaultValue: let defaultValue) = object.properties["name"] {
+            #expect(defaultValue?.value as? String == "John Doe")
         } else {
             #expect(Bool(false), "Expected string schema for parameter 'name'")
         }
@@ -131,10 +127,9 @@ func testBoolDefaultValue() throws {
         throw TestError("Could not find boolDefault function")
     }
     
-    if case .object(let object) = boolDefaultTool.inputSchema {
-		if case .boolean = object.properties["flag"] {
-            // Parameter 'flag' should have a default value of true
-            // Note: In the current implementation, default values are not stored in the JSONSchema
+    if case .object(let object, _) = boolDefaultTool.inputSchema {
+		if case .boolean(title: _, description: _, defaultValue: let defaultValue) = object.properties["flag"] {
+            #expect(defaultValue?.value as? Bool == true)
         } else {
             #expect(Bool(false), "Expected boolean schema for parameter 'flag'")
         }
@@ -155,10 +150,9 @@ func testDoubleDefaultValue() throws {
         throw TestError("Could not find doubleDefault function")
     }
     
-    if case .object(let object) = doubleDefaultTool.inputSchema {
-		if case .number = object.properties["value"] {
-            // Parameter 'value' should have a default value of 3.14
-            // Note: In the current implementation, default values are not stored in the JSONSchema
+    if case .object(let object, _) = doubleDefaultTool.inputSchema {
+		if case .number(title: _, description: _, minimum: _, maximum: _, defaultValue: let defaultValue) = object.properties["value"] {
+            #expect(defaultValue?.value as? Double == 3.14)
         } else {
             #expect(Bool(false), "Expected number schema for parameter 'value'")
         }
@@ -179,10 +173,10 @@ func testArrayDefaultValue() throws {
         throw TestError("Could not find arrayDefault function")
     }
     
-    if case .object(let object) = arrayDefaultTool.inputSchema {
-		if case .array = object.properties["values"] {
-            // Parameter 'values' should have a default value of [1, 2, 3]
-            // Note: In the current implementation, default values are not stored in the JSONSchema
+    if case .object(let object, _) = arrayDefaultTool.inputSchema {
+		if case .array(items: _, title: _, description: _, defaultValue: let defaultValue) = object.properties["values"] {
+            let values = intArray(from: defaultValue)
+            #expect(values == [1, 2, 3])
         } else {
             #expect(Bool(false), "Expected array schema for parameter 'values'")
         }
@@ -203,23 +197,21 @@ func testMultipleDefaultValues() throws {
         throw TestError("Could not find multipleDefaults function")
     }
     
-    if case .object(let object) = multipleDefaultsTool.inputSchema {
+    if case .object(let object, _) = multipleDefaultsTool.inputSchema {
 		if case .string = object.properties["a"] {
             // Parameter 'a' should not have a default value
         } else {
             #expect(Bool(false), "Expected string schema for parameter 'a'")
         }
         
-		if case .number = object.properties["b"] {
-            // Parameter 'b' should have a default value of 10
-            // Note: In the current implementation, default values are not stored in the JSONSchema
+		if case .number(title: _, description: _, minimum: _, maximum: _, defaultValue: let defaultValue) = object.properties["b"] {
+            #expect(defaultValue?.value as? Int == 10)
         } else {
             #expect(Bool(false), "Expected number schema for parameter 'b'")
         }
         
-		if case .boolean = object.properties["c"] {
-            // Parameter 'c' should have a default value of false
-            // Note: In the current implementation, default values are not stored in the JSONSchema
+		if case .boolean(title: _, description: _, defaultValue: let defaultValue) = object.properties["c"] {
+            #expect(defaultValue?.value as? Bool == false)
         } else {
             #expect(Bool(false), "Expected boolean schema for parameter 'c'")
         }
@@ -231,4 +223,15 @@ func testMultipleDefaultValues() throws {
     } else {
         #expect(Bool(false), "Expected object schema")
     }
-} 
+}
+
+private func intArray(from value: AnyCodable?) -> [Int]? {
+    if let ints = value?.value as? [Int] {
+        return ints
+    }
+    if let values = value?.value as? [Any] {
+        let ints = values.compactMap { $0 as? Int }
+        return ints.count == values.count ? ints : nil
+    }
+    return nil
+}
