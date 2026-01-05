@@ -116,7 +116,11 @@ extension MCPToolMetadata {
         )
     }
 
-    var outputSchema: JSONSchema {
-        return returnSchemaInfo.schema.withoutRequired
+    var outputSchema: JSONSchema? {
+        let schema = returnSchemaInfo.schema.withoutRequired
+        if case .object = schema {
+            return schema
+        }
+        return nil
     }
 }

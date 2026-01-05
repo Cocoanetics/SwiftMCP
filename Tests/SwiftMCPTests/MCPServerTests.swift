@@ -159,6 +159,7 @@ func testToolCallRequest() async throws {
     guard let result = response.result else {
         throw TestError("Result is missing")
     }
+    #expect(result["structuredContent"] == nil)
     
     guard let content = result["content"]?.value as? [[String: String]] else {
         throw TestError("Content not found or not an array")

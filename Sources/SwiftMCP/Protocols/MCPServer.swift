@@ -318,14 +318,17 @@ public extension MCPServer {
         do {
             let result = try await toolProvider.callTool(toolName, arguments: arguments)
 
-            let content: [String: Codable]
+            let content: [String: Any]
+            var resultPayload: [String: AnyCodable] = [
+                "isError": AnyCodable(false)
+            ]
 
             if let resource = result as? MCPResourceContent {
                 // Handle MCPResourceContent type
                 content = [
-					"type": "resource",
-					"resource": resource
-				]
+                    "type": "resource",
+                    "resource": resource
+                ]
             } else {
                 let encoder = JSONEncoder()
 
@@ -337,15 +340,18 @@ public extension MCPServer {
                 let responseText = String(data: jsonData, encoding: .utf8) ?? ""
 
                 content = [
-					"type": "text",
-					"text": responseText.removingQuotes
-				]
+                    "type": "text",
+                    "text": responseText.removingQuotes
+                ]
+
+                if let structuredObject = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
+                    resultPayload["structuredContent"] = AnyCodable(structuredObject)
+                }
             }
 
-            return JSONRPCMessage.response(id: request.id, result: [
-                "content": [content],
-                "isError": false
-            ])
+            resultPayload["content"] = AnyCodable([content])
+
+            return JSONRPCMessage.response(id: request.id, result: resultPayload)
 
         } catch {
             return JSONRPCMessage.response(id: request.id, result: [
