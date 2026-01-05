@@ -139,6 +139,7 @@ public extension Transport {
 
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601WithTimeZone
+        encoder.outputFormatting = [.sortedKeys]
 
         let data = try encoder.encode(dataToEncode)
 

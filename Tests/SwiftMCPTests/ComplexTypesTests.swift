@@ -475,6 +475,9 @@ func testContactInfoProcessing() async throws {
     let createContent = try #require(createResult["content"]?.value as? [[String: String]])
     let createFirstContent = try #require(createContent.first)
     let createText = try #require(createFirstContent["text"])
+    let sortedStructuredData = try JSONSerialization.data(withJSONObject: structured, options: [.sortedKeys])
+    let sortedStructuredText = try #require(String(data: sortedStructuredData, encoding: .utf8))
+    #expect(sortedStructuredText == createText)
     
     // Now process the contact array
     let processRequest = JSONRPCMessage.request(

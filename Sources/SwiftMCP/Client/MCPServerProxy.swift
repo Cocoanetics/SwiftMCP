@@ -256,6 +256,7 @@ public final actor MCPServerProxy: Sendable {
                 throw MCPServerProxyError.communicationError("Message must have an ID")
             }
             let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
             let data = try encoder.encode(message)
 
             let messageWithNewline = data + "\n".data(using: .utf8)!
@@ -280,6 +281,7 @@ public final actor MCPServerProxy: Sendable {
             urlRequest.httpMethod = "POST"
             urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
             let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
             let data = try encoder.encode(message)
             urlRequest.httpBody = data
 

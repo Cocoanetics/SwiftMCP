@@ -318,7 +318,7 @@ public extension MCPServer {
         do {
             let result = try await toolProvider.callTool(toolName, arguments: arguments)
 
-            let content: [String: Any]
+            var content: [String: Any]
             var resultPayload: [String: AnyCodable] = [
                 "isError": AnyCodable(false)
             ]
@@ -335,6 +335,7 @@ public extension MCPServer {
                 // Create ISO8601 formatter with timezone
                 encoder.dateEncodingStrategy = .iso8601WithTimeZone
                 encoder.nonConformingFloatEncodingStrategy = .convertToString(positiveInfinity: "Infinity", negativeInfinity: "-Infinity", nan: "NaN")
+                encoder.outputFormatting = [.sortedKeys]
 
                 let jsonData = try encoder.encode(result)
                 let responseText = String(data: jsonData, encoding: .utf8) ?? ""
@@ -362,6 +363,7 @@ public extension MCPServer {
             ])
         }
     }
+
 
     /// Handles a prompt get request
     private func handlePromptGet(_ request: JSONRPCMessage.JSONRPCRequestData) async -> JSONRPCMessage? {
