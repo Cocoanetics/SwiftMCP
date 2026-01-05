@@ -155,83 +155,9 @@ struct OpenAPISpec: Codable {
         for metadata in allToolMetadata {
             let pathKey = "/\(rootPath)/\(metadata.name)"
 
-            // Create response schema based on return type
-            let responseSchema: JSONSchema
-            let responseDescription: String
-            let voidDescription = "Empty string (void function)"
-
-            if metadata.returnType == nil || metadata.returnType == Void.self {
-                responseSchema = .string(title: nil, description: voidDescription)
-                responseDescription = metadata.returnTypeDescription ?? "A void function that performs an action"
-            } else {
-                // Convert Swift type to JSON Schema type
-                let returnType = metadata.returnType!
-
-                // Check if the type provides its own schema
-                if returnType is any MCPResourceContent.Type || returnType is [any MCPResourceContent].Type {
-                    responseSchema = OpenAIFileResponse.schemaMetadata.schema
-                    responseDescription = metadata.returnTypeDescription ?? "A file response containing name, mime type, and base64-encoded content"
-                } else if let schemaType = returnType as? any SchemaRepresentable.Type {
-                    responseSchema = schemaType.schemaMetadata.schema
-                    responseDescription = metadata.returnTypeDescription ?? "A structured response"
-                } else if let jsonSchemaType = returnType as? any JSONSchemaTypeConvertible.Type {
-                    responseSchema = jsonSchemaType.jsonSchema(description: metadata.returnTypeDescription)
-                    responseDescription = metadata.returnTypeDescription ?? "A structured response"
-                } else if let caseIterableType = returnType as? any CaseIterable.Type {
-                    responseSchema = .enum(values: caseIterableType.caseLabels, description: metadata.returnTypeDescription)
-                    responseDescription = metadata.returnTypeDescription ?? "An enumerated value"
-                } else if let arrayType = returnType as? any ArrayWithSchemaRepresentableElements.Type {
-                    responseSchema = arrayType.schema(description: metadata.returnTypeDescription)
-                    responseDescription = metadata.returnTypeDescription ?? "An array of structured responses"
-                } else if let arrayType = returnType as? any ArrayWithCaseIterableElements.Type {
-                    responseSchema = arrayType.schema(description: metadata.returnTypeDescription)
-                    responseDescription = metadata.returnTypeDescription ?? "An array of enumerated values"
-                } else if let arrayBridge = returnType as? ArraySchemaBridge.Type {
-                    // Get the element type from the array
-                    let elementType = arrayBridge.elementType
-
-                    let itemSchema: JSONSchema
-                    if let jsonSchemaType = elementType as? any JSONSchemaTypeConvertible.Type {
-                        itemSchema = jsonSchemaType.jsonSchema(description: nil)
-                    } else if let schemaType = elementType as? any SchemaRepresentable.Type {
-                        itemSchema = schemaType.schemaMetadata.schema
-                    } else if let caseIterableType = elementType as? any CaseIterable.Type {
-                        itemSchema = .enum(values: caseIterableType.caseLabels)
-                    } else {
-                        itemSchema = .string(title: nil, description: nil)
-                    }
-
-                    responseSchema = .array(items: itemSchema, description: metadata.returnTypeDescription)
-                    responseDescription = metadata.returnTypeDescription ?? "An array of values"
-                } else {
-                    switch returnType {
-                        case is Int.Type, is Double.Type:
-                            responseSchema = .number(title: nil, description: metadata.returnTypeDescription)
-                        case is Bool.Type:
-                            responseSchema = .boolean(title: nil, description: metadata.returnTypeDescription)
-                        case is Array<Any>.Type:
-                            if let elementType = (returnType as? Array<Any>.Type)?.elementType {
-                                let itemSchema: JSONSchema
-                                switch elementType {
-                                    case let jsonSchemaType as any JSONSchemaTypeConvertible.Type:
-                                        itemSchema = jsonSchemaType.jsonSchema(description: nil)
-                                    case is Int.Type, is Double.Type:
-                                        itemSchema = .number(title: nil, description: nil, minimum: nil, maximum: nil)
-                                    case is Bool.Type:
-                                        itemSchema = .boolean(title: nil, description: nil, defaultValue: nil)
-                                    default:
-                                        itemSchema = .string(title: nil, description: nil)
-                                }
-                                responseSchema = .array(items: itemSchema, description: metadata.returnTypeDescription)
-                            } else {
-                                responseSchema = .array(items: .string(title: nil, description: nil), description: metadata.returnTypeDescription)
-                            }
-                        default:
-                            responseSchema = .string(title: nil, description: metadata.returnTypeDescription)
-                    }
-                    responseDescription = metadata.returnTypeDescription ?? "The returned value of the tool"
-                }
-            }
+            let returnInfo = metadata.returnSchemaInfo
+            let responseSchema = returnInfo.schema
+            let responseDescription = returnInfo.description
 
             // Create error response schema matching {"error": {"code": Int, "message": String}}
             let errorSchema = JSONSchema.object(JSONSchema.Object(

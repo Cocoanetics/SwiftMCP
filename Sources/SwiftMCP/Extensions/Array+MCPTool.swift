@@ -19,17 +19,21 @@ extension Array where Element == MCPToolMetadata {
             let required = meta.parameters.filter { $0.isRequired }.map { $0.name }
 
             // Create the input schema
+            let hasParameters = !properties.isEmpty
             let inputSchema = JSONSchema.object(JSONSchema.Object(
                 properties: properties,
                 required: required,
-                description: meta.description
+                description: hasParameters ? meta.description : nil,
+                additionalProperties: hasParameters ? nil : false
             ))
+            let outputSchema = meta.outputSchema
 
             // Create and return the tool
             return MCPTool(
                 name: meta.name,
                 description: meta.description,
-                inputSchema: inputSchema
+                inputSchema: inputSchema,
+                outputSchema: outputSchema
             )
         }
     }

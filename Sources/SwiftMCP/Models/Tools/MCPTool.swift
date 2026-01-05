@@ -18,6 +18,9 @@ public struct MCPTool: Sendable {
     /// The JSON schema defining the tool's input parameters
     public let inputSchema: JSONSchema
 
+    /// The JSON schema defining the tool's output, if available
+    public let outputSchema: JSONSchema?
+
 /**
 	 Creates a new tool with the specified name, description, and input schema.
 	 
@@ -25,11 +28,18 @@ public struct MCPTool: Sendable {
 	   - name: The name of the tool
 	   - description: An optional description of the tool
 	   - inputSchema: The schema defining the function's input parameters
+       - outputSchema: The schema defining the function's output, if available
 	 */
-    public init(name: String, description: String? = nil, inputSchema: JSONSchema) {
+    public init(
+        name: String,
+        description: String? = nil,
+        inputSchema: JSONSchema,
+        outputSchema: JSONSchema? = nil
+    ) {
         self.name = name
         self.description = description
         self.inputSchema = inputSchema
+        self.outputSchema = outputSchema
     }
 } 
 
@@ -43,6 +53,7 @@ extension MCPTool: Codable {
         case name
         case description
         case inputSchema
+        case outputSchema
     }
 
     public init(from decoder: Decoder) throws {
@@ -50,8 +61,9 @@ extension MCPTool: Codable {
         let name = try container.decode(String.self, forKey: .name)
         let description = try container.decodeIfPresent(String.self, forKey: .description)
         let inputSchema = try container.decode(JSONSchema.self, forKey: .inputSchema)
+        let outputSchema = try container.decodeIfPresent(JSONSchema.self, forKey: .outputSchema)
 
-        self.init(name: name, description: description, inputSchema: inputSchema)
+        self.init(name: name, description: description, inputSchema: inputSchema, outputSchema: outputSchema)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -59,5 +71,6 @@ extension MCPTool: Codable {
         try container.encode(name, forKey: .name)
         try container.encodeIfPresent(description, forKey: .description)
         try container.encode(inputSchema, forKey: .inputSchema)
+        try container.encodeIfPresent(outputSchema, forKey: .outputSchema)
     }
 }

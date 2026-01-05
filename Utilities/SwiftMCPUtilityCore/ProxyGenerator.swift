@@ -586,13 +586,24 @@ public enum ProxyGenerator {
     ) -> [String: OpenAPIReturnInfo] {
         var results: [String: OpenAPIReturnInfo] = [:]
         for tool in tools {
-            guard let openapiInfo = openapiReturnSchemas[tool.name] else { continue }
+            let schema: JSONSchema
+            let description: String?
+            if let outputSchema = tool.outputSchema {
+                schema = outputSchema
+                description = openapiReturnSchemas[tool.name]?.description ?? schemaDescription(outputSchema)
+            } else if let openapiInfo = openapiReturnSchemas[tool.name] {
+                schema = openapiInfo.schema
+                description = openapiInfo.description
+            } else {
+                continue
+            }
+
             let baseName = "\(pascalCase(tool.name))Response"
-            let typeName = registry.swiftType(for: openapiInfo.schema, suggestedName: baseName)
+            let typeName = registry.swiftType(for: schema, suggestedName: baseName)
             results[tool.name] = OpenAPIReturnInfo(
                 typeName: typeName,
-                schema: openapiInfo.schema,
-                description: openapiInfo.description
+                schema: schema,
+                description: description
             )
         }
         return results

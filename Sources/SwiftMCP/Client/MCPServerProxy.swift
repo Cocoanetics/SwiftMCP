@@ -170,8 +170,14 @@ public final actor MCPServerProxy: Sendable {
 
             let description = toolData["description"] as? String
             let schema = try JSONDecoder().decode(JSONSchema.self, from: JSONSerialization.data(withJSONObject: inputSchema))
+            let outputSchema: JSONSchema?
+            if let outputSchemaData = toolData["outputSchema"] as? [String: Any] {
+                outputSchema = try JSONDecoder().decode(JSONSchema.self, from: JSONSerialization.data(withJSONObject: outputSchemaData))
+            } else {
+                outputSchema = nil
+            }
 
-            return MCPTool(name: name, description: description, inputSchema: schema)
+            return MCPTool(name: name, description: description, inputSchema: schema, outputSchema: outputSchema)
         }
 
         if cacheToolsList {

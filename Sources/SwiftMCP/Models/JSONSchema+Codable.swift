@@ -148,9 +148,11 @@ extension JSONSchema: Codable {
             case .object(let object, let defaultValue):
                 try container.encode("object", forKey: .type)
 
-                var propertiesContainer = container.nestedContainer(keyedBy: AnyCodingKey.self, forKey: .properties)
-                for (key, value) in object.properties {
-                    try propertiesContainer.encode(value, forKey: AnyCodingKey(stringValue: key)!)
+                if !object.properties.isEmpty {
+                    var propertiesContainer = container.nestedContainer(keyedBy: AnyCodingKey.self, forKey: .properties)
+                    for (key, value) in object.properties {
+                        try propertiesContainer.encode(value, forKey: AnyCodingKey(stringValue: key)!)
+                    }
                 }
 
                 if !object.required.isEmpty {

@@ -30,6 +30,34 @@ struct ProxyGeneratorOpenAPITests {
         #expect(source.contains("MCPClientResultDecoder.decode(CurrentWeatherResponse.self"))
     }
 
+    @Test("Tool output schemas generate Codable structs")
+    func outputSchemaObjectResponseGeneratesStruct() throws {
+        let outputSchema = JSONSchema.object(.init(
+            properties: [
+                "temperature": .number(title: nil, description: "Current temperature", minimum: nil, maximum: nil),
+                "condition": .string(title: nil, description: "Weather condition", format: nil, minLength: nil, maxLength: nil)
+            ],
+            required: [],
+            description: "Weather response"
+        ))
+        let tool = MCPTool(
+            name: "currentWeather",
+            description: nil,
+            inputSchema: .object(.init(properties: [:], required: [])),
+            outputSchema: outputSchema
+        )
+
+        let source = ProxyGenerator.generate(
+            typeName: "WeatherProxy",
+            tools: [tool]
+        ).description
+
+        #expect(source.contains("public struct CurrentWeatherResponse"))
+        #expect(source.contains("public let temperature: Double?"))
+        #expect(source.contains("public let condition: String?"))
+        #expect(source.contains("public func currentWeather() async throws -> CurrentWeatherResponse"))
+    }
+
     @Test("OpenAPI enum responses generate string enums")
     func openAPIEnumResponseGeneratesEnum() throws {
         let tool = MCPTool(name: "createEvent", description: nil, inputSchema: .object(.init(properties: [:], required: [])))

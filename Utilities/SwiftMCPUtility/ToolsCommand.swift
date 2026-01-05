@@ -64,6 +64,9 @@ struct ToolsCommand: AsyncParsableCommand {
                 lines.append("  \(description)")
             }
             appendSchemaDetails(tool.inputSchema, to: &lines)
+            if let outputSchema = tool.outputSchema {
+                appendOutputSchemaDetails(outputSchema, to: &lines)
+            }
         }
 
         return lines.joined(separator: "\n")
@@ -92,6 +95,32 @@ struct ToolsCommand: AsyncParsableCommand {
                 }
             default:
                 lines.append("  Input schema: \(describeSchema(schema))")
+        }
+    }
+
+    private func appendOutputSchemaDetails(_ schema: JSONSchema, to lines: inout [String]) {
+        switch schema {
+            case .object(let object, _):
+                if object.properties.isEmpty {
+                    lines.append("  Returns: object")
+                    return
+                }
+
+                let required = Set(object.required)
+                lines.append("  Returns:")
+                for name in object.properties.keys.sorted() {
+                    guard let propertySchema = object.properties[name] else { continue }
+                    let requiredSuffix = required.contains(name) ? " (required)" : " (optional)"
+                    let typeDescription = describeSchema(propertySchema)
+                    let detail = schemaDescription(propertySchema)
+                    if let detail, !detail.isEmpty {
+                        lines.append("    - \(name)\(requiredSuffix): \(typeDescription) - \(detail)")
+                    } else {
+                        lines.append("    - \(name)\(requiredSuffix): \(typeDescription)")
+                    }
+                }
+            default:
+                lines.append("  Returns: \(describeSchema(schema))")
         }
     }
 
