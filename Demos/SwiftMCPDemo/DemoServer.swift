@@ -1,6 +1,19 @@
 import Foundation
 import SwiftMCP
 
+/// A simple weather report response
+@Schema
+struct WeatherReport: Sendable, Codable {
+	/// Temperature in celsius
+	let temperature: Double
+	/// Weather conditions description
+	let conditions: String
+	/// Humidity percentage
+	let humidity: Double
+	/// Location for the report
+	let location: String
+}
+
 /**
  A Calculator for simple math doing additionals, subtractions etc.
  
@@ -22,6 +35,25 @@ actor DemoServer {
 			"message": "getCurrentDateTime called"
 		]))
 		return Date()
+	}
+
+	/**
+	 Returns a mock weather report for the supplied location.
+	 - Parameter location: City name or zip code
+	 - Returns: A weather report
+	 */
+	@MCPTool
+	func getWeatherReport(location: String) async -> WeatherReport {
+		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+			"function": "getWeatherReport",
+			"location": location
+		]))
+		return WeatherReport(
+			temperature: 22.5,
+			conditions: "Partly cloudy",
+			humidity: 65,
+			location: location
+		)
 	}
 	
 	/**
