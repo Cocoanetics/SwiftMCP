@@ -76,6 +76,13 @@ public indirect enum JSONSchema: Sendable {
         enumNames: [String]? = nil,
         defaultValue: AnyCodable? = nil
     )
+
+    /// A schema that matches any one of the provided schemas
+    case oneOf(
+        [JSONSchema],
+        title: String? = nil,
+        description: String? = nil
+    )
 }
 
 // Extension to remove required fields from a schema
@@ -98,6 +105,8 @@ extension JSONSchema {
             // For other schema types, return as is since they don't have required fields
             case .string, .number, .boolean, .enum:
                 return self
+            case .oneOf(let schemas, let title, let description):
+                return .oneOf(schemas.map { $0.withoutRequired }, title: title, description: description)
         }
     }
 }
@@ -147,6 +156,8 @@ extension JSONSchema {
                 enumNames: enumNames,
                 defaultValue: existingDefault ?? defaultValue
             )
+        case .oneOf:
+            return self
         }
     }
 }
@@ -168,6 +179,8 @@ extension JSONSchema {
                 return .array(items: items.addingAdditionalPropertiesRestrictionToObjects, title: title, description: description, defaultValue: defaultValue)
 
             // For other schema types, return as is since they don't have required fields
+            case .oneOf(let schemas, let title, let description):
+                return .oneOf(schemas.map { $0.addingAdditionalPropertiesRestrictionToObjects }, title: title, description: description)
             default:
                 return self
         }

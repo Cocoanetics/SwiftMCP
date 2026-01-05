@@ -92,7 +92,7 @@ struct ProxyDemoRunner {
         await runGreet()
         await runPing()
         await runNoop()
-        await runRandomFile()
+        await runRandomImage()
         await runCountdown()
         print("Proxy demo complete.")
     }
@@ -186,9 +186,9 @@ struct ProxyDemoRunner {
         }
     }
 
-    private func runRandomFile() async {
-        await runTool("randomFile") {
-            try await client.randomFile()
+    private func runRandomImage() async {
+        await runTool("randomImage") {
+            try await client.randomImage()
         }
     }
 

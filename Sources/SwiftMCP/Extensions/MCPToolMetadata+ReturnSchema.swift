@@ -18,10 +18,18 @@ extension MCPToolMetadata {
 
         let returnType = returnType!
 
-        if returnType is any MCPResourceContent.Type || returnType is [any MCPResourceContent].Type {
+        if returnType is any MCPResourceContent.Type {
+            let schema = MCPEmbeddedResource.jsonSchema(description: returnTypeDescription)
             return MCPReturnSchemaInfo(
-                schema: OpenAIFileResponse.schemaMetadata.schema,
-                description: returnTypeDescription ?? "A file response containing name, mime type, and base64-encoded content"
+                schema: schema,
+                description: returnTypeDescription ?? "Embedded resource content"
+            )
+        }
+        if returnType is [any MCPResourceContent].Type {
+            let itemSchema = MCPEmbeddedResource.jsonSchema(description: returnTypeDescription)
+            return MCPReturnSchemaInfo(
+                schema: .array(items: itemSchema, title: nil, description: returnTypeDescription, defaultValue: nil),
+                description: returnTypeDescription ?? "Array of embedded resources"
             )
         }
         if let schemaType = returnType as? any SchemaRepresentable.Type {
@@ -118,9 +126,16 @@ extension MCPToolMetadata {
 
     var outputSchema: JSONSchema? {
         let schema = returnSchemaInfo.schema.withoutRequired
-        if case .object = schema {
+        switch schema {
+        case .object, .oneOf:
             return schema
+        case .array(let items, _, _, _):
+            if case .oneOf = items {
+                return items
+            }
+            return nil
+        default:
+            return nil
         }
-        return nil
     }
 }

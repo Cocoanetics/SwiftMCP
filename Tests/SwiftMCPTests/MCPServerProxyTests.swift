@@ -181,19 +181,15 @@ struct MCPServerProxyTests {
         let proxy = MCPServerProxy(config: config)
         try await proxy.connect()
 
-        let imageResult = try await proxy.callTool("sampleImageResource")
-        let imagePayload = try JSONDecoder().decode(ToolBinaryContent.self, from: Data(imageResult.utf8))
-        #expect(imagePayload.type == "image")
-        #expect(imagePayload.mimeType == "image/png")
-        let decodedImage = try #require(Data(base64Encoded: imagePayload.data), "Expected image data to be base64")
-        #expect(decodedImage == LocalStdioServer.sampleImageData)
+        let imageResult = try await proxy.callTool("sampleImageToolResult")
+        let imageContent = try MCPClientResultDecoder.decode(MCPImage.self, from: imageResult)
+        #expect(imageContent.mimeType == "image/png")
+        #expect(imageContent.data == LocalStdioServer.sampleImageData)
 
-        let audioResult = try await proxy.callTool("sampleAudioResource")
-        let audioPayload = try JSONDecoder().decode(ToolBinaryContent.self, from: Data(audioResult.utf8))
-        #expect(audioPayload.type == "audio")
-        #expect(audioPayload.mimeType == "audio/wav")
-        let decodedAudio = try #require(Data(base64Encoded: audioPayload.data), "Expected audio data to be base64")
-        #expect(decodedAudio == LocalStdioServer.sampleAudioData)
+        let audioResult = try await proxy.callTool("sampleAudioToolResult")
+        let audioContent = try MCPClientResultDecoder.decode(MCPAudio.self, from: audioResult)
+        #expect(audioContent.mimeType == "audio/wav")
+        #expect(audioContent.data == LocalStdioServer.sampleAudioData)
 
         await proxy.disconnect()
     }
@@ -275,23 +271,15 @@ final class LocalStdioServer: Sendable {
         return formatter.string(from: Date())
     }
 
-    @MCPTool(description: "Returns a sample PNG payload as resource content.")
-    func sampleImageResource() -> GenericResourceContent {
-        let uri = URL(string: "file:///tmp/sample.png")!
-        return GenericResourceContent(uri: uri, mimeType: "image/png", blob: Self.sampleImageData)
+    @MCPTool(description: "Returns a sample PNG payload as tool result content.")
+    func sampleImageToolResult() -> MCPImage {
+        return MCPImage(data: Self.sampleImageData, mimeType: "image/png")
     }
 
-    @MCPTool(description: "Returns a sample WAV payload as resource content.")
-    func sampleAudioResource() -> GenericResourceContent {
-        let uri = URL(string: "file:///tmp/sample.wav")!
-        return GenericResourceContent(uri: uri, mimeType: "audio/wav", blob: Self.sampleAudioData)
+    @MCPTool(description: "Returns a sample WAV payload as tool result content.")
+    func sampleAudioToolResult() -> MCPAudio {
+        return MCPAudio(data: Self.sampleAudioData, mimeType: "audio/wav")
     }
-}
-
-private struct ToolBinaryContent: Decodable {
-    let type: String
-    let data: String
-    let mimeType: String
 }
 
 

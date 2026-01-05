@@ -370,6 +370,7 @@ private extension JSONSchema {
         case .array: return "array"
         case .object: return "object"
         case .enum: return "string"
+        case .oneOf: return "oneOf"
         }
     }
 } 

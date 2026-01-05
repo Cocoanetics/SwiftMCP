@@ -287,14 +287,15 @@ actor DemoServer {
 		return "Countdown completed! 🎉"
 	}
 	
-	/** A function returning a random file
-	 - returns: A multiple simple text files */
+	/** A function returning a random image
+	 - returns: A small PNG file */
 	@MCPTool
-	func randomFile() async -> [FileResourceContent]
+	func randomImage() async -> MCPImage
 	{
-		await Session.current?.sendLogNotification(LogMessage(level: .info, message: "randomFile called"))
-		return [FileResourceContent(uri: URL(string: "file:///hello.txt")!, mimeType: "text/plain", text: "Hello World!"),
-				FileResourceContent(uri: URL(string: "file:///hello2.txt")!, mimeType: "text/plain", text: "Hello World 2!")]
+		await Session.current?.sendLogNotification(LogMessage(level: .info, message: "randomImage called"))
+		let base64PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2WkAAAAASUVORK5CYII="
+		let data = Data(base64Encoded: base64PNG) ?? Data()
+		return MCPImage(data: data, mimeType: "image/png")
 	}
 	
     // MARK: - Resources

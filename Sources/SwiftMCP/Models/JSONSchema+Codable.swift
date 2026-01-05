@@ -44,6 +44,8 @@ extension JSONSchema: Codable {
         case `default`
         /// If additional properties are allowed (optional, needed for structured responses, not for MCP)
         case additionalProperties
+        /// The possible schemas for a union
+        case oneOf
     }
 
 /**
@@ -54,9 +56,15 @@ extension JSONSchema: Codable {
 	 */
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        let type = try container.decode(String.self, forKey: .type)
         let title = try container.decodeIfPresent(String.self, forKey: .title)
         let description = try container.decodeIfPresent(String.self, forKey: .description)
+
+        if let oneOfSchemas = try container.decodeIfPresent([JSONSchema].self, forKey: .oneOf) {
+            self = .oneOf(oneOfSchemas, title: title, description: description)
+            return
+        }
+
+        let type = try container.decode(String.self, forKey: .type)
 
         switch type {
             case "string":
@@ -172,6 +180,16 @@ extension JSONSchema: Codable {
                 try container.encode(values, forKey: .enumValues)
                 try container.encodeIfPresent(enumNames, forKey: .enumNames)
                 try container.encodeIfPresent(defaultValue, forKey: .default)
+            case .oneOf(let schemas, let title, let description):
+                if schemas.allSatisfy({
+                    if case .object = $0 { return true }
+                    return false
+                }) {
+                    try container.encode("object", forKey: .type)
+                }
+                try container.encode(schemas, forKey: .oneOf)
+                try container.encodeIfPresent(title, forKey: .title)
+                try container.encodeIfPresent(description, forKey: .description)
         }
     }
 }

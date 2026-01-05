@@ -359,6 +359,8 @@ public enum ProxyGenerator {
                 return SwiftTypeInfo(typeName: "[String: any Sendable]", needsEncoding: false)
             case .enum:
                 return SwiftTypeInfo(typeName: "String", needsEncoding: false)
+            case .oneOf:
+                return SwiftTypeInfo(typeName: "String", needsEncoding: false)
         }
     }
 
@@ -391,6 +393,8 @@ public enum ProxyGenerator {
             case .object(let object, _):
                 return object.description
             case .enum(_, _, let description, _, _):
+                return description
+            case .oneOf(_, _, let description):
                 return description
         }
     }
@@ -425,6 +429,8 @@ public enum ProxyGenerator {
             return defaultValue
         case .enum(_, _, _, _, let defaultValue):
             return defaultValue
+        case .oneOf:
+            return nil
         }
     }
 
@@ -737,6 +743,11 @@ private final class OpenAPITypeRegistry {
         case .array(let items, _, _, _):
             let itemType = swiftType(for: items, suggestedName: "\(suggestedName)Item")
             return "[\(itemType)]"
+        case .oneOf(let schemas, _, _):
+            if let knownType = knownSwiftMCPType(for: schemas) {
+                return knownType
+            }
+            return "String"
         case .enum(let values, _, let description, _, _):
             let enumName = uniqueName(suggestedName)
             ensureEnum(name: enumName, values: values, description: description)
@@ -774,11 +785,36 @@ private final class OpenAPITypeRegistry {
     private func knownSwiftMCPType(for object: JSONSchema.Object) -> String? {
         let keys = Set(object.properties.keys)
 
+        if matchesToolContent(object, type: "text", requiredKeys: ["type", "text"]) {
+            return "MCPText"
+        }
+
+        if matchesToolContent(object, type: "image", requiredKeys: ["type", "data", "mimeType"]),
+           matchesStringSchema(object.properties["data"], format: "byte"),
+           matchesStringSchema(object.properties["mimeType"]) {
+            return "MCPImage"
+        }
+
+        if matchesToolContent(object, type: "audio", requiredKeys: ["type", "data", "mimeType"]),
+           matchesStringSchema(object.properties["data"], format: "byte"),
+           matchesStringSchema(object.properties["mimeType"]) {
+            return "MCPAudio"
+        }
+
+        if matchesToolContent(object, type: "resource_link", requiredKeys: ["type", "uri", "name"]) {
+            return "MCPResourceLink"
+        }
+
+        if matchesToolContent(object, type: "resource", requiredKeys: ["type", "resource"]),
+           case .object = object.properties["resource"] {
+            return "MCPEmbeddedResource"
+        }
+
         let resourceContentKeys: Set<String> = ["uri", "mimeType", "text", "blob"]
         if keys.isSubset(of: resourceContentKeys),
            keys.contains("uri"),
            object.required.contains("uri"),
-           matchesStringSchema(object.properties["uri"]) {
+            matchesStringSchema(object.properties["uri"]) {
             return "GenericResourceContent"
         }
 
@@ -798,12 +834,30 @@ private final class OpenAPITypeRegistry {
         return nil
     }
 
-    private func matchesStringSchema(_ schema: JSONSchema?) -> Bool {
+    private func knownSwiftMCPType(for schemas: [JSONSchema]) -> String? {
+        return nil
+    }
+
+    private func matchesToolContent(_ object: JSONSchema.Object, type: String, requiredKeys: Set<String>) -> Bool {
+        guard requiredKeys.isSubset(of: Set(object.required)) else { return false }
+        guard let typeValue = typeDiscriminator(object.properties["type"]),
+              typeValue == type else { return false }
+        return true
+    }
+
+    private func typeDiscriminator(_ schema: JSONSchema?) -> String? {
+        guard let schema else { return nil }
+        guard case .enum(let values, _, _, _, _) = schema, values.count == 1 else { return nil }
+        return values[0]
+    }
+
+    private func matchesStringSchema(_ schema: JSONSchema?, format: String? = nil) -> Bool {
         guard let schema else { return false }
-        if case .string = schema {
-            return true
+        guard case .string(_, _, let schemaFormat, _, _, _) = schema else { return false }
+        if let format {
+            return schemaFormat == format
         }
-        return false
+        return true
     }
 
     private func ensureStruct(name: String, object: JSONSchema.Object) {
@@ -894,6 +948,8 @@ private final class OpenAPITypeRegistry {
         case .object(let object, _):
             return object.description
         case .enum(_, _, let description, _, _):
+            return description
+        case .oneOf(_, _, let description):
             return description
     }
 }

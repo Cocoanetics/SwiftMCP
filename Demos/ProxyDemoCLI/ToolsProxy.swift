@@ -1,6 +1,6 @@
 //
 //  ToolsProxy.swift
-//  Generated: 2026-01-03T23:05:42+01:00
+//  Generated: 2026-01-06T00:03:05+01:00
 //  Server: SwiftMCP Demo (1.0)
 //  Source: sse http://mac-studio.local:8080/sse
 //  OpenAPI: http://mac-studio.local:8080/openapi.json
@@ -18,16 +18,41 @@ import SwiftMCP
 */
 public actor SwiftMCPDemoProxy {
     // MARK: - Declarations
-    /// A resource content implementation for files in the file system
-    public struct RandomFileResponseItem: Codable, Sendable {
-        /// The binary content of the resource (if it's a binary resource)
-        public let blob: Data?
-        /// The MIME type of the resource
+    /// A simple weather report response
+    public struct GetWeatherReportResponse: Codable, Sendable {
+        /// Weather conditions description
+        public let conditions: String?
+        /// Humidity percentage
+        public let humidity: Double?
+        /// Location for the report
+        public let location: String?
+        /// Temperature in celsius
+        public let temperature: Double?
+    }
+
+    /// A small PNG file
+    public struct RandomImageResponse: Codable, Sendable {
+        /// Optional content annotations
+        public let annotations: RandomImageResponseAnnotations?
+        /// Base64-encoded image data
+        public let data: Data?
+        /// Image MIME type
         public let mimeType: String?
-        /// The text content of the resource (if it's a text resource)
-        public let text: String?
-        /// The URI of the resource
-        public let uri: URL?
+        public let type: RandomImageResponseType?
+    }
+
+    /// Optional content annotations
+    public struct RandomImageResponseAnnotations: Codable, Sendable {
+        /// Audience list
+        public let audience: [String]?
+        /// ISO 8601 timestamp
+        public let lastModified: Date?
+        /// Priority (0.0-1.0)
+        public let priority: Double?
+    }
+
+    public enum RandomImageResponseType: String, Codable, Sendable, CaseIterable {
+        case image = "image"
     }
 
     // MARK: - Public Properties
@@ -113,6 +138,18 @@ public actor SwiftMCPDemoProxy {
     }
 
     /**
+     Returns a mock weather report for the supplied location.
+     - Parameter location: City name or zip code
+     - Returns: A weather report
+     */
+    public func getWeatherReport(location: String) async throws -> GetWeatherReportResponse {
+        var arguments: [String: any Sendable] = [:]
+        arguments["location"] = location
+        let text = try await proxy.callTool("getWeatherReport", arguments: arguments)
+        return try MCPClientResultDecoder.decode(GetWeatherReportResponse.self, from: text)
+    }
+
+    /**
      Shows a greeting message
      - Parameter name: Name of the person to greet
      - Returns: The greeting message
@@ -169,12 +206,12 @@ public actor SwiftMCPDemoProxy {
     }
 
     /**
-     A function returning a random file
-     - Returns: A multiple simple text files
+     A function returning a random image
+     - Returns: A small PNG file
      */
-    public func randomFile() async throws -> [RandomFileResponseItem] {
-        let text = try await proxy.callTool("randomFile")
-        return try MCPClientResultDecoder.decode([RandomFileResponseItem].self, from: text)
+    public func randomImage() async throws -> RandomImageResponse {
+        let text = try await proxy.callTool("randomImage")
+        return try MCPClientResultDecoder.decode(RandomImageResponse.self, from: text)
     }
 
     /**

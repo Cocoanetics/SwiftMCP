@@ -899,33 +899,34 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
                 throw MCPToolError.unknownTool(name: toolName)
             }
 
-            // Convert MCPResourceContent to OpenAIFileResponse if applicable
+            // Convert resource content to tool results if applicable
             let responseToEncode: Encodable
 
-            if let resourceContent = result as? MCPResourceContent {
-
-                let file = FileContent(
-					name: resourceContent.uri.lastPathComponent,
-					mimeType: resourceContent.mimeType ?? "application/octet-stream",
-					content: resourceContent.blob ?? resourceContent.text?.data(using: .utf8) ?? Data()
-				)
-
-                responseToEncode = OpenAIFileResponse(files: [file])
-            }
-			else if let resourceContentArray = result as? [MCPResourceContent] {
-
-                let files = resourceContentArray.compactMap { resourceContent in
-                    FileContent(
-						name: resourceContent.uri.lastPathComponent,
-						mimeType: resourceContent.mimeType ?? "application/octet-stream",
-						content: resourceContent.blob ?? resourceContent.text?.data(using: .utf8) ?? Data()
-					)
-                }
-
-                responseToEncode = OpenAIFileResponse(files: files)
-            }
-			
-			else {
+            if let toolResult = result as? MCPText {
+                responseToEncode = toolResult
+            } else if let toolResult = result as? MCPImage {
+                responseToEncode = toolResult
+            } else if let toolResult = result as? MCPAudio {
+                responseToEncode = toolResult
+            } else if let toolResult = result as? MCPResourceLink {
+                responseToEncode = toolResult
+            } else if let toolResult = result as? MCPEmbeddedResource {
+                responseToEncode = toolResult
+            } else if let toolResults = result as? [MCPText] {
+                responseToEncode = toolResults
+            } else if let toolResults = result as? [MCPImage] {
+                responseToEncode = toolResults
+            } else if let toolResults = result as? [MCPAudio] {
+                responseToEncode = toolResults
+            } else if let toolResults = result as? [MCPResourceLink] {
+                responseToEncode = toolResults
+            } else if let toolResults = result as? [MCPEmbeddedResource] {
+                responseToEncode = toolResults
+            } else if let resourceContent = result as? MCPResourceContent {
+                responseToEncode = MCPEmbeddedResource(resource: resourceContent)
+            } else if let resourceContentArray = result as? [MCPResourceContent] {
+                responseToEncode = resourceContentArray.map { MCPEmbeddedResource(resource: $0) }
+            } else {
                 responseToEncode = result
             }
 

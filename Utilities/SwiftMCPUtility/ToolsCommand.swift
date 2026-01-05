@@ -144,6 +144,9 @@ struct ToolsCommand: AsyncParsableCommand {
                     return "enum"
                 }
                 return "enum [\(values.joined(separator: ", "))]"
+            case .oneOf(let schemas, _, _):
+                let items = schemas.map(describeSchema).joined(separator: " | ")
+                return "oneOf<\(items)>"
         }
     }
 
@@ -160,6 +163,8 @@ struct ToolsCommand: AsyncParsableCommand {
             case .object(let object, _):
                 return object.description
             case .enum(_, _, let description, _, _):
+                return description
+            case .oneOf(_, _, let description):
                 return description
         }
     }
