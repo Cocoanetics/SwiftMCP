@@ -174,6 +174,30 @@ struct MCPServerProxyTests {
         await proxy.disconnect()
     }
 
+    @Test("STDIO in-process: tool resource content")
+    func testStdioToolResourceContent() async throws {
+        let server = LocalStdioServer()
+        let config = MCPServerConfig.stdioHandles(server: server)
+        let proxy = MCPServerProxy(config: config)
+        try await proxy.connect()
+
+        let imageResult = try await proxy.callTool("sampleImageResource")
+        let imagePayload = try JSONDecoder().decode(ToolBinaryContent.self, from: Data(imageResult.utf8))
+        #expect(imagePayload.type == "image")
+        #expect(imagePayload.mimeType == "image/png")
+        let decodedImage = try #require(Data(base64Encoded: imagePayload.data), "Expected image data to be base64")
+        #expect(decodedImage == LocalStdioServer.sampleImageData)
+
+        let audioResult = try await proxy.callTool("sampleAudioResource")
+        let audioPayload = try JSONDecoder().decode(ToolBinaryContent.self, from: Data(audioResult.utf8))
+        #expect(audioPayload.type == "audio")
+        #expect(audioPayload.mimeType == "audio/wav")
+        let decodedAudio = try #require(Data(base64Encoded: audioPayload.data), "Expected audio data to be base64")
+        #expect(decodedAudio == LocalStdioServer.sampleAudioData)
+
+        await proxy.disconnect()
+    }
+
     @Test("STDIO external: local build", .enabled(if: isLocalSwiftMCPDemoAvailable()))
     func testStdioConnectToLocalBuild() async throws {
         guard let demoExecutable = localSwiftMCPDemoExecutable() else {
@@ -241,12 +265,33 @@ private func localSwiftMCPDemoExecutable() -> String? {
 
 @MCPServer(name: "SwiftMCP Test Server")
 final class LocalStdioServer: Sendable {
+    static let sampleImageData = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+    static let sampleAudioData = Data([0x52, 0x49, 0x46, 0x46, 0x24, 0x80, 0x00, 0x00])
+
     /// Returns the current time in ISO 8601 format.
     @MCPTool
     func getCurrentDateTime() -> String {
         let formatter = ISO8601DateFormatter()
         return formatter.string(from: Date())
     }
+
+    @MCPTool(description: "Returns a sample PNG payload as resource content.")
+    func sampleImageResource() -> GenericResourceContent {
+        let uri = URL(string: "file:///tmp/sample.png")!
+        return GenericResourceContent(uri: uri, mimeType: "image/png", blob: Self.sampleImageData)
+    }
+
+    @MCPTool(description: "Returns a sample WAV payload as resource content.")
+    func sampleAudioResource() -> GenericResourceContent {
+        let uri = URL(string: "file:///tmp/sample.wav")!
+        return GenericResourceContent(uri: uri, mimeType: "audio/wav", blob: Self.sampleAudioData)
+    }
+}
+
+private struct ToolBinaryContent: Decodable {
+    let type: String
+    let data: String
+    let mimeType: String
 }
 
 

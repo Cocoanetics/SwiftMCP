@@ -219,14 +219,23 @@ public final actor MCPServerProxy: Sendable {
             throw MCPServerProxyError.toolError(errorMessage)
         }
 
-        guard let contentArray = result["content"]?.value as? [Any] else {
+        guard let contentValue = result["content"]?.value else {
+            throw MCPServerProxyError.communicationError("Invalid content format in tools/call response")
+        }
+        let contentArray: [Any]
+        if let array = contentValue as? [Any] {
+            contentArray = array
+        } else if let array = contentValue as? [AnyCodable] {
+            contentArray = array.map { $0.value }
+        } else {
             throw MCPServerProxyError.communicationError("Invalid content format in tools/call response")
         }
 
-        if let firstContent = contentArray.first as? [String: Any],
-           let type = firstContent["type"] as? String,
-           type == "text",
-           let text = firstContent["text"] as? String {
+        if let resourcePayload = extractBinaryResourcePayload(from: contentArray) {
+            return resourcePayload
+        }
+
+        if let text = extractTextPayload(from: contentArray) {
             return text
         }
 
@@ -538,6 +547,107 @@ public final actor MCPServerProxy: Sendable {
         }
     }
 
+    private func extractBinaryResourcePayload(from contentArray: [Any]) -> String? {
+        for content in contentArray {
+            guard let contentDict = contentDictionary(from: content),
+                  let type = stringValue(contentDict["type"]) else {
+                continue
+            }
+
+            if type == "image" || type == "audio" {
+                guard let mimeType = stringValue(contentDict["mimeType"] ?? contentDict["mime_type"]),
+                      let data = base64String(from: contentDict["data"]) else {
+                    continue
+                }
+                let payload = BinaryContentPayload(type: type, data: data, mimeType: mimeType)
+                return encodeJSON(payload)
+            }
+
+            if type == "resource",
+               let resourceDict = contentDictionary(from: contentDict["resource"]),
+               let mimeType = stringValue(resourceDict["mimeType"] ?? resourceDict["mime_type"]) {
+                let lowerMimeType = mimeType.lowercased()
+                let payloadType: String
+                if lowerMimeType.hasPrefix("image/") {
+                    payloadType = "image"
+                } else if lowerMimeType.hasPrefix("audio/") {
+                    payloadType = "audio"
+                } else {
+                    continue
+                }
+
+                guard let data = base64String(from: resourceDict["blob"] ?? resourceDict["data"]) else {
+                    continue
+                }
+
+                let payload = BinaryContentPayload(type: payloadType, data: data, mimeType: mimeType)
+                return encodeJSON(payload)
+            }
+        }
+        return nil
+    }
+
+    private func extractTextPayload(from contentArray: [Any]) -> String? {
+        for content in contentArray {
+            guard let contentDict = contentDictionary(from: content),
+                  let type = stringValue(contentDict["type"]),
+                  type == "text",
+                  let text = stringValue(contentDict["text"]) else {
+                continue
+            }
+            return text
+        }
+        return nil
+    }
+
+    private func contentDictionary(from value: Any?) -> [String: Any]? {
+        if let dict = value as? [String: Any] {
+            return dict
+        }
+        if let dict = value as? [String: AnyCodable] {
+            return dict.mapValues { $0.value }
+        }
+        if let anyCodable = value as? AnyCodable {
+            return contentDictionary(from: anyCodable.value)
+        }
+        return nil
+    }
+
+    private func stringValue(_ value: Any?) -> String? {
+        if let string = value as? String {
+            return string
+        }
+        if let anyCodable = value as? AnyCodable {
+            return stringValue(anyCodable.value)
+        }
+        return nil
+    }
+
+    private func base64String(from value: Any?) -> String? {
+        if let string = stringValue(value) {
+            return string
+        }
+        if let data = value as? Data {
+            return data.base64EncodedString()
+        }
+        if let bytes = value as? [UInt8] {
+            return Data(bytes).base64EncodedString()
+        }
+        if let anyCodable = value as? AnyCodable {
+            return base64String(from: anyCodable.value)
+        }
+        return nil
+    }
+
+    private func encodeJSON<T: Encodable>(_ value: T) -> String? {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        guard let data = try? encoder.encode(value) else {
+            return nil
+        }
+        return String(data: data, encoding: .utf8)
+    }
+
     private func extractServerDescription(from result: [String: AnyCodable]) -> String? {
         guard let serverInfoValue = result["serverInfo"]?.value else {
             return nil
@@ -584,4 +694,10 @@ private extension JSONRPCID {
             return value
         }
     }
+}
+
+private struct BinaryContentPayload: Encodable {
+    let type: String
+    let data: String
+    let mimeType: String
 }
