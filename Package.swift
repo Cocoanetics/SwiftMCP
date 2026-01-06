@@ -103,7 +103,7 @@ let package = Package(
 			dependencies: [
 				"SwiftMCP",
 				"SwiftMCPUtilityCore",
-				"SwiftMCPMacros",
+				.target(name: "SwiftMCPMacros", condition: .when(platforms: [.macOS, .iOS, .tvOS, .watchOS, .macCatalyst])),
 				.product(name: "Crypto", package: "swift-crypto"),
 				.product(name: "_CryptoExtras", package: "swift-crypto"),
 				.product(name: "X509", package: "swift-certificates")
