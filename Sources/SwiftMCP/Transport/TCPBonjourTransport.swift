@@ -5,6 +5,9 @@ import Logging
 
 /// A TCP transport that advertises via Bonjour and exchanges newline-delimited JSON-RPC.
 public final class TCPBonjourTransport: Transport, @unchecked Sendable {
+    /// DNS-SD service type for MCP over TCP.
+    public static let serviceType = "_mcp._tcp"
+
     public let server: MCPServer
     public let logger = Logger(label: "com.cocoanetics.SwiftMCP.TCPBonjourTransport")
 
@@ -72,7 +75,7 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
     public init(
         server: MCPServer,
         serviceName: String? = nil,
-        serviceType: String = "_mcp._tcp",
+        serviceType: String = TCPBonjourTransport.serviceType,
         serviceDomain: String = "local.",
         port: UInt16? = nil,
         acceptLocalOnly: Bool = true,
@@ -91,7 +94,7 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
         self.init(
             server: server,
             serviceName: nil,
-            serviceType: "_mcp._tcp",
+            serviceType: TCPBonjourTransport.serviceType,
             serviceDomain: "local.",
             port: nil,
             acceptLocalOnly: true,

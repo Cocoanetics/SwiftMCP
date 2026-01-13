@@ -27,7 +27,7 @@ public struct MCPServerTcpConfig: Sendable {
     public init(
         serviceName: String? = nil,
         domain: String = "local.",
-        serviceType: String = "_mcp._tcp",
+        serviceType: String = TCPBonjourTransport.serviceType,
         timeout: TimeInterval = 10,
         preferIPv4: Bool = true
     ) {
@@ -41,7 +41,7 @@ public struct MCPServerTcpConfig: Sendable {
     public init(
         host: String,
         port: UInt16,
-        serviceType: String = "_mcp._tcp",
+        serviceType: String = TCPBonjourTransport.serviceType,
         timeout: TimeInterval = 10,
         preferIPv4: Bool = true
     ) {
