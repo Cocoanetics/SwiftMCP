@@ -7,6 +7,7 @@ A Swift implementation of the MCP (Model Context Protocol) for JSON-RPC over var
 - Multiple transport options
   - Standard I/O (stdio) for command-line usage
   - HTTP+SSE (Server-Sent Events) for web applications
+  - TCP+Bonjour for local discovery over raw TCP
 - JSON-RPC 2.0 compliant with OpenAPI generation
 - Built-in authorization and optional OAuth validation
 - Transparent OAuth proxy mode for MCP and OpenAPI
@@ -59,13 +60,14 @@ SwiftMCPDemo httpsse --port 8080 --openapi
 # Using HTTP+SSE with authorization and OpenAPI support
 SwiftMCPDemo httpsse --port 8080 --token your-secret-token --openapi
 
-# Using HTTP+SSE with OAuth
-SwiftMCPDemo httpsse --port 8080 \
-    --oauth-issuer https://example.com \
-    --oauth-token-endpoint https://example.com/oauth/token \
-    --oauth-introspection-endpoint https://example.com/oauth/introspect \
-    --oauth-jwks-endpoint https://example.com/.well-known/jwks.json \
-    --oauth-audience your-api-identifier
+# Using HTTP+SSE with OAuth (JSON config)
+SwiftMCPDemo httpsse --port 8080 --oauth oauth-config-example.json
+
+# Using TCP+Bonjour transport
+SwiftMCPDemo tcp --name "SwiftMCP Demo"
+
+# Using HTTP+SSE plus TCP+Bonjour in parallel
+SwiftMCPDemo httpsse --port 8080 --tcp
 ```
 
 When using HTTP+SSE transport with the `--token` option, clients must include an Authorization header with their requests:
@@ -101,7 +103,7 @@ To implement your own MCP server:
 
 1. Attach the `@MCPServer` macro to a reference type like class or actor
 2. Define your tools using `@MCPTool` attribute
-3. Choose and configure a transport
+3. Choose and configure a transport (stdio, HTTP+SSE, or TCP+Bonjour)
 
 Example:
 
@@ -141,6 +143,14 @@ transport.oauthConfiguration = OAuthConfiguration(
 try transport.run()
 ```
 
+To serve TCP+Bonjour instead:
+
+```swift
+let server = MyServer()
+let tcpTransport = TCPBonjourTransport(server: server)
+try await tcpTransport.run()
+```
+
 ## Typed Client Proxy
 
 SwiftMCP can generate a typed client proxy for any server. This proxy mirrors the
@@ -163,6 +173,14 @@ try await proxy.connect()
 
 let client = Calculator.Client(proxy: proxy)
 let result = try await client.add(a: 2, b: 3)
+```
+
+For TCP+Bonjour discovery:
+
+```swift
+let config = MCPServerConfig.tcp(config: MCPServerTcpConfig(serviceName: "SwiftMCP Demo"))
+let proxy = MCPServerProxy(config: config)
+try await proxy.connect()
 ```
 
 Notes:

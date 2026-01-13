@@ -93,6 +93,9 @@ final class HTTPSSECommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Enable OpenAPI endpoints")
     var openapi: Bool = false
 
+    @Flag(name: .long, help: "Also start TCP+Bonjour transport")
+    var tcp: Bool = false
+
     @Option(name: .long, help: "Path to OAuth configuration JSON file")
     var oauth: String?
     
@@ -108,6 +111,7 @@ final class HTTPSSECommand: AsyncParsableCommand {
         self.token = try container.decodeIfPresent(String.self, forKey: .token)
         self.openapi = try container.decode(Bool.self, forKey: .openapi)
         self.oauth = try container.decodeIfPresent(String.self, forKey: .oauth)
+        self.tcp = try container.decodeIfPresent(Bool.self, forKey: .tcp) ?? false
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -115,6 +119,7 @@ final class HTTPSSECommand: AsyncParsableCommand {
         case token
         case openapi
         case oauth
+        case tcp
     }
     
     func run() async throws {
@@ -180,11 +185,30 @@ final class HTTPSSECommand: AsyncParsableCommand {
         // Enable OpenAPI endpoints if requested
         transport.serveOpenAPI = openapi
         
-        // Set up signal handling to shut down the transport on Ctrl+C
-        signalHandler = SignalHandler(transport: transport)
+        var tcpTransport: TCPBonjourTransport?
+        if tcp {
+            let transport = TCPBonjourTransport(server: calculator)
+            try await transport.start()
+            tcpTransport = transport
+            print("MCP Server \(calculator.serverName) started with TCP+Bonjour transport")
+        }
+
+        // Set up signal handling to shut down the transport(s) on Ctrl+C
+        if let tcpTransport {
+            signalHandler = SignalHandler(transports: [transport, tcpTransport])
+        } else {
+            signalHandler = SignalHandler(transport: transport)
+        }
         await signalHandler?.setup()
         
         // Run the server (blocking)
-        try await transport.run()
+        do {
+            try await transport.run()
+        } catch {
+            if let tcpTransport {
+                try? await tcpTransport.stop()
+            }
+            throw error
+        }
     }
 } 

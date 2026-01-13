@@ -2,16 +2,16 @@ import Foundation
 import Dispatch
 import SwiftMCP
 
-/// Handles SIGINT signals for graceful shutdown of the HTTP SSE transport
+/// Handles SIGINT signals for graceful shutdown of one or more transports.
 public final class SignalHandler {
 	/// Actor to manage signal handling state in a thread-safe way
 	private actor State {
 		private var sigintSource: DispatchSourceSignal?
 		private var isShuttingDown = false
-		private weak var transport: HTTPSSETransport?
+		private var transports: [any Transport]
 		
-		init(transport: HTTPSSETransport) {
-			self.transport = transport
+		init(transports: [any Transport]) {
+			self.transports = transports
 		}
 		
 		func setupHandler(on queue: DispatchQueue) {
@@ -39,16 +39,24 @@ public final class SignalHandler {
 			
 			print("\nShutting down...")
 			
-			guard let transport = transport else {
-				print("Transport no longer available")
+			guard !transports.isEmpty else {
+				print("No transports available")
 				Foundation.exit(1)
 			}
 			
-			do {
-				try await transport.stop()
+			var errors: [Error] = []
+			for transport in transports {
+				do {
+					try await transport.stop()
+				} catch {
+					errors.append(error)
+				}
+			}
+			
+			if errors.isEmpty {
 				Foundation.exit(0)
-			} catch {
-				print("Error during shutdown: \(error)")
+			} else {
+				print("Error during shutdown: \(errors)")
 				Foundation.exit(1)
 			}
 		}
@@ -57,9 +65,14 @@ public final class SignalHandler {
 	// Instance state
 	private let state: State
 	
-	/// Creates a new signal handler for the given transport
+	/// Creates a new signal handler for a single transport.
 	public init(transport: HTTPSSETransport) {
-		self.state = State(transport: transport)
+		self.state = State(transports: [transport])
+	}
+
+	/// Creates a new signal handler for multiple transports.
+	public init(transports: [any Transport]) {
+		self.state = State(transports: transports)
 	}
 	
 	/// Sets up the SIGINT handler
