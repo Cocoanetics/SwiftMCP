@@ -55,6 +55,9 @@ public actor SwiftMCPDemoProxy {
         case image = "image"
     }
 
+    // MARK: - Metadata
+    public static let serverName: String? = "SwiftMCP Demo"
+
     // MARK: - Public Properties
     public let proxy: MCPServerProxy
 

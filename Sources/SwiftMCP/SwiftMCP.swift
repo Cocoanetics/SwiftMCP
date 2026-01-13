@@ -5,7 +5,7 @@
 /// - Automatic JSON-RPC communication handling
 /// - Type-safe parameter validation and conversion
 /// - Support for async/await and error handling
-/// - Multiple transport options (stdio and HTTP/SSE)
+/// - Multiple transport options (stdio, TCP+Bonjour, and HTTP/SSE)
 /// - OpenAPI specification generation
 /// - Resource management capabilities
 ///

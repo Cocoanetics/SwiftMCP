@@ -63,7 +63,8 @@ public enum ProxyGenerator {
             tools: tools,
             returnTypes: returnTypes,
             typeDefinitions: typeDefinitions,
-            typeDocComment: typeDocComment
+            typeDocComment: typeDocComment,
+            metadata: metadata
         )
 
         let headerAndImports = "\(headerComment)\n\nimport Foundation\nimport SwiftMCP\n"
@@ -84,7 +85,8 @@ public enum ProxyGenerator {
         tools: [MCPTool],
         returnTypes: [String: OpenAPIReturnInfo],
         typeDefinitions: [String],
-        typeDocComment: [String]
+        typeDocComment: [String],
+        metadata: HeaderMetadata
     ) -> String {
         var lines: [String] = []
         if !typeDocComment.isEmpty {
@@ -96,6 +98,9 @@ public enum ProxyGenerator {
             lines.append(contentsOf: indentDefinitions(typeDefinitions, indent: "    "))
             lines.append("")
         }
+        lines.append("    // MARK: - Metadata")
+        lines.append("    public static let serverName: String? = \(swiftOptionalStringLiteral(metadata.serverName))")
+        lines.append("")
         lines.append("    // MARK: - Public Properties")
         lines.append("    public let proxy: MCPServerProxy")
         lines.append("")
@@ -117,6 +122,14 @@ public enum ProxyGenerator {
 
         lines.append("}")
         return lines.joined(separator: "\n")
+    }
+
+    private static func swiftOptionalStringLiteral(_ value: String?) -> String {
+        guard let value else { return "nil" }
+        let escaped = value
+            .replacingOccurrences(of: "\\\\", with: "\\\\\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\\\"")
+        return "\"\(escaped)\""
     }
 
     private static func makeHeaderComment(metadata: HeaderMetadata) -> String {

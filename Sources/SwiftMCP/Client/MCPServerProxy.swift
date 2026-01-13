@@ -5,12 +5,15 @@ import FoundationNetworking
 import AnyCodable
 import Logging
 
-/// A proxy for interacting with an MCP server over stdio or SSE.
+/// A proxy for interacting with an MCP server over stdio, TCP, or SSE.
 public final actor MCPServerProxy: Sendable {
     public let logger = Logger(label: "com.cocoanetics.SwiftMCP.MCPServerProxy")
 
     /// The configuration for the MCP server.
     public let config: MCPServerConfig
+
+    /// Optional Bonjour service name to prefer during discovery.
+    public var service: String?
 
     /// Specifies whether the list of tools from the server should be cached.
     public let cacheToolsList: Bool
@@ -41,26 +44,37 @@ public final actor MCPServerProxy: Sendable {
         logNotificationHandler = handler
     }
 
-    private var stdioConnection: (any StdioConnection)?
+    private var lineConnection: (any StdioConnection)?
     private var endpointContinuation: CheckedContinuation<URL, Error>?
 
     public init(config: MCPServerConfig, cacheToolsList: Bool = false) {
         self.config = config
+        self.service = nil
         self.cacheToolsList = cacheToolsList
     }
 
-    /// Connects to the MCP server and establishes an SSE or stdio connection.
+    /// Connects to the MCP server and establishes an SSE, TCP, or stdio connection.
     public func connect() async throws {
         switch config {
             case .stdio(let stdioConfig):
-                stdioConnection = MCPServerProcess(config: stdioConfig)
-                try await startStdioConnection()
+                lineConnection = MCPServerProcess(config: stdioConfig)
+                try await startLineConnection()
                 try await initialize()
 
             case .stdioHandles(let server):
-                stdioConnection = InProcessStdioBridge(server: server)
-                try await startStdioConnection()
+                lineConnection = InProcessStdioBridge(server: server)
+                try await startLineConnection()
                 try await initialize()
+
+            case .tcp(let tcpConfig):
+#if canImport(Network)
+                let resolvedConfig = resolveTcpConfig(tcpConfig)
+                lineConnection = TCPConnection(config: resolvedConfig)
+                try await startLineConnection()
+                try await initialize()
+#else
+                throw MCPServerProxyError.unsupportedPlatform("TCP connections require the Network framework.")
+#endif
 
             case .sse(let sseConfig):
 #if os(Linux)
@@ -131,9 +145,9 @@ public final actor MCPServerProxy: Sendable {
     /// Disconnects from the MCP server.
     public func disconnect() async {
         switch config {
-        case .stdio, .stdioHandles:
-            await stdioConnection?.stop()
-            stdioConnection = nil
+        case .stdio, .stdioHandles, .tcp:
+            await lineConnection?.stop()
+            lineConnection = nil
         case .sse:
             break
         }
@@ -251,7 +265,7 @@ public final actor MCPServerProxy: Sendable {
     public func send(_ message: JSONRPCMessage) async throws -> JSONRPCMessage {
         let messageId = message.id
         switch config {
-        case .stdio, .stdioHandles:
+        case .stdio, .stdioHandles, .tcp:
             guard let messageId = messageId else {
                 throw MCPServerProxyError.communicationError("Message must have an ID")
             }
@@ -260,10 +274,10 @@ public final actor MCPServerProxy: Sendable {
             let data = try encoder.encode(message)
 
             let messageWithNewline = data + "\n".data(using: .utf8)!
-            guard let stdioConnection else {
-                throw MCPServerProxyError.communicationError("Not connected to stdio server")
+            guard let lineConnection else {
+                throw MCPServerProxyError.communicationError("Not connected to line-based server")
             }
-            await stdioConnection.write(messageWithNewline)
+            await lineConnection.write(messageWithNewline)
 
             return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<JSONRPCMessage, Error>) in
                 responseTasks[messageId] = continuation
@@ -316,15 +330,15 @@ public final actor MCPServerProxy: Sendable {
         _ = try await send(request)
     }
 
-    private func startStdioConnection() async throws {
-        guard let stdioConnection else {
-            throw MCPServerProxyError.communicationError("Not connected to stdio server")
+    private func startLineConnection() async throws {
+        guard let lineConnection else {
+            throw MCPServerProxyError.communicationError("Not connected to line-based server")
         }
-        try await stdioConnection.start()
+        try await lineConnection.start()
 
         streamTask = Task {
             do {
-                let lines = await stdioConnection.lines()
+                let lines = await lineConnection.lines()
                 for try await data in lines {
                     processIncomingMessage(data: data)
                 }
@@ -361,7 +375,25 @@ public final actor MCPServerProxy: Sendable {
         serverVersion = initResult.serverInfo.version
         serverDescription = initResult.serverInfo.description ?? rawServerDescription
         serverCapabilities = initResult.capabilities
+        if service == nil {
+            service = serverName
+        }
         logger.info("Connected to MCP server: \(serverName ?? "unknown") version \(serverVersion ?? "unknown")")
+    }
+
+    private func resolveTcpConfig(_ config: MCPServerTcpConfig) -> MCPServerTcpConfig {
+        guard case .bonjour(let serviceName, let domain) = config.endpoint,
+              serviceName == nil,
+              let service else {
+            return config
+        }
+        return MCPServerTcpConfig(
+            serviceName: service,
+            domain: domain,
+            serviceType: config.serviceType,
+            timeout: config.timeout,
+            preferIPv4: config.preferIPv4
+        )
     }
 
     private func processIncomingMessage(event: String = "", data: String) {

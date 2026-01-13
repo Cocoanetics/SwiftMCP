@@ -20,6 +20,8 @@ import OSLog
  - `httpsse`: Starts an HTTP server with Server-Sent Events (SSE) support, optionally with authentication and OpenAPI endpoints.
    Ideal for long-running services and AI plugin integration.
  
+ - `tcp`: Starts a TCP server with Bonjour discovery (_mcp._tcp) for local MCP clients.
+ 
  Example usage:
  ```bash
  # Using stdio mode (default)
@@ -27,7 +29,10 @@ import OSLog
  
  # Using HTTP+SSE mode
  SwiftMCPDemo httpsse --port 8080 --token secret --openapi
- ```
+
+ # Using TCP+Bonjour mode
+ SwiftMCPDemo tcp --name "SwiftMCP Demo"
+```
  */
 @main
 struct MCPCommand: AsyncParsableCommand {
@@ -50,8 +55,12 @@ struct MCPCommand: AsyncParsableCommand {
      - Supports bearer token authentication and OpenAPI endpoints
      - Example: SwiftMCPDemo httpsse --port 8080
 
+  3. tcp:
+     - Starts a TCP server with Bonjour discovery (_mcp._tcp)
+     - Example: SwiftMCPDemo tcp --name "SwiftMCP Demo"
+
 """,
-        subcommands: [StdioCommand.self, HTTPSSECommand.self],
+        subcommands: [StdioCommand.self, HTTPSSECommand.self, TCPBonjourCommand.self],
         defaultSubcommand: StdioCommand.self
     )
 }

@@ -12,6 +12,18 @@ struct ProxyDemoCLI: AsyncParsableCommand {
     @Option(name: .long, help: "SSE endpoint URL for a running demo server.")
     var sse: String?
 
+    @Option(name: .long, help: "Bonjour service name for TCP discovery (defaults to first _mcp._tcp service).")
+    var tcpService: String?
+
+    @Option(name: .long, help: "TCP host for direct connection.")
+    var tcpHost: String?
+
+    @Option(name: .long, help: "TCP port for direct connection.")
+    var tcpPort: Int?
+
+    @Flag(name: .long, help: "Browse Bonjour and connect to the first _mcp._tcp service (prefers proxy server name).")
+    var tcpBonjour: Bool = false
+
     @Option(name: .long, help: "Shell command to launch the demo server over stdio.")
     var command: String = "swift run SwiftMCPDemo stdio"
 
@@ -43,6 +55,28 @@ struct ProxyDemoCLI: AsyncParsableCommand {
                 throw ValidationError("Invalid --sse URL: \(sse)")
             }
             return .sse(config: MCPServerSseConfig(url: url, headers: [:]))
+        }
+
+        if let tcpHost, let tcpPort {
+            guard tcpPort > 0, tcpPort < 65536 else {
+                throw ValidationError("Invalid --tcp-port: \(tcpPort)")
+            }
+            let tcpConfig = MCPServerTcpConfig(host: tcpHost, port: UInt16(tcpPort))
+            return .tcp(config: tcpConfig)
+        }
+
+        if tcpHost != nil || tcpPort != nil {
+            throw ValidationError("Provide both --tcp-host and --tcp-port for direct TCP connections.")
+        }
+
+        if tcpService != nil {
+            let tcpConfig = MCPServerTcpConfig(serviceName: tcpService)
+            return .tcp(config: tcpConfig)
+        }
+
+        if tcpBonjour {
+            let tcpConfig = MCPServerTcpConfig(serviceName: SwiftMCPDemoProxy.serverName)
+            return .tcp(config: tcpConfig)
         }
 
         let environment = try parseEnvironment(env)
