@@ -35,6 +35,7 @@ struct TCPBonjourCommand: AsyncParsableCommand {
     var ipv4Only: Bool = true
 
     func run() async throws {
+#if canImport(Network)
 #if canImport(OSLog)
         LoggingSystem.bootstrapWithOSLog()
 #endif
@@ -65,5 +66,9 @@ struct TCPBonjourCommand: AsyncParsableCommand {
             logToStderr("Error: \(error)")
             Foundation.exit(1)
         }
+#else
+        logToStderr("TCP+Bonjour transport requires macOS (Network framework not available)")
+        Foundation.exit(1)
+#endif
     }
 }
