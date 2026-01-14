@@ -307,6 +307,9 @@ import Logging
 
 /// Stub implementation for platforms without Network framework.
 public final class TCPBonjourTransport: Transport, @unchecked Sendable {
+    /// DNS-SD service type for MCP over TCP.
+    public static let serviceType = "_mcp._tcp"
+
     public let server: MCPServer
     public let logger = Logger(label: "com.cocoanetics.SwiftMCP.TCPBonjourTransport")
 
