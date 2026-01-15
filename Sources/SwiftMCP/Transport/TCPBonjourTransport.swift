@@ -313,8 +313,43 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
     public let server: MCPServer
     public let logger = Logger(label: "com.cocoanetics.SwiftMCP.TCPBonjourTransport")
 
-    public init(server: MCPServer) {
+    /// Optional override for the advertised Bonjour service name.
+    /// When nil, the transport uses `server.serverName`.
+    public let serviceName: String?
+    public let serviceType: String
+    public let serviceDomain: String
+    public let acceptLocalOnly: Bool
+    public let preferIPv4: Bool
+    public private(set) var port: UInt16?
+
+    public init(
+        server: MCPServer,
+        serviceName: String? = nil,
+        serviceType: String = TCPBonjourTransport.serviceType,
+        serviceDomain: String = "local.",
+        port: UInt16? = nil,
+        acceptLocalOnly: Bool = true,
+        preferIPv4: Bool = true
+    ) {
         self.server = server
+        self.serviceName = serviceName
+        self.serviceType = serviceType
+        self.serviceDomain = serviceDomain
+        self.port = port
+        self.acceptLocalOnly = acceptLocalOnly
+        self.preferIPv4 = preferIPv4
+    }
+
+    public convenience init(server: MCPServer) {
+        self.init(
+            server: server,
+            serviceName: nil,
+            serviceType: TCPBonjourTransport.serviceType,
+            serviceDomain: "local.",
+            port: nil,
+            acceptLocalOnly: true,
+            preferIPv4: true
+        )
     }
 
     public func start() async throws {
