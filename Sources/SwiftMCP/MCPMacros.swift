@@ -29,6 +29,14 @@ import Foundation
 @attached(peer, names: prefixed(__mcpMetadata_), prefixed(__mcpCall_))
 public macro MCPTool(description: String? = nil, isConsequential: Bool = true) = #externalMacro(module: "SwiftMCPMacros", type: "MCPToolMacro")
 
+/// A macro that exposes an AppIntent as an MCP tool.
+///
+/// Apply this macro to AppIntent types to generate tool metadata and a wrapper
+/// that maps MCP arguments to intent parameters.
+@attached(member, names: named(mcpToolMetadata), named(mcpPerform))
+@attached(extension, conformances: MCPAppIntentTool)
+public macro MCPAppIntentTool(description: String? = nil, isConsequential: Bool = true) = #externalMacro(module: "SwiftMCPMacros", type: "MCPAppIntentToolMacro")
+
 /// A macro that adds a `mcpTools` property to a class to aggregate function metadata.
 ///
 /// Apply this macro to classes that contain `MCPTool` annotated methods.

@@ -61,11 +61,19 @@ public struct MCPToolMacro: PeerMacro {
 		in context: some MacroExpansionContext
 	) throws -> [DeclSyntax] {
         guard let funcDecl = declaration.as(FunctionDeclSyntax.self) else {
-            // Use the actual diagnostic type defined in your project
-            let diagnostic = Diagnostic(node: Syntax(node), message: MCPToolDiagnostic.onlyFunctions) 
+            let diagnostic = Diagnostic(node: Syntax(node), message: MCPToolDiagnostic.onlyFunctions)
             context.diagnose(diagnostic)
             return []
         }
+
+        return try functionPeers(for: funcDecl, node: node, context: context)
+    }
+
+    private static func functionPeers(
+        for funcDecl: FunctionDeclSyntax,
+        node: AttributeSyntax,
+        context: some MacroExpansionContext
+    ) throws -> [DeclSyntax] {
 
         // Use the new extractor
         let extractor = FunctionMetadataExtractor(funcDecl: funcDecl, context: context)
@@ -176,4 +184,5 @@ nonisolated private let __mcpMetadata_\(functionName) = MCPToolMetadata(
 			DeclSyntax(stringLiteral: wrapperFuncString)
 		]
     }
+
 }

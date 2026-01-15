@@ -737,6 +737,14 @@ public extension MCPServer {
         let mirror = Mirror(reflecting: self)
         guard let child = mirror.children.first(where: { $0.label == metadataKey }),
 			  let metadata = child.value as? MCPToolMetadata else {
+            #if canImport(AppIntents)
+            if #available(macOS 13.0, iOS 16.0, tvOS 16.0, watchOS 9.0, *) {
+                if let providerType = Self.self as? MCPAppShortcutsProvider.Type {
+                    let shortcutMetadata = MCPAppIntentTools.toolMetadata(for: providerType)
+                    return shortcutMetadata.first(where: { $0.name == toolName })
+                }
+            }
+            #endif
             return nil
         }
 

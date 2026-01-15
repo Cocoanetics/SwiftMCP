@@ -23,6 +23,10 @@ let package = Package(
 			targets: ["SwiftMCPDemo"]
 		),
 		.executable(
+			name: "SwiftMCPIntentsApp",
+			targets: ["SwiftMCPIntentsApp"]
+		),
+		.executable(
 			name: "SwiftMCPUtility",
 			targets: ["SwiftMCPUtility"]
 		),
@@ -71,6 +75,13 @@ let package = Package(
 				.product(name: "ArgumentParser", package: "swift-argument-parser")
 			],
 			path: "Demos/SwiftMCPDemo"
+		),
+		.executableTarget(
+			name: "SwiftMCPIntentsApp",
+			dependencies: [
+				"SwiftMCP"
+			],
+			path: "Demos/SwiftMCPIntentsApp"
 		),
 		.executableTarget(
 			name: "SwiftMCPUtility",
