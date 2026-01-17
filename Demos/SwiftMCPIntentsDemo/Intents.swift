@@ -1,4 +1,3 @@
-#if canImport(AppIntents)
 import AppIntents
 import Foundation
 import SwiftMCP
@@ -155,4 +154,3 @@ actor IntentsDemoServer: AppShortcutsProvider {
         "pong"
     }
 }
-#endif
