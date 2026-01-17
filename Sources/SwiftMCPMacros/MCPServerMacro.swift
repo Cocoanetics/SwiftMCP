@@ -216,14 +216,10 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
 """
             if hasAppShortcutsProvider {
                 defaultCase += """
-         #if canImport(AppIntents)
-         if #available(macOS 13.0, iOS 16.0, tvOS 16.0, watchOS 9.0, *) {
-            let providerType: MCPAppShortcutsProvider.Type = Self.self
-            if let result = try await MCPAppIntentTools.callTool(named: name, providerType: providerType, arguments: enrichedArguments) {
-               return result
-            }
+         let providerType: MCPAppShortcutsProvider.Type = Self.self
+         if let result = try await MCPAppIntentTools.callTool(named: name, providerType: providerType, arguments: enrichedArguments) {
+            return result
          }
-         #endif
          throw MCPToolError.unknownTool(name: name)
 """
             } else {
@@ -267,15 +263,11 @@ public func callTool(_ name: String, arguments: [String: Sendable]) async throws
             let appShortcutsBlock: String
             if hasAppShortcutsProvider {
                 appShortcutsBlock = """
-   #if canImport(AppIntents)
-   if #available(macOS 13.0, iOS 16.0, tvOS 16.0, watchOS 9.0, *) {
-      let providerType: MCPAppShortcutsProvider.Type = Self.self
-      let shortcutMetadata = MCPAppIntentTools.toolMetadata(for: providerType)
-      for toolMetadata in shortcutMetadata where !metadata.contains(where: { $0.name == toolMetadata.name }) {
-         metadata.append(toolMetadata)
-      }
+   let providerType: MCPAppShortcutsProvider.Type = Self.self
+   let shortcutMetadata = MCPAppIntentTools.toolMetadata(for: providerType)
+   for toolMetadata in shortcutMetadata where !metadata.contains(where: { $0.name == toolMetadata.name }) {
+      metadata.append(toolMetadata)
    }
-   #endif
 """
             } else {
                 appShortcutsBlock = ""
