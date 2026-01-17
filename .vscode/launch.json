@@ -59,6 +59,26 @@
             "target": "ProxyDemoCLI",
             "configuration": "release",
             "preLaunchTask": "swift: Build Release ProxyDemoCLI"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:SwiftMCP}",
+            "name": "Debug SwiftMCPIntentsApp",
+            "target": "SwiftMCPIntentsApp",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug SwiftMCPIntentsApp"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:SwiftMCP}",
+            "name": "Release SwiftMCPIntentsApp",
+            "target": "SwiftMCPIntentsApp",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release SwiftMCPIntentsApp"
         }
     ]
 }

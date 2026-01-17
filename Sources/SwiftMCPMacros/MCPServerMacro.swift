@@ -131,6 +131,12 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
             serverDescription = "\"\(documentation.description.escapedForSwiftString)\""
         }
 
+        let inheritedTypes = declaration.inheritanceClause?.inheritedTypes ?? []
+        let hasAppShortcutsProvider = inheritedTypes.contains { type in
+            let name = type.type.trimmedDescription
+            return name == "AppShortcutsProvider" || name.hasSuffix(".AppShortcutsProvider")
+        }
+
         let nameProperty = "private let __mcpServerName = \"\(serverName)\""
         let versionProperty = "private let __mcpServerVersion = \"\(serverVersion)\""
         let descriptionProperty = "private let __mcpServerDescription: String? = \(serverDescription)"
@@ -193,8 +199,8 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
 			DeclSyntax(stringLiteral: descriptionProperty),
 		]
 
-        // Only add callTool method if there are MCPTools defined
-        if !mcpTools.isEmpty {
+        // Only add callTool method if there are MCPTools or AppShortcuts defined
+        if !mcpTools.isEmpty || hasAppShortcutsProvider {
             // Create a callTool method that uses a switch statement to call the appropriate wrapper function
             var switchCases = ""
             for (index, funcName) in mcpTools.enumerated() {
@@ -204,6 +210,29 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro {
                     switchCases += "\n"
                 }
             }
+
+            var defaultCase = """
+      default:
+"""
+            if hasAppShortcutsProvider {
+                defaultCase += """
+         #if canImport(AppIntents)
+         if #available(macOS 13.0, iOS 16.0, tvOS 16.0, watchOS 9.0, *) {
+            let providerType: MCPAppShortcutsProvider.Type = Self.self
+            if let result = try await MCPAppIntentTools.callTool(named: name, providerType: providerType, arguments: enrichedArguments) {
+               return result
+            }
+         }
+         #endif
+         throw MCPToolError.unknownTool(name: name)
+"""
+            } else {
+                defaultCase += "         throw MCPToolError.unknownTool(name: name)\n"
+            }
+            defaultCase += """
+   }
+}
+"""
 
             let callToolMethod = """
 /// Calls a tool by name with the provided arguments
@@ -225,22 +254,39 @@ public func callTool(_ name: String, arguments: [String: Sendable]) async throws
    switch name {
 \(switchCases)
 
-      default:
-         throw MCPToolError.unknownTool(name: name)
-   }
-}
+\(defaultCase)
 """
 
             declarations.append(DeclSyntax(stringLiteral: callToolMethod))
         }
 
         // Add static mcpToolMetadata property
-        if !mcpTools.isEmpty {
+        if !mcpTools.isEmpty || hasAppShortcutsProvider {
             let metadataArray = mcpTools.map { "__mcpMetadata_\($0)" }.joined(separator: ", ")
+            let metadataSeed = mcpTools.isEmpty ? "[]" : "[\(metadataArray)]"
+            let appShortcutsBlock: String
+            if hasAppShortcutsProvider {
+                appShortcutsBlock = """
+   #if canImport(AppIntents)
+   if #available(macOS 13.0, iOS 16.0, tvOS 16.0, watchOS 9.0, *) {
+      let providerType: MCPAppShortcutsProvider.Type = Self.self
+      let shortcutMetadata = MCPAppIntentTools.toolMetadata(for: providerType)
+      for toolMetadata in shortcutMetadata where !metadata.contains(where: { $0.name == toolMetadata.name }) {
+         metadata.append(toolMetadata)
+      }
+   }
+   #endif
+"""
+            } else {
+                appShortcutsBlock = ""
+            }
+
             let metadataProperty = """
 /// Returns an array of all available tool metadata
 nonisolated public var mcpToolMetadata: [MCPToolMetadata] {
-   return [\(metadataArray)]
+   var metadata: [MCPToolMetadata] = \(metadataSeed)
+\(appShortcutsBlock)
+   return metadata
 }
 """
             declarations.append(DeclSyntax(stringLiteral: metadataProperty))
@@ -449,6 +495,10 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
 	) throws -> [ExtensionDeclSyntax] {
         // Check if the declaration already conforms to MCPServer
         let inheritedTypes = declaration.inheritanceClause?.inheritedTypes ?? []
+        let hasAppShortcutsProvider = inheritedTypes.contains { type in
+            let name = type.type.trimmedDescription
+            return name == "AppShortcutsProvider" || name.hasSuffix(".AppShortcutsProvider")
+        }
         let alreadyConformsToMCPServer = inheritedTypes.contains { type in
             type.type.trimmedDescription == "MCPServer"
         }
@@ -523,7 +573,7 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
             protocolsToAdd.append("MCPServer")
         }
 
-        if hasMCPTools && !alreadyConformsToToolProviding {
+        if (hasMCPTools || hasAppShortcutsProvider) && !alreadyConformsToToolProviding {
             protocolsToAdd.append("MCPToolProviding")
         }
 

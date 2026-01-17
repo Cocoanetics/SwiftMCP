@@ -20,6 +20,8 @@ import SwiftSyntaxMacros
 enum MCPToolDiagnostic: DiagnosticMessage {
     /// Error when the macro is applied to a non-function declaration
     case onlyFunctions
+    /// Error when the macro is applied to a type that does not conform to AppIntent
+    case requiresAppIntentConformance(typeName: String)
 
     /// Warning when a function is missing a description
     case missingDescription(functionName: String)
@@ -37,6 +39,8 @@ enum MCPToolDiagnostic: DiagnosticMessage {
         switch self {
             case .onlyFunctions:
                 return "The MCPTool macro can only be applied to functions"
+            case .requiresAppIntentConformance(let typeName):
+                return "Type '\(typeName)' must conform to AppIntent to use the MCPAppIntentTool macro."
             case .missingDescription(let functionName):
                 return "Function '\(functionName)' is missing a description. Add a documentation comment or provide a description parameter."
             case .invalidDefaultValueType(let paramName, let typeName):
@@ -50,7 +54,7 @@ enum MCPToolDiagnostic: DiagnosticMessage {
 
     var severity: DiagnosticSeverity {
         switch self {
-            case .onlyFunctions, .invalidDefaultValueType, .closureTypeNotSupported, .optionalParameterNeedsDefault:
+            case .onlyFunctions, .requiresAppIntentConformance, .invalidDefaultValueType, .closureTypeNotSupported, .optionalParameterNeedsDefault:
                 return .error
             case .missingDescription:
                 return .warning
@@ -61,6 +65,8 @@ enum MCPToolDiagnostic: DiagnosticMessage {
         switch self {
             case .onlyFunctions:
                 return MessageID(domain: "SwiftMCP", id: "onlyFunctions")
+            case .requiresAppIntentConformance:
+                return MessageID(domain: "SwiftMCP", id: "requiresAppIntentConformance")
             case .missingDescription:
                 return MessageID(domain: "SwiftMCP", id: "missingDescription")
             case .invalidDefaultValueType:

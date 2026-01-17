@@ -880,18 +880,22 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
 
             // Try to call as a tool first
             let result: Encodable & Sendable
+            let metadata: MCPToolMetadata?
 
             if let toolProvider = transport.server as? MCPToolProviding,
                toolProvider.mcpToolMetadata.contains(where: { $0.name == toolName }) {
                 // Call as a tool function
+                metadata = toolProvider.mcpToolMetadata.first(where: { $0.name == toolName })
                 result = try await toolProvider.callTool(toolName, arguments: arguments)
             } else if let resourceProvider = transport.server as? MCPResourceProviding,
                       resourceProvider.mcpResourceMetadata.contains(where: { $0.functionMetadata.name == toolName }) {
                 // Call as a resource function
+                metadata = nil
                 result = try await resourceProvider.callResourceAsFunction(toolName, arguments: arguments)
             } else if let promptProvider = transport.server as? MCPPromptProviding,
                       promptProvider.mcpPromptMetadata.contains(where: { $0.name == toolName }) {
                 // Call as a prompt function
+                metadata = nil
                 let messages = try await promptProvider.callPrompt(toolName, arguments: arguments)
                 result = messages
             } else {
@@ -899,35 +903,37 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
                 throw MCPToolError.unknownTool(name: toolName)
             }
 
+            let wrappedResult = metadata?.wrapOutputIfNeeded(result) ?? result
+
             // Convert resource content to tool results if applicable
             let responseToEncode: Encodable
 
-            if let toolResult = result as? MCPText {
+            if let toolResult = wrappedResult as? MCPText {
                 responseToEncode = toolResult
-            } else if let toolResult = result as? MCPImage {
+            } else if let toolResult = wrappedResult as? MCPImage {
                 responseToEncode = toolResult
-            } else if let toolResult = result as? MCPAudio {
+            } else if let toolResult = wrappedResult as? MCPAudio {
                 responseToEncode = toolResult
-            } else if let toolResult = result as? MCPResourceLink {
+            } else if let toolResult = wrappedResult as? MCPResourceLink {
                 responseToEncode = toolResult
-            } else if let toolResult = result as? MCPEmbeddedResource {
+            } else if let toolResult = wrappedResult as? MCPEmbeddedResource {
                 responseToEncode = toolResult
-            } else if let toolResults = result as? [MCPText] {
+            } else if let toolResults = wrappedResult as? [MCPText] {
                 responseToEncode = toolResults
-            } else if let toolResults = result as? [MCPImage] {
+            } else if let toolResults = wrappedResult as? [MCPImage] {
                 responseToEncode = toolResults
-            } else if let toolResults = result as? [MCPAudio] {
+            } else if let toolResults = wrappedResult as? [MCPAudio] {
                 responseToEncode = toolResults
-            } else if let toolResults = result as? [MCPResourceLink] {
+            } else if let toolResults = wrappedResult as? [MCPResourceLink] {
                 responseToEncode = toolResults
-            } else if let toolResults = result as? [MCPEmbeddedResource] {
+            } else if let toolResults = wrappedResult as? [MCPEmbeddedResource] {
                 responseToEncode = toolResults
-            } else if let resourceContent = result as? MCPResourceContent {
+            } else if let resourceContent = wrappedResult as? MCPResourceContent {
                 responseToEncode = MCPEmbeddedResource(resource: resourceContent)
-            } else if let resourceContentArray = result as? [MCPResourceContent] {
+            } else if let resourceContentArray = wrappedResult as? [MCPResourceContent] {
                 responseToEncode = resourceContentArray.map { MCPEmbeddedResource(resource: $0) }
             } else {
-                responseToEncode = result
+                responseToEncode = wrappedResult
             }
 
             // Convert result to JSON data

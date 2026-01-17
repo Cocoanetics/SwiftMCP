@@ -22,6 +22,7 @@ public struct SwiftMCPPlugin: CompilerPlugin {
     /// The macros provided by this plugin
     public var providingMacros: [Macro.Type] = [
         MCPToolMacro.self,
+        MCPAppIntentToolMacro.self,
         MCPServerMacro.self,
         SchemaMacro.self,
         MCPResourceMacro.self,

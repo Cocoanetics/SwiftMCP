@@ -62,6 +62,11 @@ struct Profile: Sendable, Codable {
     let activeStatuses: [Bool]
 }
 
+/// Wrapper used when array outputs are boxed to support outputSchema.
+struct ContactInfoArrayOutput: Sendable, Codable {
+    let items: [ContactInfo]
+}
+
 /// A test server with various tools
 @MCPServer(name: "ComplexTypesServer", version: "1.0")
 class ComplexTypesServer {
@@ -506,8 +511,8 @@ func testContactInfoProcessing() async throws {
     
     // Verify the processed contact
     let json = processText.data(using: .utf8)!
-    let processedContacts = try JSONDecoder().decode([ContactInfo].self, from: json)
-    let processedContact = try #require(processedContacts.first)
+    let processedWrapper = try JSONDecoder().decode(ContactInfoArrayOutput.self, from: json)
+    let processedContact = try #require(processedWrapper.items.first)
     #expect(processedContact.name == "JOHN DOE")
     #expect(processedContact.email == "john@example.com")
     #expect(processedContact.phone == "+1234567890")
@@ -678,5 +683,5 @@ func testOptionalArraysWithNil() async throws {
     let contactResult = try #require(contactResponse.result)
     let contactContent = try #require(contactResult["content"]?.value as? [[String: String]])
     let contactText = try #require(contactContent.first?["text"])
-    #expect(contactText == "[]")
+    #expect(contactText == "{\"items\":[]}")
 } 
