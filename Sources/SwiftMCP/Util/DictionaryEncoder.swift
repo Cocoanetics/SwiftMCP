@@ -8,7 +8,13 @@ public class DictionaryEncoder {
     public func encode<T: Encodable>(_ value: T) throws -> [String: AnyCodable] {
         let encoder = _DictionaryEncoder()
         try value.encode(to: encoder)
-        guard let dict = encoder.storage.topContainer as? [String: Any] else {
+        guard let topContainer = encoder.storage.topContainer else {
+            throw EncodingError.invalidValue(value, EncodingError.Context(
+                codingPath: [],
+                debugDescription: "No container found after encoding."
+            ))
+        }
+        guard let dict = _unwrapContainer(topContainer) as? [String: Any] else {
             throw EncodingError.invalidValue(value, EncodingError.Context(
                 codingPath: [],
                 debugDescription: "Top-level object did not encode as a dictionary."
@@ -47,14 +53,14 @@ fileprivate struct _DictionaryEncodingStorage {
 
     var topContainer: Any? { containers.last }
 
-    mutating func pushKeyedContainer() -> NSMutableDictionary {
-        let dictionary = NSMutableDictionary()
+    mutating func pushKeyedContainer() -> _DictionaryBox {
+        let dictionary = _DictionaryBox()
         containers.append(dictionary)
         return dictionary
     }
 
-    mutating func pushUnkeyedContainer() -> NSMutableArray {
-        let array = NSMutableArray()
+    mutating func pushUnkeyedContainer() -> _ArrayBox {
+        let array = _ArrayBox()
         containers.append(array)
         return array
     }
@@ -74,7 +80,7 @@ fileprivate struct DictionaryKeyedEncodingContainer<K: CodingKey>: KeyedEncoding
     typealias Key = K
 
     private let encoder: _DictionaryEncoder
-    private let container: NSMutableDictionary
+    private let container: _DictionaryBox
 
     init(referencing encoder: _DictionaryEncoder) {
         self.encoder = encoder
@@ -90,7 +96,7 @@ fileprivate struct DictionaryKeyedEncodingContainer<K: CodingKey>: KeyedEncoding
     mutating func encode<T: Encodable>(_ value: T, forKey key: K) throws {
         encoder.codingPath.append(key)
         defer { encoder.codingPath.removeLast() }
-        container[key.stringValue] = try _box(value, encoder: encoder)
+        container.value[key.stringValue] = try _box(value, encoder: encoder)
     }
 
     mutating func nestedContainer<NestedKey>(keyedBy keyType: NestedKey.Type, forKey key: K)
@@ -104,7 +110,7 @@ fileprivate struct DictionaryKeyedEncodingContainer<K: CodingKey>: KeyedEncoding
         // Store the nested container's result in the parent container
         // We need to capture the result when the nested container is finished
         let nestedResult = nestedContainer.container
-        self.container[key.stringValue] = nestedResult
+        self.container.value[key.stringValue] = nestedResult
         
         return KeyedEncodingContainer(nestedContainer)
     }
@@ -113,7 +119,7 @@ fileprivate struct DictionaryKeyedEncodingContainer<K: CodingKey>: KeyedEncoding
         encoder.codingPath.append(key)
         defer { encoder.codingPath.removeLast() }
         let container = DictionaryUnkeyedEncodingContainer(referencing: encoder)
-        self.container[key.stringValue] = encoder.storage.topContainer!
+        self.container.value[key.stringValue] = encoder.storage.topContainer!
         return container
     }
 
@@ -125,7 +131,7 @@ fileprivate struct DictionaryKeyedEncodingContainer<K: CodingKey>: KeyedEncoding
 
 fileprivate struct DictionaryUnkeyedEncodingContainer: UnkeyedEncodingContainer {
     private let encoder: _DictionaryEncoder
-    private let container: NSMutableArray
+    private let container: _ArrayBox
 
     init(referencing encoder: _DictionaryEncoder) {
         self.encoder = encoder
@@ -133,25 +139,25 @@ fileprivate struct DictionaryUnkeyedEncodingContainer: UnkeyedEncodingContainer 
     }
 
     var codingPath: [CodingKey] { encoder.codingPath }
-    var count: Int { container.count }
+    var count: Int { container.value.count }
 
     // For arrays, we keep NSNull to preserve structure and indices
-    mutating func encodeNil() { container.add(NSNull()) }
+    mutating func encodeNil() { container.value.append(NSNull()) }
 
     mutating func encode<T: Encodable>(_ value: T) throws {
-        container.add(try _box(value, encoder: encoder))
+        container.value.append(try _box(value, encoder: encoder))
     }
 
     mutating func nestedContainer<NestedKey>(keyedBy keyType: NestedKey.Type)
         -> KeyedEncodingContainer<NestedKey> {
         let container = DictionaryKeyedEncodingContainer<NestedKey>(referencing: encoder)
-        self.container.add(encoder.storage.topContainer!)
+        self.container.value.append(encoder.storage.topContainer!)
         return KeyedEncodingContainer(container)
     }
 
     mutating func nestedUnkeyedContainer() -> UnkeyedEncodingContainer {
         let container = DictionaryUnkeyedEncodingContainer(referencing: encoder)
-        self.container.add(encoder.storage.topContainer!)
+        self.container.value.append(encoder.storage.topContainer!)
         return container
     }
 
@@ -179,6 +185,24 @@ fileprivate struct DictionarySingleValueEncodingContainer: SingleValueEncodingCo
 
 // MARK: - Boxing
 
+fileprivate final class _DictionaryBox {
+    var value: [String: Any] = [:]
+}
+
+fileprivate final class _ArrayBox {
+    var value: [Any] = []
+}
+
+fileprivate func _unwrapContainer(_ value: Any) -> Any {
+    if let dictBox = value as? _DictionaryBox {
+        return dictBox.value.mapValues { _unwrapContainer($0) }
+    }
+    if let arrayBox = value as? _ArrayBox {
+        return arrayBox.value.map { _unwrapContainer($0) }
+    }
+    return value
+}
+
 fileprivate func _box<T: Encodable>(_ value: T, encoder: _DictionaryEncoder) throws -> Any {
     if let date = value as? Date {
         return date.timeIntervalSince1970
@@ -188,8 +212,6 @@ fileprivate func _box<T: Encodable>(_ value: T, encoder: _DictionaryEncoder) thr
         return url.absoluteString
     } else if let decimal = value as? Decimal {
         return decimal.description
-    } else if let number = value as? NSNumber {
-        return number
     } else if let string = value as? String {
         return string
     } else if let bool = value as? Bool {
@@ -200,6 +222,8 @@ fileprivate func _box<T: Encodable>(_ value: T, encoder: _DictionaryEncoder) thr
         return double
     } else if let float = value as? Float {
         return float
+    } else if let number = value as? NSNumber {
+        return number
     } else {
         let depthEncoder = _DictionaryEncoder()
         try value.encode(to: depthEncoder)
@@ -213,4 +237,4 @@ fileprivate func _box<T: Encodable>(_ value: T, encoder: _DictionaryEncoder) thr
         // Fallback to the last container (should not normally happen)
         return depthEncoder.storage.popContainer()
     }
-} 
+}

@@ -6,6 +6,34 @@ struct MCPReturnSchemaInfo: Sendable {
 }
 
 extension MCPToolMetadata {
+    private static let outputArrayWrapperKey = "items"
+
+    private var shouldWrapOutputArray: Bool {
+        guard let returnType else { return false }
+
+        if returnType is [MCPText].Type
+            || returnType is [MCPImage].Type
+            || returnType is [MCPAudio].Type
+            || returnType is [MCPResourceLink].Type
+            || returnType is [MCPEmbeddedResource].Type
+            || returnType is [any MCPResourceContent].Type {
+            return false
+        }
+
+        guard case .array(let items, _, _, _) = returnSchemaInfo.schema else { return false }
+        switch items {
+        case .object, .oneOf:
+            return true
+        default:
+            return false
+        }
+    }
+
+    func wrapOutputIfNeeded(_ result: Encodable & Sendable) -> Encodable & Sendable {
+        guard shouldWrapOutputArray else { return result }
+        return MCPArrayOutputWrapper(items: AnyEncodable(result))
+    }
+
     var returnSchemaInfo: MCPReturnSchemaInfo {
         let voidDescription = "Empty string (void function)"
 
@@ -129,13 +157,34 @@ extension MCPToolMetadata {
         switch schema {
         case .object, .oneOf:
             return schema
-        case .array(let items, _, _, _):
-            if case .oneOf = items {
-                return items
-            }
-            return nil
+        case .array:
+            guard shouldWrapOutputArray else { return nil }
+            let wrapper = JSONSchema.Object(
+                properties: [Self.outputArrayWrapperKey: schema],
+                required: [],
+                title: nil,
+                description: returnTypeDescription ?? returnSchemaInfo.description,
+                additionalProperties: false
+            )
+            return .object(wrapper)
         default:
             return nil
         }
     }
+}
+
+private struct AnyEncodable: Encodable, @unchecked Sendable {
+    let value: Encodable
+
+    init(_ value: Encodable) {
+        self.value = value
+    }
+
+    func encode(to encoder: Encoder) throws {
+        try value.encode(to: encoder)
+    }
+}
+
+private struct MCPArrayOutputWrapper: Encodable, Sendable {
+    let items: AnyEncodable
 }

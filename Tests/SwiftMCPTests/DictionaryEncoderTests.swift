@@ -82,4 +82,18 @@ func testDateAndData() throws {
     let dict = try encoder.encode(value)
     #expect(abs((dict["date"]?.value as? Double ?? 0) - 1234567890) < 0.001)
     #expect(dict["data"]?.value as? String == bytes.base64EncodedString())
-} 
+}
+
+@Test("DictionaryEncoder preserves boolean JSON encoding")
+func testBooleanJSONEncoding() throws {
+    struct BoolStruct: Codable {
+        let flag: Bool
+    }
+    let value = BoolStruct(flag: true)
+    let encoder = DictionaryEncoder()
+    let dict = try encoder.encode(value)
+    let jsonData = try JSONEncoder().encode(dict)
+    let jsonObject = try JSONSerialization.jsonObject(with: jsonData, options: [])
+    let jsonDict = jsonObject as? [String: Any]
+    #expect(jsonDict?["flag"] as? Bool == true)
+}

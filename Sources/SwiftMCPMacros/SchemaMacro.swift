@@ -83,6 +83,7 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
         // Process all members, but only properties (ignore nested structs)
         for member in structDecl.memberBlock.members {
             if let property = member.decl.as(VariableDeclSyntax.self) {
+                guard shouldIncludeProperty(property) else { continue }
                 // Process regular property
                 let (propertyStr, propertyInfo) = try processProperty(
                     property: property,
@@ -202,6 +203,21 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
         let propertyStr = "SchemaPropertyInfo(name: \"\(schemaName)\", type: \(baseType).self, description: \(propertyDescription), defaultValue: \(defaultValue) as Sendable?, isRequired: \(isRequired))"
 
         return (propertyStr, (name: propertyName, type: propertyType, defaultValue: defaultValue))
+    }
+
+    private static func shouldIncludeProperty(_ property: VariableDeclSyntax) -> Bool {
+        let modifiers = property.modifiers
+        if modifiers.contains(where: { $0.name.text == "static" || $0.name.text == "class" }) {
+            return false
+        }
+
+        for binding in property.bindings {
+            if binding.accessorBlock != nil {
+                return false
+            }
+        }
+
+        return true
     }
 
     /// Gets the raw value from CodingKeys enum for a given property name

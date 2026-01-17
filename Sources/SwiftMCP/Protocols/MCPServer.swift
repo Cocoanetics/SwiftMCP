@@ -314,9 +314,12 @@ public extension MCPServer {
         // Extract arguments from the request
         let arguments = (params["arguments"]?.value as? [String: Sendable]) ?? [:]
 
+        let metadata = mcpToolMetadata(for: toolName)
+
         // Call the appropriate wrapper method based on the tool name
         do {
             let result = try await toolProvider.callTool(toolName, arguments: arguments)
+            let wrappedResult = metadata?.wrapOutputIfNeeded(result) ?? result
 
             var content: [String: Any]
             var resultPayload: [String: AnyCodable] = [
@@ -324,7 +327,7 @@ public extension MCPServer {
             ]
 
             let expectsToolResult: Bool = {
-                guard let returnType = mcpToolMetadata(for: toolName)?.returnType else {
+                guard let returnType = metadata?.returnType else {
                     return false
                 }
                 return returnType is MCPText.Type
@@ -341,45 +344,45 @@ public extension MCPServer {
                     || returnType is [any MCPResourceContent].Type
             }()
 
-            if let content = result as? MCPText {
+            if let content = wrappedResult as? MCPText {
                 resultPayload["content"] = AnyCodable([content])
                 return JSONRPCMessage.response(id: request.id, result: resultPayload)
-            } else if let content = result as? MCPImage {
+            } else if let content = wrappedResult as? MCPImage {
                 resultPayload["content"] = AnyCodable([content])
                 return JSONRPCMessage.response(id: request.id, result: resultPayload)
-            } else if let content = result as? MCPAudio {
+            } else if let content = wrappedResult as? MCPAudio {
                 resultPayload["content"] = AnyCodable([content])
                 return JSONRPCMessage.response(id: request.id, result: resultPayload)
-            } else if let content = result as? MCPResourceLink {
+            } else if let content = wrappedResult as? MCPResourceLink {
                 resultPayload["content"] = AnyCodable([content])
                 return JSONRPCMessage.response(id: request.id, result: resultPayload)
-            } else if let content = result as? MCPEmbeddedResource {
+            } else if let content = wrappedResult as? MCPEmbeddedResource {
                 resultPayload["content"] = AnyCodable([content])
                 return JSONRPCMessage.response(id: request.id, result: resultPayload)
-            } else if let contents = result as? [MCPText],
+            } else if let contents = wrappedResult as? [MCPText],
                       (expectsToolResult || !contents.isEmpty) {
                 resultPayload["content"] = AnyCodable(contents)
                 return JSONRPCMessage.response(id: request.id, result: resultPayload)
-            } else if let contents = result as? [MCPImage],
+            } else if let contents = wrappedResult as? [MCPImage],
                       (expectsToolResult || !contents.isEmpty) {
                 resultPayload["content"] = AnyCodable(contents)
                 return JSONRPCMessage.response(id: request.id, result: resultPayload)
-            } else if let contents = result as? [MCPAudio],
+            } else if let contents = wrappedResult as? [MCPAudio],
                       (expectsToolResult || !contents.isEmpty) {
                 resultPayload["content"] = AnyCodable(contents)
                 return JSONRPCMessage.response(id: request.id, result: resultPayload)
-            } else if let contents = result as? [MCPResourceLink],
+            } else if let contents = wrappedResult as? [MCPResourceLink],
                       (expectsToolResult || !contents.isEmpty) {
                 resultPayload["content"] = AnyCodable(contents)
                 return JSONRPCMessage.response(id: request.id, result: resultPayload)
-            } else if let contents = result as? [MCPEmbeddedResource],
+            } else if let contents = wrappedResult as? [MCPEmbeddedResource],
                       (expectsToolResult || !contents.isEmpty) {
                 resultPayload["content"] = AnyCodable(contents)
                 return JSONRPCMessage.response(id: request.id, result: resultPayload)
-            } else if let resource = result as? MCPResourceContent {
+            } else if let resource = wrappedResult as? MCPResourceContent {
                 resultPayload["content"] = AnyCodable([MCPEmbeddedResource(resource: resource)])
                 return JSONRPCMessage.response(id: request.id, result: resultPayload)
-            } else if let resources = result as? [MCPResourceContent],
+            } else if let resources = wrappedResult as? [MCPResourceContent],
                       (expectsToolResult || !resources.isEmpty) {
                 let contents = resources.map { MCPEmbeddedResource(resource: $0) }
                 resultPayload["content"] = AnyCodable(contents)
@@ -392,7 +395,7 @@ public extension MCPServer {
                 encoder.nonConformingFloatEncodingStrategy = .convertToString(positiveInfinity: "Infinity", negativeInfinity: "-Infinity", nan: "NaN")
                 encoder.outputFormatting = [.sortedKeys]
 
-                let jsonData = try encoder.encode(result)
+                let jsonData = try encoder.encode(wrappedResult)
                 let responseText = String(data: jsonData, encoding: .utf8) ?? ""
 
                 content = [
@@ -400,7 +403,7 @@ public extension MCPServer {
                     "text": responseText.removingQuotes
                 ]
 
-                if let structuredObject = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
+                if let structuredObject = try? DictionaryEncoder().encode(wrappedResult) {
                     resultPayload["structuredContent"] = AnyCodable(structuredObject)
                 }
             }

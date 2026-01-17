@@ -27,7 +27,8 @@ public struct MCPAppIntentToolMacro: MemberMacro, ExtensionMacro {
 
         let documentation = Documentation(from: declaration.leadingTrivia.description)
 
-        var descriptionArg = "nil"
+        var descriptionOverrideArg = "nil"
+        var docDescriptionArg = "nil"
         var isConsequentialArg = "true"
 
         if let arguments = node.arguments?.as(LabeledExprListSyntax.self) {
@@ -35,7 +36,7 @@ public struct MCPAppIntentToolMacro: MemberMacro, ExtensionMacro {
                 if argument.label?.text == "description",
                    let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
                     let stringValue = stringLiteral.segments.description
-                    descriptionArg = "\"\(stringValue.escapedForSwiftString)\""
+                    descriptionOverrideArg = "\"\(stringValue.escapedForSwiftString)\""
                 } else if argument.label?.text == "isConsequential",
                           let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
                     isConsequentialArg = boolLiteral.literal.text
@@ -43,25 +44,33 @@ public struct MCPAppIntentToolMacro: MemberMacro, ExtensionMacro {
             }
         }
 
-        if descriptionArg == "nil", !documentation.description.isEmpty {
-            descriptionArg = "\"\(documentation.description.escapedForSwiftString)\""
+        if !documentation.description.isEmpty {
+            docDescriptionArg = "\"\(documentation.description.escapedForSwiftString)\""
         }
 
         let parameters = appIntentParameters(from: declaration)
         let parameterInfoStrings = parameters.map { $0.toMCPParameterInfo() }
 
+        let returnValueType = appIntentReturnValueType(from: declaration)
+        let returnTypeExpression = returnValueType == nil ? "Void.self" : "\(returnValueType!).self"
+
         let metadataDeclaration = """
 /// Metadata for the \(typeName) tool
-public static let mcpToolMetadata = MCPToolMetadata(
-   name: "\(typeName)",
-   description: \(descriptionArg),
-   parameters: [\(parameterInfoStrings.joined(separator: ", "))],
-   returnType: Void.self,
-   returnTypeDescription: nil,
-   isAsync: true,
-   isThrowing: true,
-   isConsequential: \(isConsequentialArg)
-)
+public static let mcpToolMetadata: MCPToolMetadata = {
+   let descriptionOverride: String? = \(descriptionOverrideArg)
+   let docDescription: String? = \(docDescriptionArg)
+   let resolvedDescription = descriptionOverride ?? MCPAppIntentTools.descriptionText(for: Self.self) ?? docDescription
+   return MCPToolMetadata(
+      name: "\(typeName)",
+      description: resolvedDescription,
+      parameters: [\(parameterInfoStrings.joined(separator: ", "))],
+      returnType: \(returnTypeExpression),
+      returnTypeDescription: nil,
+      isAsync: true,
+      isThrowing: true,
+      isConsequential: \(isConsequentialArg)
+   )
+}()
 """
 
         var performMethod = """
@@ -78,12 +87,24 @@ public static func mcpPerform(arguments: [String: Sendable]) async throws -> (En
 """
         }
 
-        performMethod += """
+        if returnValueType == nil {
+            performMethod += """
 
    _ = try await intent.perform()
    return ""
 }
 """
+        } else {
+            performMethod += """
+
+   let result = try await intent.perform()
+   if let value: \(returnValueType!) = MCPAppIntentTools.extractReturnValue(from: result, as: \(returnValueType!).self) {
+      return value
+   }
+   return ""
+}
+"""
+        }
 
         return [
             DeclSyntax(stringLiteral: metadataDeclaration),
@@ -218,6 +239,58 @@ public static func mcpPerform(arguments: [String: Sendable]) async throws -> (En
         }
 
         return parameters
+    }
+
+    private static func appIntentReturnValueType(from declaration: some DeclGroupSyntax) -> String? {
+        let functionDecls = declaration.memberBlock.members.compactMap { $0.decl.as(FunctionDeclSyntax.self) }
+        guard let performDecl = functionDecls.first(where: { $0.name.text == "perform" }) else { return nil }
+        guard let returnType = performDecl.signature.returnClause?.type else { return nil }
+        return returnsValueTypeName(from: returnType)
+    }
+
+    private static func returnsValueTypeName(from returnType: TypeSyntax) -> String? {
+        let raw = returnType.description
+        return extractGenericArgument(named: "ReturnsValue", from: raw)
+    }
+
+    private static func extractGenericArgument(named name: String, from raw: String) -> String? {
+        guard let nameRange = raw.range(of: name) else { return nil }
+        var index = nameRange.upperBound
+
+        while index < raw.endIndex, raw[index].isWhitespace {
+            index = raw.index(after: index)
+        }
+
+        if index == raw.endIndex {
+            return nil
+        }
+
+        if raw[index] != "<" {
+            guard let next = raw[index...].firstIndex(of: "<") else { return nil }
+            index = next
+        }
+
+        guard raw[index] == "<" else { return nil }
+
+        let start = raw.index(after: index)
+        var depth = 1
+        var current = start
+
+        while current < raw.endIndex {
+            let char = raw[current]
+            if char == "<" {
+                depth += 1
+            } else if char == ">" {
+                depth -= 1
+                if depth == 0 {
+                    let content = raw[start..<current]
+                    return content.trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+            }
+            current = raw.index(after: current)
+        }
+
+        return nil
     }
 
     private static func parameterTitle(from attribute: AttributeSyntax) -> String? {
