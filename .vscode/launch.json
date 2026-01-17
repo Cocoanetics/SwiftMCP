@@ -79,6 +79,26 @@
             "target": "SwiftMCPIntentsApp",
             "configuration": "release",
             "preLaunchTask": "swift: Build Release SwiftMCPIntentsApp"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:SwiftMCP}",
+            "name": "Debug SwiftMCPIntentsDemo",
+            "target": "SwiftMCPIntentsDemo",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug SwiftMCPIntentsDemo"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:SwiftMCP}",
+            "name": "Release SwiftMCPIntentsDemo",
+            "target": "SwiftMCPIntentsDemo",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release SwiftMCPIntentsDemo"
         }
     ]
 }
