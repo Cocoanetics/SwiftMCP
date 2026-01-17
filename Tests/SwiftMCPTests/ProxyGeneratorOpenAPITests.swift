@@ -92,6 +92,36 @@ struct ProxyGeneratorOpenAPITests {
         #expect(source.contains("public func getUserContext() async throws -> Date"))
         #expect(source.contains("MCPClientResultDecoder.decode(Date.self"))
     }
+
+    @Test("Object with single array key returns array type directly")
+    func objectWithSingleArrayKeyReturnsArrayType() throws {
+        let tool = MCPTool(name: "getItems", description: nil, inputSchema: .object(.init(properties: [:], required: [])))
+        let responseSchema = JSONSchema.object(.init(
+            properties: [
+                "items": .array(
+                    items: .string(title: nil, description: "Item name", format: nil, minLength: nil, maxLength: nil),
+                    title: nil,
+                    description: "List of items",
+                    defaultValue: nil
+                )
+            ],
+            required: [],
+            description: "Items response"
+        ))
+
+        let returnInfo = OpenAPIReturnInfo(typeName: "String", schema: responseSchema, description: "A list of items")
+        let source = ProxyGenerator.generate(
+            typeName: "ItemsProxy",
+            tools: [tool],
+            openapiReturnSchemas: ["getItems": returnInfo]
+        ).description
+
+        // Should return array type directly, not a wrapper struct
+        #expect(source.contains("public func getItems() async throws -> [String]"))
+        #expect(source.contains("MCPClientResultDecoder.decode([String].self"))
+        // Should NOT create a wrapper struct
+        #expect(!source.contains("public struct GetItemsResponse"))
+    }
 }
 
 extension Tag {

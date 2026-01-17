@@ -766,6 +766,13 @@ private final class OpenAPITypeRegistry {
             ensureEnum(name: enumName, values: values, description: description)
             return enumName
         case .object(let object, _):
+            // If the object has only one key and it's an array, return the array type directly
+            if object.properties.count == 1,
+               let (_, arraySchema) = object.properties.first,
+               case .array(let items, _, _, _) = arraySchema {
+                let itemType = swiftType(for: items, suggestedName: "\(suggestedName)Item")
+                return "[\(itemType)]"
+            }
             if let knownType = knownSwiftMCPType(for: object) {
                 return knownType
             }
