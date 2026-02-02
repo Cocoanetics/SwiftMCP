@@ -33,7 +33,8 @@ extension Array where Element == MCPToolMetadata {
                 name: meta.name,
                 description: meta.description,
                 inputSchema: inputSchema,
-                outputSchema: outputSchema
+                outputSchema: outputSchema,
+                annotations: meta.annotations
             )
         }
     }

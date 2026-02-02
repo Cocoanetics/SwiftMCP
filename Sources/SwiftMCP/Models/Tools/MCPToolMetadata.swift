@@ -15,9 +15,12 @@ public struct MCPToolMetadata: Sendable {
     /// Whether the function's actions are consequential (defaults to true)
     public let isConsequential: Bool
 
+    /// Optional annotations providing hints about tool behavior (per MCP spec)
+    public let annotations: MCPToolAnnotations?
+
 /**
      Creates a new MCPToolMetadata instance.
-     
+
      - Parameters:
        - name: The name of the function
        - description: A description of the function's purpose
@@ -27,6 +30,7 @@ public struct MCPToolMetadata: Sendable {
        - isAsync: Whether the function is asynchronous
        - isThrowing: Whether the function can throw errors
        - isConsequential: Whether the function's actions are consequential
+       - annotations: Optional hints about tool behavior
      */
     public init(
         name: String,
@@ -36,7 +40,8 @@ public struct MCPToolMetadata: Sendable {
         returnTypeDescription: String? = nil,
         isAsync: Bool = false,
         isThrowing: Bool = false,
-        isConsequential: Bool = true
+        isConsequential: Bool = true,
+        annotations: MCPToolAnnotations? = nil
     ) {
         self.functionMetadata = MCPFunctionMetadata(
             name: name,
@@ -48,6 +53,7 @@ public struct MCPToolMetadata: Sendable {
             isThrowing: isThrowing
         )
         self.isConsequential = isConsequential
+        self.annotations = annotations
     }
 
     // Convenience accessors for common properties

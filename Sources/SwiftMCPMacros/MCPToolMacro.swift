@@ -85,6 +85,12 @@ public struct MCPToolMacro: PeerMacro {
         var descriptionArg = "nil"
         var isConsequentialArg = "true"  // Default to true
 
+        // Annotation hint arguments (nil by default)
+        var readOnlyHintArg: String? = nil
+        var destructiveHintArg: String? = nil
+        var idempotentHintArg: String? = nil
+        var openWorldHintArg: String? = nil
+
         if let arguments = node.arguments?.as(LabeledExprListSyntax.self) {
             for argument in arguments {
                 if argument.label?.text == "description", let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
@@ -92,6 +98,14 @@ public struct MCPToolMacro: PeerMacro {
                     descriptionArg = "\"\(stringValue.escapedForSwiftString)\"" // Ensure proper escaping
                 } else if argument.label?.text == "isConsequential", let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
                     isConsequentialArg = boolLiteral.literal.text
+                } else if argument.label?.text == "readOnlyHint", let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
+                    readOnlyHintArg = boolLiteral.literal.text
+                } else if argument.label?.text == "destructiveHint", let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
+                    destructiveHintArg = boolLiteral.literal.text
+                } else if argument.label?.text == "idempotentHint", let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
+                    idempotentHintArg = boolLiteral.literal.text
+                } else if argument.label?.text == "openWorldHint", let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
+                    openWorldHintArg = boolLiteral.literal.text
                 }
             }
         }
@@ -122,6 +136,14 @@ public struct MCPToolMacro: PeerMacro {
         let returnTypeForBlock = returnTypeString // Assuming they are the same now, adjust if MCPTool had specific logic
         let returnDescriptionString = commonMetadata.returnDescription ?? "nil"
 
+        // Build annotations argument string
+        let annotationsArg = buildAnnotationsArg(
+            readOnlyHint: readOnlyHintArg,
+            destructiveHint: destructiveHintArg,
+            idempotentHint: idempotentHintArg,
+            openWorldHint: openWorldHintArg
+        )
+
         // Generate the metadata variable
         let metadataDeclaration = """
 /// Metadata for the \(functionName) tool
@@ -133,7 +155,8 @@ nonisolated private let __mcpMetadata_\(functionName) = MCPToolMetadata(
    returnTypeDescription: \(returnDescriptionString),
    isAsync: \(commonMetadata.isAsync),
    isThrowing: \(commonMetadata.isThrowing),
-   isConsequential: \(isConsequentialArg)
+   isConsequential: \(isConsequentialArg),
+   annotations: \(annotationsArg)
 )
 """
 
@@ -183,6 +206,38 @@ nonisolated private let __mcpMetadata_\(functionName) = MCPToolMetadata(
 			DeclSyntax(stringLiteral: metadataDeclaration),
 			DeclSyntax(stringLiteral: wrapperFuncString)
 		]
+    }
+
+    /// Builds the annotations argument string for MCPToolMetadata initialization
+    /// Returns "nil" if all annotation hints are nil, otherwise returns a MCPToolAnnotations initialization
+    private static func buildAnnotationsArg(
+        readOnlyHint: String?,
+        destructiveHint: String?,
+        idempotentHint: String?,
+        openWorldHint: String?
+    ) -> String {
+        // If all hints are nil, return nil
+        if readOnlyHint == nil && destructiveHint == nil && idempotentHint == nil && openWorldHint == nil {
+            return "nil"
+        }
+
+        // Build the MCPToolAnnotations initialization with only the provided hints
+        var args: [String] = []
+
+        if let readOnlyHint = readOnlyHint {
+            args.append("readOnlyHint: \(readOnlyHint)")
+        }
+        if let destructiveHint = destructiveHint {
+            args.append("destructiveHint: \(destructiveHint)")
+        }
+        if let idempotentHint = idempotentHint {
+            args.append("idempotentHint: \(idempotentHint)")
+        }
+        if let openWorldHint = openWorldHint {
+            args.append("openWorldHint: \(openWorldHint)")
+        }
+
+        return "MCPToolAnnotations(\(args.joined(separator: ", ")))"
     }
 
 }

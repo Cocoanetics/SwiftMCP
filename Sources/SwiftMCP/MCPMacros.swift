@@ -15,7 +15,7 @@ import Foundation
  */
 
 /// A macro that automatically extracts parameter information from a function declaration.
-/// 
+///
 /// Apply this macro to functions that should be exposed to AI models.
 /// It will generate metadata about the function's parameters, return type, and description.
 ///
@@ -25,9 +25,32 @@ import Foundation
 /// func add(a: Int, b: Int) -> Int {
 ///     return a + b
 /// }
+///
+/// // With annotations for read-only tools
+/// @MCPTool(readOnlyHint: true)
+/// func search(query: String) -> [Result]
+///
+/// // With annotations for destructive tools
+/// @MCPTool(readOnlyHint: false, destructiveHint: true)
+/// func deleteItem(id: String) -> Bool
 /// ```
+///
+/// - Parameters:
+///   - description: Optional override for the function's documentation description
+///   - isConsequential: Whether the function's actions are consequential (defaults to true)
+///   - readOnlyHint: If true, the tool does not modify its environment
+///   - destructiveHint: If true (and readOnlyHint is false), tool may perform destructive updates
+///   - idempotentHint: If true, calling multiple times with same args has no additional effect
+///   - openWorldHint: If true, tool may interact with external entities
 @attached(peer, names: prefixed(__mcpMetadata_), prefixed(__mcpCall_))
-public macro MCPTool(description: String? = nil, isConsequential: Bool = true) = #externalMacro(module: "SwiftMCPMacros", type: "MCPToolMacro")
+public macro MCPTool(
+    description: String? = nil,
+    isConsequential: Bool = true,
+    readOnlyHint: Bool? = nil,
+    destructiveHint: Bool? = nil,
+    idempotentHint: Bool? = nil,
+    openWorldHint: Bool? = nil
+) = #externalMacro(module: "SwiftMCPMacros", type: "MCPToolMacro")
 
 /// A macro that exposes an AppIntent as an MCP tool.
 ///

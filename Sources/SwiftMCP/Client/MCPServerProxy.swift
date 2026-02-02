@@ -191,7 +191,15 @@ public final actor MCPServerProxy: Sendable {
                 outputSchema = nil
             }
 
-            return MCPTool(name: name, description: description, inputSchema: schema, outputSchema: outputSchema)
+            // Parse annotations if present
+            let annotations: MCPToolAnnotations?
+            if let annotationsData = toolData["annotations"] as? [String: Any] {
+                annotations = try JSONDecoder().decode(MCPToolAnnotations.self, from: JSONSerialization.data(withJSONObject: annotationsData))
+            } else {
+                annotations = nil
+            }
+
+            return MCPTool(name: name, description: description, inputSchema: schema, outputSchema: outputSchema, annotations: annotations)
         }
 
         if cacheToolsList {
