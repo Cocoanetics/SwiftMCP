@@ -26,25 +26,29 @@ import Foundation
 ///     return a + b
 /// }
 ///
-/// // With annotations for read-only tools
-/// @MCPTool(readOnlyHint: true)
+/// // With hints using OptionSet API (preferred)
+/// @MCPTool(hints: [.readOnly])
 /// func search(query: String) -> [Result]
 ///
-/// // With annotations for destructive tools
-/// @MCPTool(readOnlyHint: false, destructiveHint: true)
-/// func deleteItem(id: String) -> Bool
+/// @MCPTool(hints: [.destructive, .openWorld])
+/// func deleteAccount(id: String) -> Bool
+///
+/// @MCPTool(hints: [.idempotent])
+/// func updateSetting(key: String, value: String) -> Bool
 /// ```
 ///
 /// - Parameters:
 ///   - description: Optional override for the function's documentation description
-///   - isConsequential: Whether the function's actions are consequential (defaults to true)
-///   - readOnlyHint: If true, the tool does not modify its environment
-///   - destructiveHint: If true (and readOnlyHint is false), tool may perform destructive updates
-///   - idempotentHint: If true, calling multiple times with same args has no additional effect
-///   - openWorldHint: If true, tool may interact with external entities
+///   - hints: OptionSet of tool behavior hints (preferred API)
+///   - isConsequential: Whether the function's actions are consequential (defaults to true, deprecated - use hints instead)
+///   - readOnlyHint: If true, the tool does not modify its environment (deprecated - use hints: [.readOnly])
+///   - destructiveHint: If true (and readOnlyHint is false), tool may perform destructive updates (deprecated - use hints: [.destructive])
+///   - idempotentHint: If true, calling multiple times with same args has no additional effect (deprecated - use hints: [.idempotent])
+///   - openWorldHint: If true, tool may interact with external entities (deprecated - use hints: [.openWorld])
 @attached(peer, names: prefixed(__mcpMetadata_), prefixed(__mcpCall_))
 public macro MCPTool(
     description: String? = nil,
+    hints: MCPToolHints = [],
     isConsequential: Bool = true,
     readOnlyHint: Bool? = nil,
     destructiveHint: Bool? = nil,

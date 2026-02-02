@@ -85,7 +85,10 @@ public struct MCPToolMacro: PeerMacro {
         var descriptionArg = "nil"
         var isConsequentialArg = "true"  // Default to true
 
-        // Annotation hint arguments (nil by default)
+        // Hints from OptionSet API (preferred)
+        var hintsFromOptionSet: [String] = []
+
+        // Annotation hint arguments from legacy Bool? API (nil by default)
         var readOnlyHintArg: String? = nil
         var destructiveHintArg: String? = nil
         var idempotentHintArg: String? = nil
@@ -96,6 +99,14 @@ public struct MCPToolMacro: PeerMacro {
                 if argument.label?.text == "description", let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
                     let stringValue = stringLiteral.segments.description
                     descriptionArg = "\"\(stringValue.escapedForSwiftString)\"" // Ensure proper escaping
+                } else if argument.label?.text == "hints", let arrayExpr = argument.expression.as(ArrayExprSyntax.self) {
+                    // Parse hints array: [.readOnly, .destructive]
+                    for element in arrayExpr.elements {
+                        if let memberAccess = element.expression.as(MemberAccessExprSyntax.self) {
+                            let hintName = memberAccess.declName.baseName.text
+                            hintsFromOptionSet.append(".\(hintName)")
+                        }
+                    }
                 } else if argument.label?.text == "isConsequential", let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
                     isConsequentialArg = boolLiteral.literal.text
                 } else if argument.label?.text == "readOnlyHint", let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
@@ -138,6 +149,7 @@ public struct MCPToolMacro: PeerMacro {
 
         // Build annotations argument string
         let annotationsArg = buildAnnotationsArg(
+            hintsFromOptionSet: hintsFromOptionSet,
             readOnlyHint: readOnlyHintArg,
             destructiveHint: destructiveHintArg,
             idempotentHint: idempotentHintArg,
@@ -209,35 +221,40 @@ nonisolated private let __mcpMetadata_\(functionName) = MCPToolMetadata(
     }
 
     /// Builds the annotations argument string for MCPToolMetadata initialization
-    /// Returns "nil" if all annotation hints are nil, otherwise returns a MCPToolAnnotations initialization
+    /// Returns "nil" if no hints are provided, otherwise returns a MCPToolAnnotations initialization
+    /// Supports both the new OptionSet API (hints: [.readOnly]) and legacy Bool? parameters
     private static func buildAnnotationsArg(
+        hintsFromOptionSet: [String],
         readOnlyHint: String?,
         destructiveHint: String?,
         idempotentHint: String?,
         openWorldHint: String?
     ) -> String {
-        // If all hints are nil, return nil
-        if readOnlyHint == nil && destructiveHint == nil && idempotentHint == nil && openWorldHint == nil {
+        // Collect all hints - start with OptionSet hints
+        var allHints = Set(hintsFromOptionSet)
+
+        // Add hints from legacy Bool? parameters (merge with OptionSet hints)
+        if readOnlyHint == "true" {
+            allHints.insert(".readOnly")
+        }
+        if destructiveHint == "true" {
+            allHints.insert(".destructive")
+        }
+        if idempotentHint == "true" {
+            allHints.insert(".idempotent")
+        }
+        if openWorldHint == "true" {
+            allHints.insert(".openWorld")
+        }
+
+        // If no hints, return nil
+        if allHints.isEmpty {
             return "nil"
         }
 
-        // Build the MCPToolAnnotations initialization with only the provided hints
-        var args: [String] = []
-
-        if let readOnlyHint = readOnlyHint {
-            args.append("readOnlyHint: \(readOnlyHint)")
-        }
-        if let destructiveHint = destructiveHint {
-            args.append("destructiveHint: \(destructiveHint)")
-        }
-        if let idempotentHint = idempotentHint {
-            args.append("idempotentHint: \(idempotentHint)")
-        }
-        if let openWorldHint = openWorldHint {
-            args.append("openWorldHint: \(openWorldHint)")
-        }
-
-        return "MCPToolAnnotations(\(args.joined(separator: ", ")))"
+        // Sort for consistent output and build the MCPToolAnnotations initialization
+        let sortedHints = allHints.sorted()
+        return "MCPToolAnnotations(hints: [\(sortedHints.joined(separator: ", "))])"
     }
 
 }

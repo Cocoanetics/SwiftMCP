@@ -217,7 +217,7 @@ struct OpenAPISpec: Codable {
                         ]
                     ),
                     responses: responses,
-                    isConsequential: metadata.isConsequential
+                    isConsequential: metadata.computedIsConsequential
                 )
             )
 
