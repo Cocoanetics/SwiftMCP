@@ -15,7 +15,7 @@ import Foundation
  */
 
 /// A macro that automatically extracts parameter information from a function declaration.
-/// 
+///
 /// Apply this macro to functions that should be exposed to AI models.
 /// It will generate metadata about the function's parameters, return type, and description.
 ///
@@ -25,9 +25,36 @@ import Foundation
 /// func add(a: Int, b: Int) -> Int {
 ///     return a + b
 /// }
+///
+/// // With hints using OptionSet API (preferred)
+/// @MCPTool(hints: [.readOnly])
+/// func search(query: String) -> [Result]
+///
+/// @MCPTool(hints: [.destructive, .openWorld])
+/// func deleteAccount(id: String) -> Bool
+///
+/// @MCPTool(hints: [.idempotent])
+/// func updateSetting(key: String, value: String) -> Bool
 /// ```
+///
+/// - Parameters:
+///   - description: Optional override for the function's documentation description
+///   - hints: OptionSet of tool behavior hints (preferred API)
+///   - isConsequential: Whether the function's actions are consequential (defaults to true, deprecated - use hints instead)
+///   - readOnlyHint: If true, the tool does not modify its environment (deprecated - use hints: [.readOnly])
+///   - destructiveHint: If true (and readOnlyHint is false), tool may perform destructive updates (deprecated - use hints: [.destructive])
+///   - idempotentHint: If true, calling multiple times with same args has no additional effect (deprecated - use hints: [.idempotent])
+///   - openWorldHint: If true, tool may interact with external entities (deprecated - use hints: [.openWorld])
 @attached(peer, names: prefixed(__mcpMetadata_), prefixed(__mcpCall_))
-public macro MCPTool(description: String? = nil, isConsequential: Bool = true) = #externalMacro(module: "SwiftMCPMacros", type: "MCPToolMacro")
+public macro MCPTool(
+    description: String? = nil,
+    hints: MCPToolHints = [],
+    isConsequential: Bool = true,
+    readOnlyHint: Bool? = nil,
+    destructiveHint: Bool? = nil,
+    idempotentHint: Bool? = nil,
+    openWorldHint: Bool? = nil
+) = #externalMacro(module: "SwiftMCPMacros", type: "MCPToolMacro")
 
 /// A macro that exposes an AppIntent as an MCP tool.
 ///
