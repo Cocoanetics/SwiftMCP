@@ -123,6 +123,7 @@ struct ListRecentSoupOrdersIntent: AppIntent {
 @available(iOS 16.0, macOS 13.0, tvOS 16.0, watchOS 9.0, *)
 @MCPServer(name: "Intents Demo", version: "0.1")
 actor IntentsDemoServer: AppShortcutsProvider {
+    @AppShortcutsBuilder
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
             intent: OrderSoupIntent(),

@@ -53,7 +53,39 @@ import SwiftDiagnostics
  - Attention: This macro can only be applied to reference types (classes or actors).
              Using it on a struct will result in a diagnostic with a fix-it to convert to a class.
  */
-public struct MCPServerMacro: MemberMacro, ExtensionMacro {
+public struct MCPServerMacro: MemberMacro, ExtensionMacro, MemberAttributeMacro {
+    public static func expansion(
+        of node: AttributeSyntax,
+        attachedTo declaration: some DeclGroupSyntax,
+        providingAttributesFor member: some DeclSyntaxProtocol,
+        in context: some MacroExpansionContext
+    ) throws -> [AttributeSyntax] {
+        _ = node
+        _ = context
+
+        let inheritedTypes = declaration.inheritanceClause?.inheritedTypes ?? []
+        let hasAppShortcutsProvider = inheritedTypes.contains { type in
+            let name = type.type.trimmedDescription
+            return name == "AppShortcutsProvider" || name.hasSuffix(".AppShortcutsProvider")
+        }
+        guard hasAppShortcutsProvider else { return [] }
+
+        guard let varDecl = member.as(VariableDeclSyntax.self) else { return [] }
+        guard varDecl.bindings.count == 1, let binding = varDecl.bindings.first else { return [] }
+        guard let identifierPattern = binding.pattern.as(IdentifierPatternSyntax.self) else { return [] }
+        guard identifierPattern.identifier.text == "appShortcuts" else { return [] }
+
+        let alreadyHasBuilder = varDecl.attributes.contains { attribute in
+            guard let attributeSyntax = attribute.as(AttributeSyntax.self) else { return false }
+            let name = attributeSyntax.attributeName.trimmedDescription
+            return name == "AppShortcutsBuilder" || name.hasSuffix(".AppShortcutsBuilder")
+        }
+        guard !alreadyHasBuilder else { return [] }
+
+        return [
+            AttributeSyntax(attributeName: IdentifierTypeSyntax(name: .identifier("AppShortcutsBuilder")))
+        ]
+    }
 /**
 	 Expands the macro to provide additional members for the declaration.
 	 
