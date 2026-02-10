@@ -740,7 +740,12 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
 
         let signature = metadata.parameters.map { parameterSignature($0) }.joined(separator: ", ")
         let effectSpecifiers = effectSpecifiersString(isAsync: metadata.isAsync, throwsKeyword: metadata.throwsKeyword)
-        let returnClause = metadata.hasReturnClause ? " -> \(metadata.returnTypeString)" : ""
+
+        // Use .MCPClientReturn for all return types. For most types this resolves to Self
+        // (via extension Decodable). For @Schema single-array wrapper structs it resolves
+        // to [Element], so the generated proxy returns the unwrapped array automatically.
+        let clientReturnType = metadata.hasReturnClause ? "\(metadata.returnTypeString).MCPClientReturn" : nil
+        let returnClause = clientReturnType.map { " -> \($0)" } ?? ""
 
         lines.append("    public func \(metadata.name)(\(signature))\(effectSpecifiers)\(returnClause) {")
 
@@ -770,7 +775,9 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
         )
         lines.append("        let text = \(callExpression)")
 
-        if metadata.hasReturnClause {
+        if metadata.hasReturnClause, let clientReturnType {
+            lines.append("        return try MCPClientResultDecoder.decode(\(clientReturnType).self, from: text)")
+        } else if metadata.hasReturnClause {
             lines.append("        return try MCPClientResultDecoder.decode(\(metadata.returnTypeString).self, from: text)")
         } else {
             lines.append("        _ = try MCPClientResultDecoder.decode(Void.self, from: text)")

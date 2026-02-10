@@ -125,7 +125,21 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
         public static let schemaMetadata = SchemaMetadata(name: "\(structName)", description: \(documentation.description.isEmpty ? "nil" : "\"\(documentation.description.escapedForSwiftString)\""), parameters: [\(propertyString)])
         """
 
-        return [DeclSyntax(stringLiteral: registrationDecl)]
+        var declarations = [DeclSyntax(stringLiteral: registrationDecl)]
+
+        // Generate MCPClientReturn typealias for the proxy generator.
+        // Single-array wrapper structs (exactly one stored property that is an array)
+        // resolve to [Element], allowing the generated proxy to return the unwrapped
+        // array type. All other structs resolve to Self (identity).
+        if propertyInfos.count == 1,
+           let onlyProp = propertyInfos.first,
+           let elementType = Self.arrayElementType(from: onlyProp.type.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            declarations.append(DeclSyntax(stringLiteral: "public typealias MCPClientReturn = [\(elementType)]"))
+        } else {
+            declarations.append(DeclSyntax(stringLiteral: "public typealias MCPClientReturn = \(structName)"))
+        }
+
+        return declarations
     }
 
     public static func expansion(
@@ -218,6 +232,30 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
         }
 
         return true
+    }
+
+    /// Extracts the element type from an array type string, or returns nil if not an array.
+    /// Handles `[Foo]` and `Array<Foo>` syntax. Returns nil for optional arrays like `[Foo]?`.
+    private static func arrayElementType(from typeString: String) -> String? {
+        // Exclude optional types
+        if typeString.hasSuffix("?") || typeString.hasSuffix("!") {
+            return nil
+        }
+
+        if typeString.hasPrefix("[") && typeString.hasSuffix("]") {
+            let inner = typeString.dropFirst().dropLast()
+            let trimmed = inner.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+
+        if typeString.hasPrefix("Array<") && typeString.hasSuffix(">") {
+            let start = typeString.index(typeString.startIndex, offsetBy: 6)
+            let end = typeString.index(before: typeString.endIndex)
+            let trimmed = typeString[start..<end].trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+
+        return nil
     }
 
     /// Gets the raw value from CodingKeys enum for a given property name

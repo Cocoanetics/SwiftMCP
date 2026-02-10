@@ -128,12 +128,15 @@ public enum MCPClientResultDecoder {
         do {
             return try decoder.decode(T.self, from: data)
         } catch let firstError {
-            // The server wraps arrays of objects in {"items":[...]} via MCPArrayOutputWrapper.
-            // Transparently unwrap the "items" key so callers can decode [Element] directly.
+            // The server may wrap array results in a single-key object:
+            //  - MCPArrayOutputWrapper produces {"items":[...]}
+            //  - @Schema wrapper structs produce {"someProperty":[...]}
+            // Transparently unwrap when the JSON is an object with exactly one key.
             if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let items = object["items"] {
-                let itemsData = try JSONSerialization.data(withJSONObject: items, options: [.sortedKeys])
-                if let result = try? decoder.decode(T.self, from: itemsData) {
+               object.count == 1,
+               let singleValue = object.values.first {
+                let singleData = try JSONSerialization.data(withJSONObject: singleValue, options: [.sortedKeys])
+                if let result = try? decoder.decode(T.self, from: singleData) {
                     return result
                 }
             }

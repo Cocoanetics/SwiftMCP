@@ -113,7 +113,7 @@ public macro MCPServer(
 ///     let phone: String?
 /// }
 /// ```
-@attached(member, names: named(schemaMetadata))
+@attached(member, names: named(schemaMetadata), named(MCPClientReturn))
 @attached(extension, conformances: SchemaRepresentable)
 public macro Schema() = #externalMacro(module: "SwiftMCPMacros", type: "SchemaMacro")
 
