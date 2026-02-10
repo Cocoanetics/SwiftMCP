@@ -127,10 +127,25 @@ public enum MCPClientResultDecoder {
         let data = Data(text.utf8)
         do {
             return try decoder.decode(T.self, from: data)
-        } catch {
+        } catch let firstError {
+            // The server wraps arrays of objects in {"items":[...]} via MCPArrayOutputWrapper.
+            // Transparently unwrap the "items" key so callers can decode [Element] directly.
+            if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let items = object["items"] {
+                let itemsData = try JSONSerialization.data(withJSONObject: items, options: [.sortedKeys])
+                if let result = try? decoder.decode(T.self, from: itemsData) {
+                    return result
+                }
+            }
+
+            // Fallback: try wrapping the text in quotes (for plain string values)
             let quoted = "\"\(text)\""
             let quotedData = Data(quoted.utf8)
-            return try decoder.decode(T.self, from: quotedData)
+            do {
+                return try decoder.decode(T.self, from: quotedData)
+            } catch {
+                throw firstError
+            }
         }
     }
 
