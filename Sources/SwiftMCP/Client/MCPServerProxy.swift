@@ -27,6 +27,8 @@ public final actor MCPServerProxy: Sendable {
     }
 
     private var responseTasks: [JSONRPCID: CheckedContinuation<JSONRPCMessage, Error>] = [:]
+    private var streamFailure: Error?
+    private var isDisconnecting = false
 
     public private(set) var endpointURL: URL?
     private var streamTask: Task<Void, Error>?
@@ -55,6 +57,9 @@ public final actor MCPServerProxy: Sendable {
 
     /// Connects to the MCP server and establishes an SSE, TCP, or stdio connection.
     public func connect() async throws {
+        isDisconnecting = false
+        streamFailure = nil
+
         switch config {
             case .stdio(let stdioConfig):
                 lineConnection = MCPServerProcess(config: stdioConfig)
@@ -114,9 +119,16 @@ public final actor MCPServerProxy: Sendable {
                             for try await message in asyncBytes.lines.sseMessages() {
                                 processIncomingMessage(event: message.event, data: message.data)
                             }
+                            self.handleStreamTermination(
+                                MCPServerProxyError.communicationError(
+                                    "SSE stream closed by server before response was received"
+                                )
+                            )
+                        } catch is CancellationError {
+                            // Pending requests are cancelled in disconnect().
                         } catch {
                             logger.error("[MCP DEBUG] SSE stream error: \(error)")
-                            endpointContinuation?.resume(throwing: error)
+                            self.handleStreamTermination(error)
                         }
                     }
 
@@ -144,6 +156,18 @@ public final actor MCPServerProxy: Sendable {
 
     /// Disconnects from the MCP server.
     public func disconnect() async {
+        isDisconnecting = true
+        let disconnectError = CancellationError()
+        streamFailure = disconnectError
+        failPendingResponseTasks(with: disconnectError)
+        if let endpointContinuation {
+            self.endpointContinuation = nil
+            endpointContinuation.resume(throwing: disconnectError)
+        }
+
+        streamTask?.cancel()
+        streamTask = nil
+
         switch config {
         case .stdio, .stdioHandles, .tcp:
             await lineConnection?.stop()
@@ -151,7 +175,6 @@ public final actor MCPServerProxy: Sendable {
         case .sse:
             break
         }
-        streamTask?.cancel()
     }
 
     /// Lists all available tools from the server.
@@ -285,15 +308,31 @@ public final actor MCPServerProxy: Sendable {
             guard let lineConnection else {
                 throw MCPServerProxyError.communicationError("Not connected to line-based server")
             }
+
+            if let streamFailure {
+                throw streamFailure
+            }
+
             await lineConnection.write(messageWithNewline)
 
+            if let streamFailure {
+                throw streamFailure
+            }
+
             return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<JSONRPCMessage, Error>) in
-                responseTasks[messageId] = continuation
+                if let streamFailure {
+                    continuation.resume(throwing: streamFailure)
+                } else {
+                    responseTasks[messageId] = continuation
+                }
             }
 
         case .sse:
             guard let endpointURL = endpointURL else {
                 throw MCPServerProxyError.communicationError("Not connected to server")
+            }
+            if let streamFailure {
+                throw streamFailure
             }
             guard let messageId = messageId else {
                 throw MCPServerProxyError.communicationError("Message must have an ID")
@@ -308,6 +347,11 @@ public final actor MCPServerProxy: Sendable {
             urlRequest.httpBody = data
 
             return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<JSONRPCMessage, Error>) in
+                if let streamFailure {
+                    continuation.resume(throwing: streamFailure)
+                    return
+                }
+
                 responseTasks[messageId] = continuation
 
                 Task {
@@ -350,13 +394,55 @@ public final actor MCPServerProxy: Sendable {
                 for try await data in lines {
                     processIncomingMessage(data: data)
                 }
+                self.handleStreamTermination(
+                    MCPServerProxyError.communicationError(
+                        "Connection closed by server before response was received"
+                    )
+                )
+            } catch is CancellationError {
+                // Pending requests are cancelled in disconnect().
             } catch {
                 logger.error("[MCP DEBUG] Stream error: \(error.localizedDescription)")
+                self.handleStreamTermination(error)
             }
         }
     }
 
     // MARK: - Internal
+
+    private func failPendingResponseTasks(with error: Error) {
+        let pending = responseTasks
+        responseTasks.removeAll()
+
+        for (_, continuation) in pending {
+            continuation.resume(throwing: error)
+        }
+    }
+
+    private func handleStreamTermination(_ error: Error) {
+        guard !isDisconnecting else {
+            return
+        }
+
+        let failure: Error
+        if let serverError = error as? MCPServerProxyError {
+            failure = serverError
+        } else {
+            failure = MCPServerProxyError.communicationError(error.localizedDescription)
+        }
+
+        if streamFailure == nil {
+            streamFailure = failure
+        }
+
+        let terminalError = streamFailure ?? failure
+        failPendingResponseTasks(with: terminalError)
+
+        if let endpointContinuation {
+            self.endpointContinuation = nil
+            endpointContinuation.resume(throwing: terminalError)
+        }
+    }
 
     private func initialize() async throws {
         let requestId = nextRequestID()

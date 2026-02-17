@@ -292,6 +292,7 @@ public func callTool(_ name: String, arguments: [String: Sendable]) async throws
         if !mcpTools.isEmpty || hasAppShortcutsProvider {
             let metadataArray = mcpTools.map { "__mcpMetadata_\($0)" }.joined(separator: ", ")
             let metadataSeed = mcpTools.isEmpty ? "[]" : "[\(metadataArray)]"
+            let metadataDeclaration = hasAppShortcutsProvider ? "var" : "let"
             let appShortcutsBlock: String
             if hasAppShortcutsProvider {
                 appShortcutsBlock = """
@@ -308,7 +309,7 @@ public func callTool(_ name: String, arguments: [String: Sendable]) async throws
             let metadataProperty = """
 /// Returns an array of all available tool metadata
 nonisolated public var mcpToolMetadata: [MCPToolMetadata] {
-   var metadata: [MCPToolMetadata] = \(metadataSeed)
+   \(metadataDeclaration) metadata: [MCPToolMetadata] = \(metadataSeed)
 \(appShortcutsBlock)
    return metadata
 }
