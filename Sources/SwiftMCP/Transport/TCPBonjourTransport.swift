@@ -154,15 +154,9 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
     }
 
     public func send(_ data: Data) async throws {
-        precondition(Session.current != nil)
-        let currentSession = Session.current!
-        let sameTransport: Bool
-        if let transport = await currentSession.transport {
-            sameTransport = transport === self
-        } else {
-            sameTransport = false
+        guard let currentSession = Session.current else {
+            throw TransportError.bindingFailed("No active session for send")
         }
-        precondition(sameTransport)
 
         guard let connection = await state.connection(for: currentSession.id) else {
             throw TransportError.bindingFailed("TCP connection unavailable for session \(currentSession.id)")
