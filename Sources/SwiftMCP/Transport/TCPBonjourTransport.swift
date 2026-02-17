@@ -59,12 +59,23 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
             }
         }
 
+        private var sessions: [UUID: Session] = [:]
+
         func addConnection(id: UUID, connection: NWConnection) {
             connections[id] = connection
         }
 
+        func addSession(id: UUID, session: Session) {
+            sessions[id] = session
+        }
+
         func removeConnection(id: UUID) {
             connections.removeValue(forKey: id)
+            sessions.removeValue(forKey: id)
+        }
+
+        func allSessions() -> [Session] {
+            Array(sessions.values)
         }
 
         func connection(for id: UUID) -> NWConnection? {
@@ -147,6 +158,13 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
         await state.stop()
     }
 
+    /// Broadcasts a log message to all connected sessions.
+    public func broadcastLog(_ message: LogMessage) async {
+        for session in await state.allSessions() {
+            await session.sendLogNotification(message)
+        }
+    }
+
     public func send(_ data: Data) async throws {
         precondition(Session.current != nil)
         let currentSession = Session.current!
@@ -224,6 +242,7 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
 
         Task {
             await state.addConnection(id: connectionID, connection: connection)
+            await state.addSession(id: connectionID, session: session)
         }
         connection.start(queue: queue)
         startReceiveLoop(connection: connection, session: session, connectionID: connectionID)
