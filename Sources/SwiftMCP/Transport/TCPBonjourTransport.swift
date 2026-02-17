@@ -22,6 +22,7 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
 
     private let queue = DispatchQueue(label: "com.cocoanetics.SwiftMCP.TCPBonjourTransport")
     private let state = TransportState()
+    internal lazy var sessionManager = SessionManager(transport: self)
 
     private actor TransportState {
         private(set) var isRunning: Bool = false
@@ -59,23 +60,12 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
             }
         }
 
-        private var sessions: [UUID: Session] = [:]
-
         func addConnection(id: UUID, connection: NWConnection) {
             connections[id] = connection
         }
 
-        func addSession(id: UUID, session: Session) {
-            sessions[id] = session
-        }
-
         func removeConnection(id: UUID) {
             connections.removeValue(forKey: id)
-            sessions.removeValue(forKey: id)
-        }
-
-        func allSessions() -> [Session] {
-            Array(sessions.values)
         }
 
         func connection(for id: UUID) -> NWConnection? {
@@ -160,9 +150,7 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
 
     /// Broadcasts a log message to all connected sessions.
     public func broadcastLog(_ message: LogMessage) async {
-        for session in await state.allSessions() {
-            await session.sendLogNotification(message)
-        }
+        await sessionManager.broadcastLog(message)
     }
 
     public func send(_ data: Data) async throws {
@@ -216,41 +204,38 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
 
     private func handleNewConnection(_ connection: NWConnection) {
         let connectionID = UUID()
-        let session = Session(id: connectionID)
-        Task {
-            await session.setTransport(self)
-        }
 
-        connection.stateUpdateHandler = { [weak self] state in
-            guard let self else { return }
-            switch state {
-            case .ready:
-                self.logger.info("TCP connection ready: \(connectionID)")
-            case .failed(let error):
-                self.logger.error("TCP connection failed (\(connectionID)): \(error)")
-                Task {
-                    await self.cleanupConnection(id: connectionID, session: session)
+        Task {
+            let session = await sessionManager.session(id: connectionID)
+
+            connection.stateUpdateHandler = { [weak self] state in
+                guard let self else { return }
+                switch state {
+                case .ready:
+                    self.logger.info("TCP connection ready: \(connectionID)")
+                case .failed(let error):
+                    self.logger.error("TCP connection failed (\(connectionID)): \(error)")
+                    Task {
+                        await self.cleanupConnection(id: connectionID)
+                    }
+                case .cancelled:
+                    Task {
+                        await self.cleanupConnection(id: connectionID)
+                    }
+                default:
+                    break
                 }
-            case .cancelled:
-                Task {
-                    await self.cleanupConnection(id: connectionID, session: session)
-                }
-            default:
-                break
             }
-        }
 
-        Task {
             await state.addConnection(id: connectionID, connection: connection)
-            await state.addSession(id: connectionID, session: session)
+            connection.start(queue: queue)
+            startReceiveLoop(connection: connection, session: session, connectionID: connectionID)
         }
-        connection.start(queue: queue)
-        startReceiveLoop(connection: connection, session: session, connectionID: connectionID)
     }
 
-    private func cleanupConnection(id: UUID, session: Session) async {
+    private func cleanupConnection(id: UUID) async {
         await state.removeConnection(id: id)
-        await session.cancelAllWaitingTasks()
+        await sessionManager.removeSession(id: id)
     }
 
     private func startReceiveLoop(connection: NWConnection, session: Session, connectionID: UUID) {
@@ -280,7 +265,7 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
             if let error {
                 self.logger.error("TCP receive error (\(connectionID)): \(error)")
                 Task {
-                    await self.cleanupConnection(id: connectionID, session: session)
+                    await self.cleanupConnection(id: connectionID)
                 }
                 return
             }
@@ -290,7 +275,7 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
                     if let remaining = await lineBuffer.getRemaining() {
                         await self.handleLine(remaining, session: session)
                     }
-                    await self.cleanupConnection(id: connectionID, session: session)
+                    await self.cleanupConnection(id: connectionID)
                 }
                 return
             }
