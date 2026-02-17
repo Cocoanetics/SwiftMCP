@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import Logging
 @testable import SwiftMCP
 
 /// A simple test server that implements logging
@@ -25,6 +26,29 @@ class TestLoggingServer: MCPLoggingProviding {
         await log(.info, "This is an info message", logger: "test")
         await log(.warning, "This is a warning message", logger: "test")
         await log(.error, "This is an error message", logger: "test")
+    }
+}
+
+/// Transport that records the active Session.current while sending.
+final class SessionContextRecordingTransport: Transport, @unchecked Sendable {
+    let server: MCPServer
+    var logger = Logger(label: "SessionContextRecordingTransport")
+    var sentMessages: [JSONRPCMessage] = []
+    var capturedSessionID: UUID?
+
+    init(server: MCPServer) {
+        self.server = server
+    }
+
+    func start() async throws {}
+    func run() async throws {}
+    func stop() async throws {}
+
+    func send(_ data: Data) async throws {
+        capturedSessionID = await Session.current?.id
+        if let message = try? JSONDecoder().decode(JSONRPCMessage.self, from: data) {
+            sentMessages.append(message)
+        }
     }
 }
 
@@ -105,4 +129,24 @@ func testLoggingServer() async throws {
     // Test with error level
     server.setMinimumLogLevel(.error)
     await server.testLogging()
-} 
+}
+
+@Test
+func testSendLogNotificationBindsSessionContext() async throws {
+    let server = TestLoggingServer()
+    let transport = SessionContextRecordingTransport(server: server)
+    let session = Session(id: UUID())
+    let expectedSessionID = await session.id
+    await session.setTransport(transport)
+
+    await session.sendLogNotification(LogMessage(level: .info, message: "hello", logger: "test"))
+
+    #expect(transport.sentMessages.count == 1)
+    #expect(transport.capturedSessionID == expectedSessionID)
+
+    if case let .notification(notificationData) = transport.sentMessages[0] {
+        #expect(notificationData.method == "notifications/message")
+    } else {
+        #expect(Bool(false))
+    }
+}
