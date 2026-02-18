@@ -24,6 +24,15 @@ jobs:
       - name: Build & Test (macOS)
         run: swift test
 
+  build-ios:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build (iOS)
+        run: xcodebuild -scheme SwiftMCP -destination 'generic/platform=iOS' build
+
   build-linux:
     runs-on: ubuntu-latest
 
@@ -35,4 +44,3 @@ jobs:
       
       - name: Build & Test (Linux)
         run: swift test
-
