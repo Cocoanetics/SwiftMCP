@@ -11,13 +11,22 @@ public final class RequestContext: @unchecked Sendable {
     public struct Meta: @unchecked Sendable {
         /// Optional progress token for sending progress notifications.
         public let progressToken: AnyCodable?
+        
+        /// Optional authentication token for authorization.
+        public let accessToken: String?
 
         init?(dictionary: [String: Any]) {
+            if dictionary.isEmpty {
+                return nil
+            }
+            
             if let token = dictionary["progressToken"] {
                 self.progressToken = AnyCodable(token)
             } else {
                 self.progressToken = nil
             }
+            
+            self.accessToken = dictionary["accessToken"] as? String
         }
     }
 

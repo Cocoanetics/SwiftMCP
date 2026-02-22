@@ -17,6 +17,9 @@ public final actor MCPServerProxy: Sendable {
 
     /// Specifies whether the list of tools from the server should be cached.
     public let cacheToolsList: Bool
+    
+    /// Base metadata included in _meta for ALL requests (e.g., accessToken).
+    public var meta: [String: AnyCodable] = [:]
 
     private var cachedTools: [MCPTool]?
     private var requestIdSequence: Int = 0
@@ -97,6 +100,11 @@ public final actor MCPServerProxy: Sendable {
 
                     for (key, value) in sseConfig.headers {
                         request.setValue(value, forHTTPHeaderField: key)
+                    }
+                    
+                    // Add Authorization header from meta if present
+                    if let accessToken = meta["accessToken"]?.value as? String {
+                        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
                     }
 
                     let (asyncBytes, response) = try await session.bytes(for: request)
@@ -244,9 +252,16 @@ public final actor MCPServerProxy: Sendable {
             "name": AnyCodable(name),
             "arguments": AnyCodable(encodableArguments)
         ]
+        
+        // Merge base meta with progressToken
+        var requestMeta = meta  // Start with base meta (e.g., accessToken)
         if let progressToken {
-            params["_meta"] = AnyCodable(["progressToken": progressToken])
+            requestMeta["progressToken"] = progressToken
         }
+        if !requestMeta.isEmpty {
+            params["_meta"] = AnyCodable(requestMeta)
+        }
+        
         let request = JSONRPCMessage.request(id: requestId, method: "tools/call", params: params)
         let responseMessage = try await send(request)
 
@@ -446,7 +461,7 @@ public final actor MCPServerProxy: Sendable {
 
     private func initialize() async throws {
         let requestId = nextRequestID()
-        let params: [String: AnyCodable] = [
+        var params: [String: AnyCodable] = [
             "protocolVersion": AnyCodable("2025-06-18"),
             "clientInfo": AnyCodable([
                 "name": "swiftmcp-client",
@@ -454,6 +469,12 @@ public final actor MCPServerProxy: Sendable {
             ]),
             "capabilities": AnyCodable([:])
         ]
+        
+        // Add base metadata if present
+        if !meta.isEmpty {
+            params["_meta"] = AnyCodable(meta)
+        }
+        
         let request = JSONRPCMessage.request(id: requestId, method: "initialize", params: params)
         let response = try await send(request)
 

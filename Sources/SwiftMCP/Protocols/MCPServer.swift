@@ -233,6 +233,13 @@ public extension MCPServer {
             }
         }
         
+        // Extract and store authentication metadata from _meta
+        if let meta = RequestContext.current?.meta {
+            if let accessToken = meta.accessToken {
+                await Session.current?.setAccessToken(accessToken)
+            }
+        }
+        
         return createInitializeResponse(id: request.id)
     }
 
