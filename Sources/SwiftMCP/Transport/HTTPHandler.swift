@@ -2,6 +2,7 @@ import Foundation
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
+import AnyCodable
 @preconcurrency import NIOCore
 import NIOHTTP1
 import Logging
@@ -950,7 +951,31 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             await sendResponseAsync(channel: channel, status: .ok, body: buffer)
 
         } catch {
-            let err = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32000, message: error.localizedDescription))
+            let localizedDescription = error.localizedDescription
+            let reflectedDescription = String(reflecting: error)
+            let errorType = String(describing: type(of: error))
+            let nsError = error as NSError
+            var errorData: [String: AnyCodable] = [
+                "errorType": AnyCodable(errorType),
+                "debugDescription": AnyCodable(reflectedDescription),
+                "localizedDescription": AnyCodable(localizedDescription),
+                "nsErrorDomain": AnyCodable(nsError.domain),
+                "nsErrorCode": AnyCodable(nsError.code)
+            ]
+
+            if let localizedError = error as? LocalizedError {
+                if let failureReason = localizedError.failureReason {
+                    errorData["failureReason"] = AnyCodable(failureReason)
+                }
+                if let recoverySuggestion = localizedError.recoverySuggestion {
+                    errorData["recoverySuggestion"] = AnyCodable(recoverySuggestion)
+                }
+            }
+
+            let err = JSONRPCMessage.errorResponse(
+                id: nil,
+                error: .init(code: -32000, message: localizedDescription, data: errorData)
+            )
             let data = try! JSONEncoder().encode(err)
             let string = String(data: data, encoding: .utf8)!
 

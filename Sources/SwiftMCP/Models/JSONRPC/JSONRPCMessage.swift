@@ -92,9 +92,13 @@ public enum JSONRPCMessage: Codable, Sendable {
             /// A human-readable error message describing what went wrong
             public var message: String
 
-            public init(code: Int, message: String) {
+            /// Optional structured data with additional error details
+            public var data: [String: AnyCodable]?
+
+            public init(code: Int, message: String, data: [String: AnyCodable]? = nil) {
                 self.code = code
                 self.message = message
+                self.data = data
             }
         }
 
