@@ -46,6 +46,8 @@ extension JSONSchema: Codable {
         case additionalProperties
         /// The possible schemas for a union
         case oneOf
+        /// Alternative union key used by some servers
+        case anyOf
     }
 
 /**
@@ -64,7 +66,29 @@ extension JSONSchema: Codable {
             return
         }
 
-        let type = try container.decode(String.self, forKey: .type)
+        if let anyOfSchemas = try container.decodeIfPresent([JSONSchema].self, forKey: .anyOf) {
+            self = .oneOf(anyOfSchemas, title: title, description: description)
+            return
+        }
+
+        let type: String
+        if let singleType = try? container.decode(String.self, forKey: .type) {
+            type = singleType
+        } else if let typeArray = try? container.decode([String].self, forKey: .type),
+                  let resolvedType = typeArray.first(where: { $0 != "null" }) {
+            // JSON Schema can express nullable types as e.g. ["string", "null"].
+            type = resolvedType
+        } else if (try? container.decodeIfPresent(JSONSchema.self, forKey: .items)) != nil {
+            type = "array"
+        } else if (try? container.nestedContainer(keyedBy: AnyCodingKey.self, forKey: .properties)) != nil {
+            type = "object"
+        } else if (try? container.decodeIfPresent([String].self, forKey: .enumValues)) != nil {
+            type = "string"
+        } else {
+            // Be permissive for non-standard schemas from third-party MCP servers.
+            // Fallback to string to keep tool discovery/proxy generation functional.
+            type = "string"
+        }
 
         switch type {
             case "string":
@@ -104,10 +128,21 @@ extension JSONSchema: Codable {
                 }
                 let required = try container.decodeIfPresent([String].self, forKey: .required) ?? []
 
-                let additionalPropertes = try container.decodeIfPresent(Bool.self, forKey: .additionalProperties)
+                let additionalProperties: Bool?
+                if let boolValue = try? container.decodeIfPresent(Bool.self, forKey: .additionalProperties) {
+                    additionalProperties = boolValue
+                } else if (try? container.decodeIfPresent(JSONSchema.self, forKey: .additionalProperties)) != nil {
+                    // JSON Schema allows `additionalProperties` to be either a Boolean or another schema.
+                    // SwiftMCP's in-memory model currently stores only the Boolean form, so preserve
+                    // permissive behavior when a schema object is provided by third-party MCP servers.
+                    additionalProperties = true
+                } else {
+                    additionalProperties = nil
+                }
+
                 let defaultValue = try container.decodeIfPresent(AnyCodable.self, forKey: .default)
 
-                self = .object(JSONSchema.Object(properties: properties, required: required, title: title, description: description, additionalProperties: additionalPropertes), defaultValue: defaultValue)
+                self = .object(JSONSchema.Object(properties: properties, required: required, title: title, description: description, additionalProperties: additionalProperties), defaultValue: defaultValue)
             default:
                 throw DecodingError.dataCorruptedError(
 					forKey: .type,
