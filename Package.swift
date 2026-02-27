@@ -116,6 +116,10 @@ let package = Package(
 		),
 		.executableTarget(
 			name: "SwiftMCPRegistryTool",
+			dependencies: [
+				.product(name: "SwiftSyntax", package: "swift-syntax"),
+				.product(name: "SwiftParser", package: "swift-syntax")
+			],
 			path: "Plugins/SwiftMCPRegistryTool"
 		),
 		.plugin(

@@ -245,6 +245,9 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro, MemberAttributeMacro 
 
             var defaultCase = """
       default:
+         if let dynamicResult = try await MCPDynamicToolRegistry.callIfRegistered(server: self as AnyObject, name: name, arguments: enrichedArguments) {
+            return dynamicResult
+         }
 """
             if hasAppShortcutsProvider {
                 defaultCase += """
@@ -271,7 +274,7 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro, MemberAttributeMacro 
 /// - Throws: MCPToolError if the tool doesn't exist or cannot be called
 public func callTool(_ name: String, arguments: [String: Sendable]) async throws -> (Encodable & Sendable) {
    // Find the tool metadata by name
-   guard let metadata = mcpToolMetadata(for: name) else {
+   guard let metadata = mcpToolMetadata.first(where: { $0.name == name }) else {
       throw MCPToolError.unknownTool(name: name)
    }
    
@@ -292,7 +295,7 @@ public func callTool(_ name: String, arguments: [String: Sendable]) async throws
         if !mcpTools.isEmpty || hasAppShortcutsProvider {
             let metadataArray = mcpTools.map { "__mcpMetadata_\($0)" }.joined(separator: ", ")
             let metadataSeed = mcpTools.isEmpty ? "[]" : "[\(metadataArray)]"
-            let metadataDeclaration = hasAppShortcutsProvider ? "var" : "let"
+            let metadataDeclaration = "var"
             let appShortcutsBlock: String
             if hasAppShortcutsProvider {
                 appShortcutsBlock = """
@@ -311,6 +314,10 @@ public func callTool(_ name: String, arguments: [String: Sendable]) async throws
 nonisolated public var mcpToolMetadata: [MCPToolMetadata] {
    \(metadataDeclaration) metadata: [MCPToolMetadata] = \(metadataSeed)
 \(appShortcutsBlock)
+   let dynamicMetadata = MCPDynamicToolRegistry.metadata(for: self as AnyObject)
+   for toolMetadata in dynamicMetadata where !metadata.contains(where: { $0.name == toolMetadata.name }) {
+      metadata.append(toolMetadata)
+   }
    return metadata
 }
 """
