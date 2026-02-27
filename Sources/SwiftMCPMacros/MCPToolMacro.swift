@@ -159,17 +159,19 @@ public struct MCPToolMacro: PeerMacro {
         // Generate the metadata variable
         let metadataDeclaration = """
 /// Metadata for the \(functionName) tool
-nonisolated private let __mcpMetadata_\(functionName) = MCPToolMetadata(
-   name: "\(functionName)",
-   description: \(descriptionArg),
-   parameters: [\(parameterInfoStrings.joined(separator: ", "))],
-   returnType: \(returnTypeString).self,
-   returnTypeDescription: \(returnDescriptionString),
-   isAsync: \(commonMetadata.isAsync),
-   isThrowing: \(commonMetadata.isThrowing),
-   isConsequential: \(isConsequentialArg),
-   annotations: \(annotationsArg)
-)
+nonisolated private var __mcpMetadata_\(functionName): MCPToolMetadata {
+   MCPToolMetadata(
+      name: "\(functionName)",
+      description: \(descriptionArg),
+      parameters: [\(parameterInfoStrings.joined(separator: ", "))],
+      returnType: \(returnTypeString).self,
+      returnTypeDescription: \(returnDescriptionString),
+      isAsync: \(commonMetadata.isAsync),
+      isThrowing: \(commonMetadata.isThrowing),
+      isConsequential: \(isConsequentialArg),
+      annotations: \(annotationsArg)
+   )
+}
 """
 
         // Create the wrapper function that takes a dictionary
