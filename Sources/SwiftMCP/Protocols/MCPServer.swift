@@ -257,15 +257,18 @@ public extension MCPServer {
     func createInitializeResponse(id: JSONRPCID) -> JSONRPCMessage {
         var capabilities = ServerCapabilities()
 
-        if self is MCPToolProviding {
+        if let toolProvider = self as? MCPToolProviding,
+           !toolProvider.mcpToolMetadata.isEmpty {
             capabilities.tools = .init(listChanged: true)
         }
 
-        if self is MCPResourceProviding {
+        if let resourceProvider = self as? MCPResourceProviding,
+           !resourceProvider.mcpResourceMetadata.isEmpty {
             capabilities.resources = .init(listChanged: true)
         }
 
-        if self is MCPPromptProviding {
+        if let promptProvider = self as? MCPPromptProviding,
+           !promptProvider.mcpPromptMetadata.isEmpty {
             capabilities.prompts = .init(listChanged: true)
         }
 
