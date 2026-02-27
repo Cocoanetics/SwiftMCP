@@ -37,6 +37,10 @@ let package = Package(
 		.plugin(
 			name: "SwiftMCPRegistryPlugin",
 			targets: ["SwiftMCPRegistryPlugin"]
+		),
+		.plugin(
+			name: "SwiftMCPAggregatorPlugin",
+			targets: ["SwiftMCPAggregatorPlugin"]
 		)
 	],
 	dependencies: [
@@ -122,10 +126,19 @@ let package = Package(
 			],
 			path: "Plugins/SwiftMCPRegistryTool"
 		),
+		.executableTarget(
+			name: "SwiftMCPAggregatorTool",
+			path: "Plugins/SwiftMCPAggregatorTool"
+		),
 		.plugin(
 			name: "SwiftMCPRegistryPlugin",
 			capability: .buildTool(),
 			dependencies: ["SwiftMCPRegistryTool"]
+		),
+		.plugin(
+			name: "SwiftMCPAggregatorPlugin",
+			capability: .buildTool(),
+			dependencies: ["SwiftMCPAggregatorTool"]
 		),
 		.testTarget(
 			name: "SwiftMCPTests",

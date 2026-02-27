@@ -50,6 +50,9 @@ public enum MCPDynamicToolRegistry {
         defer { lock.unlock() }
 
         var tools = storage[key, default: [:]]
+        if tools[name] != nil {
+            preconditionFailure("Duplicate MCP tool registration for \(Server.self).\(name)")
+        }
         tools[name] = wrapped
         storage[key] = tools
     }
