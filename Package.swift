@@ -33,6 +33,10 @@ let package = Package(
 		.executable(
 			name: "ProxyDemoCLI",
 			targets: ["ProxyDemoCLI"]
+		),
+		.plugin(
+			name: "SwiftMCPRegistryPlugin",
+			targets: ["SwiftMCPRegistryPlugin"]
 		)
 	],
 	dependencies: [
@@ -109,6 +113,15 @@ let package = Package(
 				.product(name: "SwiftSyntaxBuilder", package: "swift-syntax")
 			],
 			path: "Utilities/SwiftMCPUtilityCore"
+		),
+		.executableTarget(
+			name: "SwiftMCPRegistryTool",
+			path: "Plugins/SwiftMCPRegistryTool"
+		),
+		.plugin(
+			name: "SwiftMCPRegistryPlugin",
+			capability: .buildTool(),
+			dependencies: ["SwiftMCPRegistryTool"]
 		),
 		.testTarget(
 			name: "SwiftMCPTests",
