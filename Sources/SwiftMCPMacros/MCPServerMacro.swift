@@ -231,8 +231,8 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro, MemberAttributeMacro 
 			DeclSyntax(stringLiteral: descriptionProperty),
 		]
 
-        // Only add callTool method if there are MCPTools or AppShortcuts defined
-        if !mcpTools.isEmpty || hasAppShortcutsProvider {
+        // Always add callTool method; dynamic registries and optional integrations decide availability.
+        if true {
             // Create a callTool method that uses a switch statement to call the appropriate wrapper function
             var switchCases = ""
             for (index, funcName) in mcpTools.enumerated() {
@@ -291,8 +291,8 @@ public func callTool(_ name: String, arguments: [String: Sendable]) async throws
             declarations.append(DeclSyntax(stringLiteral: callToolMethod))
         }
 
-        // Add static mcpToolMetadata property
-        if !mcpTools.isEmpty || hasAppShortcutsProvider {
+        // Always add mcpToolMetadata; local + dynamic registrations are merged.
+        if true {
             let metadataArray = mcpTools.map { "__mcpMetadata_\($0)" }.joined(separator: ", ")
             let metadataSeed = mcpTools.isEmpty ? "[]" : "[\(metadataArray)]"
             let metadataDeclaration = "var"
@@ -324,8 +324,8 @@ nonisolated public var mcpToolMetadata: [MCPToolMetadata] {
             declarations.append(DeclSyntax(stringLiteral: metadataProperty))
         }
 
-        // Add resource-related properties and methods if there are MCPResources defined
-        if !mcpResources.isEmpty {
+        // Always add resource-related properties and methods; dynamic registrations may provide resources.
+        if true {
             // Add mcpResourceMetadata property
             let resourceMetadataArray = mcpResources.map { "__mcpResourceMetadata_\($0)" }.joined(separator: ", ")
             let resourceMetadataProperty = """
@@ -468,8 +468,8 @@ public func getResource(uri: URL) async throws -> [MCPResourceContent] {
             declarations.append(DeclSyntax(stringLiteral: getResourceMethod))
         }
 
-        // Add prompt related properties and methods if there are MCPPrompts defined
-        if !mcpPrompts.isEmpty {
+        // Always add prompt-related properties and methods; dynamic registrations may provide prompts.
+        if true {
             let promptMetadataArray = mcpPrompts.map { "__mcpPromptMetadata_\($0)" }.joined(separator: ", ")
             let promptMetadataProperty = """
 /// Returns an array of all available prompt metadata
@@ -541,95 +541,34 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
 		conformingTo protocols: [TypeSyntax],
 		in context: some MacroExpansionContext
 	) throws -> [ExtensionDeclSyntax] {
-        // Check if the declaration already conforms to MCPServer
+        // Check existing conformances
         let inheritedTypes = declaration.inheritanceClause?.inheritedTypes ?? []
-        let hasAppShortcutsProvider = inheritedTypes.contains { type in
-            let name = type.type.trimmedDescription
-            return name == "AppShortcutsProvider" || name.hasSuffix(".AppShortcutsProvider")
-        }
         let alreadyConformsToMCPServer = inheritedTypes.contains { type in
             type.type.trimmedDescription == "MCPServer"
         }
-
-        // Check if the declaration has any MCPTool functions
-        var hasMCPTools = false
-        for member in declaration.memberBlock.members {
-            if let funcDecl = member.decl.as(FunctionDeclSyntax.self) {
-                for attribute in funcDecl.attributes {
-                    if let identifierAttr = attribute.as(AttributeSyntax.self),
-					   let identifier = identifierAttr.attributeName.as(IdentifierTypeSyntax.self),
-					   identifier.name.text == "MCPTool" {
-                        hasMCPTools = true
-                        break
-                    }
-                }
-                if hasMCPTools { break }
-            }
-        }
-
-        // Check if the declaration has any MCPResource functions
-        var hasMCPResources = false
-        for member in declaration.memberBlock.members {
-            if let funcDecl = member.decl.as(FunctionDeclSyntax.self) {
-                for attribute in funcDecl.attributes {
-                    if let identifierAttr = attribute.as(AttributeSyntax.self),
-					   let identifier = identifierAttr.attributeName.as(IdentifierTypeSyntax.self),
-					   identifier.name.text == "MCPResource" {
-                        hasMCPResources = true
-                        break
-                    }
-                }
-                if hasMCPResources { break }
-            }
-        }
-
-        // Check if the declaration has any MCPPrompt functions
-        var hasMCPPrompts = false
-        for member in declaration.memberBlock.members {
-            if let funcDecl = member.decl.as(FunctionDeclSyntax.self) {
-                for attribute in funcDecl.attributes {
-                    if let identifierAttr = attribute.as(AttributeSyntax.self),
-                       let identifier = identifierAttr.attributeName.as(IdentifierTypeSyntax.self),
-                       identifier.name.text == "MCPPrompt" {
-                        hasMCPPrompts = true
-                        break
-                    }
-                }
-                if hasMCPPrompts { break }
-            }
-        }
-
-        // Check if the declaration already conforms to MCPToolProviding
         let alreadyConformsToToolProviding = inheritedTypes.contains { type in
             type.type.trimmedDescription == "MCPToolProviding"
         }
-
-        // Check if the declaration already conforms to MCPResourceProviding
         let alreadyConformsToResourceProviding = inheritedTypes.contains { type in
             type.type.trimmedDescription == "MCPResourceProviding"
         }
-
-        // Check if already conforms to MCPPromptProviding
         let alreadyConformsToPromptProviding = inheritedTypes.contains { type in
             type.type.trimmedDescription == "MCPPromptProviding"
         }
 
-        // Determine which protocols need to be added
+        // Always add provider conformances; actual capability is unlocked by available handlers.
         var protocolsToAdd: [String] = []
 
         if !alreadyConformsToMCPServer {
             protocolsToAdd.append("MCPServer")
         }
-
-        if (hasMCPTools || hasAppShortcutsProvider) && !alreadyConformsToToolProviding {
+        if !alreadyConformsToToolProviding {
             protocolsToAdd.append("MCPToolProviding")
         }
-
-        if hasMCPResources && !alreadyConformsToResourceProviding {
+        if !alreadyConformsToResourceProviding {
             protocolsToAdd.append("MCPResourceProviding")
         }
-
-        if hasMCPPrompts && !alreadyConformsToPromptProviding {
+        if !alreadyConformsToPromptProviding {
             protocolsToAdd.append("MCPPromptProviding")
         }
 
