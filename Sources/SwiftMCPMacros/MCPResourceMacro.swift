@@ -147,7 +147,8 @@ public struct MCPResourceMacro: PeerMacro {
         // Generate the metadata variable
         let metadataDeclaration = """
 /// Metadata for the \(functionName) resource
-nonisolated private let __mcpResourceMetadata_\(functionName) = MCPResourceMetadata(
+nonisolated var __mcpResourceMetadata_\(functionName): MCPResourceMetadata {
+   MCPResourceMetadata(
    uriTemplates: Set(\(templatesSetString)),
    name: "\(resourceName)",
    functionName: "\(functionName)",
@@ -158,7 +159,8 @@ nonisolated private let __mcpResourceMetadata_\(functionName) = MCPResourceMetad
    isAsync: \(commonMetadata.isAsync),
    isThrowing: \(commonMetadata.isThrowing),
    mimeType: \(mimeTypeArg)
-)
+   )
+}
 """
 
         let callParameterList = wrapperParamDetails.map { param in
@@ -177,7 +179,7 @@ nonisolated private let __mcpResourceMetadata_\(functionName) = MCPResourceMetad
                 wrapperMethod += "\n        \(attribute)"
             }
         }
-        wrapperMethod += "\n        private func __mcpResourceCall_\(functionName)(_ params: [String: Sendable], requestedUri: URL, overrideMimeType: String?) async throws -> [MCPResourceContent] {\n"
+        wrapperMethod += "\n        func __mcpResourceCall_\(functionName)(_ params: [String: Sendable], requestedUri: URL, overrideMimeType: String?) async throws -> [MCPResourceContent] {\n"
 
         for detail in wrapperParamDetails {
             wrapperMethod += """

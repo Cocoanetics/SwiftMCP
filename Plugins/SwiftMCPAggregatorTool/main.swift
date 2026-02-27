@@ -21,7 +21,7 @@ struct SwiftMCPAggregatorTool {
         var registrationLines: [String] = []
         for module in modules {
             if module == "SwiftMCP" { continue }
-            registrationLines.append("        \(module).__SwiftMCPRegistryPluginGenerated.registerTools()")
+            registrationLines.append("        \(module).__SwiftMCPRegistryPluginGenerated.registerAll()")
         }
 
         let generated = """

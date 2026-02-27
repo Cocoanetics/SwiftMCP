@@ -331,7 +331,12 @@ nonisolated public var mcpToolMetadata: [MCPToolMetadata] {
             let resourceMetadataProperty = """
 /// Returns an array of all available resource metadata
 nonisolated public var mcpResourceMetadata: [MCPResourceMetadata] {
-   return [\(resourceMetadataArray)]
+   var metadata: [MCPResourceMetadata] = [\(resourceMetadataArray)]
+   let dynamicMetadata = MCPDynamicResourceRegistry.metadata(for: self as AnyObject)
+   for resourceMetadata in dynamicMetadata where !metadata.contains(where: { $0.functionMetadata.name == resourceMetadata.functionMetadata.name }) {
+      metadata.append(resourceMetadata)
+   }
+   return metadata
 }
 """
             declarations.append(DeclSyntax(stringLiteral: resourceMetadataProperty))
@@ -374,6 +379,9 @@ internal func __callResourceFunction(_ name: String, enrichedArguments: [String:
    switch name {
 \(resourceFunctionSwitchCases)
       default:
+         if let dynamicResult = try await MCPDynamicResourceRegistry.callIfRegistered(server: self as AnyObject, name: name, arguments: enrichedArguments, requestedUri: requestedUri, overrideMimeType: overrideMimeType) {
+            return dynamicResult
+         }
          throw MCPResourceError.notFound(uri: requestedUri.absoluteString)
    }
 }
@@ -466,7 +474,12 @@ public func getResource(uri: URL) async throws -> [MCPResourceContent] {
             let promptMetadataProperty = """
 /// Returns an array of all available prompt metadata
 nonisolated public var mcpPromptMetadata: [MCPPromptMetadata] {
-   return [\(promptMetadataArray)]
+   var metadata: [MCPPromptMetadata] = [\(promptMetadataArray)]
+   let dynamicMetadata = MCPDynamicPromptRegistry.metadata(for: self as AnyObject)
+   for promptMetadata in dynamicMetadata where !metadata.contains(where: { $0.name == promptMetadata.name }) {
+      metadata.append(promptMetadata)
+   }
+   return metadata
 }
 """
             declarations.append(DeclSyntax(stringLiteral: promptMetadataProperty))
@@ -488,6 +501,9 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
    switch name {
 \(promptSwitchCases)
       default:
+         if let dynamicResult = try await MCPDynamicPromptRegistry.callIfRegistered(server: self as AnyObject, name: name, arguments: enrichedArguments) {
+            return dynamicResult
+         }
          throw MCPToolError.unknownTool(name: name)
    }
 }
