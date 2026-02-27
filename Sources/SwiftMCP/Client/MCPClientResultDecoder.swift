@@ -6,6 +6,32 @@ public enum MCPClientResultDecoder {
         ()
     }
 
+    /// Decodes `Data` from a tool result string. When the server returns MCP content JSON
+    /// (e.g. `[{"type":"image","data":"<base64>","mimeType":"..."}]`), extracts and decodes
+    /// the base64 `data` field to avoid mojibake from mistakenly base64-decoding the whole JSON.
+    public static func decode(_ type: Data.Type, from text: String) throws -> Data {
+        let data = Data(text.utf8)
+        if let json = try? JSONSerialization.jsonObject(with: data) {
+            let object: [String: Any]?
+            if let array = json as? [Any], let first = array.first as? [String: Any] {
+                object = first
+            } else if let obj = json as? [String: Any] {
+                object = obj
+            } else {
+                object = nil
+            }
+            if let object, let base64 = object["data"] as? String, let decoded = Data(base64Encoded: base64) {
+                return decoded
+            }
+        }
+        if let decoded = Data(base64Encoded: text) {
+            return decoded
+        }
+        let quoted = "\"\(text)\""
+        let quotedData = Data(quoted.utf8)
+        return try configuredDecoder().decode(Data.self, from: quotedData)
+    }
+
     public static func decode(_ type: MCPText.Type, from text: String) throws -> MCPText {
         let decoder = configuredDecoder()
         if let result = try? decoder.decode(MCPText.self, from: Data(text.utf8)) {
