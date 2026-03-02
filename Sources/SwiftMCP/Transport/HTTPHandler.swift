@@ -267,13 +267,16 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         headers.add(name: "Access-Control-Allow-Origin", value: "*")
         headers.add(name: "Mcp-Session-Id", value: sessionID.uuidString)
 
-        // Validate Accept header
+        // Validate Accept header (missing/empty means accept anything per HTTP spec)
         let acceptHeader = head.headers["accept"].first ?? ""
-        guard acceptHeader.lowercased().contains("application/json") else {
-            logger.warning("Rejected non-json request (Accept: \(acceptHeader))")
-            let buffer = channel.allocator.buffer(string: "Client must accept application/json.")
-            await self.sendResponseAsync(channel: channel, status: .badRequest, headers: headers, body: buffer)
-            return
+        if !acceptHeader.isEmpty {
+            let lower = acceptHeader.lowercased()
+            guard lower.contains("application/json") || lower.contains("*/*") else {
+                logger.warning("Rejected non-json request (Accept: \(acceptHeader))")
+                let buffer = channel.allocator.buffer(string: "Client must accept application/json.")
+                await self.sendResponseAsync(channel: channel, status: .badRequest, headers: headers, body: buffer)
+                return
+            }
         }
 
         // Check authorization if handler is set
