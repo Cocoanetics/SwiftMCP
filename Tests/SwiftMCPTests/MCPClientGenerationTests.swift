@@ -104,6 +104,11 @@ actor ClientTestServer {
 
 @Suite("Generated Client Tests", .tags(.client))
 struct MCPClientGenerationTests {
+    @Test("Generated client is Sendable")
+    func generatedClientIsSendable() {
+        requireSendable(ClientTestServer.Client.self)
+    }
+
     @Test("Preserves Int results and default parameters", .enabled(if: false))
     func preservesIntAndDefaults() async throws {
         let (server, client, proxy) = try await makeClient()
@@ -176,3 +181,5 @@ private func makeClient() async throws -> (ClientTestServer, ClientTestServer.Cl
 extension Tag {
     @Tag static var client: Self
 }
+
+private func requireSendable<T: Sendable>(_: T.Type) {}

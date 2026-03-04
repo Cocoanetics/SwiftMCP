@@ -655,7 +655,7 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
     ) -> String {
         var lines: [String] = []
         lines.append(contentsOf: clientTypeDocCommentLines(description: serverDescription))
-        lines.append("public struct Client {")
+        lines.append("public struct Client: Sendable {")
         lines.append("    public let proxy: MCPServerProxy")
         lines.append("")
         lines.append(contentsOf: initDocCommentLines())
