@@ -92,6 +92,12 @@ public final actor MCPServerProxy: Sendable {
                 throw MCPServerProxyError.unsupportedPlatform("SSE client connections require URLSession.bytes support on Linux.")
 #else
                 if #available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, macCatalyst 15.0, *) {
+                    let isStreamableMCP = isStreamableMCPURL(sseConfig.url)
+                    if isStreamableMCP {
+                        // Streamable HTTP posts to the same /mcp endpoint.
+                        endpointURL = sseConfig.url
+                    }
+
                     let sessionConfig = URLSessionConfiguration.default
                     sessionConfig.timeoutIntervalForRequest = .infinity
                     sessionConfig.timeoutIntervalForResource = .infinity
@@ -102,29 +108,13 @@ public final actor MCPServerProxy: Sendable {
                     applyConfiguredSSEHeaders(&request, sseConfig: sseConfig)
                     request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
 
-                    let (asyncBytes, response) = try await session.bytes(for: request)
-
-                    if let response = response as? HTTPURLResponse, response.statusCode != 200 {
-                        let data = try await asyncBytes.reduce(into: Data()) { partialResult, byte in
-                            partialResult.append(byte)
-                        }
-                        throw MCPServerProxyError.communicationError("HTTP error \(response.statusCode): \(String(data: data, encoding: .utf8) ?? "Unknown error")")
-                    }
-
-                    if let response = response as? HTTPURLResponse {
-                        sessionID = response.value(forHTTPHeaderField: "Mcp-Session-Id")
-                        if isStreamableMCPURL(sseConfig.url) {
-                            endpointURL = sseConfig.url
-                        } else if let sessionID,
-                                  let endpoint = messageEndpointURL(baseURL: sseConfig.url, sessionId: sessionID) {
-                            endpointURL = endpoint
-                        }
-                    }
-
                     streamTask = Task {
                         do {
+                            let (asyncBytes, response) = try await session.bytes(for: request)
+                            try await self.handleSSEConnectionResponse(response: response, asyncBytes: asyncBytes, sseConfig: sseConfig, isStreamableMCP: isStreamableMCP)
+
                             for try await message in asyncBytes.lines.sseMessages() {
-                                processIncomingMessage(event: message.event, data: message.data)
+                                await self.processIncomingMessage(event: message.event, data: message.data)
                             }
                             self.handleStreamTermination(
                                 MCPServerProxyError.communicationError(
@@ -134,12 +124,12 @@ public final actor MCPServerProxy: Sendable {
                         } catch is CancellationError {
                             // Pending requests are cancelled in disconnect().
                         } catch {
-                            logger.error("[MCP DEBUG] SSE stream error: \(error)")
+                            self.logger.error("[MCP DEBUG] SSE stream error: \(error)")
                             self.handleStreamTermination(error)
                         }
                     }
 
-                    if endpointURL == nil {
+                    if !isStreamableMCP && endpointURL == nil {
                         let _ = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<URL, Error>) in
                             self.endpointContinuation = continuation
 
@@ -379,7 +369,24 @@ public final actor MCPServerProxy: Sendable {
                         }
 
                         switch httpResponse.statusCode {
-                        case 200:
+                        case 200, 202:
+                            if let updatedSessionID = httpResponse.value(forHTTPHeaderField: "Mcp-Session-Id") {
+                                sessionID = updatedSessionID
+                            }
+
+                            // Some servers reply immediately in the HTTP body even for 202.
+                            if let responseMessage = try responseMessage(for: messageId, from: responseData) {
+                                if responseTasks[messageId] != nil {
+                                    responseTasks.removeValue(forKey: messageId)
+                                    continuation.resume(returning: responseMessage)
+                                }
+                                return
+                            }
+
+                            if httpResponse.statusCode == 202 {
+                                return // response will arrive over SSE
+                            }
+
                             guard let responseMessage = try responseMessage(for: messageId, from: responseData) else {
                                 let responseBody = String(data: responseData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                                 let details = responseBody.isEmpty ? "" : ": \(responseBody)"
@@ -390,8 +397,6 @@ public final actor MCPServerProxy: Sendable {
                                 responseTasks.removeValue(forKey: messageId)
                                 continuation.resume(returning: responseMessage)
                             }
-                        case 202:
-                            break // response will arrive over SSE
                         default:
                             let responseBody = String(data: responseData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                             let details = responseBody.isEmpty ? "" : ": \(responseBody)"
@@ -425,7 +430,7 @@ public final actor MCPServerProxy: Sendable {
             do {
                 let lines = await lineConnection.lines()
                 for try await data in lines {
-                    processIncomingMessage(data: data)
+                    await processIncomingMessage(data: data)
                 }
                 self.handleStreamTermination(
                     MCPServerProxyError.communicationError(
@@ -529,50 +534,52 @@ public final actor MCPServerProxy: Sendable {
         )
     }
 
-    private func processIncomingMessage(event: String = "", data: String) {
-        Task {
-            if event == "endpoint" {
-                if let url = URL(string: data) {
-                    endpointURL = url
-                    if let continuation = endpointContinuation {
-                        endpointContinuation = nil
-                        continuation.resume(returning: url)
-                    }
-                    return
-                }
+    private func processIncomingMessage(event: String = "", data: String) async {
+        if event == "endpoint" {
+            if case .sse(let sseConfig) = config, isStreamableMCPURL(sseConfig.url) {
+                // Ignore legacy endpoint events for streamable /mcp mode.
+                return
             }
+            if let url = URL(string: data) {
+                endpointURL = url
+                if let continuation = endpointContinuation {
+                    endpointContinuation = nil
+                    continuation.resume(returning: url)
+                }
+                return
+            }
+        }
 
-            guard let jsonData = data.data(using: .utf8) else { return }
-            logger.trace("[MCP DEBUG] Received JSON-RPC message: \(data)")
-            let decoder = JSONDecoder()
-            if let message = try? decoder.decode(JSONRPCMessage.self, from: jsonData) {
-                switch message {
-                case .request(let requestData):
-                    if requestData.method == "ping" {
-                        logger.info("[MCP] Ping request received; sending response.")
-                        await handlePingRequest(requestData)
-                    } else {
-                        logger.debug("[MCP DEBUG] Ignoring client request: \(requestData.method)")
-                    }
-                case .notification(let notification):
-                    if notification.method == "notifications/progress" {
-                        logProgressNotification(notification)
-                    } else if notification.method == "notifications/message" {
-                        await handleLogNotification(notification)
-                    } else {
-                        logger.trace("[MCP DEBUG] Received notification: \(notification.method)")
-                    }
-                case .response, .errorResponse:
-                    if let id = message.id, let waitingContinuation = responseTasks[id] {
-                        responseTasks.removeValue(forKey: id)
-                        waitingContinuation.resume(returning: message)
-                    } else {
-                        logger.error("[MCP DEBUG] No waiting continuation found for ID \(message.id?.stringValue ?? "nil")")
-                    }
+        guard let jsonData = data.data(using: .utf8) else { return }
+        logger.trace("[MCP DEBUG] Received JSON-RPC message: \(data)")
+        let decoder = JSONDecoder()
+        if let message = try? decoder.decode(JSONRPCMessage.self, from: jsonData) {
+            switch message {
+            case .request(let requestData):
+                if requestData.method == "ping" {
+                    logger.info("[MCP] Ping request received; sending response.")
+                    await handlePingRequest(requestData)
+                } else {
+                    logger.debug("[MCP DEBUG] Ignoring client request: \(requestData.method)")
                 }
-            } else {
-                logger.error("[MCP DEBUG] Failed to decode JSON-RPC message")
+            case .notification(let notification):
+                if notification.method == "notifications/progress" {
+                    logProgressNotification(notification)
+                } else if notification.method == "notifications/message" {
+                    await handleLogNotification(notification)
+                } else {
+                    logger.trace("[MCP DEBUG] Received notification: \(notification.method)")
+                }
+            case .response, .errorResponse:
+                if let id = message.id, let waitingContinuation = responseTasks[id] {
+                    responseTasks.removeValue(forKey: id)
+                    waitingContinuation.resume(returning: message)
+                } else {
+                    logger.error("[MCP DEBUG] No waiting continuation found for ID \(message.id?.stringValue ?? "nil")")
+                }
             }
+        } else {
+            logger.error("[MCP DEBUG] Failed to decode JSON-RPC message")
         }
     }
 
@@ -829,6 +836,31 @@ public final actor MCPServerProxy: Sendable {
                 return true
             case .request, .notification:
                 return false
+            }
+        }
+    }
+
+    @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, macCatalyst 15.0, *)
+    private func handleSSEConnectionResponse(
+        response: URLResponse,
+        asyncBytes: URLSession.AsyncBytes,
+        sseConfig: MCPServerSseConfig,
+        isStreamableMCP: Bool
+    ) async throws {
+        if let response = response as? HTTPURLResponse, response.statusCode != 200 {
+            let data = try await asyncBytes.reduce(into: Data()) { partialResult, byte in
+                partialResult.append(byte)
+            }
+            throw MCPServerProxyError.communicationError("HTTP error \(response.statusCode): \(String(data: data, encoding: .utf8) ?? "Unknown error")")
+        }
+
+        if let response = response as? HTTPURLResponse {
+            sessionID = response.value(forHTTPHeaderField: "Mcp-Session-Id")
+            if isStreamableMCP {
+                endpointURL = sseConfig.url
+            } else if let sessionID,
+                      let endpoint = messageEndpointURL(baseURL: sseConfig.url, sessionId: sessionID) {
+                endpointURL = endpoint
             }
         }
     }
