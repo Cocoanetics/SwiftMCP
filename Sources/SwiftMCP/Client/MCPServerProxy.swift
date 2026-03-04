@@ -34,6 +34,7 @@ public final actor MCPServerProxy: Sendable {
     private var isDisconnecting = false
 
     public private(set) var endpointURL: URL?
+    public private(set) var sessionID: String?
     private var streamTask: Task<Void, Error>?
 
     public private(set) var serverName: String?
@@ -62,6 +63,8 @@ public final actor MCPServerProxy: Sendable {
     public func connect() async throws {
         isDisconnecting = false
         streamFailure = nil
+        endpointURL = nil
+        sessionID = nil
 
         switch config {
             case .stdio(let stdioConfig):
@@ -96,16 +99,8 @@ public final actor MCPServerProxy: Sendable {
                     let session = URLSession(configuration: sessionConfig)
                     var request = URLRequest(url: sseConfig.url)
                     request.httpMethod = "GET"
+                    applyConfiguredSSEHeaders(&request, sseConfig: sseConfig)
                     request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
-
-                    for (key, value) in sseConfig.headers {
-                        request.setValue(value, forHTTPHeaderField: key)
-                    }
-                    
-                    // Add Authorization header from meta if present
-                    if let accessToken = meta["accessToken"]?.value as? String {
-                        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-                    }
 
                     let (asyncBytes, response) = try await session.bytes(for: request)
 
@@ -116,10 +111,14 @@ public final actor MCPServerProxy: Sendable {
                         throw MCPServerProxyError.communicationError("HTTP error \(response.statusCode): \(String(data: data, encoding: .utf8) ?? "Unknown error")")
                     }
 
-                    if let response = response as? HTTPURLResponse,
-                       let sessionId = response.value(forHTTPHeaderField: "Mcp-Session-Id"),
-                       let endpoint = messageEndpointURL(baseURL: sseConfig.url, sessionId: sessionId) {
-                        endpointURL = endpoint
+                    if let response = response as? HTTPURLResponse {
+                        sessionID = response.value(forHTTPHeaderField: "Mcp-Session-Id")
+                        if isStreamableMCPURL(sseConfig.url) {
+                            endpointURL = sseConfig.url
+                        } else if let sessionID,
+                                  let endpoint = messageEndpointURL(baseURL: sseConfig.url, sessionId: sessionID) {
+                            endpointURL = endpoint
+                        }
                     }
 
                     streamTask = Task {
@@ -175,6 +174,8 @@ public final actor MCPServerProxy: Sendable {
 
         streamTask?.cancel()
         streamTask = nil
+        endpointURL = nil
+        sessionID = nil
 
         switch config {
         case .stdio, .stdioHandles, .tcp:
@@ -342,7 +343,7 @@ public final actor MCPServerProxy: Sendable {
                 }
             }
 
-        case .sse:
+        case .sse(let sseConfig):
             guard let endpointURL = endpointURL else {
                 throw MCPServerProxyError.communicationError("Not connected to server")
             }
@@ -356,6 +357,7 @@ public final actor MCPServerProxy: Sendable {
             var urlRequest = URLRequest(url: endpointURL)
             urlRequest.httpMethod = "POST"
             urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            configureSSEPOSTRequest(&urlRequest, sseConfig: sseConfig)
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
             let data = try encoder.encode(message)
@@ -371,13 +373,29 @@ public final actor MCPServerProxy: Sendable {
 
                 Task {
                     do {
-                        let (_, response) = try await session.data(for: urlRequest)
-                        if let httpResponse = response as? HTTPURLResponse,
-                           ![200, 202].contains(httpResponse.statusCode) {
+                        let (responseData, response) = try await session.data(for: urlRequest)
+                        guard let httpResponse = response as? HTTPURLResponse else {
+                            throw MCPServerProxyError.communicationError("Invalid HTTP response")
+                        }
+
+                        switch httpResponse.statusCode {
+                        case 200:
+                            guard let responseMessage = try responseMessage(for: messageId, from: responseData) else {
+                                let responseBody = String(data: responseData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                                let details = responseBody.isEmpty ? "" : ": \(responseBody)"
+                                throw MCPServerProxyError.communicationError("HTTP 200 did not include JSON-RPC response for request \(messageId.stringValue)\(details)")
+                            }
+
                             if responseTasks[messageId] != nil {
                                 responseTasks.removeValue(forKey: messageId)
-                                continuation.resume(throwing: MCPServerProxyError.communicationError("HTTP error \(httpResponse.statusCode)"))
+                                continuation.resume(returning: responseMessage)
                             }
+                        case 202:
+                            break // response will arrive over SSE
+                        default:
+                            let responseBody = String(data: responseData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                            let details = responseBody.isEmpty ? "" : ": \(responseBody)"
+                            throw MCPServerProxyError.communicationError("HTTP error \(httpResponse.statusCode)\(details)")
                         }
                     } catch {
                         if responseTasks[messageId] != nil {
@@ -560,12 +578,14 @@ public final actor MCPServerProxy: Sendable {
 
     private func handlePingRequest(_ request: JSONRPCMessage.JSONRPCRequestData) async {
         guard let endpointURL = endpointURL else { return }
+        guard case .sse(let sseConfig) = config else { return }
         let response = JSONRPCMessage.response(id: request.id, result: [:])
         let sessionConfig = URLSessionConfiguration.default
         let session = URLSession(configuration: sessionConfig)
         var urlRequest = URLRequest(url: endpointURL)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        configureSSEPOSTRequest(&urlRequest, sseConfig: sseConfig)
         let encoder = JSONEncoder()
         let data = try? encoder.encode(response)
         urlRequest.httpBody = data
@@ -765,6 +785,52 @@ public final actor MCPServerProxy: Sendable {
     private func formatPercent(_ percent: Double) -> String {
         let rounded = Int(percent.rounded())
         return "\(rounded)%"
+    }
+
+    private func isStreamableMCPURL(_ url: URL) -> Bool {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return false
+        }
+        return components.path.hasPrefix("/mcp")
+    }
+
+    private func applyConfiguredSSEHeaders(_ request: inout URLRequest, sseConfig: MCPServerSseConfig) {
+        for (key, value) in sseConfig.headers {
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+
+        // Allow token in metadata to override auth header from config.
+        if let accessToken = meta["accessToken"]?.value as? String {
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
+    }
+
+    private func configureSSEPOSTRequest(_ request: inout URLRequest, sseConfig: MCPServerSseConfig) {
+        applyConfiguredSSEHeaders(&request, sseConfig: sseConfig)
+        request.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
+
+        if let sessionID {
+            request.setValue(sessionID, forHTTPHeaderField: "Mcp-Session-Id")
+        }
+    }
+
+    private func responseMessage(for requestID: JSONRPCID, from data: Data) throws -> JSONRPCMessage? {
+        guard !data.isEmpty else {
+            return nil
+        }
+
+        let messages = try JSONRPCMessage.decodeMessages(from: data)
+        return messages.first { message in
+            guard message.id == requestID else {
+                return false
+            }
+            switch message {
+            case .response, .errorResponse:
+                return true
+            case .request, .notification:
+                return false
+            }
+        }
     }
 
     private func messageEndpointURL(baseURL: URL, sessionId: String) -> URL? {
