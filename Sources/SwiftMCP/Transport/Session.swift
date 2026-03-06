@@ -227,7 +227,9 @@ extension Session {
 
         let notification = JSONRPCMessage.notification(method: "notifications/progress",
                                                        params: params)
-        try? await transport?.send(notification)
+        try? await self.work { _ in
+            try await self.transport?.send(notification)
+        }
     }
 
     /// Send a log message notification to the client associated with this session, filtered by minimumLogLevel.
@@ -242,7 +244,9 @@ extension Session {
 
         let notification = JSONRPCMessage.notification(method: "notifications/message",
                                                        params: params)
-        try? await transport?.send(notification)
+        try? await self.work { _ in
+            try await self.transport?.send(notification)
+        }
     }
 
     /// Send a roots/list request to the client and return the roots.
@@ -277,18 +281,24 @@ extension Session {
     /// Send a notification that the list of available tools changed.
     public func sendToolListChanged() async throws {
         let notification = JSONRPCMessage.notification(method: "notifications/tools/list_changed")
-        try await transport?.send(notification)
+        try await self.work { _ in
+            try await self.transport?.send(notification)
+        }
     }
 
     /// Send a notification that the list of available resources changed.
     public func sendResourceListChanged() async throws {
         let notification = JSONRPCMessage.notification(method: "notifications/resources/list_changed")
-        try await transport?.send(notification)
+        try await self.work { _ in
+            try await self.transport?.send(notification)
+        }
     }
 
     /// Send a notification that the list of available prompts changed.
     public func sendPromptListChanged() async throws {
         let notification = JSONRPCMessage.notification(method: "notifications/prompts/list_changed")
-        try await transport?.send(notification)
+        try await self.work { _ in
+            try await self.transport?.send(notification)
+        }
     }
 }
