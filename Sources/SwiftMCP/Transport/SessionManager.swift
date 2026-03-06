@@ -200,7 +200,9 @@ actor SessionManager {
     /// - Parameter message: The log message to send.
     func broadcastLog(_ message: LogMessage) async {
         for session in sessions.values {
-            await session.sendLogNotification(message)
+            await session.work { session in
+                await session.sendLogNotification(message)
+            }
         }
     }
 }
