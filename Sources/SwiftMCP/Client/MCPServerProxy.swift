@@ -865,7 +865,7 @@ public final actor MCPServerProxy: Sendable {
 
         streamTask = Task {
             do {
-                for await message in delegate.lines.sseMessages() {
+                for try await message in delegate.lines.sseMessages() {
                     await self.processIncomingMessage(event: message.event, data: message.data)
                 }
                 self.handleStreamTermination(
