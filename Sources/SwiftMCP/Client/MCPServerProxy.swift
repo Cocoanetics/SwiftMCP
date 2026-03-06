@@ -840,6 +840,7 @@ public final actor MCPServerProxy: Sendable {
         }
     }
 
+    #if !os(Linux)
     @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, macCatalyst 15.0, *)
     private func handleSSEConnectionResponse(
         response: URLResponse,
@@ -864,6 +865,7 @@ public final actor MCPServerProxy: Sendable {
             }
         }
     }
+    #endif
 
     private func messageEndpointURL(baseURL: URL, sessionId: String) -> URL? {
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
