@@ -49,7 +49,6 @@ struct TCPBonjourCommand: AsyncParsableCommand {
             let transport = TCPBonjourTransport(
                 server: calculator,
                 serviceName: name,
-                serviceType: TCPBonjourTransport.serviceType,
                 serviceDomain: domain,
                 port: bindPort,
                 acceptLocalOnly: true,

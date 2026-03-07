@@ -5,8 +5,15 @@ import Logging
 
 /// A TCP transport that advertises via Bonjour and exchanges newline-delimited JSON-RPC.
 public final class TCPBonjourTransport: Transport, @unchecked Sendable {
-    /// DNS-SD service type for MCP over TCP.
+    /// Base DNS-SD service type for MCP over TCP.
     public static let serviceType = "_mcp._tcp"
+
+    /// Returns a server-specific service type derived from the server name,
+    /// e.g. `"Post"` → `"_post-mcp._tcp"`.  This prevents Bonjour collisions
+    /// between unrelated MCP servers on the same network.
+    public static func serviceType(for serverName: String) -> String {
+        "_\(serverName.lowercased())-mcp._tcp"
+    }
 
     public let server: MCPServer
     public let logger = Logger(label: "com.cocoanetics.SwiftMCP.TCPBonjourTransport")
@@ -76,7 +83,7 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
     public init(
         server: MCPServer,
         serviceName: String? = nil,
-        serviceType: String = TCPBonjourTransport.serviceType,
+        serviceType: String? = nil,
         serviceDomain: String = "local.",
         port: UInt16? = nil,
         acceptLocalOnly: Bool = true,
@@ -84,7 +91,8 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
     ) {
         self.server = server
         self.serviceName = serviceName
-        self.serviceType = serviceType
+        // Default to a server-specific service type derived from the server name
+        self.serviceType = serviceType ?? TCPBonjourTransport.serviceType(for: server.serverName)
         self.serviceDomain = serviceDomain
         self.port = port
         self.acceptLocalOnly = acceptLocalOnly
@@ -95,7 +103,7 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
         self.init(
             server: server,
             serviceName: nil,
-            serviceType: TCPBonjourTransport.serviceType,
+            serviceType: nil,
             serviceDomain: "local.",
             port: nil,
             acceptLocalOnly: true,
@@ -305,8 +313,14 @@ import Logging
 
 /// Stub implementation for platforms without Network framework.
 public final class TCPBonjourTransport: Transport, @unchecked Sendable {
-    /// DNS-SD service type for MCP over TCP.
+    /// Base DNS-SD service type for MCP over TCP.
     public static let serviceType = "_mcp._tcp"
+
+    /// Returns a server-specific service type derived from the server name,
+    /// e.g. `"Post"` → `"_post-mcp._tcp"`.
+    public static func serviceType(for serverName: String) -> String {
+        "_\(serverName.lowercased())-mcp._tcp"
+    }
 
     public let server: MCPServer
     public let logger = Logger(label: "com.cocoanetics.SwiftMCP.TCPBonjourTransport")
@@ -323,7 +337,7 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
     public init(
         server: MCPServer,
         serviceName: String? = nil,
-        serviceType: String = TCPBonjourTransport.serviceType,
+        serviceType: String? = nil,
         serviceDomain: String = "local.",
         port: UInt16? = nil,
         acceptLocalOnly: Bool = true,
@@ -331,7 +345,7 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
     ) {
         self.server = server
         self.serviceName = serviceName
-        self.serviceType = serviceType
+        self.serviceType = serviceType ?? TCPBonjourTransport.serviceType(for: server.serverName)
         self.serviceDomain = serviceDomain
         self.port = port
         self.acceptLocalOnly = acceptLocalOnly
@@ -342,7 +356,7 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
         self.init(
             server: server,
             serviceName: nil,
-            serviceType: TCPBonjourTransport.serviceType,
+            serviceType: nil,
             serviceDomain: "local.",
             port: nil,
             acceptLocalOnly: true,

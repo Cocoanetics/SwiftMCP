@@ -144,7 +144,10 @@ public final actor TCPConnection: StdioConnection {
                     }
                 }
 
-                if let endpoint = matching.first ?? results.first?.endpoint {
+                if let endpoint = matching.first {
+                    finish(.success(endpoint))
+                } else if serviceName == nil, let endpoint = results.first?.endpoint {
+                    // Only use unfiltered fallback when no specific service was requested
                     finish(.success(endpoint))
                 }
             }
