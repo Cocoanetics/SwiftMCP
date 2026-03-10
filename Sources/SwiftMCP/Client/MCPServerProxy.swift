@@ -7,6 +7,16 @@ import Logging
 
 /// A proxy for interacting with an MCP server over stdio, TCP, or SSE.
 public final actor MCPServerProxy: Sendable {
+    private struct NotificationHandlerBox: Sendable {
+        let payloadTypeDescription: String
+        let handle: @Sendable (MCPServerProxy, JSONRPCMessage.JSONRPCNotificationData) async throws -> Void
+    }
+
+    private enum NotificationMethod {
+        static let log = "notifications/message"
+        static let progress = "notifications/progress"
+    }
+
     public let logger = Logger(label: "com.cocoanetics.SwiftMCP.MCPServerProxy")
 
     /// The configuration for the MCP server.
@@ -42,12 +52,50 @@ public final actor MCPServerProxy: Sendable {
     public private(set) var serverDescription: String?
     public private(set) var serverCapabilities: ServerCapabilities?
 
+    private var notificationHandlers: [String: NotificationHandlerBox] = [:]
+
     /// Optional handler for log notifications from the server.
-    public var logNotificationHandler: (any MCPServerProxyLogNotificationHandling)?
+    public var logNotificationHandler: (any MCPServerProxyLogNotificationHandling)? {
+        didSet {
+            updateLogNotificationRegistration()
+        }
+    }
+
+    /// Optional handler for progress notifications from the server.
+    public var progressNotificationHandler: (any MCPServerProxyProgressNotificationHandling)? {
+        didSet {
+            updateProgressNotificationRegistration()
+        }
+    }
 
     /// Updates the log notification handler.
     public func setLogNotificationHandler(_ handler: (any MCPServerProxyLogNotificationHandling)?) {
         logNotificationHandler = handler
+    }
+
+    /// Updates the progress notification handler.
+    public func setProgressNotificationHandler(_ handler: (any MCPServerProxyProgressNotificationHandling)?) {
+        progressNotificationHandler = handler
+    }
+
+    /// Registers a typed handler for a JSON-RPC notification.
+    public func setNotificationHandler<Payload>(
+        _ method: String,
+        as payloadType: Payload.Type = Payload.self,
+        handler: @escaping @Sendable (Payload) async -> Void
+    ) where Payload: Decodable, Payload: Sendable {
+        notificationHandlers[method] = NotificationHandlerBox(
+            payloadTypeDescription: String(reflecting: payloadType),
+            handle: { _, notification in
+                let payload = try Self.decodeNotificationPayload(from: notification, as: payloadType)
+                await handler(payload)
+            }
+        )
+    }
+
+    /// Removes the registered handler for a JSON-RPC notification.
+    public func removeNotificationHandler(for method: String) {
+        notificationHandlers.removeValue(forKey: method)
     }
 
     private var lineConnection: (any StdioConnection)?
@@ -518,13 +566,7 @@ public final actor MCPServerProxy: Sendable {
                     logger.debug("[MCP DEBUG] Ignoring client request: \(requestData.method)")
                 }
             case .notification(let notification):
-                if notification.method == "notifications/progress" {
-                    logProgressNotification(notification)
-                } else if notification.method == "notifications/message" {
-                    await handleLogNotification(notification)
-                } else {
-                    logger.trace("[MCP DEBUG] Received notification: \(notification.method)")
-                }
+                await handleNotification(notification)
             case .response, .errorResponse:
                 if let id = message.id, let waitingContinuation = responseTasks[id] {
                     responseTasks.removeValue(forKey: id)
@@ -536,6 +578,19 @@ public final actor MCPServerProxy: Sendable {
         } else {
             logger.error("[MCP DEBUG] Failed to decode JSON-RPC message")
         }
+    }
+
+    func handleNotification(_ notification: JSONRPCMessage.JSONRPCNotificationData) async {
+        if let handler = notificationHandlers[notification.method] {
+            do {
+                try await handler.handle(self, notification)
+                return
+            } catch {
+                logger.error("[MCP] Failed to handle \(notification.method) as \(handler.payloadTypeDescription): \(String(describing: error))")
+            }
+        }
+
+        handleUnhandledNotification(notification)
     }
 
     private func handlePingRequest(_ request: JSONRPCMessage.JSONRPCRequestData) async {
@@ -558,6 +613,17 @@ public final actor MCPServerProxy: Sendable {
             }
         } catch {
             return
+        }
+    }
+
+    private func handleUnhandledNotification(_ notification: JSONRPCMessage.JSONRPCNotificationData) {
+        switch notification.method {
+        case NotificationMethod.progress:
+            logProgressNotification(notification)
+        case NotificationMethod.log:
+            logIncomingLogMessage(notification)
+        default:
+            logger.trace("[MCP DEBUG] Received notification: \(notification.method)")
         }
     }
 
@@ -596,22 +662,48 @@ public final actor MCPServerProxy: Sendable {
     }
 
     func handleLogNotification(_ notification: JSONRPCMessage.JSONRPCNotificationData) async {
-        guard let params = notification.params else {
-            logger.info("[MCP] Log notification received.")
+        await handleNotification(notification)
+    }
+
+    private func updateLogNotificationRegistration() {
+        guard let handler = logNotificationHandler else {
+            removeNotificationHandler(for: NotificationMethod.log)
             return
         }
 
-        let levelValue = params["level"]?.value as? String
-        let level = levelValue.flatMap(LogLevel.init(string:)) ?? .info
-        let loggerName = params["logger"]?.value as? String
-        let dataValue = params["data"] ?? AnyCodable("")
-        let message = LogMessage(level: level, logger: loggerName, data: dataValue)
+        notificationHandlers[NotificationMethod.log] = NotificationHandlerBox(
+            payloadTypeDescription: String(reflecting: LogMessage.self),
+            handle: { proxy, notification in
+                let message = try Self.decodeNotificationPayload(from: notification, as: LogMessage.self)
+                await handler.mcpServerProxy(proxy, didReceiveLog: message)
+            }
+        )
+    }
 
-        if let handler = logNotificationHandler {
-            await handler.mcpServerProxy(self, didReceiveLog: message)
-        } else {
-            logIncomingLogMessage(message)
+    private func updateProgressNotificationRegistration() {
+        guard let handler = progressNotificationHandler else {
+            removeNotificationHandler(for: NotificationMethod.progress)
+            return
         }
+
+        notificationHandlers[NotificationMethod.progress] = NotificationHandlerBox(
+            payloadTypeDescription: String(reflecting: ProgressNotification.self),
+            handle: { proxy, notification in
+                let progress = try Self.decodeNotificationPayload(from: notification, as: ProgressNotification.self)
+                await handler.mcpServerProxy(proxy, didReceiveProgress: progress)
+            }
+        )
+    }
+
+    private static func decodeNotificationPayload<Payload>(
+        from notification: JSONRPCMessage.JSONRPCNotificationData,
+        as payloadType: Payload.Type = Payload.self
+    ) throws -> Payload where Payload: Decodable {
+        let encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+        let params = notification.params ?? [:]
+        let data = try encoder.encode(params)
+        return try decoder.decode(payloadType, from: data)
     }
 
     private func logIncomingLogMessage(_ message: LogMessage) {
@@ -631,6 +723,20 @@ public final actor MCPServerProxy: Sendable {
         } else {
             logger.log(level: level, "[MCP] Log: \(parts.joined(separator: " | "))")
         }
+    }
+
+    private func logIncomingLogMessage(_ notification: JSONRPCMessage.JSONRPCNotificationData) {
+        guard let params = notification.params else {
+            logger.info("[MCP] Log notification received.")
+            return
+        }
+
+        let levelValue = params["level"]?.value as? String
+        let level = levelValue.flatMap(LogLevel.init(string:)) ?? .info
+        let loggerName = params["logger"]?.value as? String
+        let dataValue = params["data"] ?? AnyCodable("")
+        let message = LogMessage(level: level, logger: loggerName, data: dataValue)
+        logIncomingLogMessage(message)
     }
 
     private func loggerLevel(for level: LogLevel) -> Logger.Level {
