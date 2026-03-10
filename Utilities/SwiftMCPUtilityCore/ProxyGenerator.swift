@@ -308,7 +308,7 @@ public enum ProxyGenerator {
         resourceTemplates: [SimpleResourceTemplate],
         usedMethodNames: inout Set<String>
     ) -> [String] {
-        var lines = [
+        let lines = [
             "    public func listResources() async throws -> [SimpleResource] {",
             "        try await proxy.listResources()",
             "    }",
@@ -322,16 +322,6 @@ public enum ProxyGenerator {
             "    }"
         ]
 
-        let convenienceLines = makeResourceWrapperLines(
-            resources: resources,
-            resourceTemplates: resourceTemplates,
-            usedMethodNames: &usedMethodNames
-        )
-        if !convenienceLines.isEmpty {
-            lines.append("")
-            lines.append(contentsOf: convenienceLines)
-        }
-
         return lines
     }
 
@@ -339,7 +329,7 @@ public enum ProxyGenerator {
         prompts: [Prompt],
         usedMethodNames: inout Set<String>
     ) -> [String] {
-        var lines = [
+        let lines = [
             "    public func listPrompts() async throws -> [Prompt] {",
             "        try await proxy.listPrompts()",
             "    }",
@@ -348,12 +338,6 @@ public enum ProxyGenerator {
             "        try await proxy.getPrompt(name: name, arguments: arguments)",
             "    }"
         ]
-
-        let convenienceLines = makePromptWrapperLines(prompts: prompts, usedMethodNames: &usedMethodNames)
-        if !convenienceLines.isEmpty {
-            lines.append("")
-            lines.append(contentsOf: convenienceLines)
-        }
 
         return lines
     }
