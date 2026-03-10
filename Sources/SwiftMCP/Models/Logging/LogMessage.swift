@@ -53,10 +53,10 @@ public struct LogMessage: Codable, Sendable {
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        let rawLevel = try container.decodeIfPresent(String.self, forKey: .level) ?? LogLevel.info.rawValue
+        let rawLevel = (try? container.decode(String.self, forKey: .level)) ?? LogLevel.info.rawValue
 
         level = LogLevel(string: rawLevel) ?? .info
-        logger = try container.decodeIfPresent(String.self, forKey: .logger)
-        data = try container.decodeIfPresent(AnyCodable.self, forKey: .data) ?? AnyCodable("")
+        logger = try? container.decode(String.self, forKey: .logger)
+        data = (try? container.decode(AnyCodable.self, forKey: .data)) ?? AnyCodable("")
     }
 }

@@ -57,6 +57,31 @@ struct ProxyNotificationHandlerTests {
         #expect(message.data.value as? String == "hello")
     }
 
+    @Test("Proxy tolerates malformed optional log fields and still forwards handler callbacks")
+    func proxyHandlesMalformedLogNotifications() async {
+        let proxy = makeProxy()
+        let capture = LogCapture()
+        await proxy.setLogNotificationHandler(capture)
+
+        let notification = JSONRPCMessage.JSONRPCNotificationData(
+            method: "notifications/message",
+            params: [
+                "level": AnyCodable(3),
+                "logger": AnyCodable(["name": "demo"]),
+                "data": AnyCodable("hello")
+            ]
+        )
+
+        await proxy.handleNotification(notification)
+
+        let messages = await capture.messages
+        #expect(messages.count == 1)
+        let message = messages[0]
+        #expect(message.level == .info)
+        #expect(message.logger == nil)
+        #expect(message.data.value as? String == "hello")
+    }
+
     @Test("Proxy forwards progress notifications to handler")
     func proxyHandlesProgressNotifications() async {
         let proxy = makeProxy()
