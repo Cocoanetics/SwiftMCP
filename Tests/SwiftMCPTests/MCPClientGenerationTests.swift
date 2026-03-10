@@ -224,13 +224,13 @@ struct MCPClientGenerationTests {
         #expect(summary.status == "ready")
     }
 
-    @Test("Generated client exposes all resource templates")
+    @Test("Generated client selects the matching resource template from optional parameters")
     func readsAllGeneratedResourceTemplates() async throws {
         let (_, client, proxy) = try await makeClient()
         defer { Task { await proxy.disconnect() } }
 
         let defaultProfile = try await client.versionedUserProfile(user_id: 7)
-        let localizedProfile = try await client.versionedUserProfileTemplate2(user_id: 7, lang: "de")
+        let localizedProfile = try await client.versionedUserProfile(user_id: 7, lang: "de")
         #expect(defaultProfile == "Profile 7")
         #expect(localizedProfile == "Profile 7 [de]")
     }
