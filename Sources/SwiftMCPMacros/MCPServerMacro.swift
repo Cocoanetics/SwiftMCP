@@ -658,7 +658,7 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
 
     private enum ClientFunctionKind {
         case tool
-        case resource(primaryTemplate: String)
+        case resource(templates: [String])
         case prompt
     }
 
@@ -691,31 +691,42 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
         if !resourceFunctions.isEmpty {
             lines.append("")
             lines.append("    // MARK: - Resources")
-        }
-        for funcDecl in resourceFunctions {
-            guard let template = resourceTemplates(from: funcDecl).first else {
-                continue
-            }
-            let metadata = clientFunctionMetadata(from: funcDecl, kind: .resource(primaryTemplate: template))
             lines.append("")
-            lines.append(contentsOf: makeClientMethodLines(metadata: metadata))
+            lines.append("    public func listResources() async throws -> [SimpleResource] {")
+            lines.append("        try await proxy.listResources()")
+            lines.append("    }")
+            lines.append("")
+            lines.append("    public func listResourceTemplates() async throws -> [SimpleResourceTemplate] {")
+            lines.append("        try await proxy.listResourceTemplates()")
+            lines.append("    }")
+            lines.append("")
+            lines.append("    public func readResource(uri: URL) async throws -> [GenericResourceContent] {")
+            lines.append("        try await proxy.readResource(uri: uri)")
+            lines.append("    }")
         }
 
         if !promptFunctions.isEmpty {
             lines.append("")
             lines.append("    // MARK: - Prompts")
-        }
-        for funcDecl in promptFunctions {
-            let metadata = clientFunctionMetadata(from: funcDecl, kind: .prompt)
             lines.append("")
-            lines.append(contentsOf: makeClientMethodLines(metadata: metadata))
+            lines.append("    public func listPrompts() async throws -> [Prompt] {")
+            lines.append("        try await proxy.listPrompts()")
+            lines.append("    }")
+            lines.append("")
+            lines.append("    public func getPrompt(name: String, arguments: [String: any Sendable] = [:]) async throws -> PromptResult {")
+            lines.append("        try await proxy.getPrompt(name: name, arguments: arguments)")
+            lines.append("    }")
         }
 
         lines.append("}")
         return lines.joined(separator: "\n")
     }
 
-    private static func clientFunctionMetadata(from funcDecl: FunctionDeclSyntax, kind: ClientFunctionKind) -> ClientFunctionMetadata {
+    private static func clientFunctionMetadata(
+        from funcDecl: FunctionDeclSyntax,
+        kind: ClientFunctionKind,
+        generatedName: String? = nil
+    ) -> ClientFunctionMetadata {
         let documentation = Documentation(from: funcDecl.leadingTrivia.description)
         let parameters = funcDecl.signature.parameterClause.parameters.map { param -> ClientParameter in
             let name = param.secondName?.text ?? param.firstName.text
@@ -745,7 +756,7 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
 
         return ClientFunctionMetadata(
             kind: kind,
-            name: funcDecl.name.text,
+            name: generatedName ?? funcDecl.name.text,
             documentation: documentation,
             parameters: parameters,
             returnTypeString: returnTypeString,
@@ -820,7 +831,7 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
                 lines.append("        return")
             }
 
-        case .resource(let primaryTemplate):
+        case .resource(let templates):
             let clientReturnType = metadata.hasReturnClause ? "\(metadata.returnTypeString).MCPClientReturn" : nil
             let returnClause = clientReturnType.map { " -> \($0)" } ?? ""
 
@@ -832,7 +843,31 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
                 lines.append("        let capturedArguments = arguments")
             }
 
-            lines.append("        let uri = try \"\(primaryTemplate.escapedForSwiftString)\".constructURI(with: \(argumentsName))")
+            let orderedTemplates = templates.sorted {
+                let lhsCount = resourceTemplateVariables(in: $0).count
+                let rhsCount = resourceTemplateVariables(in: $1).count
+                if lhsCount == rhsCount { return $0 < $1 }
+                return lhsCount > rhsCount
+            }
+
+            if orderedTemplates.count == 1, let template = orderedTemplates.first {
+                lines.append("        let uri = try \"\(template.escapedForSwiftString)\".constructURI(with: \(argumentsName))")
+            } else {
+                lines.append("        let uri: URL")
+                for (index, template) in orderedTemplates.enumerated() {
+                    let variables = resourceTemplateVariables(in: template)
+                    let condition = variables.isEmpty
+                        ? "true"
+                        : variables.map { "\(argumentsName)[\"\($0)\"] != nil" }.joined(separator: " && ")
+                    let keyword = index == 0 ? "if" : "else if"
+                    lines.append("        \(keyword) \(condition) {")
+                    lines.append("            uri = try \"\(template.escapedForSwiftString)\".constructURI(with: \(argumentsName))")
+                    lines.append("        }")
+                }
+                lines.append("        else {")
+                lines.append("            throw MCPServerProxyError.communicationError(\"No resource template matched for \(metadata.name)\")")
+                lines.append("        }")
+            }
             lines.append("        let contents = \(resourceReadExpression(isAsync: metadata.isAsync, isThrowing: metadata.isThrowing))")
 
             if !metadata.hasReturnClause || metadata.returnTypeString == "Void" {
@@ -1065,5 +1100,39 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
         }
 
         return []
+    }
+
+    private static func resourceTemplateVariables(in template: String) -> [String] {
+        guard let regex = try? NSRegularExpression(pattern: #"\{[^}]+\}"#) else {
+            return []
+        }
+
+        let nsRange = NSRange(template.startIndex..., in: template)
+        let matches = regex.matches(in: template, range: nsRange)
+        var variables: [String] = []
+
+        for match in matches {
+            guard let range = Range(match.range, in: template) else { continue }
+            var expression = String(template[range].dropFirst().dropLast())
+
+            if let first = expression.first, "+#./;?&".contains(first) {
+                expression.removeFirst()
+            }
+
+            for spec in expression.split(separator: ",") {
+                var name = String(spec)
+                if let starIndex = name.firstIndex(of: "*") {
+                    name = String(name[..<starIndex])
+                }
+                if let colonIndex = name.firstIndex(of: ":") {
+                    name = String(name[..<colonIndex])
+                }
+                if !name.isEmpty, !variables.contains(name) {
+                    variables.append(name)
+                }
+            }
+        }
+
+        return variables
     }
 }

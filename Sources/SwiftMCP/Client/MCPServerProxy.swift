@@ -831,7 +831,21 @@ public final actor MCPServerProxy: Sendable {
         params: [String: AnyCodable]? = nil
     ) async throws -> [String: AnyCodable] {
         let requestId = nextRequestID()
-        let request = JSONRPCMessage.request(id: requestId, method: method, params: params)
+        var requestParams = params ?? [:]
+
+        if !meta.isEmpty {
+            var requestMeta = meta
+            if let existingMeta = requestParams["_meta"]?.value as? [String: AnyCodable] {
+                requestMeta.merge(existingMeta) { _, new in new }
+            } else if let existingMeta = requestParams["_meta"]?.value as? [String: Any] {
+                for (key, value) in existingMeta {
+                    requestMeta[key] = AnyCodable(value)
+                }
+            }
+            requestParams["_meta"] = AnyCodable(requestMeta)
+        }
+
+        let request = JSONRPCMessage.request(id: requestId, method: method, params: requestParams.isEmpty ? nil : requestParams)
         let response = try await send(request)
 
         switch response {
