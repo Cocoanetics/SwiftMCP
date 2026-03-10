@@ -787,24 +787,34 @@ public extension MCPServer {
 	 */
     func mcpToolMetadata(for toolName: String) -> MCPToolMetadata?
         {
+        // Try direct mirror lookup first (works when tool name == function name)
         let metadataKey = "__mcpMetadata_\(toolName)"
-
-        // Find the metadata for the function using reflection
         let mirror = Mirror(reflecting: self)
-        guard let child = mirror.children.first(where: { $0.label == metadataKey }),
-			  let metadata = child.value as? MCPToolMetadata else {
-            #if canImport(AppIntents)
-            if #available(macOS 13.0, iOS 16.0, tvOS 16.0, watchOS 9.0, *) {
-                if let providerType = Self.self as? MCPAppShortcutsProvider.Type {
-                    let shortcutMetadata = MCPAppIntentTools.toolMetadata(for: providerType)
-                    return shortcutMetadata.first(where: { $0.name == toolName })
-                }
-            }
-            #endif
-            return nil
+
+        if let child = mirror.children.first(where: { $0.label == metadataKey }),
+           let metadata = child.value as? MCPToolMetadata {
+            return metadata
         }
 
-        return metadata
+        // Fallback: search all metadata children by their name property
+        // (handles custom naming conventions like .pascalCase, .snakeCase, etc.)
+        for child in mirror.children {
+            guard let label = child.label, label.hasPrefix("__mcpMetadata_"),
+                  let metadata = child.value as? MCPToolMetadata,
+                  metadata.name == toolName else { continue }
+            return metadata
+        }
+
+        #if canImport(AppIntents)
+        if #available(macOS 13.0, iOS 16.0, tvOS 16.0, watchOS 9.0, *) {
+            if let providerType = Self.self as? MCPAppShortcutsProvider.Type {
+                let shortcutMetadata = MCPAppIntentTools.toolMetadata(for: providerType)
+                return shortcutMetadata.first(where: { $0.name == toolName })
+            }
+        }
+        #endif
+
+        return nil
     }
 
     /// Retrieves metadata for a prompt function by name
