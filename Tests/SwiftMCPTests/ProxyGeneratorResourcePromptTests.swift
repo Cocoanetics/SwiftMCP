@@ -58,6 +58,30 @@ struct ProxyGeneratorResourcePromptTests {
         #expect(source.contains("arguments[\"excited\"] = MCPClientArgumentEncoder.encode(excited)"))
     }
 
+    @Test("Generator keeps distinct resource templates even when names collide")
+    func generatorKeepsDistinctResourceTemplatesWithSameName() throws {
+        let source = ProxyGenerator.generate(
+            typeName: "DemoProxy",
+            tools: [],
+            resourceTemplates: [
+                SimpleResourceTemplate(
+                    uriTemplate: "users://{user_id}/profile",
+                    name: "userProfile",
+                    description: "Default profile"
+                ),
+                SimpleResourceTemplate(
+                    uriTemplate: "users://{user_id}/profile/localized?locale={lang}",
+                    name: "userProfile",
+                    description: "Localized profile"
+                )
+            ],
+            supportsResources: true
+        ).description
+
+        #expect(source.contains("public func userProfile(user_id: String) async throws -> [GenericResourceContent]"))
+        #expect(source.contains("public func userProfileResource(user_id: String, lang: String? = nil) async throws -> [GenericResourceContent]"))
+    }
+
     @Test("Generator emits generic resource and prompt helpers from capability flags")
     func generatorEmitsSurfaceHelpersFromCapabilities() throws {
         let source = ProxyGenerator.generate(

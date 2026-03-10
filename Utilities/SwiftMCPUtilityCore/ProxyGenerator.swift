@@ -510,12 +510,17 @@ public enum ProxyGenerator {
     }
 
     private static func uniqueResourceTemplates(_ templates: [SimpleResourceTemplate]) -> [SimpleResourceTemplate] {
-        var templatesByName: [String: SimpleResourceTemplate] = [:]
-        for template in templates where templatesByName[template.name] == nil {
-            templatesByName[template.name] = template
+        var seen: Set<String> = []
+        var unique: [SimpleResourceTemplate] = []
+
+        for template in templates {
+            let key = "\(template.name)\u{0}\(template.uriTemplate)"
+            if seen.insert(key).inserted {
+                unique.append(template)
+            }
         }
 
-        return templatesByName.values.sorted {
+        return unique.sorted {
             let nameOrder = $0.name.localizedCaseInsensitiveCompare($1.name)
             if nameOrder == .orderedSame {
                 return $0.uriTemplate < $1.uriTemplate
