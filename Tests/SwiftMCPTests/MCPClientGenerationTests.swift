@@ -117,6 +117,18 @@ actor ClientTestServer {
         ClientResult(total: 8, status: "ready")
     }
 
+    /// Returns profile text via multiple URI templates.
+    /// - Parameter user_id: The user identifier.
+    /// - Parameter lang: Optional language code.
+    /// - Returns: A localized user profile summary.
+    @MCPResource(["users://{user_id}/profile", "users://{user_id}/profile/localized?lang={lang}"])
+    func versionedUserProfile(user_id: Int, lang: String? = nil) async -> String {
+        if let lang {
+            return "Profile \(user_id) [\(lang)]"
+        }
+        return "Profile \(user_id)"
+    }
+
     /// Builds a greeting prompt.
     /// - Parameter name: Name to greet.
     /// - Parameter excited: Whether to add emphasis.
@@ -210,6 +222,17 @@ struct MCPClientGenerationTests {
         let summary = try await client.summaryResource()
         #expect(summary.total == 8)
         #expect(summary.status == "ready")
+    }
+
+    @Test("Generated client exposes all resource templates")
+    func readsAllGeneratedResourceTemplates() async throws {
+        let (_, client, proxy) = try await makeClient()
+        defer { Task { await proxy.disconnect() } }
+
+        let defaultProfile = try await client.versionedUserProfile(user_id: 7)
+        let localizedProfile = try await client.versionedUserProfileTemplate2(user_id: 7, lang: "de")
+        #expect(defaultProfile == "Profile 7")
+        #expect(localizedProfile == "Profile 7 [de]")
     }
 
     @Test("Generated client gets prompts")

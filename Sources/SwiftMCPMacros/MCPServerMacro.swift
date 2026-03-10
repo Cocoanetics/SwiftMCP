@@ -693,12 +693,17 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
             lines.append("    // MARK: - Resources")
         }
         for funcDecl in resourceFunctions {
-            guard let template = resourceTemplates(from: funcDecl).first else {
-                continue
+            let templates = resourceTemplates(from: funcDecl)
+            for (index, template) in templates.enumerated() {
+                let generatedName = index == 0 ? funcDecl.name.text : "\(funcDecl.name.text)Template\(index + 1)"
+                let metadata = clientFunctionMetadata(
+                    from: funcDecl,
+                    kind: .resource(primaryTemplate: template),
+                    generatedName: generatedName
+                )
+                lines.append("")
+                lines.append(contentsOf: makeClientMethodLines(metadata: metadata))
             }
-            let metadata = clientFunctionMetadata(from: funcDecl, kind: .resource(primaryTemplate: template))
-            lines.append("")
-            lines.append(contentsOf: makeClientMethodLines(metadata: metadata))
         }
 
         if !promptFunctions.isEmpty {
@@ -715,7 +720,11 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
         return lines.joined(separator: "\n")
     }
 
-    private static func clientFunctionMetadata(from funcDecl: FunctionDeclSyntax, kind: ClientFunctionKind) -> ClientFunctionMetadata {
+    private static func clientFunctionMetadata(
+        from funcDecl: FunctionDeclSyntax,
+        kind: ClientFunctionKind,
+        generatedName: String? = nil
+    ) -> ClientFunctionMetadata {
         let documentation = Documentation(from: funcDecl.leadingTrivia.description)
         let parameters = funcDecl.signature.parameterClause.parameters.map { param -> ClientParameter in
             let name = param.secondName?.text ?? param.firstName.text
@@ -745,7 +754,7 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
 
         return ClientFunctionMetadata(
             kind: kind,
-            name: funcDecl.name.text,
+            name: generatedName ?? funcDecl.name.text,
             documentation: documentation,
             parameters: parameters,
             returnTypeString: returnTypeString,
