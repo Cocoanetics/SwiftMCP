@@ -106,4 +106,11 @@ public struct SimpleResourceTemplate: MCPResourceTemplate {
     public let name: String
     public let description: String?
     public let mimeType: String?
-} 
+
+    public init(uriTemplate: String, name: String, description: String? = nil, mimeType: String? = nil) {
+        self.uriTemplate = uriTemplate
+        self.name = name
+        self.description = description
+        self.mimeType = mimeType
+    }
+}

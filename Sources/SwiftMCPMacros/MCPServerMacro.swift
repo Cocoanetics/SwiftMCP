@@ -194,6 +194,7 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro, MemberAttributeMacro 
 
         // Find all functions with the MCPResource macro
         var mcpResources: [String] = []
+        var resourceFunctions: [FunctionDeclSyntax] = []
 
         for member in declaration.memberBlock.members {
             if let funcDecl = member.decl.as(FunctionDeclSyntax.self) {
@@ -203,6 +204,7 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro, MemberAttributeMacro 
 					   let identifier = identifierAttr.attributeName.as(IdentifierTypeSyntax.self),
 					   identifier.name.text == "MCPResource" {
                         mcpResources.append(funcDecl.name.text)
+                        resourceFunctions.append(funcDecl)
                         break
                     }
                 }
@@ -211,6 +213,7 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro, MemberAttributeMacro 
 
         // Find all functions with the MCPPrompt macro
         var mcpPrompts: [String] = []
+        var promptFunctions: [FunctionDeclSyntax] = []
 
         for member in declaration.memberBlock.members {
             if let funcDecl = member.decl.as(FunctionDeclSyntax.self) {
@@ -219,6 +222,7 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro, MemberAttributeMacro 
                        let identifier = identifierAttr.attributeName.as(IdentifierTypeSyntax.self),
                        identifier.name.text == "MCPPrompt" {
                         mcpPrompts.append(funcDecl.name.text)
+                        promptFunctions.append(funcDecl)
                         break
                     }
                 }
@@ -488,9 +492,11 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
             declarations.append(DeclSyntax(stringLiteral: callPromptMethod))
         }
 
-        if generateClient, !toolFunctions.isEmpty {
+        if generateClient, !(toolFunctions.isEmpty && resourceFunctions.isEmpty && promptFunctions.isEmpty) {
             let clientType = makeClientType(
                 toolFunctions: toolFunctions,
+                resourceFunctions: resourceFunctions,
+                promptFunctions: promptFunctions,
                 serverDescription: serverDescriptionText
             )
             declarations.append(DeclSyntax(stringLiteral: clientType))
@@ -638,6 +644,7 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
     }
 
     private struct ClientFunctionMetadata {
+        let kind: ClientFunctionKind
         let name: String
         let documentation: Documentation
         let parameters: [ClientParameter]
@@ -649,8 +656,16 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
         let propagatedAttributes: [String]
     }
 
+    private enum ClientFunctionKind {
+        case tool
+        case resource(primaryTemplate: String)
+        case prompt
+    }
+
     private static func makeClientType(
         toolFunctions: [FunctionDeclSyntax],
+        resourceFunctions: [FunctionDeclSyntax],
+        promptFunctions: [FunctionDeclSyntax],
         serverDescription: String?
     ) -> String {
         var lines: [String] = []
@@ -663,8 +678,35 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
         lines.append("        self.proxy = proxy")
         lines.append("    }")
 
+        if !toolFunctions.isEmpty {
+            lines.append("")
+            lines.append("    // MARK: - Tools")
+        }
         for funcDecl in toolFunctions {
-            let metadata = clientFunctionMetadata(from: funcDecl)
+            let metadata = clientFunctionMetadata(from: funcDecl, kind: .tool)
+            lines.append("")
+            lines.append(contentsOf: makeClientMethodLines(metadata: metadata))
+        }
+
+        if !resourceFunctions.isEmpty {
+            lines.append("")
+            lines.append("    // MARK: - Resources")
+        }
+        for funcDecl in resourceFunctions {
+            guard let template = resourceTemplates(from: funcDecl).first else {
+                continue
+            }
+            let metadata = clientFunctionMetadata(from: funcDecl, kind: .resource(primaryTemplate: template))
+            lines.append("")
+            lines.append(contentsOf: makeClientMethodLines(metadata: metadata))
+        }
+
+        if !promptFunctions.isEmpty {
+            lines.append("")
+            lines.append("    // MARK: - Prompts")
+        }
+        for funcDecl in promptFunctions {
+            let metadata = clientFunctionMetadata(from: funcDecl, kind: .prompt)
             lines.append("")
             lines.append(contentsOf: makeClientMethodLines(metadata: metadata))
         }
@@ -673,7 +715,7 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
         return lines.joined(separator: "\n")
     }
 
-    private static func clientFunctionMetadata(from funcDecl: FunctionDeclSyntax) -> ClientFunctionMetadata {
+    private static func clientFunctionMetadata(from funcDecl: FunctionDeclSyntax, kind: ClientFunctionKind) -> ClientFunctionMetadata {
         let documentation = Documentation(from: funcDecl.leadingTrivia.description)
         let parameters = funcDecl.signature.parameterClause.parameters.map { param -> ClientParameter in
             let name = param.secondName?.text ?? param.firstName.text
@@ -702,6 +744,7 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
         let isThrowing = true
 
         return ClientFunctionMetadata(
+            kind: kind,
             name: funcDecl.name.text,
             documentation: documentation,
             parameters: parameters,
@@ -741,48 +784,102 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
 
         let signature = metadata.parameters.map { parameterSignature($0) }.joined(separator: ", ")
         let effectSpecifiers = effectSpecifiersString(isAsync: metadata.isAsync, throwsKeyword: metadata.throwsKeyword)
-
-        // Use .MCPClientReturn for all return types. For most types this resolves to Self
-        // (via extension Decodable). For @Schema single-array wrapper structs it resolves
-        // to [Element], so the generated proxy returns the unwrapped array automatically.
-        let clientReturnType = metadata.hasReturnClause ? "\(metadata.returnTypeString).MCPClientReturn" : nil
-        let returnClause = clientReturnType.map { " -> \($0)" } ?? ""
-
-        lines.append("    public func \(metadata.name)(\(signature))\(effectSpecifiers)\(returnClause) {")
-
         let hasParameters = !metadata.parameters.isEmpty
-        if hasParameters {
-            lines.append("        var arguments: [String: any Sendable] = [:]")
-            for parameter in metadata.parameters {
-                if parameter.isOptional {
-                    lines.append("        if let \(parameter.name) { arguments[\"\(parameter.name)\"] = MCPClientArgumentEncoder.encode(\(parameter.name)) }")
+
+        switch metadata.kind {
+        case .tool:
+            // Use .MCPClientReturn for all return types. For most types this resolves to Self
+            // (via extension Decodable). For @Schema single-array wrapper structs it resolves
+            // to [Element], so the generated proxy returns the unwrapped array automatically.
+            let clientReturnType = metadata.hasReturnClause ? "\(metadata.returnTypeString).MCPClientReturn" : nil
+            let returnClause = clientReturnType.map { " -> \($0)" } ?? ""
+
+            lines.append("    public func \(metadata.name)(\(signature))\(effectSpecifiers)\(returnClause) {")
+            lines.append(contentsOf: encodedArgumentLines(for: metadata.parameters, variableName: "arguments", indent: "        "))
+
+            let argumentsName = (hasParameters && !metadata.isAsync) ? "capturedArguments" : "arguments"
+            if hasParameters && !metadata.isAsync {
+                lines.append("        let capturedArguments = arguments")
+            }
+
+            let callExpression = toolCallExpression(
+                toolName: metadata.name,
+                hasParameters: hasParameters,
+                argumentsName: argumentsName,
+                isAsync: metadata.isAsync,
+                isThrowing: metadata.isThrowing
+            )
+            lines.append("        let text = \(callExpression)")
+
+            if metadata.hasReturnClause, let clientReturnType {
+                lines.append("        return try MCPClientResultDecoder.decode(\(clientReturnType).self, from: text)")
+            } else if metadata.hasReturnClause {
+                lines.append("        return try MCPClientResultDecoder.decode(\(metadata.returnTypeString).self, from: text)")
+            } else {
+                lines.append("        _ = try MCPClientResultDecoder.decode(Void.self, from: text)")
+                lines.append("        return")
+            }
+
+        case .resource(let primaryTemplate):
+            let clientReturnType = metadata.hasReturnClause ? "\(metadata.returnTypeString).MCPClientReturn" : nil
+            let returnClause = clientReturnType.map { " -> \($0)" } ?? ""
+
+            lines.append("    public func \(metadata.name)(\(signature))\(effectSpecifiers)\(returnClause) {")
+            lines.append(contentsOf: encodedArgumentLines(for: metadata.parameters, variableName: "arguments", indent: "        "))
+
+            let argumentsName = hasParameters ? ((metadata.isAsync ? "arguments" : "capturedArguments")) : "[:]"
+            if hasParameters && !metadata.isAsync {
+                lines.append("        let capturedArguments = arguments")
+            }
+
+            lines.append("        let uri = try \"\(primaryTemplate.escapedForSwiftString)\".constructURI(with: \(argumentsName))")
+            lines.append("        let contents = \(resourceReadExpression(isAsync: metadata.isAsync, isThrowing: metadata.isThrowing))")
+
+            if !metadata.hasReturnClause || metadata.returnTypeString == "Void" {
+                lines.append("        return")
+            } else if metadata.returnTypeString == "MCPResourceContent" || metadata.returnTypeString == "GenericResourceContent" {
+                lines.append("        guard let content = contents.first else {")
+                lines.append("            throw MCPServerProxyError.communicationError(\"Resource \(metadata.name) returned no content\")")
+                lines.append("        }")
+                lines.append("        return content")
+            } else if metadata.returnTypeString == "[MCPResourceContent]" || metadata.returnTypeString == "[GenericResourceContent]" {
+                lines.append("        return contents")
+            } else if metadata.returnTypeString == "Data" {
+                lines.append("        if let blob = contents.first?.blob {")
+                lines.append("            return blob")
+                lines.append("        }")
+                lines.append("        if let text = contents.first?.text {")
+                lines.append("            return try MCPClientResultDecoder.decode(Data.self, from: text)")
+                lines.append("        }")
+                lines.append("        throw MCPServerProxyError.communicationError(\"Resource \(metadata.name) returned no blob content\")")
+            } else {
+                lines.append("        guard let text = contents.first?.text else {")
+                lines.append("            throw MCPServerProxyError.communicationError(\"Resource \(metadata.name) returned no text content\")")
+                lines.append("        }")
+                if let clientReturnType {
+                    lines.append("        return try MCPClientResultDecoder.decode(\(clientReturnType).self, from: text)")
                 } else {
-                    lines.append("        arguments[\"\(parameter.name)\"] = MCPClientArgumentEncoder.encode(\(parameter.name))")
+                    lines.append("        return try MCPClientResultDecoder.decode(\(metadata.returnTypeString).self, from: text)")
                 }
             }
-        }
 
-        let argumentsName = (hasParameters && !metadata.isAsync) ? "capturedArguments" : "arguments"
-        if hasParameters && !metadata.isAsync {
-            lines.append("        let capturedArguments = arguments")
-        }
+        case .prompt:
+            lines.append("    public func \(metadata.name)(\(signature))\(effectSpecifiers) -> PromptResult {")
+            lines.append(contentsOf: encodedArgumentLines(for: metadata.parameters, variableName: "arguments", indent: "        "))
 
-        let callExpression = toolCallExpression(
-            toolName: metadata.name,
-            hasParameters: hasParameters,
-            argumentsName: argumentsName,
-            isAsync: metadata.isAsync,
-            isThrowing: metadata.isThrowing
-        )
-        lines.append("        let text = \(callExpression)")
+            let argumentsName = (hasParameters && !metadata.isAsync) ? "capturedArguments" : "arguments"
+            if hasParameters && !metadata.isAsync {
+                lines.append("        let capturedArguments = arguments")
+            }
 
-        if metadata.hasReturnClause, let clientReturnType {
-            lines.append("        return try MCPClientResultDecoder.decode(\(clientReturnType).self, from: text)")
-        } else if metadata.hasReturnClause {
-            lines.append("        return try MCPClientResultDecoder.decode(\(metadata.returnTypeString).self, from: text)")
-        } else {
-            lines.append("        _ = try MCPClientResultDecoder.decode(Void.self, from: text)")
-            lines.append("        return")
+            let callExpression = promptCallExpression(
+                promptName: metadata.name,
+                hasParameters: hasParameters,
+                argumentsName: argumentsName,
+                isAsync: metadata.isAsync,
+                isThrowing: metadata.isThrowing
+            )
+            lines.append("        return \(callExpression)")
         }
 
         lines.append("    }")
@@ -827,9 +924,26 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
     private static func initDocCommentLines() -> [String] {
         let bodyLines = [
             "Creates a client using the provided proxy.",
-            "- Parameter proxy: The proxy used to call server tools."
+            "- Parameter proxy: The proxy used to call server tools, resources, and prompts."
         ]
         return blockDocCommentLines(bodyLines, indent: "    ")
+    }
+
+    private static func encodedArgumentLines(
+        for parameters: [ClientParameter],
+        variableName: String,
+        indent: String
+    ) -> [String] {
+        guard !parameters.isEmpty else { return [] }
+        var lines = ["\(indent)var \(variableName): [String: any Sendable] = [:]"]
+        for parameter in parameters {
+            if parameter.isOptional {
+                lines.append("\(indent)if let \(parameter.name) { \(variableName)[\"\(parameter.name)\"] = MCPClientArgumentEncoder.encode(\(parameter.name)) }")
+            } else {
+                lines.append("\(indent)\(variableName)[\"\(parameter.name)\"] = MCPClientArgumentEncoder.encode(\(parameter.name))")
+            }
+        }
+        return lines
     }
 
     private static func blockDocCommentLines(_ bodyLines: [String], indent: String) -> [String] {
@@ -890,5 +1004,66 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
         }
 
         return "\(tryPrefix)MCPClientBlocking.call { try await \(call) }"
+    }
+
+    private static func resourceReadExpression(
+        isAsync: Bool,
+        isThrowing: Bool
+    ) -> String {
+        let call = "proxy.readResource(uri: uri)"
+        let tryPrefix = isThrowing ? "try " : "try! "
+
+        if isAsync {
+            return "\(tryPrefix)await \(call)"
+        }
+
+        return "\(tryPrefix)MCPClientBlocking.call { try await \(call) }"
+    }
+
+    private static func promptCallExpression(
+        promptName: String,
+        hasParameters: Bool,
+        argumentsName: String,
+        isAsync: Bool,
+        isThrowing: Bool
+    ) -> String {
+        let call = hasParameters
+            ? "proxy.getPrompt(name: \"\(promptName)\", arguments: \(argumentsName))"
+            : "proxy.getPrompt(name: \"\(promptName)\")"
+
+        let tryPrefix = isThrowing ? "try " : "try! "
+
+        if isAsync {
+            return "\(tryPrefix)await \(call)"
+        }
+
+        return "\(tryPrefix)MCPClientBlocking.call { try await \(call) }"
+    }
+
+    private static func resourceTemplates(from funcDecl: FunctionDeclSyntax) -> [String] {
+        for attribute in funcDecl.attributes {
+            guard let identifierAttr = attribute.as(AttributeSyntax.self),
+                  let identifier = identifierAttr.attributeName.as(IdentifierTypeSyntax.self),
+                  identifier.name.text == "MCPResource",
+                  let argList = identifierAttr.arguments?.as(LabeledExprListSyntax.self) else {
+                continue
+            }
+
+            var templates: [String] = []
+            for arg in argList where arg.label == nil {
+                if let stringLiteral = arg.expression.as(StringLiteralExprSyntax.self) {
+                    templates.append(stringLiteral.segments.description)
+                } else if let arrayExpr = arg.expression.as(ArrayExprSyntax.self) {
+                    for element in arrayExpr.elements {
+                        if let stringLiteral = element.expression.as(StringLiteralExprSyntax.self) {
+                            templates.append(stringLiteral.segments.description)
+                        }
+                    }
+                }
+            }
+            return templates
+        }
+
+        return []
     }
 }

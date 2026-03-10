@@ -36,6 +36,9 @@ public enum ProxyGenerator {
     public static func generate(
         typeName: String,
         tools: [MCPTool],
+        resources: [SimpleResource] = [],
+        resourceTemplates: [SimpleResourceTemplate] = [],
+        prompts: [Prompt] = [],
         openapiReturnSchemas: [String: OpenAPIReturnInfo] = [:],
         fileName: String? = nil,
         headerMetadata: HeaderMetadata? = nil
@@ -61,6 +64,9 @@ public enum ProxyGenerator {
         let actorSource = makeActorSource(
             typeName: typeName,
             tools: tools,
+            resources: resources,
+            resourceTemplates: resourceTemplates,
+            prompts: prompts,
             returnTypes: returnTypes,
             typeDefinitions: typeDefinitions,
             typeDocComment: typeDocComment,
@@ -83,6 +89,9 @@ public enum ProxyGenerator {
     private static func makeActorSource(
         typeName: String,
         tools: [MCPTool],
+        resources: [SimpleResource],
+        resourceTemplates: [SimpleResourceTemplate],
+        prompts: [Prompt],
         returnTypes: [String: OpenAPIReturnInfo],
         typeDefinitions: [String],
         typeDocComment: [String],
@@ -118,6 +127,20 @@ public enum ProxyGenerator {
             lines.append("")
             let returnInfo = returnTypes[tool.name]
             lines.append(contentsOf: makeMethodLines(tool: tool, returnInfo: returnInfo))
+        }
+
+        if !resources.isEmpty || !resourceTemplates.isEmpty {
+            lines.append("")
+            lines.append("    // MARK: - Resources")
+            lines.append("")
+            lines.append(contentsOf: makeResourceMethodLines())
+        }
+
+        if !prompts.isEmpty {
+            lines.append("")
+            lines.append("    // MARK: - Prompts")
+            lines.append("")
+            lines.append(contentsOf: makePromptMethodLines())
         }
 
         lines.append("}")
@@ -255,6 +278,34 @@ public enum ProxyGenerator {
         lines.append(contentsOf: returnLines(returnType: returnType))
         lines.append("    }")
         return lines
+    }
+
+    private static func makeResourceMethodLines() -> [String] {
+        [
+            "    public func listResources() async throws -> [SimpleResource] {",
+            "        try await proxy.listResources()",
+            "    }",
+            "",
+            "    public func listResourceTemplates() async throws -> [SimpleResourceTemplate] {",
+            "        try await proxy.listResourceTemplates()",
+            "    }",
+            "",
+            "    public func readResource(uri: URL) async throws -> [GenericResourceContent] {",
+            "        try await proxy.readResource(uri: uri)",
+            "    }"
+        ]
+    }
+
+    private static func makePromptMethodLines() -> [String] {
+        [
+            "    public func listPrompts() async throws -> [Prompt] {",
+            "        try await proxy.listPrompts()",
+            "    }",
+            "",
+            "    public func getPrompt(name: String, arguments: [String: any Sendable] = [:]) async throws -> PromptResult {",
+            "        try await proxy.getPrompt(name: name, arguments: arguments)",
+            "    }"
+        ]
     }
 
     private static func docCommentLines(

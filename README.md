@@ -154,8 +154,8 @@ try await tcpTransport.run()
 ## Typed Client Proxy
 
 SwiftMCP can generate a typed client proxy for any server. This proxy mirrors the
-`@MCPTool` signatures and forwards calls through `MCPServerProxy`. Enable it with
-`generateClient: true` on the server macro.
+`@MCPTool`, `@MCPResource`, and `@MCPPrompt` signatures and forwards calls through
+`MCPServerProxy`. Enable it with `generateClient: true` on the server macro.
 
 ```swift
 @MCPServer(generateClient: true)
@@ -191,7 +191,8 @@ Notes:
 
 Use `SwiftMCPUtility generate-proxy` to create a client proxy for any MCP server,
 including non-SwiftMCP servers. The generated proxy calls `MCPServerProxy` under
-the hood and always returns `String` because MCP does not include output schemas.
+the hood, generates typed tool methods from MCP tool schemas, and adds first-class
+resource/prompt convenience APIs when the server advertises those capabilities.
 Input parameters are inferred from the server's tool schemas, and only string
 formats such as `date-time`, `uri`, `uuid`, and `byte` can be mapped to native
 types (`Date`, `URL`, `UUID`, `Data`).

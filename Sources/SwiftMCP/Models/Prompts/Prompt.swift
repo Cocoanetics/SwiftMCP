@@ -2,7 +2,7 @@ import Foundation
 import AnyCodable
 
 /// Represents a prompt that can be provided by an MCP server
-public struct Prompt: Encodable, Sendable {
+public struct Prompt: Codable, Sendable {
     /// Unique name of the prompt
     public let name: String
 
@@ -22,6 +22,28 @@ public struct Prompt: Encodable, Sendable {
 extension Prompt {
     private enum CodingKeys: String, CodingKey {
         case name, description, arguments
+    }
+
+    private struct ArgumentPayload: Codable {
+        let name: String
+        let description: String?
+        let required: Bool?
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decode(String.self, forKey: .name)
+        description = try container.decodeIfPresent(String.self, forKey: .description)
+
+        let args = try container.decodeIfPresent([ArgumentPayload].self, forKey: .arguments) ?? []
+        arguments = args.map { argument in
+            MCPParameterInfo(
+                name: argument.name,
+                type: String.self,
+                description: argument.description?.isEmpty == false ? argument.description : nil,
+                isRequired: argument.required ?? false
+            )
+        }
     }
 
     public func encode(to encoder: Encoder) throws {

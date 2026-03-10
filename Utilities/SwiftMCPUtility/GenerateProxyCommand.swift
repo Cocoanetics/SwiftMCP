@@ -42,6 +42,11 @@ struct GenerateProxyCommand: AsyncParsableCommand {
 
         try await proxy.connect()
         let tools = try await proxy.listTools()
+        let supportsResources = await proxy.serverCapabilities?.resources != nil
+        let supportsPrompts = await proxy.serverCapabilities?.prompts != nil
+        let resources = supportsResources ? ((try? await proxy.listResources()) ?? []) : []
+        let resourceTemplates = supportsResources ? ((try? await proxy.listResourceTemplates()) ?? []) : []
+        let prompts = supportsPrompts ? ((try? await proxy.listPrompts()) ?? []) : []
         let serverName = await proxy.serverName
         let serverVersion = await proxy.serverVersion
         let serverDescription = await proxy.serverDescription
@@ -60,6 +65,9 @@ struct GenerateProxyCommand: AsyncParsableCommand {
         let source = ProxyGenerator.generate(
             typeName: typeName,
             tools: tools,
+            resources: resources,
+            resourceTemplates: resourceTemplates,
+            prompts: prompts,
             openapiReturnSchemas: openAPIReturnInfo,
             fileName: fileName,
             headerMetadata: headerMetadata

@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 import SwiftMCP
 
@@ -100,6 +101,30 @@ actor ClientTestServer {
     func record(message: String) {
         lastMessage = message
     }
+
+    /// Returns a profile string as a resource.
+    /// - Parameter user_id: The user identifier.
+    /// - Returns: A user profile summary.
+    @MCPResource("users://{user_id}/profile")
+    func userProfile(user_id: Int) async -> String {
+        "Profile \(user_id)"
+    }
+
+    /// Returns structured resource data.
+    /// - Returns: A structured resource payload.
+    @MCPResource("app://summary")
+    func summaryResource() async -> ClientResult {
+        ClientResult(total: 8, status: "ready")
+    }
+
+    /// Builds a greeting prompt.
+    /// - Parameter name: Name to greet.
+    /// - Parameter excited: Whether to add emphasis.
+    @MCPPrompt
+    func greetPrompt(name: String, excited: Bool = false) async -> [PromptMessage] {
+        let punctuation = excited ? "!" : "."
+        return [PromptMessage(role: .assistant, content: .init(text: "Hello \(name)\(punctuation)"))]
+    }
 }
 
 @Suite("Generated Client Tests", .tags(.client))
@@ -166,6 +191,36 @@ struct MCPClientGenerationTests {
 
         try client.record(message: "hello")
         #expect(await server.lastMessage == "hello")
+    }
+
+    @Test("Generated client reads resource text")
+    func readsResourceText() async throws {
+        let (_, client, proxy) = try await makeClient()
+        defer { Task { await proxy.disconnect() } }
+
+        let profile = try await client.userProfile(user_id: 7)
+        #expect(profile == "Profile 7")
+    }
+
+    @Test("Generated client decodes structured resources")
+    func decodesStructuredResources() async throws {
+        let (_, client, proxy) = try await makeClient()
+        defer { Task { await proxy.disconnect() } }
+
+        let summary = try await client.summaryResource()
+        #expect(summary.total == 8)
+        #expect(summary.status == "ready")
+    }
+
+    @Test("Generated client gets prompts")
+    func getsPrompts() async throws {
+        let (_, client, proxy) = try await makeClient()
+        defer { Task { await proxy.disconnect() } }
+
+        let result = try await client.greetPrompt(name: "Taylor", excited: true)
+        #expect(result.description == "greetPrompt")
+        #expect(result.messages.count == 1)
+        #expect(result.messages.first?.content.text == "Hello Taylor!")
     }
 }
 
