@@ -187,6 +187,24 @@ Notes:
 - Client generation is opt-in (`generateClient` defaults to `false`).
 - Client methods always `throw` to surface transport or server errors.
 
+## Client Notification Handlers
+
+`MCPServerProxy` can also surface typed JSON-RPC notifications from the server.
+Use `setNotificationHandler(_:as:handler:)` for custom app/domain events and
+use `setLogNotificationHandler(_:)` / `setProgressNotificationHandler(_:)` for
+the built-in convenience paths.
+
+```swift
+struct RunStatusUpdate: Codable, Sendable {
+    let runID: String
+    let status: String
+}
+
+await proxy.setNotificationHandler("notifications/runStatusChanged", as: RunStatusUpdate.self) { update in
+    print("Run \(update.runID) is now \(update.status)")
+}
+```
+
 ## SwiftMCPUtility Proxy Generation
 
 Use `SwiftMCPUtility generate-proxy` to create a client proxy for any MCP server,
