@@ -1,5 +1,4 @@
 import Testing
-import AnyCodable
 @testable import SwiftMCP
 
 // MARK: - Test Enums

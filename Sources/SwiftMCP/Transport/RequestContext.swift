@@ -1,5 +1,4 @@
 import Foundation
-import AnyCodable
 
 /// Represents the context of a single JSON-RPC message.
 ///

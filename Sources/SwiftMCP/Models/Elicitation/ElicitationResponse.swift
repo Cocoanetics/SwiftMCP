@@ -1,5 +1,4 @@
 import Foundation
-import AnyCodable
 
 /// Represents the response to an elicitation request.
 public struct ElicitationCreateResponse: Codable, Sendable {

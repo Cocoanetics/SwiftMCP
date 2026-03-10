@@ -1,5 +1,4 @@
 import Foundation
-import AnyCodable
 
 /// Encodes Encodable values into [String: AnyCodable] dictionaries.
 public class DictionaryEncoder {

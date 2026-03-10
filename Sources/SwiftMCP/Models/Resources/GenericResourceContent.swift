@@ -51,14 +51,3 @@ public struct GenericResourceContent: MCPResourceContent {
         return [GenericResourceContent(uri: uri, mimeType: mimeType ?? "text/plain", text: text)]
     }
 }
-
-
-
-/// Helper to encode any Encodable type
-private struct AnyEncodable: Encodable {
-    let value: Encodable
-    init(_ value: Encodable) { self.value = value }
-    func encode(to encoder: Encoder) throws {
-        try value.encode(to: encoder)
-    }
-} 

@@ -18,10 +18,6 @@ let package = Package(
 			name: "SwiftMCP",
 			targets: ["SwiftMCP"]
 		),
-		.library(
-			name: "AnyCodable",
-			targets: ["AnyCodable"]
-		),
 		.executable(
 			name: "SwiftMCPDemo",
 			targets: ["SwiftMCPDemo"]
@@ -49,7 +45,6 @@ let package = Package(
 		.package(url: "https://github.com/apple/swift-certificates.git", from: "1.1.0")
     ],
 	targets: [
-		.target(name: "AnyCodable"),
 		.macro(
 			name: "SwiftMCPMacros",
 			dependencies: [
@@ -60,7 +55,6 @@ let package = Package(
 		.target(
 			name: "SwiftMCP",
 			dependencies: [
-				"AnyCodable",
 				"SwiftMCPMacros",
 				.product(name: "NIOCore", package: "swift-nio"),
 				.product(name: "NIOHTTP1", package: "swift-nio"),
@@ -108,7 +102,6 @@ let package = Package(
 		.target(
 			name: "SwiftMCPUtilityCore",
 			dependencies: [
-				"AnyCodable",
 				"SwiftMCP",
 				.product(name: "SwiftSyntax", package: "swift-syntax"),
 				.product(name: "SwiftSyntaxBuilder", package: "swift-syntax")
@@ -118,7 +111,6 @@ let package = Package(
 		.testTarget(
 			name: "SwiftMCPTests",
 			dependencies: [
-				"AnyCodable",
 				"SwiftMCP",
 				"SwiftMCPUtilityCore",
 				.product(name: "Crypto", package: "swift-crypto"),

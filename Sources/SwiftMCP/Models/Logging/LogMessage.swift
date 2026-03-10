@@ -1,5 +1,4 @@
 import Foundation
-import AnyCodable
 
 /// Represents a log message as defined in the MCP protocol specification.
 public struct LogMessage: Codable, Sendable {

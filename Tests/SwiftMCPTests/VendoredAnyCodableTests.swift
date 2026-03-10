@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-import AnyCodable
+@testable import SwiftMCP
 
 @Suite("Vendored AnyCodable")
 struct VendoredAnyCodableTests {

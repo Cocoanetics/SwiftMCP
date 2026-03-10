@@ -2,7 +2,6 @@ import Foundation
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
-import AnyCodable
 import Logging
 
 /// A proxy for interacting with an MCP server over stdio, TCP, or SSE.

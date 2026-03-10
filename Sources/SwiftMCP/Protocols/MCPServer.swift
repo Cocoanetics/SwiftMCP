@@ -3,7 +3,6 @@
 #endif
 
 import Foundation
-import AnyCodable
 
 /**
  Protocol defining the interface for an MCP server.

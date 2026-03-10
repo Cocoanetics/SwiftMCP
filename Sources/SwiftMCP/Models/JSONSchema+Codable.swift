@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import AnyCodable
 
 /**
  Extension to make JSONSchema conform to Codable

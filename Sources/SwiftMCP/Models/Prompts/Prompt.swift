@@ -1,5 +1,4 @@
 import Foundation
-import AnyCodable
 
 /// Represents a prompt that can be provided by an MCP server
 public struct Prompt: Codable, Sendable {

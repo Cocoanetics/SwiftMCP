@@ -1,7 +1,6 @@
 import Foundation
 import Testing
 @testable import SwiftMCP
-import AnyCodable
 
 @Test("Ping Request")
 func testPingRequest() async throws {

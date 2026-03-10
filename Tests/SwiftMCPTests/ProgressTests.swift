@@ -2,7 +2,6 @@ import Foundation
 import Testing
 @testable import SwiftMCP
 import Logging
-import AnyCodable
 
 /// Simple transport that records JSON-RPC messages sent through it.
 final class RecordingTransport: Transport, @unchecked Sendable {

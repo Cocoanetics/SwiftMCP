@@ -2,7 +2,6 @@ import Foundation
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
-import AnyCodable
 @preconcurrency import NIOCore
 import NIOHTTP1
 import Logging
