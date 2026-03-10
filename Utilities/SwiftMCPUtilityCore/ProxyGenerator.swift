@@ -39,6 +39,8 @@ public enum ProxyGenerator {
         resources: [SimpleResource] = [],
         resourceTemplates: [SimpleResourceTemplate] = [],
         prompts: [Prompt] = [],
+        supportsResources: Bool = false,
+        supportsPrompts: Bool = false,
         openapiReturnSchemas: [String: OpenAPIReturnInfo] = [:],
         fileName: String? = nil,
         headerMetadata: HeaderMetadata? = nil
@@ -67,6 +69,8 @@ public enum ProxyGenerator {
             resources: resources,
             resourceTemplates: resourceTemplates,
             prompts: prompts,
+            supportsResources: supportsResources,
+            supportsPrompts: supportsPrompts,
             returnTypes: returnTypes,
             typeDefinitions: typeDefinitions,
             typeDocComment: typeDocComment,
@@ -92,6 +96,8 @@ public enum ProxyGenerator {
         resources: [SimpleResource],
         resourceTemplates: [SimpleResourceTemplate],
         prompts: [Prompt],
+        supportsResources: Bool,
+        supportsPrompts: Bool,
         returnTypes: [String: OpenAPIReturnInfo],
         typeDefinitions: [String],
         typeDocComment: [String],
@@ -119,6 +125,16 @@ public enum ProxyGenerator {
         lines.append("    }")
 
         let sortedTools = tools.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        let includesResources = supportsResources || !resources.isEmpty || !resourceTemplates.isEmpty
+        let includesPrompts = supportsPrompts || !prompts.isEmpty
+        var usedMethodNames = Set(sortedTools.map { swiftIdentifier(from: $0.name, lowerCamel: true) })
+        if includesResources {
+            usedMethodNames.formUnion(["listResources", "listResourceTemplates", "readResource"])
+        }
+        if includesPrompts {
+            usedMethodNames.formUnion(["listPrompts", "getPrompt"])
+        }
+
         if !sortedTools.isEmpty {
             lines.append("")
             lines.append("    // MARK: - Functions")
@@ -129,18 +145,25 @@ public enum ProxyGenerator {
             lines.append(contentsOf: makeMethodLines(tool: tool, returnInfo: returnInfo))
         }
 
-        if !resources.isEmpty || !resourceTemplates.isEmpty {
+        if includesResources {
             lines.append("")
             lines.append("    // MARK: - Resources")
             lines.append("")
-            lines.append(contentsOf: makeResourceMethodLines())
+            lines.append(contentsOf: makeResourceMethodLines(
+                resources: resources,
+                resourceTemplates: resourceTemplates,
+                usedMethodNames: &usedMethodNames
+            ))
         }
 
-        if !prompts.isEmpty {
+        if includesPrompts {
             lines.append("")
             lines.append("    // MARK: - Prompts")
             lines.append("")
-            lines.append(contentsOf: makePromptMethodLines())
+            lines.append(contentsOf: makePromptMethodLines(
+                prompts: prompts,
+                usedMethodNames: &usedMethodNames
+            ))
         }
 
         lines.append("}")
@@ -280,8 +303,12 @@ public enum ProxyGenerator {
         return lines
     }
 
-    private static func makeResourceMethodLines() -> [String] {
-        [
+    private static func makeResourceMethodLines(
+        resources: [SimpleResource],
+        resourceTemplates: [SimpleResourceTemplate],
+        usedMethodNames: inout Set<String>
+    ) -> [String] {
+        let lines = [
             "    public func listResources() async throws -> [SimpleResource] {",
             "        try await proxy.listResources()",
             "    }",
@@ -294,10 +321,15 @@ public enum ProxyGenerator {
             "        try await proxy.readResource(uri: uri)",
             "    }"
         ]
+
+        return lines
     }
 
-    private static func makePromptMethodLines() -> [String] {
-        [
+    private static func makePromptMethodLines(
+        prompts: [Prompt],
+        usedMethodNames: inout Set<String>
+    ) -> [String] {
+        let lines = [
             "    public func listPrompts() async throws -> [Prompt] {",
             "        try await proxy.listPrompts()",
             "    }",
@@ -306,6 +338,203 @@ public enum ProxyGenerator {
             "        try await proxy.getPrompt(name: name, arguments: arguments)",
             "    }"
         ]
+
+        return lines
+    }
+
+    private static func makeResourceWrapperLines(
+        resources: [SimpleResource],
+        resourceTemplates: [SimpleResourceTemplate],
+        usedMethodNames: inout Set<String>
+    ) -> [String] {
+        var lines: [String] = []
+
+        let sortedResources = resources.sorted {
+            let nameOrder = $0.name.localizedCaseInsensitiveCompare($1.name)
+            if nameOrder == .orderedSame {
+                return $0.uri.absoluteString < $1.uri.absoluteString
+            }
+            return nameOrder == .orderedAscending
+        }
+
+        for resource in sortedResources {
+            if !lines.isEmpty {
+                lines.append("")
+            }
+
+            let methodName = uniqueMethodName(
+                candidate: swiftIdentifier(from: resource.name, lowerCamel: true),
+                suffix: "Resource",
+                usedMethodNames: &usedMethodNames
+            )
+            let description = resource.description.trimmingCharacters(in: .whitespacesAndNewlines)
+            lines.append(contentsOf: wrapperDocCommentLines(
+                description: description.isEmpty ? nil : description,
+                parameters: []
+            ))
+            lines.append("    public func \(methodName)() async throws -> [GenericResourceContent] {")
+            lines.append("        try await readResource(uri: URL(string: \"\(escapeSwiftString(resource.uri.absoluteString))\")!)")
+            lines.append("    }")
+        }
+
+        let uniqueTemplates = uniqueResourceTemplates(resourceTemplates)
+        for template in uniqueTemplates {
+            guard let parameters = resourceTemplateParameters(for: template.uriTemplate) else {
+                continue
+            }
+
+            if !lines.isEmpty {
+                lines.append("")
+            }
+
+            let methodName = uniqueMethodName(
+                candidate: swiftIdentifier(from: template.name, lowerCamel: true),
+                suffix: "Resource",
+                usedMethodNames: &usedMethodNames
+            )
+            let description = template.description?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let signature = parameters.map { $0.signature }.joined(separator: ", ")
+            lines.append(contentsOf: wrapperDocCommentLines(description: description, parameters: parameters))
+            lines.append("    public func \(methodName)(\(signature)) async throws -> [GenericResourceContent] {")
+            if parameters.isEmpty {
+                lines.append("        let uri = try \"\(escapeSwiftString(template.uriTemplate))\".constructURI(with: [:])")
+            } else {
+                lines.append("        var uriParameters: [String: Sendable] = [:]")
+                for parameter in parameters {
+                    if parameter.isOptional {
+                        lines.append("        if let \(parameter.swiftName) { uriParameters[\"\(parameter.originalName)\"] = \(parameter.swiftName) }")
+                    } else {
+                        lines.append("        uriParameters[\"\(parameter.originalName)\"] = \(parameter.swiftName)")
+                    }
+                }
+                lines.append("        let uri = try \"\(escapeSwiftString(template.uriTemplate))\".constructURI(with: uriParameters)")
+            }
+            lines.append("        return try await readResource(uri: uri)")
+            lines.append("    }")
+        }
+
+        return lines
+    }
+
+    private static func makePromptWrapperLines(
+        prompts: [Prompt],
+        usedMethodNames: inout Set<String>
+    ) -> [String] {
+        var lines: [String] = []
+        let sortedPrompts = prompts.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+
+        for prompt in sortedPrompts {
+            guard let parameters = promptParameters(for: prompt) else {
+                continue
+            }
+
+            if !lines.isEmpty {
+                lines.append("")
+            }
+
+            let methodName = uniqueMethodName(
+                candidate: swiftIdentifier(from: prompt.name, lowerCamel: true),
+                suffix: "Prompt",
+                usedMethodNames: &usedMethodNames
+            )
+            let signature = parameters.map { $0.signature }.joined(separator: ", ")
+            let description = prompt.description?.trimmingCharacters(in: .whitespacesAndNewlines)
+            lines.append(contentsOf: wrapperDocCommentLines(description: description, parameters: parameters))
+            lines.append("    public func \(methodName)(\(signature)) async throws -> PromptResult {")
+
+            if parameters.isEmpty {
+                lines.append("        try await getPrompt(name: \"\(escapeSwiftString(prompt.name))\")")
+                lines.append("    }")
+                continue
+            }
+
+            lines.append("        var arguments: [String: any Sendable] = [:]")
+            for parameter in parameters {
+                if parameter.isOptional {
+                    lines.append("        if let \(parameter.swiftName) { arguments[\"\(parameter.originalName)\"] = MCPClientArgumentEncoder.encode(\(parameter.swiftName)) }")
+                } else {
+                    lines.append("        arguments[\"\(parameter.originalName)\"] = MCPClientArgumentEncoder.encode(\(parameter.swiftName))")
+                }
+            }
+            lines.append("        return try await getPrompt(name: \"\(escapeSwiftString(prompt.name))\", arguments: arguments)")
+            lines.append("    }")
+        }
+
+        return lines
+    }
+
+    private static func wrapperDocCommentLines(
+        description: String?,
+        parameters: [MethodParameter]
+    ) -> [String] {
+        var bodyLines: [String] = []
+
+        if let description, !description.isEmpty {
+            for line in description.split(separator: "\n", omittingEmptySubsequences: false) {
+                bodyLines.append(String(line))
+            }
+        }
+
+        for parameter in parameters {
+            if let docLine = parameter.docLine, !docLine.isEmpty {
+                bodyLines.append("- Parameter \(parameter.swiftName): \(docLine)")
+            }
+        }
+
+        guard !bodyLines.isEmpty else {
+            return []
+        }
+
+        var lines = ["    /**"]
+        for bodyLine in bodyLines {
+            lines.append("     \(bodyLine)")
+        }
+        lines.append("     */")
+        return lines
+    }
+
+    private static func uniqueResourceTemplates(_ templates: [SimpleResourceTemplate]) -> [SimpleResourceTemplate] {
+        var seen: Set<String> = []
+        var unique: [SimpleResourceTemplate] = []
+
+        for template in templates {
+            let key = "\(template.name)\u{0}\(template.uriTemplate)"
+            if seen.insert(key).inserted {
+                unique.append(template)
+            }
+        }
+
+        return unique.sorted {
+            let nameOrder = $0.name.localizedCaseInsensitiveCompare($1.name)
+            if nameOrder == .orderedSame {
+                return $0.uriTemplate < $1.uriTemplate
+            }
+            return nameOrder == .orderedAscending
+        }
+    }
+
+    private static func uniqueMethodName(
+        candidate: String,
+        suffix: String,
+        usedMethodNames: inout Set<String>
+    ) -> String {
+        if usedMethodNames.insert(candidate).inserted {
+            return candidate
+        }
+
+        let suffixedCandidate = candidate + suffix
+        if usedMethodNames.insert(suffixedCandidate).inserted {
+            return suffixedCandidate
+        }
+
+        var index = 2
+        while true {
+            let indexedCandidate = "\(suffixedCandidate)\(index)"
+            if usedMethodNames.insert(indexedCandidate).inserted {
+                return indexedCandidate
+            }
+            index += 1
+        }
     }
 
     private static func docCommentLines(
@@ -353,6 +582,11 @@ public enum ProxyGenerator {
         let docLine: String?
     }
 
+    private struct TemplateVariable {
+        let name: String
+        let isOptional: Bool
+    }
+
     private static func methodParameters(for tool: MCPTool) -> [MethodParameter] {
         guard case .object(let object, _) = tool.inputSchema else {
             return []
@@ -392,9 +626,249 @@ public enum ProxyGenerator {
         }
     }
 
+    private static func resourceTemplateParameters(for template: String) -> [MethodParameter]? {
+        guard let regex = try? NSRegularExpression(pattern: #"\{[^}]+\}"#) else {
+            return nil
+        }
+
+        let range = NSRange(template.startIndex..., in: template)
+        let matches = regex.matches(in: template, range: range)
+        if matches.isEmpty {
+            return []
+        }
+
+        var parameters: [MethodParameter] = []
+        var seenOriginalNames: Set<String> = []
+        var seenSwiftNames: Set<String> = []
+
+        for match in matches {
+            guard let swiftRange = Range(match.range, in: template) else {
+                continue
+            }
+
+            let expression = String(template[swiftRange])
+            guard let variables = templateVariables(in: expression, template: template, expressionStart: swiftRange.lowerBound) else {
+                return nil
+            }
+
+            for variable in variables {
+                if !seenOriginalNames.insert(variable.name).inserted {
+                    continue
+                }
+
+                let swiftName = swiftIdentifier(from: variable.name, lowerCamel: true)
+                guard seenSwiftNames.insert(swiftName).inserted else {
+                    return nil
+                }
+
+                let signature: String
+                if variable.isOptional {
+                    signature = "\(swiftName): String? = nil"
+                } else {
+                    signature = "\(swiftName): String"
+                }
+
+                let docLine = variable.isOptional
+                    ? "Optional value for the `\(variable.name)` URI variable."
+                    : "Value for the `\(variable.name)` URI variable."
+                parameters.append(MethodParameter(
+                    originalName: variable.name,
+                    swiftName: swiftName,
+                    signature: signature,
+                    isOptional: variable.isOptional,
+                    needsEncoding: false,
+                    docLine: docLine
+                ))
+            }
+        }
+
+        return parameters
+    }
+
+    private static func templateVariables(
+        in expression: String,
+        template: String,
+        expressionStart: String.Index
+    ) -> [TemplateVariable]? {
+        guard expression.first == "{", expression.last == "}" else {
+            return nil
+        }
+
+        var content = String(expression.dropFirst().dropLast())
+        var usesOptionalExpansion = false
+        if let first = content.first, "+#./;?&".contains(first) {
+            usesOptionalExpansion = first == "?" || first == "&" || first == ";"
+            content.removeFirst()
+        }
+
+        let isQueryParameter = expressionAppearsInQuery(template: template, expressionStart: expressionStart)
+        let variableSpecs = content.split(separator: ",", omittingEmptySubsequences: true)
+        guard !variableSpecs.isEmpty else {
+            return nil
+        }
+
+        var variables: [TemplateVariable] = []
+        for spec in variableSpecs {
+            let variable = String(spec).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !variable.isEmpty else {
+                return nil
+            }
+
+            if variable.hasSuffix("*") || variable.contains(":") {
+                return nil
+            }
+
+            variables.append(TemplateVariable(name: variable, isOptional: usesOptionalExpansion || isQueryParameter))
+        }
+
+        return variables
+    }
+
+    private static func expressionAppearsInQuery(template: String, expressionStart: String.Index) -> Bool {
+        let prefix = template[..<expressionStart]
+        let fragmentIndex = prefix.lastIndex(of: "#")
+
+        if let ampersandIndex = prefix.lastIndex(of: "&"), fragmentIndex == nil || ampersandIndex > fragmentIndex! {
+            return true
+        }
+
+        if let queryIndex = prefix.lastIndex(of: "?"), fragmentIndex == nil || queryIndex > fragmentIndex! {
+            return true
+        }
+
+        return false
+    }
+
+    private static func promptParameters(for prompt: Prompt) -> [MethodParameter]? {
+        var parameters: [MethodParameter] = []
+        var seenSwiftNames: Set<String> = []
+
+        for argument in prompt.arguments {
+            guard let typeInfo = swiftTypeInfo(for: argument.type) else {
+                return nil
+            }
+
+            let swiftName = swiftIdentifier(from: argument.name, lowerCamel: true)
+            guard seenSwiftNames.insert(swiftName).inserted else {
+                return nil
+            }
+
+            let defaultLiteral = promptDefaultValueLiteral(for: argument.defaultValue, typeInfo: typeInfo)
+            let isDefaultNil = defaultLiteral == "nil"
+            let hasDefault = defaultLiteral != nil
+            let isOptional = isDefaultNil || (!argument.isRequired && !hasDefault)
+            let typeName = isOptional ? "\(typeInfo.typeName)?" : typeInfo.typeName
+
+            let defaultValue: String
+            if let defaultLiteral {
+                defaultValue = " = \(defaultLiteral)"
+            } else if isOptional {
+                defaultValue = " = nil"
+            } else {
+                defaultValue = ""
+            }
+
+            parameters.append(MethodParameter(
+                originalName: argument.name,
+                swiftName: swiftName,
+                signature: "\(swiftName): \(typeName)\(defaultValue)",
+                isOptional: isOptional,
+                needsEncoding: typeInfo.needsEncoding,
+                docLine: argument.description
+            ))
+        }
+
+        return parameters
+    }
+
     private struct SwiftTypeInfo {
         let typeName: String
         let needsEncoding: Bool
+    }
+
+    private static func swiftTypeInfo(for type: Sendable.Type) -> SwiftTypeInfo? {
+        if type == String.self {
+            return SwiftTypeInfo(typeName: "String", needsEncoding: false)
+        }
+        if type == Int.self {
+            return SwiftTypeInfo(typeName: "Int", needsEncoding: false)
+        }
+        if type == Int8.self {
+            return SwiftTypeInfo(typeName: "Int8", needsEncoding: false)
+        }
+        if type == Int16.self {
+            return SwiftTypeInfo(typeName: "Int16", needsEncoding: false)
+        }
+        if type == Int32.self {
+            return SwiftTypeInfo(typeName: "Int32", needsEncoding: false)
+        }
+        if type == Int64.self {
+            return SwiftTypeInfo(typeName: "Int64", needsEncoding: false)
+        }
+        if type == UInt.self {
+            return SwiftTypeInfo(typeName: "UInt", needsEncoding: false)
+        }
+        if type == UInt8.self {
+            return SwiftTypeInfo(typeName: "UInt8", needsEncoding: false)
+        }
+        if type == UInt16.self {
+            return SwiftTypeInfo(typeName: "UInt16", needsEncoding: false)
+        }
+        if type == UInt32.self {
+            return SwiftTypeInfo(typeName: "UInt32", needsEncoding: false)
+        }
+        if type == UInt64.self {
+            return SwiftTypeInfo(typeName: "UInt64", needsEncoding: false)
+        }
+        if type == Double.self {
+            return SwiftTypeInfo(typeName: "Double", needsEncoding: false)
+        }
+        if type == Float.self {
+            return SwiftTypeInfo(typeName: "Float", needsEncoding: false)
+        }
+        if type == Bool.self {
+            return SwiftTypeInfo(typeName: "Bool", needsEncoding: false)
+        }
+        if type == Date.self {
+            return SwiftTypeInfo(typeName: "Date", needsEncoding: true)
+        }
+        if type == URL.self {
+            return SwiftTypeInfo(typeName: "URL", needsEncoding: true)
+        }
+        if type == UUID.self {
+            return SwiftTypeInfo(typeName: "UUID", needsEncoding: true)
+        }
+        if type == Data.self {
+            return SwiftTypeInfo(typeName: "Data", needsEncoding: true)
+        }
+        if type == [String].self {
+            return SwiftTypeInfo(typeName: "[String]", needsEncoding: false)
+        }
+        if type == [Int].self {
+            return SwiftTypeInfo(typeName: "[Int]", needsEncoding: false)
+        }
+        if type == [Double].self {
+            return SwiftTypeInfo(typeName: "[Double]", needsEncoding: false)
+        }
+        if type == [Float].self {
+            return SwiftTypeInfo(typeName: "[Float]", needsEncoding: false)
+        }
+        if type == [Bool].self {
+            return SwiftTypeInfo(typeName: "[Bool]", needsEncoding: false)
+        }
+        if type == [Date].self {
+            return SwiftTypeInfo(typeName: "[Date]", needsEncoding: true)
+        }
+        if type == [URL].self {
+            return SwiftTypeInfo(typeName: "[URL]", needsEncoding: true)
+        }
+        if type == [UUID].self {
+            return SwiftTypeInfo(typeName: "[UUID]", needsEncoding: true)
+        }
+        if type == [Data].self {
+            return SwiftTypeInfo(typeName: "[Data]", needsEncoding: true)
+        }
+        return nil
     }
 
     private static func swiftTypeInfo(for schema: JSONSchema) -> SwiftTypeInfo {
@@ -473,6 +947,36 @@ public enum ProxyGenerator {
         if typeInfo.needsEncoding {
             if let stringValue = value as? String {
                 return encodedLiteral(for: typeInfo.typeName, value: stringValue)
+            }
+        }
+
+        return swiftLiteral(from: value)
+    }
+
+    private static func promptDefaultValueLiteral(
+        for value: Sendable?,
+        typeInfo: SwiftTypeInfo
+    ) -> String? {
+        guard let value else {
+            return nil
+        }
+
+        if value is Void {
+            return "nil"
+        }
+
+        if typeInfo.needsEncoding {
+            switch value {
+                case let date as Date:
+                    return encodedLiteral(for: typeInfo.typeName, value: MCPToolArgumentEncoder.encode(date))
+                case let url as URL:
+                    return encodedLiteral(for: typeInfo.typeName, value: url.absoluteString)
+                case let uuid as UUID:
+                    return encodedLiteral(for: typeInfo.typeName, value: uuid.uuidString)
+                case let data as Data:
+                    return encodedLiteral(for: typeInfo.typeName, value: data.base64EncodedString())
+                default:
+                    break
             }
         }
 
