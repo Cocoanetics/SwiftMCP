@@ -131,53 +131,56 @@ public final actor MCPServerProxy: Sendable {
             return cachedTools
         }
 
-        let requestId = nextRequestID()
-        let request = JSONRPCMessage.request(id: requestId, method: "tools/list")
-        let response = try await send(request)
-
-        guard case let .response(respData) = response, let result = respData.result else {
-            throw MCPServerProxyError.communicationError("Invalid response type for tools/list")
-        }
-
-        if let isError = result["isError"]?.value as? Bool, isError {
-            throw MCPServerProxyError.communicationError("Server does not provide any tools")
-        }
-
-        guard let toolsData = result["tools"]?.value as? [[String: Any]] else {
-            throw MCPServerProxyError.communicationError("Invalid response format for tools/list")
-        }
-
-        let tools = try toolsData.compactMap { toolData -> MCPTool? in
-            guard let name = toolData["name"] as? String,
-                  let inputSchema = toolData["inputSchema"] as? [String: Any] else {
-                return nil
-            }
-
-            let description = toolData["description"] as? String
-            let schema = try JSONDecoder().decode(JSONSchema.self, from: JSONSerialization.data(withJSONObject: inputSchema))
-            let outputSchema: JSONSchema?
-            if let outputSchemaData = toolData["outputSchema"] as? [String: Any] {
-                outputSchema = try JSONDecoder().decode(JSONSchema.self, from: JSONSerialization.data(withJSONObject: outputSchemaData))
-            } else {
-                outputSchema = nil
-            }
-
-            // Parse annotations if present
-            let annotations: MCPToolAnnotations?
-            if let annotationsData = toolData["annotations"] as? [String: Any] {
-                annotations = try JSONDecoder().decode(MCPToolAnnotations.self, from: JSONSerialization.data(withJSONObject: annotationsData))
-            } else {
-                annotations = nil
-            }
-
-            return MCPTool(name: name, description: description, inputSchema: schema, outputSchema: outputSchema, annotations: annotations)
-        }
+        let result = try await requestResult(method: "tools/list")
+        let tools: [MCPTool] = try decodeResultField("tools", from: result, method: "tools/list")
 
         if cacheToolsList {
             cachedTools = tools
         }
 
         return tools
+    }
+
+    /// Lists all static resources available from the server.
+    public func listResources() async throws -> [SimpleResource] {
+        let result = try await requestResult(method: "resources/list")
+        return try decodeResultField("resources", from: result, method: "resources/list")
+    }
+
+    /// Lists all resource templates available from the server.
+    public func listResourceTemplates() async throws -> [SimpleResourceTemplate] {
+        let result = try await requestResult(method: "resources/templates/list")
+        return try decodeResultField("resourceTemplates", from: result, method: "resources/templates/list")
+    }
+
+    /// Reads a resource at the specified URI.
+    public func readResource(uri: URL) async throws -> [GenericResourceContent] {
+        let result = try await requestResult(
+            method: "resources/read",
+            params: ["uri": AnyCodable(uri.absoluteString)]
+        )
+        return try decodeResultField("contents", from: result, method: "resources/read")
+    }
+
+    /// Lists all prompts available from the server.
+    public func listPrompts() async throws -> [Prompt] {
+        let result = try await requestResult(method: "prompts/list")
+        return try decodeResultField("prompts", from: result, method: "prompts/list")
+    }
+
+    /// Gets a prompt by name with optional arguments.
+    public func getPrompt(
+        name: String,
+        arguments: [String: any Sendable] = [:]
+    ) async throws -> PromptResult {
+        let result = try await requestResult(
+            method: "prompts/get",
+            params: [
+                "name": AnyCodable(name),
+                "arguments": AnyCodable(arguments.mapValues(AnyCodable.init))
+            ]
+        )
+        return try decodeResultField("self", from: result, method: "prompts/get", as: PromptResult.self)
     }
 
     /// Calls a tool by name on the connected MCP server with the provided arguments.
@@ -205,18 +208,21 @@ public final actor MCPServerProxy: Sendable {
         let request = JSONRPCMessage.request(id: requestId, method: "tools/call", params: params)
         let responseMessage = try await send(request)
 
-        guard case let .response(responseData) = responseMessage, let result = responseData.result else {
+        let result: [String: AnyCodable]
+        switch responseMessage {
+        case .response(let responseData):
+            guard let responseResult = responseData.result else {
+                throw MCPServerProxyError.communicationError("Invalid response type for tools/call, expected JSONRPCResponse")
+            }
+            result = responseResult
+        case .errorResponse(let errorResponse):
+            throw MCPServerProxyError.toolError(errorResponse.error.message)
+        default:
             throw MCPServerProxyError.communicationError("Invalid response type for tools/call, expected JSONRPCResponse")
         }
 
         if let isError = result["isError"]?.value as? Bool, isError {
-            var errorMessage = "Tool call failed with an unspecified error."
-            if let contentArray = result["content"]?.value as? [Any],
-               let firstContent = contentArray.first as? [String: Any],
-               let text = firstContent["text"] as? String {
-                errorMessage = text
-            }
-            throw MCPServerProxyError.toolError(errorMessage)
+            throw MCPServerProxyError.toolError(errorMessage(from: result) ?? "Tool call failed with an unspecified error.")
         }
 
         guard let contentValue = result["content"]?.value else {
@@ -710,6 +716,72 @@ public final actor MCPServerProxy: Sendable {
         }
         if let anyCodable = value as? AnyCodable {
             return stringValue(anyCodable.value)
+        }
+        return nil
+    }
+
+    private func requestResult(
+        method: String,
+        params: [String: AnyCodable]? = nil
+    ) async throws -> [String: AnyCodable] {
+        let requestId = nextRequestID()
+        let request = JSONRPCMessage.request(id: requestId, method: method, params: params)
+        let response = try await send(request)
+
+        switch response {
+        case .response(let responseData):
+            guard let result = responseData.result else {
+                throw MCPServerProxyError.communicationError("Invalid response type for \(method)")
+            }
+            if let isError = result["isError"]?.value as? Bool, isError {
+                throw MCPServerProxyError.communicationError(errorMessage(from: result) ?? "Request failed for \(method)")
+            }
+            return result
+        case .errorResponse(let errorResponse):
+            throw MCPServerProxyError.communicationError(errorResponse.error.message)
+        default:
+            throw MCPServerProxyError.communicationError("Invalid response type for \(method)")
+        }
+    }
+
+    private func decodeResultField<T: Decodable>(
+        _ field: String,
+        from result: [String: AnyCodable],
+        method: String,
+        as type: T.Type = T.self
+    ) throws -> T {
+        let value: AnyCodable
+        if field == "self" {
+            value = AnyCodable(result)
+        } else if let fieldValue = result[field] {
+            value = fieldValue
+        } else {
+            throw MCPServerProxyError.communicationError("Invalid response format for \(method)")
+        }
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601WithTimeZone
+        let data = try encoder.encode(value)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601WithTimeZone
+        return try decoder.decode(type, from: data)
+    }
+
+    private func errorMessage(from result: [String: AnyCodable]) -> String? {
+        if let message = stringValue(result["message"]) {
+            return message
+        }
+        if let contentValue = result["content"]?.value {
+            let contentArray: [Any]
+            if let array = contentValue as? [Any] {
+                contentArray = array
+            } else if let array = contentValue as? [AnyCodable] {
+                contentArray = array.map(\.value)
+            } else {
+                contentArray = []
+            }
+            return extractTextPayload(from: contentArray)
         }
         return nil
     }

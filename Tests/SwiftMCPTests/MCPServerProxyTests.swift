@@ -194,6 +194,56 @@ struct MCPServerProxyTests {
         await proxy.disconnect()
     }
 
+    @Test("STDIO in-process: list resources and templates")
+    func testStdioListResourcesAndTemplates() async throws {
+        let server = LocalStdioServer()
+        let config = MCPServerConfig.stdioHandles(server: server)
+        let proxy = MCPServerProxy(config: config)
+        try await proxy.connect()
+
+        let resources = try await proxy.listResources()
+        #expect(resources.contains { $0.uri.absoluteString == "config://app" })
+
+        let templates = try await proxy.listResourceTemplates()
+        #expect(templates.contains { $0.uriTemplate == "users://{user_id}/profile" })
+
+        await proxy.disconnect()
+    }
+
+    @Test("STDIO in-process: read resource")
+    func testStdioReadResource() async throws {
+        let server = LocalStdioServer()
+        let config = MCPServerConfig.stdioHandles(server: server)
+        let proxy = MCPServerProxy(config: config)
+        try await proxy.connect()
+
+        let contents = try await proxy.readResource(uri: URL(string: "users://42/profile")!)
+        #expect(contents.count == 1)
+        #expect(contents.first?.text == "profile-42")
+
+        await proxy.disconnect()
+    }
+
+    @Test("STDIO in-process: list prompts and get prompt")
+    func testStdioPrompts() async throws {
+        let server = LocalStdioServer()
+        let config = MCPServerConfig.stdioHandles(server: server)
+        let proxy = MCPServerProxy(config: config)
+        try await proxy.connect()
+
+        let prompts = try await proxy.listPrompts()
+        let greetingPrompt = try #require(prompts.first { $0.name == "helloPrompt" })
+        #expect(greetingPrompt.arguments.count == 1)
+        #expect(greetingPrompt.arguments.first?.name == "name")
+
+        let result = try await proxy.getPrompt(name: "helloPrompt", arguments: ["name": "Oliver"])
+        #expect(result.description == "helloPrompt")
+        #expect(result.messages.count == 1)
+        #expect(result.messages.first?.content.text == "Hello Oliver")
+
+        await proxy.disconnect()
+    }
+
     @Test("STDIO external: local build", .enabled(if: isLocalSwiftMCPDemoAvailable()))
     func testStdioConnectToLocalBuild() async throws {
         guard let demoExecutable = localSwiftMCPDemoExecutable() else {
@@ -279,6 +329,21 @@ final class LocalStdioServer: Sendable {
     @MCPTool(description: "Returns a sample WAV payload as tool result content.")
     func sampleAudioToolResult() -> MCPAudio {
         return MCPAudio(data: Self.sampleAudioData, mimeType: "audio/wav")
+    }
+
+    @MCPResource("config://app")
+    func appConfiguration() -> String {
+        "demo-config"
+    }
+
+    @MCPResource("users://{user_id}/profile")
+    func userProfile(user_id: Int) -> String {
+        "profile-\(user_id)"
+    }
+
+    @MCPPrompt(description: "Returns a greeting prompt.")
+    func helloPrompt(name: String) -> [PromptMessage] {
+        [PromptMessage(role: .assistant, content: .init(text: "Hello \(name)"))]
     }
 }
 
