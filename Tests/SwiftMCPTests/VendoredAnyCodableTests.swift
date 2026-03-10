@@ -34,6 +34,19 @@ struct VendoredAnyCodableTests {
         #expect(object["nested"] as? Bool == true)
         #expect(object["count"] as? Int == 3)
     }
+
+    @Test("AnyCodable can decode typed values from stored JSON")
+    func anyCodableCanDecodeTypedValues() throws {
+        let tools = [
+            MCPTool(name: "echo", description: "Echo text", inputSchema: .object(.init(properties: [:], required: []))),
+            MCPTool(name: "sum", description: "Add numbers", inputSchema: .object(.init(properties: [:], required: [])))
+        ]
+
+        let wrapped = AnyCodable(tools)
+        let decoded = try wrapped.decoded([MCPTool].self)
+
+        #expect(decoded.map { $0.name } == ["echo", "sum"])
+    }
 }
 
 private func assertSendable<T: Sendable>(_: T.Type) {}

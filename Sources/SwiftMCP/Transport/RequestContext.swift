@@ -5,9 +5,9 @@ import Foundation
 /// A context tracks the message identifier, method name and optional
 /// metadata like a progress token. It is stored in task local storage so
 /// it can be accessed from anywhere while handling the message.
-public final class RequestContext: @unchecked Sendable {
+public final class RequestContext: Sendable {
     /// Additional metadata sent in the `_meta` field of a request.
-    public struct Meta: @unchecked Sendable {
+    public struct Meta: Sendable {
         /// Optional progress token for sending progress notifications.
         public let progressToken: AnyCodable?
         
@@ -43,7 +43,7 @@ public final class RequestContext: @unchecked Sendable {
             id = data.id
             method = data.method
             if let params = data.params,
-               let dict = params["_meta"]?.value as? [String: Any] {
+               let dict = params["_meta"]?.dictionaryValue {
                 meta = Meta(dictionary: dict)
             } else {
                 meta = nil
@@ -52,7 +52,7 @@ public final class RequestContext: @unchecked Sendable {
             id = nil
             method = data.method
             if let params = data.params,
-               let dict = params["_meta"]?.value as? [String: Any] {
+               let dict = params["_meta"]?.dictionaryValue {
                 meta = Meta(dictionary: dict)
             } else {
                 meta = nil

@@ -113,9 +113,11 @@ func testToolsListRequest() async throws {
         throw TestError("Result is missing")
     }
     
-    guard let tools = result["tools"]?.value as? [MCPTool] else {
-        throw TestError("Tools not found or not an array")
+    guard let toolsValue = result["tools"] else {
+        throw TestError("Tools not found")
     }
+
+    let tools = try toolsValue.decoded([MCPTool].self)
     
     #expect(!tools.isEmpty)
     
