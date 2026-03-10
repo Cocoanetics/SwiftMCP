@@ -6,9 +6,10 @@ import SwiftMCPUtilityCore
 struct GenerateProxyCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "generate-proxy",
-        abstract: "Generate a Swift proxy from MCP tools",
+        abstract: "Generate a Swift proxy from MCP server surfaces",
         discussion: """
-  Connect to an MCP server, read the tools list, and generate a Swift proxy.
+  Connect to an MCP server, inspect its advertised capabilities, and generate a Swift proxy
+  for available tools, resources, and prompts.
 
   Examples:
     SwiftMCPUtility generate-proxy --sse http://localhost:8080/sse -o ToolsProxy.swift
@@ -68,6 +69,8 @@ struct GenerateProxyCommand: AsyncParsableCommand {
             resources: resources,
             resourceTemplates: resourceTemplates,
             prompts: prompts,
+            supportsResources: supportsResources,
+            supportsPrompts: supportsPrompts,
             openapiReturnSchemas: openAPIReturnInfo,
             fileName: fileName,
             headerMetadata: headerMetadata
