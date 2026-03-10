@@ -691,26 +691,31 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
         if !resourceFunctions.isEmpty {
             lines.append("")
             lines.append("    // MARK: - Resources")
-        }
-        for funcDecl in resourceFunctions {
-            let templates = resourceTemplates(from: funcDecl)
-            guard !templates.isEmpty else { continue }
-            let metadata = clientFunctionMetadata(
-                from: funcDecl,
-                kind: .resource(templates: templates)
-            )
             lines.append("")
-            lines.append(contentsOf: makeClientMethodLines(metadata: metadata))
+            lines.append("    public func listResources() async throws -> [SimpleResource] {")
+            lines.append("        try await proxy.listResources()")
+            lines.append("    }")
+            lines.append("")
+            lines.append("    public func listResourceTemplates() async throws -> [SimpleResourceTemplate] {")
+            lines.append("        try await proxy.listResourceTemplates()")
+            lines.append("    }")
+            lines.append("")
+            lines.append("    public func readResource(uri: URL) async throws -> [GenericResourceContent] {")
+            lines.append("        try await proxy.readResource(uri: uri)")
+            lines.append("    }")
         }
 
         if !promptFunctions.isEmpty {
             lines.append("")
             lines.append("    // MARK: - Prompts")
-        }
-        for funcDecl in promptFunctions {
-            let metadata = clientFunctionMetadata(from: funcDecl, kind: .prompt)
             lines.append("")
-            lines.append(contentsOf: makeClientMethodLines(metadata: metadata))
+            lines.append("    public func listPrompts() async throws -> [Prompt] {")
+            lines.append("        try await proxy.listPrompts()")
+            lines.append("    }")
+            lines.append("")
+            lines.append("    public func getPrompt(name: String, arguments: [String: any Sendable] = [:]) async throws -> PromptResult {")
+            lines.append("        try await proxy.getPrompt(name: name, arguments: arguments)")
+            lines.append("    }")
         }
 
         lines.append("}")

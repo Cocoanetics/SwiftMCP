@@ -205,42 +205,34 @@ struct MCPClientGenerationTests {
         #expect(await server.lastMessage == "hello")
     }
 
-    @Test("Generated client reads resource text")
-    func readsResourceText() async throws {
+    @Test("Generated client exposes standard resource APIs")
+    func generatedClientUsesStandardResourceAPIs() async throws {
         let (_, client, proxy) = try await makeClient()
         defer { Task { await proxy.disconnect() } }
 
-        let profile = try await client.userProfile(user_id: 7)
-        #expect(profile == "Profile 7")
+        let resources = try await client.listResources()
+        #expect(resources.contains { $0.name == "summaryResource" })
+
+        let profileContents = try await client.readResource(uri: URL(string: "users://7/profile")!)
+        #expect(profileContents.first?.text == "Profile 7")
+
+        let summaryContents = try await client.readResource(uri: URL(string: "app://summary")!)
+        #expect(summaryContents.first?.text != nil)
+
+        let templates = try await client.listResourceTemplates()
+        #expect(templates.contains { $0.name == "userProfile" && $0.uriTemplate == "users://{user_id}/profile" })
+        #expect(templates.contains { $0.name == "versionedUserProfile" && $0.uriTemplate == "users://{user_id}/profile/localized?lang={lang}" })
     }
 
-    @Test("Generated client decodes structured resources")
-    func decodesStructuredResources() async throws {
+    @Test("Generated client exposes standard prompt APIs")
+    func generatedClientUsesStandardPromptAPIs() async throws {
         let (_, client, proxy) = try await makeClient()
         defer { Task { await proxy.disconnect() } }
 
-        let summary = try await client.summaryResource()
-        #expect(summary.total == 8)
-        #expect(summary.status == "ready")
-    }
+        let prompts = try await client.listPrompts()
+        #expect(prompts.contains { $0.name == "greetPrompt" })
 
-    @Test("Generated client selects the matching resource template from optional parameters")
-    func readsAllGeneratedResourceTemplates() async throws {
-        let (_, client, proxy) = try await makeClient()
-        defer { Task { await proxy.disconnect() } }
-
-        let defaultProfile = try await client.versionedUserProfile(user_id: 7)
-        let localizedProfile = try await client.versionedUserProfile(user_id: 7, lang: "de")
-        #expect(defaultProfile == "Profile 7")
-        #expect(localizedProfile == "Profile 7 [de]")
-    }
-
-    @Test("Generated client gets prompts")
-    func getsPrompts() async throws {
-        let (_, client, proxy) = try await makeClient()
-        defer { Task { await proxy.disconnect() } }
-
-        let result = try await client.greetPrompt(name: "Taylor", excited: true)
+        let result = try await client.getPrompt(name: "greetPrompt", arguments: ["name": "Taylor", "excited": true])
         #expect(result.description == "greetPrompt")
         #expect(result.messages.count == 1)
         #expect(result.messages.first?.content.text == "Hello Taylor!")
