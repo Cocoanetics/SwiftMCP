@@ -5,7 +5,7 @@
 //  Created by Oliver Drobnik on 18.03.25.
 //
 
-@preconcurrency import AnyCodable
+import AnyCodable
 
 /**
  Enum representing all possible JSON-RPC message types.

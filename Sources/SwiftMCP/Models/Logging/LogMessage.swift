@@ -1,5 +1,5 @@
 import Foundation
-@preconcurrency import AnyCodable
+import AnyCodable
 
 /// Represents a log message as defined in the MCP protocol specification.
 public struct LogMessage: Codable, Sendable {

@@ -18,6 +18,10 @@ let package = Package(
 			name: "SwiftMCP",
 			targets: ["SwiftMCP"]
 		),
+		.library(
+			name: "AnyCodable",
+			targets: ["AnyCodable"]
+		),
 		.executable(
 			name: "SwiftMCPDemo",
 			targets: ["SwiftMCPDemo"]
@@ -39,13 +43,13 @@ let package = Package(
 		.package(url: "https://github.com/apple/swift-log.git", from: "1.0.0"),
 		.package(url: "https://github.com/apple/swift-argument-parser", from: "1.2.0"),
 		.package(url: "https://github.com/apple/swift-nio.git", from: "2.0.0"),
-		.package(url: "https://github.com/Flight-School/AnyCodable", from: "0.6.0"),
 		.package(url: "https://github.com/swiftlang/swift-docc-plugin.git", from: "1.0.0"),
 		.package(url: "https://github.com/swiftlang/swift-syntax.git", from: "602.0.0-latest"),
 		.package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
 		.package(url: "https://github.com/apple/swift-certificates.git", from: "1.1.0")
     ],
 	targets: [
+		.target(name: "AnyCodable"),
 		.macro(
 			name: "SwiftMCPMacros",
 			dependencies: [
@@ -104,6 +108,7 @@ let package = Package(
 		.target(
 			name: "SwiftMCPUtilityCore",
 			dependencies: [
+				"AnyCodable",
 				"SwiftMCP",
 				.product(name: "SwiftSyntax", package: "swift-syntax"),
 				.product(name: "SwiftSyntaxBuilder", package: "swift-syntax")
@@ -113,6 +118,7 @@ let package = Package(
 		.testTarget(
 			name: "SwiftMCPTests",
 			dependencies: [
+				"AnyCodable",
 				"SwiftMCP",
 				"SwiftMCPUtilityCore",
 				.product(name: "Crypto", package: "swift-crypto"),
