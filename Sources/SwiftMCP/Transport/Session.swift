@@ -188,9 +188,13 @@ public actor Session {
     ///   - params: Optional parameters for the request
     /// - Returns: The response message from the client
     /// - Throws: An error if the request fails or if no response is received
-    public func request(method: String, params: [String: AnyCodable]? = nil) async throws -> JSONRPCMessage {
+    public func request(method: String, params: JSONDictionary? = nil) async throws -> JSONRPCMessage {
         let message = JSONRPCMessage.request(id: .string(UUID().uuidString), method: method, params: params)
         return try await send(message)
+    }
+
+    public func request<T: Encodable & Sendable>(method: String, params value: T) async throws -> JSONRPCMessage {
+        try await request(method: method, params: JSONDictionary(encoding: value))
     }
     
     /// Cancels all waiting continuations when the session is being removed.
@@ -213,16 +217,16 @@ extension Session {
     ///   - progress: Current progress value.
     ///   - total: Optional total value if known.
     ///   - message: Optional human-readable progress message.
-    public func sendProgressNotification(progressToken: AnyCodable,
+    public func sendProgressNotification(progressToken: JSONValue,
                                          progress: Double,
                                          total: Double? = nil,
                                          message: String? = nil) async {
-        var params: [String: AnyCodable] = [
+        var params: JSONDictionary = [
             "progressToken": progressToken,
-            "progress": AnyCodable(progress)
+            "progress": .double(progress)
         ]
-        if let total = total { params["total"] = AnyCodable(total) }
-        if let message = message { params["message"] = AnyCodable(message) }
+        if let total = total { params["total"] = .double(total) }
+        if let message = message { params["message"] = .string(message) }
 
         let notification = JSONRPCMessage.notification(method: "notifications/progress",
                                                        params: params)
@@ -233,11 +237,11 @@ extension Session {
     /// - Parameter message: The log message to send
     public func sendLogNotification(_ message: LogMessage) async {
         guard message.level.isAtLeast(self.minimumLogLevel) else { return }
-        var params: [String: AnyCodable] = [
-            "level": AnyCodable(message.level.rawValue),
+        var params: JSONDictionary = [
+            "level": .string(message.level.rawValue),
             "data": message.data
         ]
-        if let logger = message.logger { params["logger"] = AnyCodable(logger) }
+        if let logger = message.logger { params["logger"] = .string(logger) }
 
         let notification = JSONRPCMessage.notification(method: "notifications/message",
                                                        params: params)
@@ -262,15 +266,11 @@ extension Session {
         }
         
         guard let result = responseData.result,
-              let rootsAnyCodable = result["roots"],
-              let rootsArray = rootsAnyCodable.value as? [[String: Any]] else {
+              let rootsValue = result["roots"] else {
             preconditionFailure("Malformed roots response")
         }
-        
-        let data = try JSONSerialization.data(withJSONObject: rootsArray)
-        let roots = try JSONDecoder().decode([Root].self, from: data)
-        
-        return roots
+
+        return try rootsValue.decoded([Root].self)
     }
 
     /// Send a notification that the list of available tools changed.

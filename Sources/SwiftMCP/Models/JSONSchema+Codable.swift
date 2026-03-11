@@ -92,7 +92,7 @@ extension JSONSchema: Codable {
         switch type {
             case "string":
 
-                let defaultValue = try container.decodeIfPresent(AnyCodable.self, forKey: .default)
+                let defaultValue = try container.decodeIfPresent(JSONValue.self, forKey: .default)
                 if let enumValues = try container.decodeIfPresent([String].self, forKey: .enumValues)
 				{
                     let enumNames = try container.decodeIfPresent([String].self, forKey: .enumNames)
@@ -109,14 +109,14 @@ extension JSONSchema: Codable {
             case "number", "integer":
                 let minimum = try container.decodeIfPresent(Double.self, forKey: .minimum)
                 let maximum = try container.decodeIfPresent(Double.self, forKey: .maximum)
-                let defaultValue = try container.decodeIfPresent(AnyCodable.self, forKey: .default)
+                let defaultValue = try container.decodeIfPresent(JSONValue.self, forKey: .default)
                 self = .number(title: title, description: description, minimum: minimum, maximum: maximum, defaultValue: defaultValue)
             case "boolean":
-                let defaultValue = try container.decodeIfPresent(AnyCodable.self, forKey: .default)
+                let defaultValue = try container.decodeIfPresent(JSONValue.self, forKey: .default)
                 self = .boolean(title: title, description: description, defaultValue: defaultValue)
             case "array":
                 let items = try container.decode(JSONSchema.self, forKey: .items)
-                let defaultValue = try container.decodeIfPresent(AnyCodable.self, forKey: .default)
+                let defaultValue = try container.decodeIfPresent(JSONValue.self, forKey: .default)
                 self = .array(items: items, title: title, description: description, defaultValue: defaultValue)
             case "object":
                 var properties: [String: JSONSchema] = [:]
@@ -139,7 +139,7 @@ extension JSONSchema: Codable {
                     additionalProperties = nil
                 }
 
-                let defaultValue = try container.decodeIfPresent(AnyCodable.self, forKey: .default)
+                let defaultValue = try container.decodeIfPresent(JSONValue.self, forKey: .default)
 
                 self = .object(JSONSchema.Object(properties: properties, required: required, title: title, description: description, additionalProperties: additionalProperties), defaultValue: defaultValue)
             default:

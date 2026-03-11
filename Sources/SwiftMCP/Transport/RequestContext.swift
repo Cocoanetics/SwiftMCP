@@ -9,23 +9,18 @@ public final class RequestContext: Sendable {
     /// Additional metadata sent in the `_meta` field of a request.
     public struct Meta: Sendable {
         /// Optional progress token for sending progress notifications.
-        public let progressToken: AnyCodable?
+        public let progressToken: JSONValue?
         
         /// Optional authentication token for authorization.
         public let accessToken: String?
 
-        init?(dictionary: [String: Any]) {
+        init?(dictionary: JSONDictionary) {
             if dictionary.isEmpty {
                 return nil
             }
             
-            if let token = dictionary["progressToken"] {
-                self.progressToken = AnyCodable(token)
-            } else {
-                self.progressToken = nil
-            }
-            
-            self.accessToken = dictionary["accessToken"] as? String
+            self.progressToken = dictionary["progressToken"]
+            self.accessToken = dictionary["accessToken"]?.stringValue
         }
     }
 
@@ -110,8 +105,7 @@ public final class RequestContext: Sendable {
         }
         
         // Encode the request parameters
-        let encoder = DictionaryEncoder()
-        let params = try encoder.encode(request)
+        let params = try JSONDictionary(encoding: request)
         
         // Send the sampling request to the client
         let response = try await session.request(method: "sampling/createMessage", params: params)
@@ -127,11 +121,7 @@ public final class RequestContext: Sendable {
             throw MCPServerError.unexpectedMessageType(method: "sampling/createMessage")
         }
         
-        // Convert AnyCodable dictionary to [String: Any] for decoding
-        let resultDict = result.mapValues { $0.value }
-        
-        // Decode the response using the Dictionary extension
-        return try resultDict.decode(SamplingCreateMessageResponse.self)
+        return try result.decoded(SamplingCreateMessageResponse.self)
     }
     
     /// Convenience method for simple text sampling.
@@ -194,8 +184,7 @@ public final class RequestContext: Sendable {
         }
         
         // Encode the request parameters
-        let encoder = DictionaryEncoder()
-        let params = try encoder.encode(request)
+        let params = try JSONDictionary(encoding: request)
         
         // Debug: Print the encoded parameters
         print("DEBUG: Encoded elicitation params: \(params)")
@@ -214,11 +203,7 @@ public final class RequestContext: Sendable {
             throw MCPServerError.unexpectedMessageType(method: "elicitation/create")
         }
         
-        // Convert AnyCodable dictionary to [String: Any] for decoding
-        let resultDict = result.mapValues { $0.value }
-        
-        // Decode the response using the Dictionary extension
-        return try resultDict.decode(ElicitationCreateResponse.self)
+        return try result.decoded(ElicitationCreateResponse.self)
     }
     
     /// Convenience method for simple elicitation with basic schema.

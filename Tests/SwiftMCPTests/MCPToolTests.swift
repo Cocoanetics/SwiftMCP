@@ -378,12 +378,12 @@ func testURLParameters() async throws {
         }
         
         // Test with valid URL string
-        let validArgs = ["url": "https://example.com"] as [String: Sendable]
+        let validArgs: JSONDictionary = ["url": "https://example.com"]
         let validResult = try await instance.callTool("processURL", arguments: validArgs)
         #expect(validResult as? String == "example.com")
         
         // Test with invalid URL string
-        let invalidArgs = ["url": "https://example.com:xyz"] as [String: Sendable]
+        let invalidArgs: JSONDictionary = ["url": "https://example.com:xyz"]
         do {
             _ = try await instance.callTool("processURL", arguments: invalidArgs)
             #expect(Bool(false), "Should throw error for invalid URL")
@@ -409,8 +409,8 @@ func testSchemaRepresentableParameter() async throws {
     let address = SchemaRepresentableTests.Address(street: "123 Main St", city: "New York", zip: "10001")
     
     // Create parameters dictionary
-    let params: [String: Sendable] = [
-        "contact": address
+    let params: JSONDictionary = [
+        "contact": try JSONValue(encoding: address)
     ]
     
     // Call the function
@@ -666,8 +666,8 @@ func testExtractAddressArray() throws {
         SchemaRepresentableTests.Address(street: "456 Oak Ave", city: "San Francisco", zip: "94102")
     ]
     
-    let params: [String: any Sendable] = [
-        "addresses": addresses as [SchemaRepresentableTests.Address]
+    let params: JSONDictionary = [
+        "addresses": try JSONValue(encoding: addresses)
     ]
     
     let extractedAddresses: [SchemaRepresentableTests.Address] = try params.extractParameter(named: "addresses")

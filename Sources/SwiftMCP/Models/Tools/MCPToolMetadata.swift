@@ -81,7 +81,7 @@ public struct MCPToolMetadata: Sendable {
     }
 
     /// Enriches a dictionary of arguments with default values and throws if a required parameter is missing
-    public func enrichArguments(_ arguments: [String: Sendable]) throws -> [String: Sendable] {
+    public func enrichArguments(_ arguments: JSONDictionary) throws -> JSONDictionary {
         return try functionMetadata.enrichArguments(arguments)
     }
 } 

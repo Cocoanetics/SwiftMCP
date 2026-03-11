@@ -46,7 +46,7 @@ public indirect enum JSONSchema: Sendable {
         format: String? = nil,
         minLength: Int? = nil,
         maxLength: Int? = nil,
-        defaultValue: AnyCodable? = nil
+        defaultValue: JSONValue? = nil
     )
 
     /// A number schema
@@ -55,17 +55,17 @@ public indirect enum JSONSchema: Sendable {
         description: String? = nil,
         minimum: Double? = nil,
         maximum: Double? = nil,
-        defaultValue: AnyCodable? = nil
+        defaultValue: JSONValue? = nil
     )
 
     /// A boolean schema
-    case boolean(title: String? = nil, description: String? = nil, defaultValue: AnyCodable? = nil)
+    case boolean(title: String? = nil, description: String? = nil, defaultValue: JSONValue? = nil)
 
     /// An array schema
-    case array(items: JSONSchema, title: String? = nil, description: String? = nil, defaultValue: AnyCodable? = nil)
+    case array(items: JSONSchema, title: String? = nil, description: String? = nil, defaultValue: JSONValue? = nil)
 
     /// An object schema
-    case object(Object, defaultValue: AnyCodable? = nil)
+    case object(Object, defaultValue: JSONValue? = nil)
 
     /// An enum schema with possible values
     case `enum`(
@@ -73,7 +73,7 @@ public indirect enum JSONSchema: Sendable {
         title: String? = nil,
         description: String? = nil,
         enumNames: [String]? = nil,
-        defaultValue: AnyCodable? = nil
+        defaultValue: JSONValue? = nil
     )
 
     /// A schema that matches any one of the provided schemas
@@ -112,7 +112,7 @@ extension JSONSchema {
 
 // Extension to apply default values when available
 extension JSONSchema {
-    public func applyingDefault(_ defaultValue: AnyCodable?) -> JSONSchema {
+    public func applyingDefault(_ defaultValue: JSONValue?) -> JSONSchema {
         guard let defaultValue else { return self }
         switch self {
         case .string(let title, let description, let format, let minLength, let maxLength, let existingDefault):

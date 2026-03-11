@@ -48,7 +48,7 @@ public final actor MCPServerProxy: Sendable {
     public let cacheToolsList: Bool
     
     /// Base metadata included in _meta for ALL requests (e.g., accessToken).
-    public var meta: [String: AnyCodable] = [:]
+    public var meta: JSONDictionary = [:]
 
     private var cachedTools: [MCPTool]?
     private var requestIdSequence: Int = 0
@@ -224,7 +224,7 @@ public final actor MCPServerProxy: Sendable {
     public func readResource(uri: URL) async throws -> [GenericResourceContent] {
         let result: ResourceReadResult = try await requestResult(
             method: "resources/read",
-            params: ["uri": AnyCodable(uri.absoluteString)],
+            params: ["uri": .string(uri.absoluteString)],
             as: ResourceReadResult.self
         )
         return result.contents
@@ -239,13 +239,13 @@ public final actor MCPServerProxy: Sendable {
     /// Gets a prompt by name with optional arguments.
     public func getPrompt(
         name: String,
-        arguments: [String: any Sendable] = [:]
+        arguments: JSONDictionary = [:]
     ) async throws -> PromptResult {
         try await requestResult(
             method: "prompts/get",
             params: [
-                "name": AnyCodable(name),
-                "arguments": AnyCodable(arguments.mapValues(AnyCodable.init))
+                "name": .string(name),
+                "arguments": .object(arguments)
             ],
             as: PromptResult.self
         )
@@ -254,14 +254,13 @@ public final actor MCPServerProxy: Sendable {
     /// Calls a tool by name on the connected MCP server with the provided arguments.
     public func callTool(
         _ name: String,
-        arguments: [String: any Sendable] = [:],
-        progressToken: AnyCodable? = AnyCodable(UUID().uuidString)
+        arguments: JSONDictionary = [:],
+        progressToken: JSONValue? = .string(UUID().uuidString)
     ) async throws -> String {
         let requestId = nextRequestID()
-        let encodableArguments = arguments.mapValues { AnyCodable($0) }
-        var params: [String: AnyCodable] = [
-            "name": AnyCodable(name),
-            "arguments": AnyCodable(encodableArguments)
+        var params: JSONDictionary = [
+            "name": .string(name),
+            "arguments": .object(arguments)
         ]
         
         // Merge base meta with progressToken
@@ -270,13 +269,13 @@ public final actor MCPServerProxy: Sendable {
             requestMeta["progressToken"] = progressToken
         }
         if !requestMeta.isEmpty {
-            params["_meta"] = AnyCodable(requestMeta)
+            params["_meta"] = .object(requestMeta)
         }
         
         let request = JSONRPCMessage.request(id: requestId, method: "tools/call", params: params)
         let responseMessage = try await send(request)
 
-        let result: [String: AnyCodable]
+        let result: JSONDictionary
         switch responseMessage {
         case .response(let responseData):
             guard let responseResult = responseData.result else {
@@ -289,19 +288,11 @@ public final actor MCPServerProxy: Sendable {
             throw MCPServerProxyError.communicationError("Invalid response type for tools/call, expected JSONRPCResponse")
         }
 
-        if let isError = result["isError"]?.value as? Bool, isError {
+        if result["isError"]?.boolValue == true {
             throw MCPServerProxyError.toolError(errorMessage(from: result) ?? "Tool call failed with an unspecified error.")
         }
 
-        guard let contentValue = result["content"]?.value else {
-            throw MCPServerProxyError.communicationError("Invalid content format in tools/call response")
-        }
-        let contentArray: [Any]
-        if let array = contentValue as? [Any] {
-            contentArray = array
-        } else if let array = contentValue as? [AnyCodable] {
-            contentArray = array.map { $0.value }
-        } else {
+        guard let contentArray = result["content"]?.arrayValue else {
             throw MCPServerProxyError.communicationError("Invalid content format in tools/call response")
         }
 
@@ -507,18 +498,18 @@ public final actor MCPServerProxy: Sendable {
 
     private func initialize() async throws {
         let requestId = nextRequestID()
-        var params: [String: AnyCodable] = [
-            "protocolVersion": AnyCodable("2025-06-18"),
-            "clientInfo": AnyCodable([
-                "name": "swiftmcp-client",
-                "version": "1.0.0"
+        var params: JSONDictionary = [
+            "protocolVersion": .string("2025-06-18"),
+            "clientInfo": .object([
+                "name": .string("swiftmcp-client"),
+                "version": .string("1.0.0")
             ]),
-            "capabilities": AnyCodable([:])
+            "capabilities": .object([:])
         ]
         
         // Add base metadata if present
         if !meta.isEmpty {
-            params["_meta"] = AnyCodable(meta)
+            params["_meta"] = .object(meta)
         }
         
         let request = JSONRPCMessage.request(id: requestId, method: "initialize", params: params)
@@ -651,10 +642,10 @@ public final actor MCPServerProxy: Sendable {
             logger.info("[MCP] Progress notification received.")
             return
         }
-        let tokenValue = params["progressToken"]?.value
-        let progressValue = numericValue(params["progress"]?.value)
-        let totalValue = numericValue(params["total"]?.value)
-        let messageValue = params["message"]?.value as? String
+        let tokenValue = params["progressToken"]
+        let progressValue = numericValue(params["progress"])
+        let totalValue = numericValue(params["total"])
+        let messageValue = params["message"]?.stringValue
 
         var parts: [String] = []
         if let messageValue, !messageValue.isEmpty {
@@ -728,7 +719,7 @@ public final actor MCPServerProxy: Sendable {
         if let loggerName = message.logger, !loggerName.isEmpty {
             parts.append("logger \(loggerName)")
         }
-        let dataDescription = String(describing: message.data.value)
+        let dataDescription = String(describing: message.data)
         if !dataDescription.isEmpty {
             parts.append("data \(dataDescription)")
         }
@@ -747,10 +738,10 @@ public final actor MCPServerProxy: Sendable {
             return
         }
 
-        let levelValue = params["level"]?.value as? String
+        let levelValue = params["level"]?.stringValue
         let level = levelValue.flatMap(LogLevel.init(string:)) ?? .info
-        let loggerName = params["logger"]?.value as? String
-        let dataValue = params["data"] ?? AnyCodable("")
+        let loggerName = params["logger"]?.stringValue
+        let dataValue = params["data"] ?? .string("")
         let message = LogMessage(level: level, logger: loggerName, data: dataValue)
         logIncomingLogMessage(message)
     }
@@ -772,24 +763,11 @@ public final actor MCPServerProxy: Sendable {
         }
     }
 
-    private func numericValue(_ value: Any?) -> Double? {
-        switch value {
-        case let double as Double:
-            return double
-        case let int as Int:
-            return Double(int)
-        case let int64 as Int64:
-            return Double(int64)
-        case let uint as UInt:
-            return Double(uint)
-        case let float as Float:
-            return Double(float)
-        default:
-            return nil
-        }
+    private func numericValue(_ value: JSONValue?) -> Double? {
+        value?.doubleValue
     }
 
-    private func extractTextPayload(from contentArray: [Any]) -> String? {
+    private func extractTextPayload(from contentArray: JSONArray) -> String? {
         guard contentArray.count == 1 else {
             return nil
         }
@@ -805,60 +783,41 @@ public final actor MCPServerProxy: Sendable {
         return nil
     }
 
-    private func encodeContentPayload(from contentArray: [Any]) -> String? {
-        let normalized = contentArray.compactMap { contentDictionary(from: $0) }
+    private func encodeContentPayload(from contentArray: JSONArray) -> String? {
+        let normalized = contentArray.compactMap { contentDictionary(from: $0).map(JSONValue.object) }
         if normalized.isEmpty {
             return "[]"
         }
-        let payload: Any = normalized.count == 1 ? normalized[0] : normalized
-        guard JSONSerialization.isValidJSONObject(payload),
-              let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
+        let payload: JSONValue = normalized.count == 1 ? normalized[0] : .array(normalized)
+        let encoder = MCPJSONCoding.makeWireEncoder()
+        guard let data = try? encoder.encode(payload),
               let string = String(data: data, encoding: .utf8) else {
             return nil
         }
         return string
     }
 
-    private func contentDictionary(from value: Any?) -> [String: Any]? {
-        if let dict = value as? [String: Any] {
-            return dict
-        }
-        if let dict = value as? [String: AnyCodable] {
-            return dict.mapValues { $0.value }
-        }
-        if let anyCodable = value as? AnyCodable {
-            return contentDictionary(from: anyCodable.value)
-        }
-        return nil
+    private func contentDictionary(from value: JSONValue) -> JSONDictionary? {
+        value.dictionaryValue
     }
 
-    private func stringValue(_ value: Any?) -> String? {
-        if let string = value as? String {
-            return string
-        }
-        if let anyCodable = value as? AnyCodable {
-            return stringValue(anyCodable.value)
-        }
-        return nil
+    private func stringValue(_ value: JSONValue?) -> String? {
+        value?.stringValue
     }
 
     private func requestResult(
         method: String,
-        params: [String: AnyCodable]? = nil
-    ) async throws -> [String: AnyCodable] {
+        params: JSONDictionary? = nil
+    ) async throws -> JSONDictionary {
         let requestId = nextRequestID()
         var requestParams = params ?? [:]
 
         if !meta.isEmpty {
             var requestMeta = meta
-            if let existingMeta = requestParams["_meta"]?.value as? [String: AnyCodable] {
+            if let existingMeta = requestParams["_meta"]?.dictionaryValue {
                 requestMeta.merge(existingMeta) { _, new in new }
-            } else if let existingMeta = requestParams["_meta"]?.value as? [String: Any] {
-                for (key, value) in existingMeta {
-                    requestMeta[key] = AnyCodable(value)
-                }
             }
-            requestParams["_meta"] = AnyCodable(requestMeta)
+            requestParams["_meta"] = .object(requestMeta)
         }
 
         let request = JSONRPCMessage.request(id: requestId, method: method, params: requestParams.isEmpty ? nil : requestParams)
@@ -869,7 +828,7 @@ public final actor MCPServerProxy: Sendable {
             guard let result = responseData.result else {
                 throw MCPServerProxyError.communicationError("Invalid response type for \(method)")
             }
-            if let isError = result["isError"]?.value as? Bool, isError {
+            if result["isError"]?.boolValue == true {
                 throw MCPServerProxyError.communicationError(errorMessage(from: result) ?? "Request failed for \(method)")
             }
             return result
@@ -882,56 +841,37 @@ public final actor MCPServerProxy: Sendable {
 
     private func requestResult<T: Decodable>(
         method: String,
-        params: [String: AnyCodable]? = nil,
+        params: JSONDictionary? = nil,
         as type: T.Type = T.self
     ) async throws -> T {
         let result = try await requestResult(method: method, params: params)
-        return try Self.decodeJSONPayload(result, as: type)
+        return try result.decoded(type)
     }
 
     private static func decodeJSONPayload<T: Decodable, Payload: Encodable>(
         _ payload: Payload,
         as type: T.Type = T.self
     ) throws -> T {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601WithTimeZone
+        let encoder = MCPJSONCoding.makeWireEncoder()
         let data = try encoder.encode(payload)
 
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601WithTimeZone
+        let decoder = MCPJSONCoding.makeDecoder()
         return try decoder.decode(type, from: data)
     }
 
-    private func errorMessage(from result: [String: AnyCodable]) -> String? {
+    private func errorMessage(from result: JSONDictionary) -> String? {
         if let message = stringValue(result["message"]) {
             return message
         }
-        if let contentValue = result["content"]?.value {
-            let contentArray: [Any]
-            if let array = contentValue as? [Any] {
-                contentArray = array
-            } else if let array = contentValue as? [AnyCodable] {
-                contentArray = array.map(\.value)
-            } else {
-                contentArray = []
-            }
+        if let contentArray = result["content"]?.arrayValue {
             return extractTextPayload(from: contentArray)
         }
         return nil
     }
 
 
-    private func extractServerDescription(from result: [String: AnyCodable]) -> String? {
-        guard let serverInfoValue = result["serverInfo"]?.value else {
-            return nil
-        }
-        if let info = serverInfoValue as? [String: AnyCodable] {
-            return info["description"]?.value as? String
-        }
-        if let info = serverInfoValue as? [String: Any] {
-            return info["description"] as? String
-        }
-        return nil
+    private func extractServerDescription(from result: JSONDictionary) -> String? {
+        result["serverInfo"]?.dictionaryValue?["description"]?.stringValue
     }
 
     private func progressPercentText(progressValue: Double, totalValue: Double?) -> String? {
@@ -962,7 +902,7 @@ public final actor MCPServerProxy: Sendable {
         }
 
         // Allow token in metadata to override auth header from config.
-        if let accessToken = meta["accessToken"]?.value as? String {
+        if let accessToken = meta["accessToken"]?.stringValue {
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         }
     }

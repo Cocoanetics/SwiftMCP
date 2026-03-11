@@ -38,11 +38,11 @@ public struct GenericResourceContent: MCPResourceContent {
             let text = String(describing: dict)
             return [GenericResourceContent(uri: uri, mimeType: mimeType ?? "text/plain", text: text)]
         } else if let encodable = result as? Encodable {
-            // Try to encode to JSON string
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = .prettyPrinted
-            if let data = try? encoder.encode(AnyEncodable(encodable)),
-			   let json = String(data: data, encoding: .utf8) {
+            let encoder = MCPJSONCoding.makeWireEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            if let jsonValue = try? JSONValue(encoding: encodable),
+               let data = try? encoder.encode(jsonValue),
+               let json = String(data: data, encoding: .utf8) {
                 return [GenericResourceContent(uri: uri, mimeType: mimeType ?? "application/json", text: json)]
             }
         }

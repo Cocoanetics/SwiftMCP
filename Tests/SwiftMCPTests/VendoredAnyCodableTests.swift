@@ -2,29 +2,27 @@ import Foundation
 import Testing
 @testable import SwiftMCP
 
-@Suite("Vendored AnyCodable")
-struct VendoredAnyCodableTests {
-    @Test("Vendored types remain Sendable")
-    func vendoredTypesRemainSendable() {
-        assertSendable(AnyCodable.self)
-        assertSendable(AnyDecodable.self)
-        assertSendable(AnyEncodable.self)
+@Suite("JSONValue")
+struct JSONValueTests {
+    @Test("JSONValue remains Sendable")
+    func jsonValueRemainsSendable() {
+        assertSendable(JSONValue.self)
     }
 
-    @Test("AnyCodable round-trips nested JSON values")
-    func anyCodableRoundTripsNestedJSONValues() throws {
-        let payload: [String: AnyCodable] = [
-            "string": AnyCodable("value"),
-            "number": AnyCodable(42),
-            "array": AnyCodable(["one", "two"]),
-            "object": AnyCodable([
+    @Test("JSONValue round-trips nested JSON values")
+    func jsonValueRoundTripsNestedJSONValues() throws {
+        let payload: JSONDictionary = [
+            "string": "value",
+            "number": 42,
+            "array": .array(["one", "two"]),
+            "object": .object([
                 "nested": true,
                 "count": 3
             ])
         ]
 
         let data = try JSONEncoder().encode(payload)
-        let decoded = try JSONDecoder().decode([String: AnyCodable].self, from: data)
+        let decoded = try JSONDecoder().decode(JSONDictionary.self, from: data)
 
         #expect(decoded["string"]?.value as? String == "value")
         #expect(decoded["number"]?.value as? Int == 42)
@@ -35,17 +33,26 @@ struct VendoredAnyCodableTests {
         #expect(object["count"] as? Int == 3)
     }
 
-    @Test("AnyCodable can decode typed values from stored JSON")
-    func anyCodableCanDecodeTypedValues() throws {
+    @Test("JSONValue can decode typed values from stored JSON")
+    func jsonValueCanDecodeTypedValues() throws {
         let tools = [
             MCPTool(name: "echo", description: "Echo text", inputSchema: .object(.init(properties: [:], required: []))),
             MCPTool(name: "sum", description: "Add numbers", inputSchema: .object(.init(properties: [:], required: [])))
         ]
 
-        let wrapped = AnyCodable(tools)
+        let wrapped = try JSONValue(encoding: tools)
         let decoded = try wrapped.decoded([MCPTool].self)
 
         #expect(decoded.map { $0.name } == ["echo", "sum"])
+    }
+
+    @Test("JSONDictionary initializer rejects non-object top-level values")
+    func jsonDictionaryInitializerRejectsNonObjectTopLevelValues() {
+        struct ScalarValue: Encodable { let value: Int }
+
+        #expect(throws: JSONValueError.expectedObject) {
+            _ = try JSONDictionary(encoding: [ScalarValue(value: 1)])
+        }
     }
 }
 

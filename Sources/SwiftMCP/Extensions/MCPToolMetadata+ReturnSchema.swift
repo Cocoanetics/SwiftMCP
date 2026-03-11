@@ -29,9 +29,9 @@ extension MCPToolMetadata {
         }
     }
 
-    func wrapOutputIfNeeded(_ result: Encodable & Sendable) -> Encodable & Sendable {
+    func wrapOutputIfNeeded(_ result: Encodable & Sendable) throws -> Encodable & Sendable {
         guard shouldWrapOutputArray else { return result }
-        return MCPArrayOutputWrapper(items: AnyEncodable(result))
+        return MCPArrayOutputWrapper(items: try JSONValue(encoding: result))
     }
 
     var returnSchemaInfo: MCPReturnSchemaInfo {
@@ -174,5 +174,5 @@ extension MCPToolMetadata {
 }
 
 private struct MCPArrayOutputWrapper: Encodable, Sendable {
-    let items: AnyEncodable
+    let items: JSONValue
 }

@@ -15,6 +15,12 @@ import Testing
 // Test class with functions that have parameters with default values
 @MCPServer
 final class DefaultValueFunctions {
+    @Schema
+    struct StructuredOptions: Codable, Sendable {
+        let label: String
+        let retries: Int
+    }
+
     /// Function with integer default value
     /// - Parameter a: First number
     /// - Parameter b: Second number with default value
@@ -58,6 +64,13 @@ final class DefaultValueFunctions {
     @MCPTool
     func multipleDefaults(a: String, b: Int = 10, c: Bool = false) -> String {
         return "\(a), \(b), \(c)"
+    }
+
+    /// Function with structured default value
+    /// - Parameter options: Structured options with default value
+    @MCPTool
+    func structuredDefault(options: StructuredOptions = StructuredOptions(label: "retry", retries: 3)) -> String {
+        return "\(options.label):\(options.retries)"
     }
 }
 
@@ -224,7 +237,30 @@ func testMultipleDefaultValues() throws {
     }
 }
 
-private func intArray(from value: AnyCodable?) -> [Int]? {
+@Test
+func testStructuredDefaultValue() throws {
+    let instance = DefaultValueFunctions()
+    let tools = instance.mcpToolMetadata.convertedToTools()
+
+    guard let structuredDefaultTool = tools.first(where: { $0.name == "structuredDefault" }) else {
+        throw TestError("Could not find structuredDefault function")
+    }
+
+    if case .object(let object, _) = structuredDefaultTool.inputSchema {
+        if case .object(_, let defaultValue) = object.properties["options"] {
+            let defaultObject = try #require(defaultValue?.dictionaryValue)
+            #expect(defaultObject["label"]?.stringValue == "retry")
+            #expect(defaultObject["retries"]?.intValue == 3)
+        } else {
+            #expect(Bool(false), "Expected object schema for parameter 'options'")
+        }
+        #expect(!object.required.contains("options"))
+    } else {
+        #expect(Bool(false), "Expected object schema")
+    }
+}
+
+private func intArray(from value: JSONValue?) -> [Int]? {
     if let ints = value?.value as? [Int] {
         return ints
     }

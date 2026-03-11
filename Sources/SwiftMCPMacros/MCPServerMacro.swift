@@ -273,7 +273,7 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro, MemberAttributeMacro 
 ///   - arguments: A dictionary of arguments to pass to the tool
 /// - Returns: The result of the tool call
 /// - Throws: MCPToolError if the tool doesn't exist or cannot be called
-public func callTool(_ name: String, arguments: [String: Sendable]) async throws -> (Encodable & Sendable) {
+public func callTool(_ name: String, arguments: JSONDictionary) async throws -> (Encodable & Sendable) {
    // Find the tool metadata by name
    guard let metadata = mcpToolMetadata(for: name) else {
       throw MCPToolError.unknownTool(name: name)
@@ -366,7 +366,7 @@ public var mcpResourceTemplates: [MCPResourceTemplate] {
 ///   - overrideMimeType: Optional MIME type override
 /// - Returns: The resource content from the function call
 /// - Throws: MCPResourceError if the resource function doesn't exist or cannot be called
-internal func __callResourceFunction(_ name: String, enrichedArguments: [String: Sendable], requestedUri: URL, overrideMimeType: String?) async throws -> [MCPResourceContent] {
+internal func __callResourceFunction(_ name: String, enrichedArguments: JSONDictionary, requestedUri: URL, overrideMimeType: String?) async throws -> [MCPResourceContent] {
    // Call the appropriate wrapper method based on the resource name
    switch name {
 \(resourceFunctionSwitchCases)
@@ -384,7 +384,7 @@ internal func __callResourceFunction(_ name: String, enrichedArguments: [String:
 ///   - arguments: The arguments to pass to the resource function
 /// - Returns: The result of the resource function execution
 /// - Throws: An error if the resource function doesn't exist or cannot be called
-public func callResourceAsFunction(_ name: String, arguments: [String: Sendable]) async throws -> Encodable & Sendable {
+public func callResourceAsFunction(_ name: String, arguments: JSONDictionary) async throws -> Encodable & Sendable {
    // Find the resource metadata by name
    guard let metadata = mcpResourceMetadata.first(where: { $0.functionMetadata.name == name }) else {
       throw MCPResourceError.notFound(uri: "function://\\(name)")
@@ -433,9 +433,9 @@ public func getResource(uri: URL) async throws -> [MCPResourceContent] {
    // If we found a match, use it
    if let match = bestMatch {
       let params = uri.extractTemplateVariables(from: match.template) ?? [:]
-      // Convert [String: String] to [String: Sendable]
-      let sendableParams: [String: Sendable] = params.reduce(into: [:]) { result, pair in
-         result[pair.key] = pair.value as Sendable
+      // Convert [String: String] to JSONDictionary
+      let sendableParams: JSONDictionary = params.reduce(into: [:]) { result, pair in
+         result[pair.key] = .string(pair.value)
       }
       // Enrich arguments. This can throw if required params are missing or types are wrong for a TEMPLATE.
       let enrichedParams = try match.metadata.enrichArguments(sendableParams)
@@ -477,7 +477,7 @@ nonisolated public var mcpPromptMetadata: [MCPPromptMetadata] {
 
             let callPromptMethod = """
 /// Calls a prompt by name with the provided arguments
-public func callPrompt(_ name: String, arguments: [String: Sendable]) async throws -> [PromptMessage] {
+public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -> [PromptMessage] {
    guard let metadata = mcpPromptMetadata.first(where: { $0.name == name }) else {
       throw MCPToolError.unknownTool(name: name)
    }
@@ -713,7 +713,7 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
             lines.append("        try await proxy.listPrompts()")
             lines.append("    }")
             lines.append("")
-            lines.append("    public func getPrompt(name: String, arguments: [String: any Sendable] = [:]) async throws -> PromptResult {")
+            lines.append("    public func getPrompt(name: String, arguments: JSONDictionary = [:]) async throws -> PromptResult {")
             lines.append("        try await proxy.getPrompt(name: name, arguments: arguments)")
             lines.append("    }")
         }
@@ -970,12 +970,12 @@ public func callPrompt(_ name: String, arguments: [String: Sendable]) async thro
         indent: String
     ) -> [String] {
         guard !parameters.isEmpty else { return [] }
-        var lines = ["\(indent)var \(variableName): [String: any Sendable] = [:]"]
+        var lines = ["\(indent)var \(variableName): JSONDictionary = [:]"]
         for parameter in parameters {
             if parameter.isOptional {
-                lines.append("\(indent)if let \(parameter.name) { \(variableName)[\"\(parameter.name)\"] = MCPClientArgumentEncoder.encode(\(parameter.name)) }")
+                lines.append("\(indent)if let \(parameter.name) { \(variableName)[\"\(parameter.name)\"] = try MCPClientArgumentEncoder.encode(\(parameter.name)) }")
             } else {
-                lines.append("\(indent)\(variableName)[\"\(parameter.name)\"] = MCPClientArgumentEncoder.encode(\(parameter.name))")
+                lines.append("\(indent)\(variableName)[\"\(parameter.name)\"] = try MCPClientArgumentEncoder.encode(\(parameter.name))")
             }
         }
         return lines

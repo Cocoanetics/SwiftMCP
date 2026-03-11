@@ -3,7 +3,7 @@ import Foundation
 /// Represents a progress notification as defined in the MCP protocol specification.
 public struct ProgressNotification: Codable, Sendable {
     /// The token identifying the operation the progress update belongs to.
-    public let progressToken: AnyCodable
+    public let progressToken: JSONValue
 
     /// The current progress value.
     public let progress: Double
@@ -20,7 +20,7 @@ public struct ProgressNotification: Codable, Sendable {
     ///   - progress: The current progress value.
     ///   - total: An optional total value if known.
     ///   - message: An optional human-readable progress message.
-    public init(progressToken: AnyCodable,
+    public init(progressToken: JSONValue,
                 progress: Double,
                 total: Double? = nil,
                 message: String? = nil) {

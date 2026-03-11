@@ -64,7 +64,7 @@ nonisolated private let __mcpPromptMetadata_\(functionName) = MCPPromptMetadata(
                 wrapperFunc += "\n\(attribute)"
             }
         }
-        wrapperFunc += "\nfunc __mcpPromptCall_\(functionName)(_ enrichedArguments: [String: Sendable]) async throws -> [PromptMessage] {\n"
+        wrapperFunc += "\nfunc __mcpPromptCall_\(functionName)(_ enrichedArguments: JSONDictionary) async throws -> [PromptMessage] {\n"
         
         for detail in metadata.parameters {
             wrapperFunc += """

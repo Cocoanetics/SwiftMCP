@@ -26,7 +26,7 @@ public enum MCPAppIntentTools {
     public static func callTool(
         named name: String,
         providerType: MCPAppShortcutsProvider.Type,
-        arguments: [String: Sendable]
+        arguments: JSONDictionary
     ) async throws -> (Encodable & Sendable)? {
         guard let tool = toolInstance(named: name, providerType: providerType) else { return nil }
         return try await tool.mcpPerform(arguments: arguments)

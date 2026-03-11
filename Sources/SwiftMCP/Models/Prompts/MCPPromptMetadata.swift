@@ -27,7 +27,7 @@ public struct MCPPromptMetadata: Sendable {
     public var isAsync: Bool { functionMetadata.isAsync }
     public var isThrowing: Bool { functionMetadata.isThrowing }
 
-    public func enrichArguments(_ arguments: [String: Sendable]) throws -> [String: Sendable] {
+    public func enrichArguments(_ arguments: JSONDictionary) throws -> JSONDictionary {
         return try functionMetadata.enrichArguments(arguments)
     }
 }

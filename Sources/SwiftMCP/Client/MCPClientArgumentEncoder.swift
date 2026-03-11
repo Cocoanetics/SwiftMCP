@@ -2,47 +2,47 @@ import Foundation
 
 /// Helpers for encoding client arguments into MCP tool payloads.
 public enum MCPClientArgumentEncoder {
-    public static func encode<T>(_ value: T) -> T {
-        value
+    public static func encode<T: Encodable>(_ value: T) throws -> JSONValue {
+        try JSONValue(encoding: value)
     }
 
-    public static func encode(_ value: Date) -> String {
-        MCPToolArgumentEncoder.encode(value)
+    public static func encode(_ value: Date) throws -> JSONValue {
+        .string(MCPToolArgumentEncoder.encode(value))
     }
 
-    public static func encode(_ value: URL) -> String {
-        MCPToolArgumentEncoder.encode(value)
+    public static func encode(_ value: URL) throws -> JSONValue {
+        .string(MCPToolArgumentEncoder.encode(value))
     }
 
-    public static func encode(_ value: UUID) -> String {
-        MCPToolArgumentEncoder.encode(value)
+    public static func encode(_ value: UUID) throws -> JSONValue {
+        .string(MCPToolArgumentEncoder.encode(value))
     }
 
-    public static func encode(_ value: Data) -> String {
-        MCPToolArgumentEncoder.encode(value)
+    public static func encode(_ value: Data) throws -> JSONValue {
+        .string(MCPToolArgumentEncoder.encode(value))
     }
 
-    public static func encode<T: CaseIterable>(_ value: T) -> String {
-        String(describing: value)
+    public static func encode<T: CaseIterable>(_ value: T) throws -> JSONValue {
+        .string(String(describing: value))
     }
 
-    public static func encode(_ values: [Date]) -> [String] {
-        MCPToolArgumentEncoder.encode(values)
+    public static func encode(_ values: [Date]) throws -> JSONValue {
+        .array(MCPToolArgumentEncoder.encode(values).map(JSONValue.string))
     }
 
-    public static func encode(_ values: [URL]) -> [String] {
-        MCPToolArgumentEncoder.encode(values)
+    public static func encode(_ values: [URL]) throws -> JSONValue {
+        .array(MCPToolArgumentEncoder.encode(values).map(JSONValue.string))
     }
 
-    public static func encode(_ values: [UUID]) -> [String] {
-        MCPToolArgumentEncoder.encode(values)
+    public static func encode(_ values: [UUID]) throws -> JSONValue {
+        .array(MCPToolArgumentEncoder.encode(values).map(JSONValue.string))
     }
 
-    public static func encode(_ values: [Data]) -> [String] {
-        MCPToolArgumentEncoder.encode(values)
+    public static func encode(_ values: [Data]) throws -> JSONValue {
+        .array(MCPToolArgumentEncoder.encode(values).map(JSONValue.string))
     }
 
-    public static func encode<T: CaseIterable>(_ values: [T]) -> [String] {
-        values.map { String(describing: $0) }
+    public static func encode<T: CaseIterable>(_ values: [T]) throws -> JSONValue {
+        .array(values.map { .string(String(describing: $0)) })
     }
 }

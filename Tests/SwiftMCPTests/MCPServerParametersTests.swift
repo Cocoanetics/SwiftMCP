@@ -29,16 +29,16 @@ struct MCPServerParametersTests {
             id: 1,
             method: "initialize",
             params: [
-                "protocolVersion": AnyCodable("2025-06-18"),
-                "capabilities": AnyCodable([
-                    "experimental": [:],
-                    "resources": ["listChanged": false],
-                    "tools": ["listChanged": false]
-                ] as [String: Any]),
-                "clientInfo": AnyCodable([
+                "protocolVersion": "2025-06-18",
+                "capabilities": .object([
+                    "experimental": .object([:]),
+                    "resources": .object(["listChanged": false]),
+                    "tools": .object(["listChanged": false])
+                ]),
+                "clientInfo": .object([
                     "name": "TestClient",
                     "version": "1.0"
-                ] as [String: Any])
+                ])
             ]
         )
         
@@ -65,16 +65,16 @@ struct MCPServerParametersTests {
             id: 1,
             method: "initialize",
             params: [
-                "protocolVersion": AnyCodable("2025-06-18"),
-                "capabilities": AnyCodable([
-                    "experimental": [:],
-                    "resources": ["listChanged": false],
-                    "tools": ["listChanged": false]
-                ] as [String: Any]),
-                "clientInfo": AnyCodable([
+                "protocolVersion": "2025-06-18",
+                "capabilities": .object([
+                    "experimental": .object([:]),
+                    "resources": .object(["listChanged": false]),
+                    "tools": .object(["listChanged": false])
+                ]),
+                "clientInfo": .object([
                     "name": "TestClient",
                     "version": "1.0"
-                ] as [String: Any])
+                ])
             ]
         )
         

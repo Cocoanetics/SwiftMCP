@@ -877,9 +877,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
 
         do {
             // Parse request body as JSON dictionary
-            guard let arguments = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Sendable] else {
-                throw MCPToolError.invalidJSONDictionary
-            }
+            let arguments = try MCPJSONCoding.makeDecoder().decode(JSONDictionary.self, from: bodyData)
 
             // Try to call as a tool first
             let result: Encodable & Sendable
@@ -906,7 +904,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
                 throw MCPToolError.unknownTool(name: toolName)
             }
 
-            let wrappedResult = metadata?.wrapOutputIfNeeded(result) ?? result
+            let wrappedResult = try metadata?.wrapOutputIfNeeded(result) ?? result
 
             // Convert resource content to tool results if applicable
             let responseToEncode: Encodable
@@ -940,9 +938,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             }
 
             // Convert result to JSON data
-            let encoder = JSONEncoder()
-            encoder.dateEncodingStrategy = .iso8601WithTimeZone
-            encoder.nonConformingFloatEncodingStrategy = .convertToString(positiveInfinity: "Infinity", negativeInfinity: "-Infinity", nan: "NaN")
+            let encoder = MCPJSONCoding.makeValueEncoder()
             encoder.outputFormatting = [.prettyPrinted]
 
             let jsonData = try encoder.encode(responseToEncode)
@@ -957,20 +953,20 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             let reflectedDescription = String(reflecting: error)
             let errorType = String(describing: type(of: error))
             let nsError = error as NSError
-            var errorData: [String: AnyCodable] = [
-                "errorType": AnyCodable(errorType),
-                "debugDescription": AnyCodable(reflectedDescription),
-                "localizedDescription": AnyCodable(localizedDescription),
-                "nsErrorDomain": AnyCodable(nsError.domain),
-                "nsErrorCode": AnyCodable(nsError.code)
+            var errorData: JSONDictionary = [
+                "errorType": .string(errorType),
+                "debugDescription": .string(reflectedDescription),
+                "localizedDescription": .string(localizedDescription),
+                "nsErrorDomain": .string(nsError.domain),
+                "nsErrorCode": .integer(nsError.code)
             ]
 
             if let localizedError = error as? LocalizedError {
                 if let failureReason = localizedError.failureReason {
-                    errorData["failureReason"] = AnyCodable(failureReason)
+                    errorData["failureReason"] = .string(failureReason)
                 }
                 if let recoverySuggestion = localizedError.recoverySuggestion {
-                    errorData["recoverySuggestion"] = AnyCodable(recoverySuggestion)
+                    errorData["recoverySuggestion"] = .string(recoverySuggestion)
                 }
             }
 

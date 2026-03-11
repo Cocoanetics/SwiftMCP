@@ -54,11 +54,11 @@ public struct MCPFunctionMetadata: Sendable {
     }
 
     /// Enriches a dictionary of arguments with default values and throws if a required parameter is missing
-    public func enrichArguments(_ arguments: [String: Sendable]) throws -> [String: Sendable] {
+    public func enrichArguments(_ arguments: JSONDictionary) throws -> JSONDictionary {
         var enrichedArguments = arguments
         for param in parameters {
             if enrichedArguments[param.name] == nil {
-                if let defaultValue = param.defaultValue {
+                if let defaultValue = param.jsonDefaultValue() {
                     enrichedArguments[param.name] = defaultValue
                 } else if param.isRequired {
                     throw MCPToolError.missingRequiredParameter(parameterName: param.name)

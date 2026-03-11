@@ -18,7 +18,7 @@ extension Array: ArraySchemaBridge {
 extension MCPParameterInfo {
 
     public var schema: JSONSchema {
-        let defaultValue = schemaDefaultValue()
+        let defaultValue = jsonDefaultValue()
         // If this is a JSONSchemaTypeConvertible type, use its schema
         if let convertibleType = type as? any JSONSchemaTypeConvertible.Type {
             return convertibleType.jsonSchema(description: description).applyingDefault(defaultValue)
@@ -76,82 +76,88 @@ extension MCPParameterInfo {
     }
 }
 
-private extension MCPParameterInfo {
-    func schemaDefaultValue() -> AnyCodable? {
+extension MCPParameterInfo {
+    func jsonDefaultValue() -> JSONValue? {
         guard let value = defaultValue else { return nil }
 
-        if let anyCodable = value as? AnyCodable {
-            return anyCodable
+        if let jsonValue = value as? JSONValue {
+            return jsonValue
         }
 
         if let string = value as? String {
-            return AnyCodable(string)
+            return .string(string)
         }
         if let bool = value as? Bool {
-            return AnyCodable(bool)
+            return .bool(bool)
         }
         if let int = value as? Int {
-            return AnyCodable(int)
+            return .integer(int)
         }
         if let int64 = value as? Int64 {
-            return AnyCodable(int64)
+            return Int(exactly: int64).map(JSONValue.integer)
         }
         if let uint = value as? UInt {
-            return AnyCodable(uint)
+            return .unsignedInteger(uint)
         }
         if let double = value as? Double {
-            return AnyCodable(double)
+            return .double(double)
         }
         if let float = value as? Float {
-            return AnyCodable(float)
+            return .double(Double(float))
         }
         if let decimal = value as? Decimal {
-            return AnyCodable(NSDecimalNumber(decimal: decimal).doubleValue)
+            return .double(NSDecimalNumber(decimal: decimal).doubleValue)
         }
         if let date = value as? Date {
             let formatter = ISO8601DateFormatter()
             formatter.timeZone = TimeZone.current
             formatter.formatOptions = [.withInternetDateTime, .withTimeZone]
-            return AnyCodable(formatter.string(from: date))
+            return .string(formatter.string(from: date))
         }
         if let url = value as? URL {
-            return AnyCodable(url.absoluteString)
+            return .string(url.absoluteString)
         }
         if let uuid = value as? UUID {
-            return AnyCodable(uuid.uuidString)
+            return .string(uuid.uuidString)
         }
         if let data = value as? Data {
-            return AnyCodable(data.base64EncodedString())
+            return .string(data.base64EncodedString())
         }
         if let values = value as? [String] {
-            return AnyCodable(values)
+            return .array(values.map(JSONValue.string))
         }
         if let values = value as? [Int] {
-            return AnyCodable(values)
+            return .array(values.map(JSONValue.integer))
         }
         if let values = value as? [Double] {
-            return AnyCodable(values)
+            return .array(values.map(JSONValue.double))
         }
         if let values = value as? [Bool] {
-            return AnyCodable(values)
+            return .array(values.map(JSONValue.bool))
         }
         if let values = value as? [Date] {
             let formatter = ISO8601DateFormatter()
             formatter.timeZone = TimeZone.current
             formatter.formatOptions = [.withInternetDateTime, .withTimeZone]
-            return AnyCodable(values.map { formatter.string(from: $0) })
+            return .array(values.map { .string(formatter.string(from: $0)) })
         }
         if let values = value as? [URL] {
-            return AnyCodable(values.map(\.absoluteString))
+            return .array(values.map { .string($0.absoluteString) })
         }
         if let values = value as? [UUID] {
-            return AnyCodable(values.map(\.uuidString))
+            return .array(values.map { .string($0.uuidString) })
         }
         if let values = value as? [Data] {
-            return AnyCodable(values.map { $0.base64EncodedString() })
+            return .array(values.map { .string($0.base64EncodedString()) })
+        }
+        if Mirror(reflecting: value).displayStyle == .enum {
+            return .string(String(describing: value))
+        }
+        if let encodable = value as? any Encodable {
+            return try? JSONValue(encoding: encodable)
         }
         if let value = value as? CustomStringConvertible {
-            return AnyCodable(value.description)
+            return .string(value.description)
         }
 
         return nil

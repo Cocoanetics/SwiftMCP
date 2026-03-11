@@ -60,9 +60,10 @@ public struct PromptMessage: Codable, Sendable {
         } else if let str = result as? String {
             return [PromptMessage(role: .user, content: .init(text: str))]
         } else if let encodable = result as? Encodable {
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = .prettyPrinted
-            if let data = try? encoder.encode(AnyEncodable(encodable)),
+            let encoder = MCPJSONCoding.makeWireEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            if let jsonValue = try? JSONValue(encoding: encodable),
+               let data = try? encoder.encode(jsonValue),
                let json = String(data: data, encoding: .utf8) {
                 return [PromptMessage(role: .user, content: .init(text: json))]
             }

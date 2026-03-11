@@ -30,9 +30,9 @@ func testContextProgressToken() throws {
         id: 1,
         method: "tools/call",
         params: [
-            "name": AnyCodable("getCurrentDateTime"),
-            "arguments": AnyCodable([:]),
-            "_meta": AnyCodable(["progressToken": 5])
+            "name": .string("getCurrentDateTime"),
+            "arguments": .object([:]),
+            "_meta": .object(["progressToken": 5])
         ]
     )
 
@@ -53,9 +53,9 @@ func testProgressNotification() async throws {
         id: 2,
         method: "tools/call",
         params: [
-            "name": AnyCodable("getCurrentDateTime"),
-            "arguments": AnyCodable([:]),
-            "_meta": AnyCodable(["progressToken": "abc"])
+            "name": .string("getCurrentDateTime"),
+            "arguments": .object([:]),
+            "_meta": .object(["progressToken": "abc"])
         ]
     )
 

@@ -1,6 +1,29 @@
 import Foundation
 
 public extension BinaryInteger {
+    static func convert(from value: JSONValue) -> Self? {
+        switch value {
+        case .bool(let boolValue):
+            return Self(boolValue ? 1 : 0)
+        case .integer(let intValue):
+            return Self(exactly: intValue)
+        case .unsignedInteger(let uintValue):
+            return Self(exactly: uintValue)
+        case .double(let doubleValue):
+            if doubleValue.truncatingRemainder(dividingBy: 1.0) == 0 {
+                return Self(exactly: doubleValue)
+            }
+            return nil
+        case .string(let stringValue):
+            if let intVal = Int(stringValue) { return Self(exactly: intVal) }
+            if let int64Val = Int64(stringValue) { return Self(exactly: int64Val) }
+            if let uintVal = UInt(stringValue) { return Self(exactly: uintVal) }
+            return nil
+        case .null, .array, .object:
+            return nil
+        }
+    }
+
     static func convert<T>(from value: T) -> Self? {
         if let exact = value as? Self {
             return exact
@@ -31,6 +54,26 @@ public extension BinaryInteger {
 }
 
 public extension BinaryFloatingPoint {
+    static func convert(from value: JSONValue) -> Self? {
+        switch value {
+        case .bool(let boolValue):
+            return Self(boolValue ? 1.0 : 0.0)
+        case .integer(let intValue):
+            return Self(intValue)
+        case .unsignedInteger(let uintValue):
+            return Self(uintValue)
+        case .double(let doubleValue):
+            return Self(doubleValue)
+        case .string(let stringValue):
+            if let doubleVal = Double(stringValue) {
+                return Self(doubleVal)
+            }
+            return nil
+        case .null, .array, .object:
+            return nil
+        }
+    }
+
     static func convert<T>(from value: T) -> Self? {
         if let exact = value as? Self {
             return exact

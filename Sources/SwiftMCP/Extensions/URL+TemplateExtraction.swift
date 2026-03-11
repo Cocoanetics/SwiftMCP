@@ -20,7 +20,7 @@ extension String {
     /// - Parameter parameters: Dictionary of parameter names and their values
     /// - Returns: Constructed URL
     /// - Throws: An error if the template cannot be processed or required parameters are missing
-    public func constructURI(with parameters: [String: Sendable]) throws -> URL {
+    public func constructURI(with parameters: JSONDictionary) throws -> URL {
         let constructor = RFC6570TemplateConstructor(template: self, parameters: parameters)
         return try constructor.construct()
     }
@@ -31,9 +31,9 @@ extension String {
 /// RFC 6570 compliant URI template constructor
 private struct RFC6570TemplateConstructor {
     let template: String
-    let parameters: [String: Sendable]
+    let parameters: JSONDictionary
 
-    init(template: String, parameters: [String: Sendable]) {
+    init(template: String, parameters: JSONDictionary) {
         self.template = template
         self.parameters = parameters
     }
@@ -234,7 +234,43 @@ private struct RFC6570TemplateConstructor {
 
     private func getParameterValue(for name: String) -> String? {
         guard let value = parameters[name] else { return nil }
-        return String(describing: value)
+        switch value {
+        case .null:
+            return nil
+        case .bool(let bool):
+            return String(bool)
+        case .integer(let integer):
+            return String(integer)
+        case .unsignedInteger(let integer):
+            return String(integer)
+        case .double(let double):
+            return String(double)
+        case .string(let string):
+            return string
+        case .array(let values):
+            return values.compactMap { getParameterString(from: $0) }.joined(separator: ",")
+        case .object:
+            return nil
+        }
+    }
+
+    private func getParameterString(from value: JSONValue) -> String? {
+        switch value {
+        case .null:
+            return nil
+        case .bool(let bool):
+            return String(bool)
+        case .integer(let integer):
+            return String(integer)
+        case .unsignedInteger(let integer):
+            return String(integer)
+        case .double(let double):
+            return String(double)
+        case .string(let string):
+            return string
+        case .array, .object:
+            return nil
+        }
     }
 
     private func cleanupEmptyQueryParameters(_ urlString: String) -> String {

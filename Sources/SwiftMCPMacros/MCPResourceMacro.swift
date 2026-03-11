@@ -177,7 +177,7 @@ nonisolated private let __mcpResourceMetadata_\(functionName) = MCPResourceMetad
                 wrapperMethod += "\n        \(attribute)"
             }
         }
-        wrapperMethod += "\n        private func __mcpResourceCall_\(functionName)(_ params: [String: Sendable], requestedUri: URL, overrideMimeType: String?) async throws -> [MCPResourceContent] {\n"
+        wrapperMethod += "\n        private func __mcpResourceCall_\(functionName)(_ params: JSONDictionary, requestedUri: URL, overrideMimeType: String?) async throws -> [MCPResourceContent] {\n"
 
         for detail in wrapperParamDetails {
             wrapperMethod += """
