@@ -1018,7 +1018,7 @@ public final actor MCPServerProxy: Sendable {
         streamTask = Task {
             do {
                 let (asyncBytes, response) = try await session.bytes(for: request)
-                try self.handleSSEResponse(response, sseConfig: sseConfig, isStreamableMCP: isStreamableMCP)
+                self.handleSSEResponse(response, sseConfig: sseConfig, isStreamableMCP: isStreamableMCP)
 
                 for try await message in asyncBytes.lines.sseMessages() {
                     await self.processIncomingMessage(event: message.event, data: message.data)
