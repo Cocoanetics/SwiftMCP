@@ -1,5 +1,4 @@
 import Foundation
-import AnyCodable
 import Testing
 @testable import SwiftMCP
 

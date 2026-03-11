@@ -6,7 +6,6 @@
 //
 
 import Foundation
-@preconcurrency import AnyCodable
 
 /// Represents the capabilities of an MCP client.
 ///

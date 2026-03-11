@@ -1,5 +1,4 @@
 import Foundation
-@preconcurrency import AnyCodable
 
 /// Represents a progress notification as defined in the MCP protocol specification.
 public struct ProgressNotification: Codable, Sendable {

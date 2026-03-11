@@ -1,5 +1,4 @@
 import Testing
-import AnyCodable
 import SwiftMCP
 import SwiftMCPUtilityCore
 

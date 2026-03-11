@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import AnyCodable
 
 protocol ArraySchemaBridge {
     static var elementType: Any.Type { get }

@@ -2,7 +2,6 @@ import Foundation
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
-import AnyCodable
 import Logging
 
 /// A proxy for interacting with an MCP server over stdio, TCP, or SSE.
@@ -10,6 +9,26 @@ public final actor MCPServerProxy: Sendable {
     private struct NotificationHandlerBox: Sendable {
         let payloadTypeDescription: String
         let handle: @Sendable (MCPServerProxy, JSONRPCMessage.JSONRPCNotificationData) async throws -> Void
+    }
+
+    private struct ToolsListResult: Decodable, Sendable {
+        let tools: [MCPTool]
+    }
+
+    private struct ResourcesListResult: Decodable, Sendable {
+        let resources: [SimpleResource]
+    }
+
+    private struct ResourceTemplatesListResult: Decodable, Sendable {
+        let resourceTemplates: [SimpleResourceTemplate]
+    }
+
+    private struct ResourceReadResult: Decodable, Sendable {
+        let contents: [GenericResourceContent]
+    }
+
+    private struct PromptsListResult: Decodable, Sendable {
+        let prompts: [Prompt]
     }
 
     private enum NotificationMethod {
@@ -179,8 +198,8 @@ public final actor MCPServerProxy: Sendable {
             return cachedTools
         }
 
-        let result = try await requestResult(method: "tools/list")
-        let tools: [MCPTool] = try decodeResultField("tools", from: result, method: "tools/list")
+        let result: ToolsListResult = try await requestResult(method: "tools/list", as: ToolsListResult.self)
+        let tools = result.tools
 
         if cacheToolsList {
             cachedTools = tools
@@ -191,29 +210,30 @@ public final actor MCPServerProxy: Sendable {
 
     /// Lists all static resources available from the server.
     public func listResources() async throws -> [SimpleResource] {
-        let result = try await requestResult(method: "resources/list")
-        return try decodeResultField("resources", from: result, method: "resources/list")
+        let result: ResourcesListResult = try await requestResult(method: "resources/list", as: ResourcesListResult.self)
+        return result.resources
     }
 
     /// Lists all resource templates available from the server.
     public func listResourceTemplates() async throws -> [SimpleResourceTemplate] {
-        let result = try await requestResult(method: "resources/templates/list")
-        return try decodeResultField("resourceTemplates", from: result, method: "resources/templates/list")
+        let result: ResourceTemplatesListResult = try await requestResult(method: "resources/templates/list", as: ResourceTemplatesListResult.self)
+        return result.resourceTemplates
     }
 
     /// Reads a resource at the specified URI.
     public func readResource(uri: URL) async throws -> [GenericResourceContent] {
-        let result = try await requestResult(
+        let result: ResourceReadResult = try await requestResult(
             method: "resources/read",
-            params: ["uri": AnyCodable(uri.absoluteString)]
+            params: ["uri": AnyCodable(uri.absoluteString)],
+            as: ResourceReadResult.self
         )
-        return try decodeResultField("contents", from: result, method: "resources/read")
+        return result.contents
     }
 
     /// Lists all prompts available from the server.
     public func listPrompts() async throws -> [Prompt] {
-        let result = try await requestResult(method: "prompts/list")
-        return try decodeResultField("prompts", from: result, method: "prompts/list")
+        let result: PromptsListResult = try await requestResult(method: "prompts/list", as: PromptsListResult.self)
+        return result.prompts
     }
 
     /// Gets a prompt by name with optional arguments.
@@ -221,14 +241,14 @@ public final actor MCPServerProxy: Sendable {
         name: String,
         arguments: [String: any Sendable] = [:]
     ) async throws -> PromptResult {
-        let result = try await requestResult(
+        try await requestResult(
             method: "prompts/get",
             params: [
                 "name": AnyCodable(name),
                 "arguments": AnyCodable(arguments.mapValues(AnyCodable.init))
-            ]
+            ],
+            as: PromptResult.self
         )
-        return try decodeResultField("self", from: result, method: "prompts/get", as: PromptResult.self)
     }
 
     /// Calls a tool by name on the connected MCP server with the provided arguments.
@@ -510,8 +530,7 @@ public final actor MCPServerProxy: Sendable {
         }
 
         let rawServerDescription = extractServerDescription(from: result)
-        let resultData = try JSONEncoder().encode(result)
-        let initResult = try JSONDecoder().decode(InitializeResult.self, from: resultData)
+        let initResult = try Self.decodeJSONPayload(result, as: InitializeResult.self)
         serverName = initResult.serverInfo.name
         serverVersion = initResult.serverInfo.version
         serverDescription = initResult.serverInfo.description ?? rawServerDescription
@@ -699,11 +718,8 @@ public final actor MCPServerProxy: Sendable {
         from notification: JSONRPCMessage.JSONRPCNotificationData,
         as payloadType: Payload.Type = Payload.self
     ) throws -> Payload where Payload: Decodable {
-        let encoder = JSONEncoder()
-        let decoder = JSONDecoder()
         let params = notification.params ?? [:]
-        let data = try encoder.encode(params)
-        return try decoder.decode(payloadType, from: data)
+        return try decodeJSONPayload(params, as: payloadType)
     }
 
     private func logIncomingLogMessage(_ message: LogMessage) {
@@ -864,24 +880,22 @@ public final actor MCPServerProxy: Sendable {
         }
     }
 
-    private func decodeResultField<T: Decodable>(
-        _ field: String,
-        from result: [String: AnyCodable],
+    private func requestResult<T: Decodable>(
         method: String,
+        params: [String: AnyCodable]? = nil,
+        as type: T.Type = T.self
+    ) async throws -> T {
+        let result = try await requestResult(method: method, params: params)
+        return try Self.decodeJSONPayload(result, as: type)
+    }
+
+    private static func decodeJSONPayload<T: Decodable, Payload: Encodable>(
+        _ payload: Payload,
         as type: T.Type = T.self
     ) throws -> T {
-        let value: AnyCodable
-        if field == "self" {
-            value = AnyCodable(result)
-        } else if let fieldValue = result[field] {
-            value = fieldValue
-        } else {
-            throw MCPServerProxyError.communicationError("Invalid response format for \(method)")
-        }
-
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601WithTimeZone
-        let data = try encoder.encode(value)
+        let data = try encoder.encode(payload)
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601WithTimeZone

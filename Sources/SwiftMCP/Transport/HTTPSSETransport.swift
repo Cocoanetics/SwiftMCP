@@ -4,7 +4,6 @@ import NIOHTTP1
 import NIOPosix
 import NIOFoundationCompat
 import Logging
-import AnyCodable
 
 /**
  A transport that exposes an HTTP server with Server-Sent Events (SSE) and JSON-RPC endpoints.

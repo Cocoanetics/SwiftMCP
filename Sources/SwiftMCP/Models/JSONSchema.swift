@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import AnyCodable
 
 /// A simplified representation of JSON Schema for use in the macros
 public indirect enum JSONSchema: Sendable {

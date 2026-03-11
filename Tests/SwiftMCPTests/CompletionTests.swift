@@ -1,7 +1,6 @@
 import Foundation
 import Testing
 @testable import SwiftMCP
-import AnyCodable
 
 @MCPServer
 class CompletionServer {

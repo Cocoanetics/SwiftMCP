@@ -1,7 +1,6 @@
 import Foundation
 import Testing
 @testable import SwiftMCP
-import AnyCodable
 
 @Suite("Calculator Mock Client Tests", .tags(.calculator, .mockClient, .unit))
 struct CalculatorMockTests {

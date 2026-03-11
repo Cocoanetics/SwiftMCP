@@ -2,7 +2,6 @@ import Foundation
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
-import AnyCodable
 import SwiftMCP
 import SwiftSyntax
 import SwiftSyntaxBuilder

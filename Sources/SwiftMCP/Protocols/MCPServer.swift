@@ -1,9 +1,4 @@
-#if canImport(Glibc)
-@preconcurrency import Glibc
-#endif
-
 import Foundation
-import AnyCodable
 
 /**
  Protocol defining the interface for an MCP server.
@@ -217,7 +212,7 @@ public extension MCPServer {
     private func handleInitializeRequest(_ request: JSONRPCMessage.JSONRPCRequestData) async -> JSONRPCMessage? {
         // Extract and store client capabilities if provided
         if let params = request.params,
-           let capabilitiesDict = params["capabilities"]?.value as? [String: Any] {
+           let capabilitiesDict = params["capabilities"]?.dictionaryValue {
             
             do {
                 let capabilitiesData = try JSONSerialization.data(withJSONObject: capabilitiesDict)
@@ -313,13 +308,13 @@ public extension MCPServer {
         }
 
         guard let params = request.params,
-              let toolName = params["name"]?.value as? String else {
+              let toolName = params["name"]?.stringValue else {
             // Invalid request: missing tool name
             return nil
         }
 
         // Extract arguments from the request
-        let arguments = (params["arguments"]?.value as? [String: Sendable]) ?? [:]
+        let arguments = params["arguments"]?.sendableDictionaryValue ?? [:]
 
         let metadata = mcpToolMetadata(for: toolName)
 
@@ -437,11 +432,11 @@ public extension MCPServer {
         }
 
         guard let params = request.params,
-              let name = params["name"]?.value as? String else {
+              let name = params["name"]?.stringValue else {
             return JSONRPCMessage.errorResponse(id: request.id, error: .init(code: -32602, message: "Missing prompt name"))
         }
 
-        let arguments = (params["arguments"]?.value as? [String: Sendable]) ?? [:]
+        let arguments = params["arguments"]?.sendableDictionaryValue ?? [:]
 
         do {
             let messages = try await promptProvider.callPrompt(name, arguments: arguments)
@@ -455,8 +450,8 @@ public extension MCPServer {
     private func handleCompletion(_ request: JSONRPCMessage.JSONRPCRequestData) async -> JSONRPCMessage? {
 
         guard let params = request.params,
-              let refDict = params["ref"]?.value as? [String: Any],
-              let argDict = params["argument"]?.value as? [String: Any],
+              let refDict = params["ref"]?.dictionaryValue,
+              let argDict = params["argument"]?.dictionaryValue,
               let argName = argDict["name"] as? String else {
             return JSONRPCMessage.response(id: request.id, result: ["completion": ["values": []]].mapValues { AnyCodable($0) })
         }
@@ -630,7 +625,7 @@ public extension MCPServer {
         }
 
         // Extract the URI from the request params
-        guard let uriString = request.params?["uri"]?.value as? String,
+        guard let uriString = request.params?["uri"]?.stringValue,
 				  let uri = URL(string: uriString) else {
             return JSONRPCMessage.errorResponse(id: id, error: .init(code: -32602, message: "Invalid or missing URI parameter"))
         }
@@ -707,7 +702,7 @@ public extension MCPServer {
         }
 
         guard let params = request.params,
-              let levelString = params["level"]?.value as? String else {
+              let levelString = params["level"]?.stringValue else {
             return JSONRPCMessage.errorResponse(
                 id: request.id,
                 error: .init(code: -32602, message: "Invalid parameters: 'level' parameter is required")

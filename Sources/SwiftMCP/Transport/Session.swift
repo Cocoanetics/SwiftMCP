@@ -1,5 +1,4 @@
 import Foundation
-import AnyCodable
 import NIO
 
 /// Represents a connection session.

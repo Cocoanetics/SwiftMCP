@@ -1,7 +1,6 @@
 import Testing
 import SwiftMCP
 import Foundation
-import AnyCodable
 
 @MCPServer(name: "CustomCalculator", version: "2.0")
 final class CustomNameCalculator: MCPServer {
