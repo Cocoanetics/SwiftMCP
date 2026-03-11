@@ -153,6 +153,9 @@ extension MCPParameterInfo {
         if Mirror(reflecting: value).displayStyle == .enum {
             return .string(String(describing: value))
         }
+        if let encodable = value as? any Encodable {
+            return try? JSONValue(encoding: encodable)
+        }
         if let value = value as? CustomStringConvertible {
             return .string(value.description)
         }

@@ -138,3 +138,15 @@ func testMultiplyArguments() throws {
     #expect(allArgs["a"]?.value as? Int == 20)
     #expect(allArgs["b"]?.value as? Int == 5)
 } 
+
+@Test
+func testEnrichArgumentsWithStructuredDefault() throws {
+    let instance = DefaultValueFunctions()
+
+    let metadata = try #require(instance.mcpToolMetadata(for: "structuredDefault"))
+    let enrichedArguments = try metadata.enrichArguments([:])
+
+    let options = try #require(enrichedArguments["options"]?.dictionaryValue)
+    #expect(options["label"]?.stringValue == "retry")
+    #expect(options["retries"]?.intValue == 3)
+}
