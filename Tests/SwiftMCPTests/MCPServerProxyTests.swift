@@ -275,7 +275,7 @@ func isMCPServerAvailable(url: URL) -> Bool {
 
     let task = session.dataTask(with: request) { _, response, _ in
         if let httpResponse = response as? HTTPURLResponse {
-            availability.set((200...499).contains(httpResponse.statusCode))
+            availability.set((200...299).contains(httpResponse.statusCode))
         }
         semaphore.signal()
     }
