@@ -75,9 +75,9 @@ public actor SwiftMCPDemoProxy {
      - Returns: The sum of a and b
      */
     public func add(a: Double, b: Double) async throws -> Double {
-        var arguments: [String: any Sendable] = [:]
-        arguments["a"] = a
-        arguments["b"] = b
+        var arguments: JSONDictionary = [:]
+        arguments["a"] = try MCPClientArgumentEncoder.encode(a)
+        arguments["b"] = try MCPClientArgumentEncoder.encode(b)
         let text = try await proxy.callTool("add", arguments: arguments)
         return try MCPClientResultDecoder.decode(Double.self, from: text)
     }
@@ -89,9 +89,9 @@ public actor SwiftMCPDemoProxy {
      - Returns: The adjusted date
      */
     public func addHours(date: Date, hours: Double) async throws -> Date {
-        var arguments: [String: any Sendable] = [:]
-        arguments["date"] = MCPToolArgumentEncoder.encode(date)
-        arguments["hours"] = hours
+        var arguments: JSONDictionary = [:]
+        arguments["date"] = try MCPClientArgumentEncoder.encode(date)
+        arguments["hours"] = try MCPClientArgumentEncoder.encode(hours)
         let text = try await proxy.callTool("addHours", arguments: arguments)
         return try MCPClientResultDecoder.decode(Date.self, from: text)
     }
@@ -112,9 +112,9 @@ public actor SwiftMCPDemoProxy {
      - Returns: The quotient of numerator divided by denominator
      */
     public func divide(denominator: Double = 1, numerator: Double) async throws -> Double {
-        var arguments: [String: any Sendable] = [:]
-        arguments["denominator"] = denominator
-        arguments["numerator"] = numerator
+        var arguments: JSONDictionary = [:]
+        arguments["denominator"] = try MCPClientArgumentEncoder.encode(denominator)
+        arguments["numerator"] = try MCPClientArgumentEncoder.encode(numerator)
         let text = try await proxy.callTool("divide", arguments: arguments)
         return try MCPClientResultDecoder.decode(Double.self, from: text)
     }
@@ -125,8 +125,8 @@ public actor SwiftMCPDemoProxy {
      - Returns: A string with the date formatted
      */
     public func formatDateAsString(date: Date) async throws -> String {
-        var arguments: [String: any Sendable] = [:]
-        arguments["date"] = MCPToolArgumentEncoder.encode(date)
+        var arguments: JSONDictionary = [:]
+        arguments["date"] = try MCPClientArgumentEncoder.encode(date)
         let text = try await proxy.callTool("formatDateAsString", arguments: arguments)
         return text
     }
@@ -146,8 +146,8 @@ public actor SwiftMCPDemoProxy {
      - Returns: A weather report
      */
     public func getWeatherReport(location: String) async throws -> GetWeatherReportResponse {
-        var arguments: [String: any Sendable] = [:]
-        arguments["location"] = location
+        var arguments: JSONDictionary = [:]
+        arguments["location"] = try MCPClientArgumentEncoder.encode(location)
         let text = try await proxy.callTool("getWeatherReport", arguments: arguments)
         return try MCPClientResultDecoder.decode(GetWeatherReportResponse.self, from: text)
     }
@@ -158,8 +158,8 @@ public actor SwiftMCPDemoProxy {
      - Returns: The greeting message
      */
     public func greet(name: String) async throws -> String {
-        var arguments: [String: any Sendable] = [:]
-        arguments["name"] = name
+        var arguments: JSONDictionary = [:]
+        arguments["name"] = try MCPClientArgumentEncoder.encode(name)
         let text = try await proxy.callTool("greet", arguments: arguments)
         return text
     }
@@ -171,9 +171,9 @@ public actor SwiftMCPDemoProxy {
      - Returns: The product of a and b
      */
     public func multiply(a: Double, b: Double) async throws -> Double {
-        var arguments: [String: any Sendable] = [:]
-        arguments["a"] = a
-        arguments["b"] = b
+        var arguments: JSONDictionary = [:]
+        arguments["a"] = try MCPClientArgumentEncoder.encode(a)
+        arguments["b"] = try MCPClientArgumentEncoder.encode(b)
         let text = try await proxy.callTool("multiply", arguments: arguments)
         return try MCPClientResultDecoder.decode(Double.self, from: text)
     }
@@ -193,8 +193,8 @@ public actor SwiftMCPDemoProxy {
      - Returns: The normalized URL
      */
     public func normalizeURL(url: URL) async throws -> URL {
-        var arguments: [String: any Sendable] = [:]
-        arguments["url"] = MCPToolArgumentEncoder.encode(url)
+        var arguments: JSONDictionary = [:]
+        arguments["url"] = try MCPClientArgumentEncoder.encode(url)
         let text = try await proxy.callTool("normalizeURL", arguments: arguments)
         return try MCPClientResultDecoder.decode(URL.self, from: text)
     }
@@ -259,8 +259,8 @@ public actor SwiftMCPDemoProxy {
      - Returns: The same data
      */
     public func roundTripData(data: Data) async throws -> Data {
-        var arguments: [String: any Sendable] = [:]
-        arguments["data"] = MCPToolArgumentEncoder.encode(data)
+        var arguments: JSONDictionary = [:]
+        arguments["data"] = try MCPClientArgumentEncoder.encode(data)
         let text = try await proxy.callTool("roundTripData", arguments: arguments)
         return try MCPClientResultDecoder.decode(Data.self, from: text)
     }
@@ -271,8 +271,8 @@ public actor SwiftMCPDemoProxy {
      - Returns: The same UUID
      */
     public func roundTripUUID(uuid: UUID) async throws -> UUID {
-        var arguments: [String: any Sendable] = [:]
-        arguments["uuid"] = MCPToolArgumentEncoder.encode(uuid)
+        var arguments: JSONDictionary = [:]
+        arguments["uuid"] = try MCPClientArgumentEncoder.encode(uuid)
         let text = try await proxy.callTool("roundTripUUID", arguments: arguments)
         return try MCPClientResultDecoder.decode(UUID.self, from: text)
     }
@@ -283,10 +283,10 @@ public actor SwiftMCPDemoProxy {
      - Parameter prompt: The prompt to send to the client's LLM
      - Returns: The generated text from the client, or nil if no context is available
      */
-    public func sampleFromClient(modelPreferences: [String: any Sendable]? = nil, prompt: String) async throws -> String {
-        var arguments: [String: any Sendable] = [:]
-        if let modelPreferences { arguments["modelPreferences"] = modelPreferences }
-        arguments["prompt"] = prompt
+    public func sampleFromClient(modelPreferences: JSONDictionary? = nil, prompt: String) async throws -> String {
+        var arguments: JSONDictionary = [:]
+        if let modelPreferences { arguments["modelPreferences"] = .object(modelPreferences) }
+        arguments["prompt"] = try MCPClientArgumentEncoder.encode(prompt)
         let text = try await proxy.callTool("sampleFromClient", arguments: arguments)
         return text
     }
@@ -298,9 +298,9 @@ public actor SwiftMCPDemoProxy {
      - Returns: The difference between a and b
      */
     public func subtract(a: Double = 5, b: Double = 3) async throws -> Double {
-        var arguments: [String: any Sendable] = [:]
-        arguments["a"] = a
-        arguments["b"] = b
+        var arguments: JSONDictionary = [:]
+        arguments["a"] = try MCPClientArgumentEncoder.encode(a)
+        arguments["b"] = try MCPClientArgumentEncoder.encode(b)
         let text = try await proxy.callTool("subtract", arguments: arguments)
         return try MCPClientResultDecoder.decode(Double.self, from: text)
     }
@@ -311,8 +311,8 @@ public actor SwiftMCPDemoProxy {
      - Returns: A string representation of the array
      */
     public func testArray(a: [Double] = [1, 2, 3]) async throws -> String {
-        var arguments: [String: any Sendable] = [:]
-        arguments["a"] = a
+        var arguments: JSONDictionary = [:]
+        arguments["a"] = try MCPClientArgumentEncoder.encode(a)
         let text = try await proxy.callTool("testArray", arguments: arguments)
         return text
     }

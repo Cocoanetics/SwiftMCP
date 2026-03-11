@@ -42,5 +42,5 @@ public protocol MCPToolProviding: MCPService {
 	 - Returns: The result of the tool execution
 	 - Throws: An error if the tool execution fails
 	 */
-    func callTool(_ name: String, arguments: [String: Sendable]) async throws -> Encodable & Sendable
+    func callTool(_ name: String, arguments: JSONDictionary) async throws -> Encodable & Sendable
 }

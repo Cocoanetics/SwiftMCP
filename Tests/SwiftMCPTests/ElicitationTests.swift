@@ -37,9 +37,9 @@ struct ElicitationTests {
         
         @Test("ElicitationCreateResponse with accept action")
         func elicitationCreateResponseAcceptTest() throws {
-            let content: [String: AnyCodable] = [
-                "name": AnyCodable("John Doe"),
-                "age": AnyCodable(30)
+            let content: JSONDictionary = [
+                "name": "John Doe",
+                "age": 30
             ]
             
             let response = ElicitationCreateResponse(action: .accept, content: content)

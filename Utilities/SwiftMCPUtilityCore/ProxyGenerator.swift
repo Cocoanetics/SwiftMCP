@@ -279,21 +279,13 @@ public enum ProxyGenerator {
             return lines
         }
 
-        lines.append("        var arguments: [String: any Sendable] = [:]")
+        lines.append("        var arguments: JSONDictionary = [:]")
         for param in parameters {
             let key = param.originalName
             if param.isOptional {
-                if param.needsEncoding {
-                    lines.append("        if let \(param.swiftName) { arguments[\"\(key)\"] = MCPToolArgumentEncoder.encode(\(param.swiftName)) }")
-                } else {
-                    lines.append("        if let \(param.swiftName) { arguments[\"\(key)\"] = \(param.swiftName) }")
-                }
+                lines.append("        if let \(param.swiftName) { arguments[\"\(key)\"] = try MCPClientArgumentEncoder.encode(\(param.swiftName)) }")
             } else {
-                if param.needsEncoding {
-                    lines.append("        arguments[\"\(key)\"] = MCPToolArgumentEncoder.encode(\(param.swiftName))")
-                } else {
-                    lines.append("        arguments[\"\(key)\"] = \(param.swiftName)")
-                }
+                lines.append("        arguments[\"\(key)\"] = try MCPClientArgumentEncoder.encode(\(param.swiftName))")
             }
         }
         lines.append("        let text = try await proxy.callTool(\"\(tool.name)\", arguments: arguments)")
@@ -333,7 +325,7 @@ public enum ProxyGenerator {
             "        try await proxy.listPrompts()",
             "    }",
             "",
-            "    public func getPrompt(name: String, arguments: [String: any Sendable] = [:]) async throws -> PromptResult {",
+            "    public func getPrompt(name: String, arguments: JSONDictionary = [:]) async throws -> PromptResult {",
             "        try await proxy.getPrompt(name: name, arguments: arguments)",
             "    }"
         ]
@@ -398,12 +390,12 @@ public enum ProxyGenerator {
             if parameters.isEmpty {
                 lines.append("        let uri = try \"\(escapeSwiftString(template.uriTemplate))\".constructURI(with: [:])")
             } else {
-                lines.append("        var uriParameters: [String: Sendable] = [:]")
+                lines.append("        var uriParameters: JSONDictionary = [:]")
                 for parameter in parameters {
                     if parameter.isOptional {
-                        lines.append("        if let \(parameter.swiftName) { uriParameters[\"\(parameter.originalName)\"] = \(parameter.swiftName) }")
+                        lines.append("        if let \(parameter.swiftName) { uriParameters[\"\(parameter.originalName)\"] = try MCPClientArgumentEncoder.encode(\(parameter.swiftName)) }")
                     } else {
-                        lines.append("        uriParameters[\"\(parameter.originalName)\"] = \(parameter.swiftName)")
+                        lines.append("        uriParameters[\"\(parameter.originalName)\"] = try MCPClientArgumentEncoder.encode(\(parameter.swiftName))")
                     }
                 }
                 lines.append("        let uri = try \"\(escapeSwiftString(template.uriTemplate))\".constructURI(with: uriParameters)")
@@ -447,12 +439,12 @@ public enum ProxyGenerator {
                 continue
             }
 
-            lines.append("        var arguments: [String: any Sendable] = [:]")
+            lines.append("        var arguments: JSONDictionary = [:]")
             for parameter in parameters {
                 if parameter.isOptional {
-                    lines.append("        if let \(parameter.swiftName) { arguments[\"\(parameter.originalName)\"] = MCPClientArgumentEncoder.encode(\(parameter.swiftName)) }")
+                    lines.append("        if let \(parameter.swiftName) { arguments[\"\(parameter.originalName)\"] = try MCPClientArgumentEncoder.encode(\(parameter.swiftName)) }")
                 } else {
-                    lines.append("        arguments[\"\(parameter.originalName)\"] = MCPClientArgumentEncoder.encode(\(parameter.swiftName))")
+                    lines.append("        arguments[\"\(parameter.originalName)\"] = try MCPClientArgumentEncoder.encode(\(parameter.swiftName))")
                 }
             }
             lines.append("        return try await getPrompt(name: \"\(escapeSwiftString(prompt.name))\", arguments: arguments)")
@@ -893,7 +885,7 @@ public enum ProxyGenerator {
                 let elementInfo = swiftTypeInfo(for: items)
                 return SwiftTypeInfo(typeName: "[\(elementInfo.typeName)]", needsEncoding: elementInfo.needsEncoding)
             case .object:
-                return SwiftTypeInfo(typeName: "[String: any Sendable]", needsEncoding: false)
+                return SwiftTypeInfo(typeName: "JSONDictionary", needsEncoding: false)
             case .enum:
                 return SwiftTypeInfo(typeName: "String", needsEncoding: false)
             case .oneOf:
@@ -938,18 +930,15 @@ public enum ProxyGenerator {
 
     private static func defaultValueLiteral(for schema: JSONSchema, typeInfo: SwiftTypeInfo) -> String? {
         guard let defaultValue = schemaDefaultValue(schema) else { return nil }
-        let value = defaultValue.value
-        if value is Void || value is NSNull {
+        if defaultValue == .null {
             return "nil"
         }
 
-        if typeInfo.needsEncoding {
-            if let stringValue = value as? String {
-                return encodedLiteral(for: typeInfo.typeName, value: stringValue)
-            }
+        if typeInfo.needsEncoding, let stringValue = defaultValue.stringValue {
+            return encodedLiteral(for: typeInfo.typeName, value: stringValue)
         }
 
-        return swiftLiteral(from: value)
+        return swiftLiteral(from: defaultValue)
     }
 
     private static func promptDefaultValueLiteral(
@@ -979,10 +968,14 @@ public enum ProxyGenerator {
             }
         }
 
-        return swiftLiteral(from: value)
+        guard let jsonValue = promptDefaultJSONValue(from: value) else {
+            return nil
+        }
+
+        return swiftLiteral(from: jsonValue)
     }
 
-    private static func schemaDefaultValue(_ schema: JSONSchema) -> AnyCodable? {
+    private static func schemaDefaultValue(_ schema: JSONSchema) -> JSONValue? {
         switch schema {
         case .string(_, _, _, _, _, let defaultValue):
             return defaultValue
@@ -1017,45 +1010,28 @@ public enum ProxyGenerator {
         }
     }
 
-    private static func swiftLiteral(from value: Any) -> String? {
-        if let stringValue = value as? String {
+    private static func swiftLiteral(from value: JSONValue) -> String? {
+        switch value {
+        case .null:
+            return "nil"
+        case .string(let stringValue):
             return "\"\(escapeSwiftString(stringValue))\""
-        }
-        if let boolValue = value as? Bool {
+        case .bool(let boolValue):
             return boolValue ? "true" : "false"
-        }
-        if let intValue = value as? Int {
+        case .integer(let intValue):
             return "\(intValue)"
-        }
-        if let intValue = value as? Int64 {
+        case .unsignedInteger(let intValue):
             return "\(intValue)"
-        }
-        if let intValue = value as? UInt {
-            return "\(intValue)"
-        }
-        if let doubleValue = value as? Double {
+        case .double(let doubleValue):
             return String(describing: doubleValue)
-        }
-        if let floatValue = value as? Float {
-            return String(describing: floatValue)
-        }
-        if let arrayValue = value as? [Any] {
+        case .array(let arrayValue):
             var elements: [String] = []
             for element in arrayValue {
                 guard let literal = swiftLiteral(from: element) else { return nil }
                 elements.append(literal)
             }
             return "[\(elements.joined(separator: ", "))]"
-        }
-        if let arrayValue = value as? [AnyCodable] {
-            var elements: [String] = []
-            for element in arrayValue {
-                guard let literal = swiftLiteral(from: element.value) else { return nil }
-                elements.append(literal)
-            }
-            return "[\(elements.joined(separator: ", "))]"
-        }
-        if let dictValue = value as? [String: Any] {
+        case .object(let dictValue):
             var pairs: [String] = []
             for (key, value) in dictValue {
                 guard let literal = swiftLiteral(from: value) else { return nil }
@@ -1063,13 +1039,44 @@ public enum ProxyGenerator {
             }
             return "[\(pairs.joined(separator: ", "))]"
         }
-        if let dictValue = value as? [String: AnyCodable] {
-            var pairs: [String] = []
-            for (key, value) in dictValue {
-                guard let literal = swiftLiteral(from: value.value) else { return nil }
-                pairs.append("\"\(escapeSwiftString(key))\": \(literal)")
-            }
-            return "[\(pairs.joined(separator: ", "))]"
+    }
+
+    private static func promptDefaultJSONValue(from value: any Sendable) -> JSONValue? {
+        if let jsonValue = value as? JSONValue {
+            return jsonValue
+        }
+        if let stringValue = value as? String {
+            return .string(stringValue)
+        }
+        if let boolValue = value as? Bool {
+            return .bool(boolValue)
+        }
+        if let intValue = value as? Int {
+            return .integer(intValue)
+        }
+        if let intValue = value as? Int64, let exact = Int(exactly: intValue) {
+            return .integer(exact)
+        }
+        if let uintValue = value as? UInt {
+            return .unsignedInteger(uintValue)
+        }
+        if let doubleValue = value as? Double {
+            return .double(doubleValue)
+        }
+        if let floatValue = value as? Float {
+            return .double(Double(floatValue))
+        }
+        if let values = value as? [String] {
+            return .array(values.map(JSONValue.string))
+        }
+        if let values = value as? [Int] {
+            return .array(values.map(JSONValue.integer))
+        }
+        if let values = value as? [Double] {
+            return .array(values.map(JSONValue.double))
+        }
+        if let values = value as? [Bool] {
+            return .array(values.map(JSONValue.bool))
         }
         return nil
     }

@@ -11,16 +11,16 @@ func testInitializeRequest() async throws {
         id: 1,
         method: "initialize",
         params: [
-            "protocolVersion": AnyCodable("2025-06-18"),
-            "capabilities": AnyCodable([
-                "experimental": [:],
-                "resources": ["listChanged": false],
-                "tools": ["listChanged": false]
-            ] as [String: Any]),
-            "clientInfo": AnyCodable([
+            "protocolVersion": "2025-06-18",
+            "capabilities": .object([
+                "experimental": .object([:]),
+                "resources": .object(["listChanged": false]),
+                "tools": .object(["listChanged": false])
+            ]),
+            "clientInfo": .object([
                 "name": "TestClient",
                 "version": "1.0"
-            ] as [String: Any])
+            ])
         ]
     )
     
@@ -136,8 +136,8 @@ func testToolCallRequest() async throws {
         id: 3,
         method: "tools/call",
         params: [
-            "name": AnyCodable("add"),
-            "arguments": AnyCodable([
+            "name": "add",
+            "arguments": .object([
                 "a": 2,
                 "b": 3
             ])
@@ -180,8 +180,8 @@ func testToolCallRequestWithError() async throws {
         id: 4,
         method: "tools/call",
         params: [
-            "name": AnyCodable("unknown_tool"),
-            "arguments": AnyCodable([:])
+            "name": "unknown_tool",
+            "arguments": .object([:])
         ]
     )
     
@@ -228,8 +228,8 @@ func testToolCallRequestWithInvalidArgument() async throws {
         id: 5,
         method: "tools/call",
         params: [
-            "name": AnyCodable("add"),
-            "arguments": AnyCodable([
+            "name": "add",
+            "arguments": .object([
                 "a": "not_a_number",
                 "b": 3
             ])

@@ -21,13 +21,13 @@ extension MCPToolMetadata {
 	 - Returns: The enriched dictionary of arguments
 	 - Throws: An error if a required parameter is missing
 	 */
-    public func enrichArguments(_ arguments: [String: Sendable], functionName: String? = nil) throws -> [String: Sendable] {
+    public func enrichArguments(_ arguments: JSONDictionary, functionName: String? = nil) throws -> JSONDictionary {
         var enrichedArguments = arguments
 
         // Add default values for missing parameters
         for param in parameters {
             if enrichedArguments[param.name] == nil {
-                if let defaultValue = param.defaultValue {
+                if let defaultValue = param.jsonDefaultValue() {
                     enrichedArguments[param.name] = defaultValue
                 } else if param.isRequired {
                     throw MCPToolError.missingRequiredParameter(parameterName: param.name)

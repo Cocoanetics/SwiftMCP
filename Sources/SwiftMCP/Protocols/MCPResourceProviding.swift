@@ -50,7 +50,7 @@ public protocol MCPResourceProviding {
 	 - Returns: The result of the resource function execution
 	 - Throws: An error if the resource function doesn't exist or cannot be called
 	 */
-    func callResourceAsFunction(_ name: String, arguments: [String: Sendable]) async throws -> Encodable & Sendable
+    func callResourceAsFunction(_ name: String, arguments: JSONDictionary) async throws -> Encodable & Sendable
 
 /**
 	 Handles non-template resources (e.g., file-based resources).
@@ -116,7 +116,7 @@ extension MCPResourceProviding {
         return []
     }
 
-    public func callResourceAsFunction(_ name: String, arguments: [String: Sendable]) async throws -> Encodable & Sendable {
+    public func callResourceAsFunction(_ name: String, arguments: JSONDictionary) async throws -> Encodable & Sendable {
         // Default implementation throws an error - this should be overridden by the macro
         throw MCPResourceError.notFound(uri: "function://\(name)")
     }

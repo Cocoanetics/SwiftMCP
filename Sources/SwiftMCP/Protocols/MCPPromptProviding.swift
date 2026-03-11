@@ -6,13 +6,13 @@ public protocol MCPPromptProviding {
     nonisolated var mcpPromptMetadata: [MCPPromptMetadata] { get }
 
     /// Calls a prompt by name with provided arguments
-    func callPrompt(_ name: String, arguments: [String: Sendable]) async throws -> [PromptMessage]
+    func callPrompt(_ name: String, arguments: JSONDictionary) async throws -> [PromptMessage]
 }
 
 extension MCPPromptProviding {
     public var mcpPromptMetadata: [MCPPromptMetadata] { [] }
 
-    public func callPrompt(_ name: String, arguments: [String: Sendable]) async throws -> [PromptMessage] {
+    public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -> [PromptMessage] {
         throw MCPToolError.unknownTool(name: name)
     }
 }

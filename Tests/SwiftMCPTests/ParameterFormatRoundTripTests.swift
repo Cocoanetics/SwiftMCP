@@ -7,7 +7,7 @@ struct ParameterFormatRoundTripTests {
     @Test("UUID parameters accept encoded string values")
     func uuidParameterFromEncodedString() throws {
         let uuid = UUID()
-        let params: [String: Sendable] = ["uuid": MCPToolArgumentEncoder.encode(uuid)]
+        let params: JSONDictionary = ["uuid": .string(MCPToolArgumentEncoder.encode(uuid))]
         let extracted: UUID = try params.extractParameter(named: "uuid")
         #expect(extracted == uuid)
     }
@@ -15,7 +15,7 @@ struct ParameterFormatRoundTripTests {
     @Test("UUID parameters accept native UUID values")
     func uuidParameterFromNativeValue() throws {
         let uuid = UUID()
-        let params: [String: Sendable] = ["uuid": uuid]
+        let params: JSONDictionary = ["uuid": try JSONValue(encoding: uuid)]
         let extracted: UUID = try params.extractParameter(named: "uuid")
         #expect(extracted == uuid)
     }
@@ -23,15 +23,15 @@ struct ParameterFormatRoundTripTests {
     @Test("Data parameters accept base64-encoded string values")
     func dataParameterFromEncodedString() throws {
         let data = Data([0x01, 0x02, 0x03, 0x04])
-        let params: [String: Sendable] = ["data": MCPToolArgumentEncoder.encode(data)]
+        let params: JSONDictionary = ["data": .string(MCPToolArgumentEncoder.encode(data))]
         let extracted: Data = try params.extractParameter(named: "data")
         #expect(extracted == data)
     }
 
-    @Test("Data parameters accept native Data values")
-    func dataParameterFromNativeValue() throws {
+    @Test("Data parameters accept JSONValue-encoded Data values")
+    func dataParameterFromJSONValueEncoding() throws {
         let data = Data([0x0A, 0x0B, 0x0C])
-        let params: [String: Sendable] = ["data": data]
+        let params: JSONDictionary = ["data": try MCPClientArgumentEncoder.encode(data)]
         let extracted: Data = try params.extractParameter(named: "data")
         #expect(extracted == data)
     }

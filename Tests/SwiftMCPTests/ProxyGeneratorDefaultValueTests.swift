@@ -15,7 +15,7 @@ struct ProxyGeneratorDefaultValueTests {
                     description: nil,
                     minimum: nil,
                     maximum: nil,
-                    defaultValue: AnyCodable(5)
+                    defaultValue: .integer(5)
                 ),
                 "dateDefault": .string(
                     title: nil,
@@ -23,7 +23,7 @@ struct ProxyGeneratorDefaultValueTests {
                     format: "date-time",
                     minLength: nil,
                     maxLength: nil,
-                    defaultValue: AnyCodable("2024-01-02T03:04:05Z")
+                    defaultValue: .string("2024-01-02T03:04:05Z")
                 ),
                 "urlDefault": .string(
                     title: nil,
@@ -31,20 +31,20 @@ struct ProxyGeneratorDefaultValueTests {
                     format: "uri",
                     minLength: nil,
                     maxLength: nil,
-                    defaultValue: AnyCodable("https://example.com")
+                    defaultValue: .string("https://example.com")
                 ),
                 "arrayDefault": .array(
                     items: .number(title: nil, description: nil, minimum: nil, maximum: nil),
                     title: nil,
                     description: nil,
-                    defaultValue: AnyCodable([1, 2, 3])
+                    defaultValue: .array([1, 2, 3])
                 ),
                 "enumDefault": .enum(
                     values: ["one", "two"],
                     title: nil,
                     description: nil,
                     enumNames: nil,
-                    defaultValue: AnyCodable("one")
+                    defaultValue: .string("one")
                 )
             ],
             required: ["requiredValue"]

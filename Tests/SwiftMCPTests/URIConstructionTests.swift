@@ -3,8 +3,8 @@ import Testing
 
 // Define a helper function for tests
 func constructURI(from template: String, with parameters: [String: String]) throws -> String {
-    let sendableParams: [String: Sendable] = parameters.reduce(into: [:]) { result, pair in
-        result[pair.key] = pair.value as Sendable
+    let sendableParams: JSONDictionary = parameters.reduce(into: [:]) { result, pair in
+        result[pair.key] = .string(pair.value)
     }
     let url = try template.constructURI(with: sendableParams)
     return url.absoluteString

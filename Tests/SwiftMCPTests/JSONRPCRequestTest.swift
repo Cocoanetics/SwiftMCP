@@ -120,7 +120,7 @@ func testHandleBatchRequest() async throws {
 func testEncodeBatchResponse() throws {
 	let responses: [JSONRPCMessage] = [
 		.response(id: 1, result: [:]),
-		.response(id: 2, result: ["tools": AnyCodable([])])
+		.response(id: 2, result: ["tools": .array([])])
 	]
 	
 	let encoder = JSONEncoder()

@@ -15,13 +15,13 @@ import Foundation
 /// about what functionalities are available on the server.
 public struct ServerCapabilities: Codable, Sendable {
     /// Experimental, non-standard capabilities that the server supports.
-    public var experimental: [String: AnyCodable] = [:]
+    public var experimental: JSONDictionary = [:]
 
     /// Present if the server supports sending log messages to the client.
     public var logging: LoggingCapabilities?
 
     /// Present if the server supports argument autocompletion suggestions.
-    public var completions: AnyCodable?
+    public var completions: JSONValue?
 
     /// Present if the server offers any prompt templates.
     public var prompts: PromptsCapabilities?
@@ -77,9 +77,9 @@ public struct ServerCapabilities: Codable, Sendable {
     }
 
     public init(
-        experimental: [String: AnyCodable] = [:],
+        experimental: JSONDictionary = [:],
         logging: LoggingCapabilities? = nil,
-        completions: AnyCodable? = nil,
+        completions: JSONValue? = nil,
         prompts: PromptsCapabilities? = nil,
         resources: ResourcesCapabilities? = nil,
         tools: ToolsCapabilities? = nil
@@ -103,9 +103,9 @@ public struct ServerCapabilities: Codable, Sendable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        experimental = try container.decodeIfPresent([String: AnyCodable].self, forKey: .experimental) ?? [:]
+        experimental = try container.decodeIfPresent(JSONDictionary.self, forKey: .experimental) ?? [:]
         logging = try container.decodeIfPresent(LoggingCapabilities.self, forKey: .logging)
-        completions = try container.decodeIfPresent(AnyCodable.self, forKey: .completions)
+        completions = try container.decodeIfPresent(JSONValue.self, forKey: .completions)
         prompts = try container.decodeIfPresent(PromptsCapabilities.self, forKey: .prompts)
         resources = try container.decodeIfPresent(ResourcesCapabilities.self, forKey: .resources)
         tools = try container.decodeIfPresent(ToolsCapabilities.self, forKey: .tools)

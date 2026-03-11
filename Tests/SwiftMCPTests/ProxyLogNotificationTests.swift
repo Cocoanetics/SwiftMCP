@@ -16,9 +16,9 @@ struct ProxyNotificationHandlerTests {
         let notification = JSONRPCMessage.JSONRPCNotificationData(
             method: "notifications/runStatusChanged",
             params: [
-                "runID": AnyCodable("run-123"),
-                "status": AnyCodable("completed"),
-                "step": AnyCodable(3)
+                "runID": "run-123",
+                "status": "completed",
+                "step": 3
             ]
         )
 
@@ -40,9 +40,9 @@ struct ProxyNotificationHandlerTests {
         let notification = JSONRPCMessage.JSONRPCNotificationData(
             method: "notifications/message",
             params: [
-                "level": AnyCodable("warning"),
-                "logger": AnyCodable("demo"),
-                "data": AnyCodable("hello")
+                "level": "warning",
+                "logger": "demo",
+                "data": "hello"
             ]
         )
 
@@ -65,9 +65,9 @@ struct ProxyNotificationHandlerTests {
         let notification = JSONRPCMessage.JSONRPCNotificationData(
             method: "notifications/message",
             params: [
-                "level": AnyCodable(3),
-                "logger": AnyCodable(["name": "demo"]),
-                "data": AnyCodable("hello")
+                "level": 3,
+                "logger": .object(["name": "demo"]),
+                "data": "hello"
             ]
         )
 
@@ -90,10 +90,10 @@ struct ProxyNotificationHandlerTests {
         let notification = JSONRPCMessage.JSONRPCNotificationData(
             method: "notifications/progress",
             params: [
-                "progressToken": AnyCodable("job-42"),
-                "progress": AnyCodable(0.5),
-                "total": AnyCodable(1.0),
-                "message": AnyCodable("Halfway there")
+                "progressToken": "job-42",
+                "progress": 0.5,
+                "total": 1.0,
+                "message": "Halfway there"
             ]
         )
 

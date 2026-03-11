@@ -49,12 +49,12 @@ extension Prompt {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(name, forKey: .name)
         try container.encodeIfPresent(description, forKey: .description)
-        let args: [[String: AnyCodable]] = arguments.map { param in
-            [
-                "name": AnyCodable(param.name),
-                "description": AnyCodable(param.description ?? ""),
-                "required": AnyCodable(param.isRequired)
-            ]
+        let args = arguments.map { param in
+            ArgumentPayload(
+                name: param.name,
+                description: param.description ?? "",
+                required: param.isRequired
+            )
         }
         try container.encode(args, forKey: .arguments)
     }

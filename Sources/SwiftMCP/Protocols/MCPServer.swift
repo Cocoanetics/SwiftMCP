@@ -212,19 +212,11 @@ public extension MCPServer {
     private func handleInitializeRequest(_ request: JSONRPCMessage.JSONRPCRequestData) async -> JSONRPCMessage? {
         // Extract and store client capabilities if provided
         if let params = request.params,
-           let capabilitiesDict = params["capabilities"]?.dictionaryValue {
-            
-            do {
-                let capabilitiesData = try JSONSerialization.data(withJSONObject: capabilitiesDict)
-                let clientCapabilities = try JSONDecoder().decode(ClientCapabilities.self, from: capabilitiesData)
-                
-                // Store client capabilities in current session
-                if let session = Session.current {
-                    await session.setClientCapabilities(clientCapabilities)
-                }
-            } catch {
-                // If parsing fails, continue without client capabilities
-                // This is non-fatal as not all clients may send capabilities
+           let capabilitiesValue = params["capabilities"],
+           let clientCapabilities: ClientCapabilities = try? capabilitiesValue.decoded(ClientCapabilities.self) {
+
+            if let session = Session.current {
+                await session.setClientCapabilities(clientCapabilities)
             }
         }
         
@@ -271,7 +263,7 @@ public extension MCPServer {
 
 
         // Advertise completion support
-        capabilities.completions = AnyCodable([:])
+        capabilities.completions = .object([:])
 
         let serverInfo = InitializeResult.ServerInfo(
             name: serverName,
@@ -286,8 +278,7 @@ public extension MCPServer {
         )
 
         do {
-            let encoder = DictionaryEncoder()
-            let resultDict = try encoder.encode(result)
+            let resultDict = try JSONDictionary(encoding: result)
             return JSONRPCMessage.response(id: id, result: resultDict)
         } catch {
             // Fallback to empty response if encoding fails
@@ -314,18 +305,18 @@ public extension MCPServer {
         }
 
         // Extract arguments from the request
-        let arguments = params["arguments"]?.sendableDictionaryValue ?? [:]
+        let arguments = params["arguments"]?.dictionaryValue ?? [:]
 
         let metadata = mcpToolMetadata(for: toolName)
 
         // Call the appropriate wrapper method based on the tool name
         do {
             let result = try await toolProvider.callTool(toolName, arguments: arguments)
-            let wrappedResult = metadata?.wrapOutputIfNeeded(result) ?? result
+            let wrappedResult = try metadata?.wrapOutputIfNeeded(result) ?? result
 
-            var content: [String: Any]
-            var resultPayload: [String: AnyCodable] = [
-                "isError": AnyCodable(false)
+            var content: JSONDictionary
+            var resultPayload: JSONDictionary = [
+                "isError": false
             ]
 
             let expectsToolResult: Bool = {
@@ -347,80 +338,79 @@ public extension MCPServer {
             }()
 
             if let content = wrappedResult as? MCPText {
-                resultPayload["content"] = AnyCodable([content])
+                resultPayload["content"] = try JSONValue(encoding: [content])
                 return JSONRPCMessage.response(id: request.id, result: resultPayload)
             } else if let content = wrappedResult as? MCPImage {
-                resultPayload["content"] = AnyCodable([content])
+                resultPayload["content"] = try JSONValue(encoding: [content])
                 return JSONRPCMessage.response(id: request.id, result: resultPayload)
             } else if let content = wrappedResult as? MCPAudio {
-                resultPayload["content"] = AnyCodable([content])
+                resultPayload["content"] = try JSONValue(encoding: [content])
                 return JSONRPCMessage.response(id: request.id, result: resultPayload)
             } else if let content = wrappedResult as? MCPResourceLink {
-                resultPayload["content"] = AnyCodable([content])
+                resultPayload["content"] = try JSONValue(encoding: [content])
                 return JSONRPCMessage.response(id: request.id, result: resultPayload)
             } else if let content = wrappedResult as? MCPEmbeddedResource {
-                resultPayload["content"] = AnyCodable([content])
+                resultPayload["content"] = try JSONValue(encoding: [content])
                 return JSONRPCMessage.response(id: request.id, result: resultPayload)
             } else if let contents = wrappedResult as? [MCPText],
                       (expectsToolResult || !contents.isEmpty) {
-                resultPayload["content"] = AnyCodable(contents)
+                resultPayload["content"] = try JSONValue(encoding: contents)
                 return JSONRPCMessage.response(id: request.id, result: resultPayload)
             } else if let contents = wrappedResult as? [MCPImage],
                       (expectsToolResult || !contents.isEmpty) {
-                resultPayload["content"] = AnyCodable(contents)
+                resultPayload["content"] = try JSONValue(encoding: contents)
                 return JSONRPCMessage.response(id: request.id, result: resultPayload)
             } else if let contents = wrappedResult as? [MCPAudio],
                       (expectsToolResult || !contents.isEmpty) {
-                resultPayload["content"] = AnyCodable(contents)
+                resultPayload["content"] = try JSONValue(encoding: contents)
                 return JSONRPCMessage.response(id: request.id, result: resultPayload)
             } else if let contents = wrappedResult as? [MCPResourceLink],
                       (expectsToolResult || !contents.isEmpty) {
-                resultPayload["content"] = AnyCodable(contents)
+                resultPayload["content"] = try JSONValue(encoding: contents)
                 return JSONRPCMessage.response(id: request.id, result: resultPayload)
             } else if let contents = wrappedResult as? [MCPEmbeddedResource],
                       (expectsToolResult || !contents.isEmpty) {
-                resultPayload["content"] = AnyCodable(contents)
+                resultPayload["content"] = try JSONValue(encoding: contents)
                 return JSONRPCMessage.response(id: request.id, result: resultPayload)
             } else if let resource = wrappedResult as? MCPResourceContent {
-                resultPayload["content"] = AnyCodable([MCPEmbeddedResource(resource: resource)])
+                resultPayload["content"] = try JSONValue(encoding: [MCPEmbeddedResource(resource: resource)])
                 return JSONRPCMessage.response(id: request.id, result: resultPayload)
             } else if let resources = wrappedResult as? [MCPResourceContent],
                       (expectsToolResult || !resources.isEmpty) {
                 let contents = resources.map { MCPEmbeddedResource(resource: $0) }
-                resultPayload["content"] = AnyCodable(contents)
+                resultPayload["content"] = try JSONValue(encoding: contents)
                 return JSONRPCMessage.response(id: request.id, result: resultPayload)
             } else {
-                let encoder = JSONEncoder()
-
-                // Create ISO8601 formatter with timezone
-                encoder.dateEncodingStrategy = .iso8601WithTimeZone
-                encoder.nonConformingFloatEncodingStrategy = .convertToString(positiveInfinity: "Infinity", negativeInfinity: "-Infinity", nan: "NaN")
-                encoder.outputFormatting = [.sortedKeys]
-
-                let jsonData = try encoder.encode(wrappedResult)
+                let jsonValue = try JSONValue(encoding: wrappedResult)
+                let encoder = MCPJSONCoding.makeWireEncoder()
+                let jsonData = try encoder.encode(jsonValue)
                 let responseText = String(data: jsonData, encoding: .utf8) ?? ""
 
                 content = [
-                    "type": "text",
-                    "text": responseText.removingQuotes
+                    "type": .string("text"),
+                    "text": .string(responseText.removingQuotes)
                 ]
 
-                if let structuredObject = try? DictionaryEncoder().encode(wrappedResult) {
-                    resultPayload["structuredContent"] = AnyCodable(structuredObject)
+                if case .object(let structuredObject) = jsonValue {
+                    resultPayload["structuredContent"] = .object(structuredObject)
                 }
             }
 
-            resultPayload["content"] = AnyCodable([content])
+            resultPayload["content"] = .array([.object(content)])
 
             return JSONRPCMessage.response(id: request.id, result: resultPayload)
 
         } catch {
-            return JSONRPCMessage.response(id: request.id, result: [
-                "content": [
-                    ["type": "text", "text": error.localizedDescription]
-                ],
-                "isError": true
-            ])
+            return JSONRPCMessage.response(
+                id: request.id,
+                result: [
+                    "content": .array([.object([
+                        "type": .string("text"),
+                        "text": .string(error.localizedDescription)
+                    ])]),
+                    "isError": true
+                ]
+            )
         }
     }
 
@@ -436,11 +426,17 @@ public extension MCPServer {
             return JSONRPCMessage.errorResponse(id: request.id, error: .init(code: -32602, message: "Missing prompt name"))
         }
 
-        let arguments = params["arguments"]?.sendableDictionaryValue ?? [:]
+        let arguments = params["arguments"]?.dictionaryValue ?? [:]
 
         do {
             let messages = try await promptProvider.callPrompt(name, arguments: arguments)
-            return JSONRPCMessage.response(id: request.id, result: ["description": AnyCodable(name), "messages": AnyCodable(messages)])
+            return JSONRPCMessage.response(
+                id: request.id,
+                result: [
+                    "description": .string(name),
+                    "messages": try JSONValue(encoding: messages)
+                ]
+            )
         } catch {
             return JSONRPCMessage.errorResponse(id: request.id, error: .init(code: -32000, message: error.localizedDescription))
         }
@@ -452,15 +448,15 @@ public extension MCPServer {
         guard let params = request.params,
               let refDict = params["ref"]?.dictionaryValue,
               let argDict = params["argument"]?.dictionaryValue,
-              let argName = argDict["name"] as? String else {
-            return JSONRPCMessage.response(id: request.id, result: ["completion": ["values": []]].mapValues { AnyCodable($0) })
+              let argName = argDict["name"]?.stringValue else {
+            return JSONRPCMessage.response(id: request.id, result: ["completion": .object(["values": .array([])])])
         }
 
-        let prefix = (argDict["value"] as? String) ?? ""
+        let prefix = argDict["value"]?.stringValue ?? ""
 
-        if let refType = refDict["type"] as? String,
+        if let refType = refDict["type"]?.stringValue,
            refType == "ref/resource",
-           let uri = refDict["uri"] as? String,
+           let uri = refDict["uri"]?.stringValue,
            let resourceProvider = self as? MCPResourceProviding,
            let metadata = resourceProvider.mcpResourceMetadata.first(where: { $0.uriTemplates.contains(uri) }),
            let parameter = metadata.parameters.first(where: { $0.name == argName }) {
@@ -473,19 +469,19 @@ public extension MCPServer {
                 comp = CompleteResult.Completion(values: completions, total: completions.count, hasMore: false)
             }
 
-            let result: [String: Any] = [
-                "completion": [
-                    "values": comp.values,
-                    "total": comp.total ?? comp.values.count,
-                    "hasMore": comp.hasMore ?? false
-                ]
+            let result: JSONDictionary = [
+                "completion": .object([
+                    "values": try! JSONValue(encoding: comp.values),
+                    "total": .integer(comp.total ?? comp.values.count),
+                    "hasMore": .bool(comp.hasMore ?? false)
+                ])
             ]
-            return JSONRPCMessage.response(id: request.id, result: result.mapValues { AnyCodable($0) })
+            return JSONRPCMessage.response(id: request.id, result: result)
         }
 
-        if let refType = refDict["type"] as? String,
+        if let refType = refDict["type"]?.stringValue,
            refType == "ref/prompt",
-           let name = refDict["name"] as? String,
+           let name = refDict["name"]?.stringValue,
            let promptProvider = self as? MCPPromptProviding,
            let metadata = promptProvider.mcpPromptMetadata.first(where: { $0.name == name }),
            let parameter = metadata.parameters.first(where: { $0.name == argName }) {
@@ -498,18 +494,18 @@ public extension MCPServer {
                 comp = CompleteResult.Completion(values: completions, total: completions.count, hasMore: false)
             }
 
-            let result: [String: Any] = [
-                "completion": [
-                    "values": comp.values,
-                    "total": comp.total ?? comp.values.count,
-                    "hasMore": comp.hasMore ?? false
-                ]
+            let result: JSONDictionary = [
+                "completion": .object([
+                    "values": try! JSONValue(encoding: comp.values),
+                    "total": .integer(comp.total ?? comp.values.count),
+                    "hasMore": .bool(comp.hasMore ?? false)
+                ])
             ]
-            return JSONRPCMessage.response(id: request.id, result: result.mapValues { AnyCodable($0) })
+            return JSONRPCMessage.response(id: request.id, result: result)
         }
 
         // Fallback empty response
-        return JSONRPCMessage.response(id: request.id, result: ["completion": ["values": []]].mapValues { AnyCodable($0) })
+        return JSONRPCMessage.response(id: request.id, result: ["completion": .object(["values": .array([])])])
     }
 
 /**
@@ -553,9 +549,10 @@ public extension MCPServer {
 			])
         }
 
-        return JSONRPCMessage.response(id: id, result: [
-                        "tools": AnyCodable(toolProvider.mcpToolMetadata.convertedToTools())
-                ])
+        if let tools = try? JSONValue(encoding: toolProvider.mcpToolMetadata.convertedToTools()) {
+            return JSONRPCMessage.response(id: id, result: ["tools": tools])
+        }
+        return JSONRPCMessage.errorResponse(id: id, error: .init(code: -32603, message: "Failed to encode tools list"))
     }
 
     /// Creates a response listing all available prompts.
@@ -568,7 +565,10 @@ public extension MCPServer {
         }
 
         let prompts = promptProvider.mcpPromptMetadata.convertedToPrompts()
-        return JSONRPCMessage.response(id: id, result: ["prompts": AnyCodable(prompts)])
+        if let promptsValue = try? JSONValue(encoding: prompts) {
+            return JSONRPCMessage.response(id: id, result: ["prompts": promptsValue])
+        }
+        return JSONRPCMessage.errorResponse(id: id, error: .init(code: -32603, message: "Failed to encode prompts list"))
     }
 
 /**
@@ -592,16 +592,17 @@ public extension MCPServer {
         /// get resources from templates that have no parameters plus developer provided array
         let resources = resourceProvider.mcpStaticResources + (await resourceProvider.mcpResources)
 
-        let resourceDicts = resources.map { resource -> [String: Any] in
-            return [
-				"uri": resource.uri.absoluteString,
-				"name": resource.name,
-				"description": resource.description,
-				"mimeType": resource.mimeType
-			]
+        if let resourcesValue = try? JSONValue(encoding: resources.map { resource in
+            [
+                "uri": resource.uri.absoluteString,
+                "name": resource.name,
+                "description": resource.description,
+                "mimeType": resource.mimeType
+            ]
+        }) {
+            return JSONRPCMessage.response(id: id, result: ["resources": resourcesValue])
         }
-
-        return JSONRPCMessage.response(id: id, result: ["resources": AnyCodable(resourceDicts)])
+        return JSONRPCMessage.errorResponse(id: id, error: .init(code: -32603, message: "Failed to encode resources list"))
     }
 
 /**
@@ -636,7 +637,8 @@ public extension MCPServer {
 
             if !resourceContentArray.isEmpty
 				{
-                return JSONRPCMessage.response(id: id, result: ["contents": AnyCodable(resourceContentArray)])
+                let contents = try resourceContentArray.map { try JSONValue(encoding: $0) }
+                return JSONRPCMessage.response(id: id, result: ["contents": .array(contents)])
             } else {
                 return JSONRPCMessage.errorResponse(id: id, error: .init(code: -32001, message: "Resource not found: \(uri.absoluteString)"))
             }
@@ -665,16 +667,17 @@ public extension MCPServer {
 
         let templates = await resourceProvider.mcpResourceTemplates
 
-        return JSONRPCMessage.response(id: id, result: [
-			"resourceTemplates": AnyCodable(templates.map { template in
+        if let templatesValue = try? JSONValue(encoding: templates.map { template in
             [
-					"uriTemplate": template.uriTemplate,
-					"name": template.name,
-					"description": template.description,
-					"mimeType": template.mimeType ?? "text/plain"
-				]
-        })
-		])
+                "uriTemplate": template.uriTemplate,
+                "name": template.name,
+                "description": template.description,
+                "mimeType": template.mimeType ?? "text/plain"
+            ]
+        }) {
+            return JSONRPCMessage.response(id: id, result: ["resourceTemplates": templatesValue])
+        }
+        return JSONRPCMessage.errorResponse(id: id, error: .init(code: -32603, message: "Failed to encode resource templates list"))
     }
 
 /**

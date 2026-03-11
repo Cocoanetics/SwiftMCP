@@ -318,13 +318,13 @@ struct AdditionalPromptTests {
         let messages = [PromptMessage(role: .assistant, content: .init(text: "Hello Oliver! Mood: excited"))]
         
         // Encode as JSON like it would go over the wire
-        let response = ["description": "greet", "messages": AnyCodable(messages)]
+        let response: JSONDictionary = ["description": "greet", "messages": try JSONValue(encoding: messages)]
         let encoder = JSONEncoder()
         let jsonData = try encoder.encode(response)
         
         // Decode back like a client would
         let decoder = JSONDecoder()
-        let decoded = try decoder.decode([String: AnyCodable].self, from: jsonData)
+        let decoded = try decoder.decode(JSONDictionary.self, from: jsonData)
         
         // Now test if we can access it like the test expects
         let messagesValue = try #require(decoded["messages"]?.value as? [[String: Any]])

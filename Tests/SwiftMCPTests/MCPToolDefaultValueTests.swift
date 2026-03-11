@@ -224,7 +224,7 @@ func testMultipleDefaultValues() throws {
     }
 }
 
-private func intArray(from value: AnyCodable?) -> [Int]? {
+private func intArray(from value: JSONValue?) -> [Int]? {
     if let ints = value?.value as? [Int] {
         return ints
     }

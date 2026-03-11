@@ -489,9 +489,9 @@ func testContactInfoProcessing() async throws {
         method: "tools/call",
         params: [
             "name": "processContactArray",
-            "arguments": [
-                "contacts": [createText]
-            ]
+            "arguments": .object([
+                "contacts": .array([.string(createText)])
+            ])
         ]
     )
     
@@ -509,7 +509,7 @@ func testContactInfoProcessing() async throws {
     let processText = try #require(processFirstContent["text"])
     
     // Verify the processed contact
-    let json = processText.data(using: .utf8)!
+    let json = (processText as String).data(using: String.Encoding.utf8)!
     let processedWrapper = try JSONDecoder().decode(ContactInfoArrayOutput.self, from: json)
     let processedContact = try #require(processedWrapper.items.first)
     #expect(processedContact.name == "JOHN DOE")
@@ -579,14 +579,14 @@ func testProfileCreation() async throws {
         method: "tools/call",
         params: [
             "name": "createProfile",
-            "arguments": [
-                "contact": contactText,
-                "address": addressText,
-                "interests": ["reading", "gaming", "coding"],
-                "scores": [95, 88, 92],
-                "ratings": [4.5, 4.8, 4.2],
-                "activeStatuses": [true, false, true]
-            ]
+            "arguments": .object([
+                "contact": .string(contactText),
+                "address": .string(addressText),
+                "interests": .array(["reading", "gaming", "coding"]),
+                "scores": .array([95, 88, 92]),
+                "ratings": .array([4.5, 4.8, 4.2]),
+                "activeStatuses": .array([true, false, true])
+            ])
         ]
     )
     
@@ -600,8 +600,9 @@ func testProfileCreation() async throws {
     let profileIsError = try #require(profileResult["isError"]?.value as? Bool)
     #expect(profileIsError == false)
     let profileContent = try #require(profileResult["content"]?.value as? [[String: String]])
-    let profileText = try #require(profileContent.first?["text"] as? String)
-    let profile = try JSONDecoder().decode(Profile.self, from: (profileText as String).data(using: .utf8)!)
+    let profileFirstContent = try #require(profileContent.first)
+    let profileText: String = try #require(profileFirstContent["text"])
+    let profile = try JSONDecoder().decode(Profile.self, from: profileText.data(using: String.Encoding.utf8)!)
     #expect(profile.contact.name == "Jane Doe")
     #expect(profile.contact.email == "jane@example.com")
     #expect(profile.contact.phone == "+1987654321")

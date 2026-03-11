@@ -218,7 +218,7 @@ struct EnumTests {
                 method: "tools/call",
                 params: [
                     "name": "processStatus",
-                    "arguments": AnyCodable(["status": "active"])
+                    "arguments": .object(["status": "active"])
                 ]
             )
             
@@ -247,7 +247,7 @@ struct EnumTests {
                 method: "tools/call",
                 params: [
                     "name": "processOptionalStatuses",
-                    "arguments": AnyCodable([:])
+                    "arguments": .object([:])
                 ]
             )
             

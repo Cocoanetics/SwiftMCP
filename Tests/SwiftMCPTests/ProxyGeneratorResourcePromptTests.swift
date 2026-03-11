@@ -50,7 +50,7 @@ struct ProxyGeneratorResourcePromptTests {
         #expect(source.contains("public func listResourceTemplates() async throws -> [SimpleResourceTemplate]"))
         #expect(source.contains("public func readResource(uri: URL) async throws -> [GenericResourceContent]"))
         #expect(source.contains("public func listPrompts() async throws -> [Prompt]"))
-        #expect(source.contains("public func getPrompt(name: String, arguments: [String: any Sendable] = [:]) async throws -> PromptResult"))
+        #expect(source.contains("public func getPrompt(name: String, arguments: JSONDictionary = [:]) async throws -> PromptResult"))
         #expect(!source.contains("public func config() async throws -> [GenericResourceContent]"))
         #expect(!source.contains("public func userProfile(user_id: String, lang: String? = nil) async throws -> [GenericResourceContent]"))
         #expect(!source.contains("public func helloPrompt(name: String, excited: Bool? = nil) async throws -> PromptResult"))
@@ -70,6 +70,6 @@ struct ProxyGeneratorResourcePromptTests {
         #expect(source.contains("public func readResource(uri: URL) async throws -> [GenericResourceContent]"))
         #expect(source.contains("// MARK: - Prompts"))
         #expect(source.contains("public func listPrompts() async throws -> [Prompt]"))
-        #expect(source.contains("public func getPrompt(name: String, arguments: [String: any Sendable] = [:]) async throws -> PromptResult"))
+        #expect(source.contains("public func getPrompt(name: String, arguments: JSONDictionary = [:]) async throws -> PromptResult"))
     }
 }
