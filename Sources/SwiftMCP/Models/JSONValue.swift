@@ -142,9 +142,7 @@ public enum MCPJSONCoding {
         case let value as Double:
             self = .double(value)
         case let value as NSNumber:
-            if CFGetTypeID(value) == CFBooleanGetTypeID() {
-                self = .bool(value.boolValue)
-            } else if let exact = Int(exactly: value.int64Value), value.doubleValue == Double(exact) {
+            if let exact = Int(exactly: value.int64Value), value.doubleValue == Double(exact) {
                 self = .integer(exact)
             } else if let exact = UInt(exactly: value.uint64Value), value.doubleValue == Double(exact) {
                 self = .unsignedInteger(exact)
