@@ -1,4 +1,4 @@
-#if os(macOS) || os(Linux) || (os(iOS) && targetEnvironment(macCatalyst))
+#if os(macOS) || os(Linux)
 
 import Foundation
 
