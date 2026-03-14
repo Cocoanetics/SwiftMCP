@@ -63,9 +63,13 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
             }
         }
 
-        func replaceListener(_ listener: NWListener) {
+        /// Replaces the current listener if the transport is still running.
+        /// Returns `false` when stopped — the caller must cancel the orphaned listener.
+        func replaceListenerIfRunning(_ newListener: NWListener) -> Bool {
+            guard isRunning else { return false }
             self.listener?.cancel()
-            self.listener = listener
+            self.listener = newListener
+            return true
         }
 
         func scheduleRetry(block: @Sendable @escaping () async -> Void) {
@@ -252,7 +256,10 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
 
                     do {
                         let newListener = try self.createListener()
-                        await self.state.replaceListener(newListener)
+                        guard await self.state.replaceListenerIfRunning(newListener) else {
+                            newListener.cancel()
+                            return
+                        }
                         newListener.start(queue: self.queue)
                         self.logger.info("Bonjour listener re-created, waiting for it to become ready.")
                         return
