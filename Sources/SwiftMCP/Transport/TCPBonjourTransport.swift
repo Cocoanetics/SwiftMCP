@@ -98,11 +98,12 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
         }
 
         /// Called when the listener reaches `.ready`.
-        /// Resets backoff and clears any pending retry.
-        func listenerReady(generation listenerGen: UInt64) {
-            guard listenerGen == generation, isRunning else { return }
+        /// Resets backoff, clears any pending retry, and returns the bound port (if available).
+        func listenerReady(generation listenerGen: UInt64) -> UInt16? {
+            guard listenerGen == generation, isRunning else { return nil }
             retryAttempt = 0
             cancelRetryTask()
+            return listener?.port?.rawValue
         }
 
         /// Called when the listener fails with a retryable error.
@@ -246,7 +247,9 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
     private func handleListenerState(_ newState: NWListener.State, generation: UInt64) async {
         switch newState {
         case .ready:
-            await state.listenerReady(generation: generation)
+            if let boundPort = await state.listenerReady(generation: generation) {
+                port = boundPort
+            }
             logger.info("TCP+Bonjour transport ready on port \(port.map(String.init) ?? "unknown")")
 
         case .failed(let error):
