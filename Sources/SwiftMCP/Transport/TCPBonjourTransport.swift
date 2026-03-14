@@ -36,6 +36,7 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
         private var listener: NWListener?
         private var connections: [UUID: NWConnection] = [:]
         private var runContinuation: CheckedContinuation<Void, Never>?
+        private var retryTask: Task<Void, Never>?
 
         func running() -> Bool {
             isRunning
@@ -48,6 +49,8 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
 
         func stop() {
             isRunning = false
+            retryTask?.cancel()
+            retryTask = nil
             listener?.cancel()
             listener = nil
             for connection in connections.values {
@@ -58,6 +61,16 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
                 runContinuation = nil
                 continuation.resume()
             }
+        }
+
+        func replaceListener(_ listener: NWListener) {
+            self.listener?.cancel()
+            self.listener = listener
+        }
+
+        func setRetryTask(_ task: Task<Void, Never>?) {
+            retryTask?.cancel()
+            retryTask = task
         }
 
         func waitUntilStopped() async {
@@ -116,6 +129,12 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
             return
         }
 
+        let listener = try createListener()
+        await state.start(listener: listener)
+        listener.start(queue: queue)
+    }
+
+    private func createListener() throws -> NWListener {
         let parameters = NWParameters.tcp
         parameters.acceptLocalOnly = acceptLocalOnly
         parameters.includePeerToPeer = false
@@ -143,8 +162,7 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
             self?.handleListenerState(newState, listener: listener)
         }
 
-        await state.start(listener: listener)
-        listener.start(queue: queue)
+        return listener
     }
 
     public func run() async throws {
@@ -188,19 +206,61 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
         }
     }
 
-    private func handleListenerState(_ state: NWListener.State, listener: NWListener) {
-        switch state {
+    /// Maximum delay between Bonjour listener retry attempts (in seconds).
+    private static let maxRetryDelay: UInt64 = 60
+
+    private func handleListenerState(_ newState: NWListener.State, listener: NWListener) {
+        switch newState {
         case .ready:
             if let boundPort = listener.port?.rawValue {
                 port = boundPort
             }
             logger.info("TCP+Bonjour transport ready on port \(port.map(String.init) ?? "unknown")")
         case .failed(let error):
-            logger.error("TCP+Bonjour listener failed: \(error)")
+            if Self.isServiceNotRunning(error) {
+                logger.warning("Bonjour listener failed because mDNSResponder is not running: \(error). Will retry.")
+                scheduleListenerRetry()
+            } else {
+                logger.error("TCP+Bonjour listener failed: \(error)")
+            }
         case .cancelled:
             logger.info("TCP+Bonjour listener cancelled")
         default:
             break
+        }
+    }
+
+    /// Returns `true` when the error indicates the mDNS daemon is unavailable
+    /// (DNS service error -65563 / `kDNSServiceErr_ServiceNotRunning`).
+    private static func isServiceNotRunning(_ error: NWError) -> Bool {
+        if case .dns(let dnsError) = error, dnsError == -65563 {
+            return true
+        }
+        return false
+    }
+
+    private func scheduleListenerRetry() {
+        Task {
+            let retryTask = Task { [weak self] in
+                guard let self else { return }
+                var delay: UInt64 = 1
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: delay * 1_000_000_000)
+                    guard !Task.isCancelled else { return }
+
+                    do {
+                        let newListener = try self.createListener()
+                        await self.state.replaceListener(newListener)
+                        newListener.start(queue: self.queue)
+                        self.logger.info("Bonjour listener re-created, waiting for it to become ready.")
+                        return
+                    } catch {
+                        self.logger.warning("Bonjour listener retry failed: \(error). Retrying in \(min(delay * 2, Self.maxRetryDelay))s.")
+                        delay = min(delay * 2, Self.maxRetryDelay)
+                    }
+                }
+            }
+            await state.setRetryTask(retryTask)
         }
     }
 
