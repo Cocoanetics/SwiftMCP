@@ -68,9 +68,10 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
             self.listener = listener
         }
 
-        func setRetryTask(_ task: Task<Void, Never>?) {
+        func scheduleRetry(block: @Sendable @escaping () async -> Void) {
+            guard isRunning else { return }
             retryTask?.cancel()
-            retryTask = task
+            retryTask = Task(operation: block)
         }
 
         func waitUntilStopped() async {
@@ -240,8 +241,9 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
     }
 
     private func scheduleListenerRetry() {
-        Task {
-            let retryTask = Task { [weak self] in
+        Task { [weak self] in
+            guard let self else { return }
+            await self.state.scheduleRetry { [weak self] in
                 guard let self else { return }
                 var delay: UInt64 = 1
                 while !Task.isCancelled {
@@ -260,7 +262,6 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
                     }
                 }
             }
-            await state.setRetryTask(retryTask)
         }
     }
 
