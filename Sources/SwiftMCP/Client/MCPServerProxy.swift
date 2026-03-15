@@ -306,6 +306,125 @@ public final actor MCPServerProxy: Sendable {
         )
     }
 
+    // MARK: - File Upload
+
+    /// Uploads binary data to the server's upload endpoint and returns the upload URI.
+    ///
+    /// Requires the server to advertise `experimental.uploads` capability.
+    /// The returned URI can be passed as a tool argument for `Data` parameters.
+    ///
+    /// - Parameters:
+    ///   - data: The binary data to upload.
+    ///   - contentType: MIME type of the data (e.g. `"image/png"`).
+    ///   - filename: Optional original filename.
+    /// - Returns: The upload URI string (e.g. `"upload://session-id/file-id"`).
+    public func uploadFile(
+        data: Data,
+        contentType: String? = nil,
+        filename: String? = nil
+    ) async throws -> String {
+        // Determine the upload URL from the server's base URL
+        let uploadURL = try resolveUploadURL()
+
+        var request = URLRequest(url: uploadURL)
+        request.httpMethod = "POST"
+        request.httpBody = data
+
+        if let contentType {
+            request.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        } else {
+            request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        }
+
+        if let filename {
+            request.setValue("attachment; filename=\"\(filename)\"", forHTTPHeaderField: "Content-Disposition")
+        }
+
+        if let sessionID {
+            request.setValue(sessionID, forHTTPHeaderField: "Mcp-Session-Id")
+        }
+
+        // Add authorization from meta if present
+        if let token = meta["accessToken"]?.stringValue {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        let (responseData, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw MCPServerProxyError.communicationError("Upload failed: invalid response")
+        }
+
+        guard httpResponse.statusCode == 201 else {
+            let body = String(data: responseData, encoding: .utf8) ?? "unknown error"
+            throw MCPServerProxyError.communicationError("Upload failed (\(httpResponse.statusCode)): \(body)")
+        }
+
+        let result = try JSONDecoder().decode(JSONDictionary.self, from: responseData)
+        guard let uri = result["uri"]?.stringValue else {
+            throw MCPServerProxyError.communicationError("Upload response missing 'uri'")
+        }
+
+        return uri
+    }
+
+    /// Uploads binary data and returns it as a JSONValue string ready for use in tool arguments.
+    ///
+    /// This is a convenience for building tool call argument dictionaries:
+    /// ```swift
+    /// let imageArg = try await proxy.uploadAndEncode(data: imageData, contentType: "image/png")
+    /// let result = try await proxy.callTool("processImage", arguments: ["image": imageArg])
+    /// ```
+    public func uploadAndEncode(
+        data: Data,
+        contentType: String? = nil,
+        filename: String? = nil
+    ) async throws -> JSONValue {
+        let uri = try await uploadFile(data: data, contentType: contentType, filename: filename)
+        return .string(uri)
+    }
+
+    /// Whether the connected server supports file uploads.
+    public var supportsFileUpload: Bool {
+        guard let experimental = serverCapabilities?.experimental,
+              experimental["uploads"] != nil else {
+            return false
+        }
+        return true
+    }
+
+    /// Maximum upload size advertised by the server, or nil if uploads aren't supported.
+    public var maxUploadSize: Int? {
+        guard let experimental = serverCapabilities?.experimental,
+              let uploads = experimental["uploads"]?.dictionaryValue,
+              let maxSize = uploads["maxSize"]?.intValue else {
+            return nil
+        }
+        return maxSize
+    }
+
+    private func resolveUploadURL() throws -> URL {
+        // For streamable HTTP (/mcp), the upload endpoint is /mcp/uploads on the same base
+        if case .sse(let sseConfig) = config {
+            var components = URLComponents(url: sseConfig.url, resolvingAgainstBaseURL: false)
+            components?.path = "/mcp/uploads"
+            if let url = components?.url {
+                return url
+            }
+        }
+
+        // For endpoint-based connections, derive from the endpoint URL
+        if let endpoint = endpointURL {
+            var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)
+            components?.path = "/mcp/uploads"
+            if let url = components?.url {
+                return url
+            }
+        }
+
+        throw MCPServerProxyError.communicationError("Cannot determine upload URL — only HTTP transports support file upload")
+    }
+
     /// Lists all prompts available from the server.
     public func listPrompts() async throws -> [Prompt] {
         let result: PromptsListResult = try await requestResult(method: "prompts/list", as: PromptsListResult.self)
