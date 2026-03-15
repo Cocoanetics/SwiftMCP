@@ -854,9 +854,26 @@ public final actor MCPServerProxy: Sendable {
     private func buildClientCapabilities() -> JSONDictionary {
         var capabilities: JSONDictionary = [:]
 
-        // Resource subscription support — advertised when a resource notification handler is installed
+        // Resource capabilities — subscription and/or list-changed
+        var resourcesCap: JSONDictionary = [:]
         if resourceNotificationHandler != nil {
-            capabilities["resources"] = .object(["subscribe": .bool(true)])
+            resourcesCap["subscribe"] = .bool(true)
+        }
+        if resourcesListChangedHandler != nil {
+            resourcesCap["listChanged"] = .bool(true)
+        }
+        if !resourcesCap.isEmpty {
+            capabilities["resources"] = .object(resourcesCap)
+        }
+
+        // Tools list-changed
+        if toolsListChangedHandler != nil {
+            capabilities["tools"] = .object(["listChanged": .bool(true)])
+        }
+
+        // Prompts list-changed
+        if promptsListChangedHandler != nil {
+            capabilities["prompts"] = .object(["listChanged": .bool(true)])
         }
 
         return capabilities
