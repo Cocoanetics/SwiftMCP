@@ -34,6 +34,10 @@ public final actor MCPServerProxy: Sendable {
     private enum NotificationMethod {
         static let log = "notifications/message"
         static let progress = "notifications/progress"
+        static let toolsListChanged = "notifications/tools/list_changed"
+        static let resourcesListChanged = "notifications/resources/list_changed"
+        static let promptsListChanged = "notifications/prompts/list_changed"
+        static let resourceUpdated = "notifications/resources/updated"
     }
 
     public let logger = Logger(label: "com.cocoanetics.SwiftMCP.MCPServerProxy")
@@ -95,6 +99,60 @@ public final actor MCPServerProxy: Sendable {
     /// Updates the progress notification handler.
     public func setProgressNotificationHandler(_ handler: (any MCPServerProxyProgressNotificationHandling)?) {
         progressNotificationHandler = handler
+    }
+
+    /// Optional handler for resource-updated notifications from the server.
+    /// Installing this handler enables the client to receive `notifications/resources/updated`
+    /// for subscribed resources. The client automatically advertises subscription support
+    /// during initialization when this handler is set before `connect()`.
+    public var resourceNotificationHandler: (any MCPServerProxyResourceNotificationHandling)? {
+        didSet {
+            updateResourceNotificationRegistration()
+        }
+    }
+
+    /// Updates the resource notification handler.
+    public func setResourceNotificationHandler(_ handler: (any MCPServerProxyResourceNotificationHandling)?) {
+        resourceNotificationHandler = handler
+    }
+
+    /// Optional handler for tools list-changed notifications.
+    /// When set, the client advertises support during initialization (if set before `connect()`).
+    public var toolsListChangedHandler: (any MCPServerProxyToolsListChangedHandling)? {
+        didSet {
+            updateToolsListChangedRegistration()
+        }
+    }
+
+    /// Updates the tools list-changed handler.
+    public func setToolsListChangedHandler(_ handler: (any MCPServerProxyToolsListChangedHandling)?) {
+        toolsListChangedHandler = handler
+    }
+
+    /// Optional handler for resources list-changed notifications.
+    /// When set, the client advertises support during initialization (if set before `connect()`).
+    public var resourcesListChangedHandler: (any MCPServerProxyResourcesListChangedHandling)? {
+        didSet {
+            updateResourcesListChangedRegistration()
+        }
+    }
+
+    /// Updates the resources list-changed handler.
+    public func setResourcesListChangedHandler(_ handler: (any MCPServerProxyResourcesListChangedHandling)?) {
+        resourcesListChangedHandler = handler
+    }
+
+    /// Optional handler for prompts list-changed notifications.
+    /// When set, the client advertises support during initialization (if set before `connect()`).
+    public var promptsListChangedHandler: (any MCPServerProxyPromptsListChangedHandling)? {
+        didSet {
+            updatePromptsListChangedRegistration()
+        }
+    }
+
+    /// Updates the prompts list-changed handler.
+    public func setPromptsListChangedHandler(_ handler: (any MCPServerProxyPromptsListChangedHandling)?) {
+        promptsListChangedHandler = handler
     }
 
     /// Registers a typed handler for a JSON-RPC notification.
@@ -228,6 +286,24 @@ public final actor MCPServerProxy: Sendable {
             as: ResourceReadResult.self
         )
         return result.contents
+    }
+
+    /// Subscribes to update notifications for a resource URI.
+    /// Requires a `resourceNotificationHandler` to be set and the server
+    /// to advertise `resources.subscribe` capability.
+    public func subscribeResource(uri: URL) async throws {
+        _ = try await requestResult(
+            method: "resources/subscribe",
+            params: ["uri": .string(uri.absoluteString)]
+        )
+    }
+
+    /// Unsubscribes from update notifications for a resource URI.
+    public func unsubscribeResource(uri: URL) async throws {
+        _ = try await requestResult(
+            method: "resources/unsubscribe",
+            params: ["uri": .string(uri.absoluteString)]
+        )
     }
 
     /// Lists all prompts available from the server.
@@ -504,7 +580,7 @@ public final actor MCPServerProxy: Sendable {
                 "name": .string("swiftmcp-client"),
                 "version": .string("1.0.0")
             ]),
-            "capabilities": .object([:])
+            "capabilities": .object(buildClientCapabilities())
         ]
         
         // Add base metadata if present
@@ -703,6 +779,87 @@ public final actor MCPServerProxy: Sendable {
                 await handler.mcpServerProxy(proxy, didReceiveProgress: progress)
             }
         )
+    }
+
+    // MARK: - Resource Updated Registration
+
+    private struct ResourceUpdatedParams: Decodable, Sendable {
+        let uri: String
+    }
+
+    private func updateResourceNotificationRegistration() {
+        guard let handler = resourceNotificationHandler else {
+            removeNotificationHandler(for: NotificationMethod.resourceUpdated)
+            return
+        }
+
+        notificationHandlers[NotificationMethod.resourceUpdated] = NotificationHandlerBox(
+            payloadTypeDescription: "ResourceUpdated",
+            handle: { proxy, notification in
+                let params = try Self.decodeNotificationPayload(from: notification, as: ResourceUpdatedParams.self)
+                guard let url = URL(string: params.uri) else { return }
+                await handler.mcpServerProxy(proxy, resourceUpdatedAt: url)
+            }
+        )
+    }
+
+    // MARK: - List Changed Registration
+
+    private func updateToolsListChangedRegistration() {
+        guard let handler = toolsListChangedHandler else {
+            removeNotificationHandler(for: NotificationMethod.toolsListChanged)
+            return
+        }
+
+        notificationHandlers[NotificationMethod.toolsListChanged] = NotificationHandlerBox(
+            payloadTypeDescription: "ToolsListChanged",
+            handle: { proxy, _ in
+                await handler.mcpServerProxyToolsListDidChange(proxy)
+            }
+        )
+    }
+
+    private func updateResourcesListChangedRegistration() {
+        guard let handler = resourcesListChangedHandler else {
+            removeNotificationHandler(for: NotificationMethod.resourcesListChanged)
+            return
+        }
+
+        notificationHandlers[NotificationMethod.resourcesListChanged] = NotificationHandlerBox(
+            payloadTypeDescription: "ResourcesListChanged",
+            handle: { proxy, _ in
+                await handler.mcpServerProxyResourcesListDidChange(proxy)
+            }
+        )
+    }
+
+    private func updatePromptsListChangedRegistration() {
+        guard let handler = promptsListChangedHandler else {
+            removeNotificationHandler(for: NotificationMethod.promptsListChanged)
+            return
+        }
+
+        notificationHandlers[NotificationMethod.promptsListChanged] = NotificationHandlerBox(
+            payloadTypeDescription: "PromptsListChanged",
+            handle: { proxy, _ in
+                await handler.mcpServerProxyPromptsListDidChange(proxy)
+            }
+        )
+    }
+
+    // MARK: - Client Capabilities
+
+    /// Builds the client capabilities dictionary based on installed handlers.
+    /// Only advertises support for features that have handlers installed.
+    private func buildClientCapabilities() -> JSONDictionary {
+        var capabilities: JSONDictionary = [:]
+
+        // Resource subscription support — advertised when a resource notification handler is installed
+        if resourceNotificationHandler != nil {
+            capabilities["resources"] = .object(["subscribe": .bool(true)])
+        }
+
+        return capabilities
     }
 
     private static func decodeNotificationPayload<Payload>(
