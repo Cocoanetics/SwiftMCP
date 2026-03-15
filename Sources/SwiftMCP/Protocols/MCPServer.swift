@@ -332,7 +332,27 @@ public extension MCPServer {
         }
 
         // Extract arguments from the request
-        let arguments = params["arguments"]?.dictionaryValue ?? [:]
+        var arguments = params["arguments"]?.dictionaryValue ?? [:]
+
+        // Extract progress token for upload progress notifications
+        let progressToken = params["_meta"]?.dictionaryValue?["progressToken"]
+
+        // Resolve any cid: placeholders by waiting for uploads
+        if let pendingStore = UploadResolver.pendingStore {
+            do {
+                arguments = try await Self.resolveCIDPlaceholders(
+                    in: arguments,
+                    sessionID: Session.current?.id ?? UUID(),
+                    progressToken: progressToken,
+                    pendingStore: pendingStore
+                ) ?? arguments
+            } catch {
+                return JSONRPCMessage.errorResponse(
+                    id: request.id,
+                    error: .init(code: -32603, message: "Upload resolution failed: \(error.localizedDescription)")
+                )
+            }
+        }
 
         let metadata = mcpToolMetadata(for: toolName)
 
@@ -751,6 +771,68 @@ public extension MCPServer {
 
         // Return empty result for success
         return JSONRPCMessage.response(id: request.id, result: [:])
+    }
+
+    // MARK: - CID Upload Resolution
+
+    /// Scans tool call arguments for `cid:` placeholders and waits for corresponding uploads.
+    /// Returns the arguments with CIDs replaced by `upload://` URIs, or nil if no CIDs found.
+    private static func resolveCIDPlaceholders(
+        in arguments: JSONDictionary,
+        sessionID: UUID,
+        progressToken: JSONValue?,
+        pendingStore: PendingUploadStore
+    ) async throws -> JSONDictionary? {
+        // Find all cid: references
+        var cidEntries: [(key: String, cid: String)] = []
+        for (key, value) in arguments {
+            if let str = value.stringValue, str.hasPrefix("cid:") {
+                cidEntries.append((key: key, cid: String(str.dropFirst(4))))
+            }
+        }
+
+        guard !cidEntries.isEmpty else { return nil }
+
+        var resolved = arguments
+
+        for (index, entry) in cidEntries.enumerated() {
+            // Send progress: waiting for upload
+            if let token = progressToken, let session = Session.current {
+                let total = Double(cidEntries.count)
+                let message = cidEntries.count == 1
+                    ? "Waiting for file upload..."
+                    : "Waiting for file upload \(index + 1) of \(cidEntries.count)..."
+                await session.sendProgressNotification(
+                    progressToken: token,
+                    progress: Double(index),
+                    total: total,
+                    message: message
+                )
+            }
+
+            // Wait for the upload to arrive
+            let data = try await pendingStore.waitForUpload(
+                cid: entry.cid,
+                progressToken: progressToken,
+                sessionID: sessionID
+            )
+
+            // Store the data and replace the CID with a base64 value
+            // (we use base64 here since the data is already in memory)
+            resolved[entry.key] = .string(data.base64EncodedString())
+        }
+
+        // Send final progress
+        if let token = progressToken, let session = Session.current {
+            await session.sendProgressNotification(
+                progressToken: token,
+                progress: Double(cidEntries.count),
+                total: Double(cidEntries.count),
+                message: "All uploads received"
+            )
+        }
+
+        return resolved
     }
 
     // MARK: - Resource Subscriptions

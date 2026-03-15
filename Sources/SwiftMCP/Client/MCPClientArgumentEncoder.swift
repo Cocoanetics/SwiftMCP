@@ -22,10 +22,13 @@ public enum MCPClientArgumentEncoder {
         .string(MCPToolArgumentEncoder.encode(value))
     }
 
-    /// Proxy-aware encoding for `Data`: uploads if supported, falls back to base64.
+    /// Proxy-aware encoding for `Data`: generates CID placeholder if uploads supported, falls back to base64.
+    /// The proxy tracks the pending upload data for post-call uploading.
     public static func encode(_ value: Data, proxy: MCPServerProxy) async throws -> JSONValue {
         if await proxy.supportsFileUpload {
-            return try await proxy.uploadAndEncode(data: value)
+            let cid = UUID().uuidString
+            await proxy.registerPendingUpload(cid: cid, data: value)
+            return .string("cid:\(cid)")
         }
         return .string(MCPToolArgumentEncoder.encode(value))
     }
@@ -57,12 +60,14 @@ public enum MCPClientArgumentEncoder {
         .array(MCPToolArgumentEncoder.encode(values).map(JSONValue.string))
     }
 
-    /// Proxy-aware encoding for `[Data]`: uploads each item if supported, falls back to base64.
+    /// Proxy-aware encoding for `[Data]`: generates CID placeholders if uploads supported, falls back to base64.
     public static func encode(_ values: [Data], proxy: MCPServerProxy) async throws -> JSONValue {
         if await proxy.supportsFileUpload {
             var results: [JSONValue] = []
             for value in values {
-                results.append(try await proxy.uploadAndEncode(data: value))
+                let cid = UUID().uuidString
+                await proxy.registerPendingUpload(cid: cid, data: value)
+                results.append(.string("cid:\(cid)"))
             }
             return .array(results)
         }

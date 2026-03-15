@@ -37,6 +37,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     private var channel: Channel?
     internal lazy var sessionManager = SessionManager(transport: self)
     internal let uploadStore = UploadStore()
+    internal let pendingUploadStore = PendingUploadStore()
     private var keepAliveTimer: DispatchSourceTimer?
 
     /// Flag to determine whether to serve OpenAPI endpoints.
@@ -353,8 +354,12 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
                 resolverContext = nil
             }
 
+            let pending = server is MCPFileUploadHandling ? pendingUploadStore : nil
+
             guard let response = await UploadResolver.$current.withValue(resolverContext, operation: {
-                await server.handleMessage(request)
+                await UploadResolver.$pendingStore.withValue(pending, operation: {
+                    await server.handleMessage(request)
+                })
             }) else {
                 // No response to send (e.g., notification)
                 return

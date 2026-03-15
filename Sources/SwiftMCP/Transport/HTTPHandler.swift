@@ -148,7 +148,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             case (.OPTIONS, _):
                 handleOPTIONS(channel: channel, head: head)
 
-            // Binary file upload endpoint
+            // Binary file upload endpoint (with optional CID: /mcp/uploads/{cid})
             case (.POST, let path) where path.hasPrefix("/mcp/uploads"):
                 Task {
                     await self.handleUpload(channel: channel, head: head, body: body)
@@ -390,8 +390,12 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
                         resolverContext = nil
                     }
 
+                    let pending = transport.server is MCPFileUploadHandling ? transport.pendingUploadStore : nil
+
                     let responses = await UploadResolver.$current.withValue(resolverContext) {
-                        await transport.server.processBatch(messages, ignoringEmptyResponses: true)
+                        await UploadResolver.$pendingStore.withValue(pending) {
+                            await transport.server.processBatch(messages, ignoringEmptyResponses: true)
+                        }
                     }
 
                     if responses.isEmpty {
@@ -708,7 +712,56 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         let contentType = head.headers["Content-Type"].first
         let filename = Self.parseFilename(from: head.headers["Content-Disposition"].first)
 
-        // Store the upload
+        // Check if this is a CID-targeted upload (POST /mcp/uploads/{cid})
+        let pathComponents = head.uri.split(separator: "/")
+        // Path: /mcp/uploads/{cid} → ["mcp", "uploads", "{cid}"]
+        let cid: String? = pathComponents.count == 3 && pathComponents[0] == "mcp" && pathComponents[1] == "uploads"
+            ? String(pathComponents[2]).removingPercentEncoding
+            : nil
+
+        // If this is a CID-targeted upload, fulfill the pending expectation
+        if let cid, await transport.pendingUploadStore.isExpected(cid: cid) {
+            // Get the progress token before fulfilling
+            let progressToken = await transport.pendingUploadStore.progressToken(for: cid)
+
+            // Send upload progress notification
+            if let progressToken, let session = await transport.sessionManager.session(id: sessionID) as Session? {
+                await session.work { session in
+                    await session.sendProgressNotification(
+                        progressToken: progressToken,
+                        progress: Double(data.count),
+                        total: Double(data.count),
+                        message: "Upload received (\(data.count) bytes)"
+                    )
+                }
+            }
+
+            // Fulfill the pending upload — this resumes the tool call
+            await transport.pendingUploadStore.fulfill(cid: cid, data: data)
+
+            var headers = HTTPHeaders()
+            headers.add(name: "Content-Type", value: "application/json")
+            headers.add(name: "Access-Control-Allow-Origin", value: "*")
+            headers.add(name: "Mcp-Session-Id", value: sessionID.uuidString)
+
+            let responseDict: JSONDictionary = [
+                "cid": .string(cid),
+                "size": .integer(data.count),
+                "status": .string("fulfilled")
+            ]
+
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let jsonData = try! encoder.encode(responseDict)
+            let buffer = channel.allocator.buffer(data: jsonData)
+
+            await sendResponseAsync(channel: channel, status: .ok, headers: headers, body: buffer)
+
+            logger.info("CID upload fulfilled: \(cid) (\(data.count) bytes)")
+            return
+        }
+
+        // Standard upload — store to temp file and return URI
         do {
             let upload = try await transport.uploadStore.store(
                 data: data,

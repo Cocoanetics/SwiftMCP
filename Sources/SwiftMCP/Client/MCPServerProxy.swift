@@ -178,6 +178,9 @@ public final actor MCPServerProxy: Sendable {
     private var lineConnection: (any StdioConnection)?
     private var endpointContinuation: CheckedContinuation<URL, Error>?
 
+    /// Pending CID uploads queued during argument encoding, to be uploaded after the tool call is sent.
+    private var pendingUploads: [(cid: String, data: Data)] = []
+
     public init(config: MCPServerConfig, cacheToolsList: Bool = false) {
         self.config = config
         self.service = nil
@@ -321,10 +324,14 @@ public final actor MCPServerProxy: Sendable {
     public func uploadFile(
         data: Data,
         contentType: String? = nil,
-        filename: String? = nil
+        filename: String? = nil,
+        cid: String? = nil
     ) async throws -> String {
         // Determine the upload URL from the server's base URL
-        let uploadURL = try resolveUploadURL()
+        var uploadURL = try resolveUploadURL()
+        if let cid {
+            uploadURL = uploadURL.appendingPathComponent(cid)
+        }
 
         var request = URLRequest(url: uploadURL)
         request.httpMethod = "POST"
@@ -355,17 +362,22 @@ public final actor MCPServerProxy: Sendable {
             throw MCPServerProxyError.communicationError("Upload failed: invalid response")
         }
 
-        guard httpResponse.statusCode == 201 else {
+        guard httpResponse.statusCode == 201 || httpResponse.statusCode == 200 else {
             let body = String(data: responseData, encoding: .utf8) ?? "unknown error"
             throw MCPServerProxyError.communicationError("Upload failed (\(httpResponse.statusCode)): \(body)")
         }
 
         let result = try JSONDecoder().decode(JSONDictionary.self, from: responseData)
-        guard let uri = result["uri"]?.stringValue else {
-            throw MCPServerProxyError.communicationError("Upload response missing 'uri'")
+
+        // CID upload returns "cid" + "status", standard upload returns "uri"
+        if let uri = result["uri"]?.stringValue {
+            return uri
+        }
+        if let cidValue = result["cid"]?.stringValue {
+            return "cid:\(cidValue)"
         }
 
-        return uri
+        throw MCPServerProxyError.communicationError("Upload response missing 'uri' or 'cid'")
     }
 
     /// Uploads binary data and returns it as a JSONValue string ready for use in tool arguments.
@@ -378,9 +390,10 @@ public final actor MCPServerProxy: Sendable {
     public func uploadAndEncode(
         data: Data,
         contentType: String? = nil,
-        filename: String? = nil
+        filename: String? = nil,
+        cid: String? = nil
     ) async throws -> JSONValue {
-        let uri = try await uploadFile(data: data, contentType: contentType, filename: filename)
+        let uri = try await uploadFile(data: data, contentType: contentType, filename: filename, cid: cid)
         return .string(uri)
     }
 
@@ -446,6 +459,12 @@ public final actor MCPServerProxy: Sendable {
         )
     }
 
+    /// Register a pending upload that will be sent after the tool call request.
+    /// Called by `MCPClientArgumentEncoder.encode(Data, proxy:)`.
+    public func registerPendingUpload(cid: String, data: Data) {
+        pendingUploads.append((cid: cid, data: data))
+    }
+
     /// Calls a tool by name on the connected MCP server with the provided arguments.
     public func callTool(
         _ name: String,
@@ -468,7 +487,51 @@ public final actor MCPServerProxy: Sendable {
         }
         
         let request = JSONRPCMessage.request(id: requestId, method: "tools/call", params: params)
-        let responseMessage = try await send(request)
+
+        // If there are pending CID uploads, send the tool call and uploads concurrently.
+        // The server blocks the tool call until all CID uploads arrive.
+        let hasPendingUploads = !pendingUploads.isEmpty
+        let responseMessage: JSONRPCMessage
+
+        if hasPendingUploads {
+            // Capture pending uploads before clearing
+            let uploads = pendingUploads
+            pendingUploads = []
+
+            responseMessage = try await withThrowingTaskGroup(of: JSONRPCMessage?.self) { group in
+                // Send the tool call (will block on server until uploads arrive)
+                group.addTask {
+                    return try await self.send(request)
+                }
+
+                // Upload all pending CID data concurrently
+                group.addTask {
+                    for upload in uploads {
+                        _ = try await self.uploadFile(
+                            data: upload.data,
+                            contentType: "application/octet-stream",
+                            filename: nil,
+                            cid: upload.cid
+                        )
+                    }
+                    return nil  // uploads don't produce a response
+                }
+
+                // Wait for the tool call response (the non-nil result)
+                var result: JSONRPCMessage?
+                for try await value in group {
+                    if let value {
+                        result = value
+                    }
+                }
+                guard let result else {
+                    throw MCPServerProxyError.communicationError("No response received from tool call")
+                }
+                return result
+            }
+        } else {
+            responseMessage = try await send(request)
+        }
 
         let result: JSONDictionary
         switch responseMessage {

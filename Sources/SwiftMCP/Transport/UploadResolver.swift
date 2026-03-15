@@ -9,6 +9,9 @@ public enum UploadResolver {
     @TaskLocal
     static var current: UploadResolverContext?
 
+    @TaskLocal
+    static var pendingStore: PendingUploadStore?
+
     /// Resolve an `upload://` URI to its file data.
     /// Returns nil if no resolver is available or the URI is unknown.
     static func resolve(uri: String) -> Data? {
