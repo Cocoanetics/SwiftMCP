@@ -233,7 +233,27 @@ public extension MCPServer {
             }
         }
         
-        return createInitializeResponse(id: request.id)
+        var response = createInitializeResponse(id: request.id)
+
+        // Conditionally advertise upload capability only on HTTP transports
+        if let uploadHandler = self as? MCPFileUploadHandling,
+           let transport = await Session.current?.transport,
+           transport is HTTPSSETransport {
+            // Inject experimental.uploads into the response result
+            if case .response(var responseData) = response,
+               var result = responseData.result {
+                var experimental = result["experimental"]?.dictionaryValue ?? [:]
+                experimental["uploads"] = .object([
+                    "endpoint": .string("/mcp/uploads"),
+                    "maxSize": .integer(uploadHandler.maxUploadSize)
+                ])
+                result["experimental"] = .object(experimental)
+                responseData.result = result
+                response = .response(responseData)
+            }
+        }
+
+        return response
     }
 
 /**
@@ -266,12 +286,8 @@ public extension MCPServer {
             capabilities.logging = .init(enabled: true)
         }
 
-        if let uploadHandler = self as? MCPFileUploadHandling {
-            capabilities.experimental["uploads"] = .object([
-                "endpoint": .string("/mcp/uploads"),
-                "maxSize": .integer(uploadHandler.maxUploadSize)
-            ])
-        }
+        // Upload capability is conditionally added by the caller (handleInitialize)
+        // based on whether the transport supports HTTP uploads.
 
         // Advertise completion support
         capabilities.completions = .object([:])

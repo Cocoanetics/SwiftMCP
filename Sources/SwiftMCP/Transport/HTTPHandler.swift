@@ -1479,6 +1479,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             return
         }
         await transport.sessionManager.removeSession(id: sessionUUID)
+        await transport.uploadStore.removeAll(sessionID: sessionUUID)
         sendResponse(channel: channel, status: .noContent)
     }
 }
