@@ -26,6 +26,13 @@ public enum MCPClientArgumentEncoder {
         .string(String(describing: value))
     }
 
+    /// Tie-breaker for types conforming to both `Encodable` and `CaseIterable`.
+    /// Uses the case label (not the raw/Codable encoding) to stay consistent
+    /// with MCP parameter decoding which validates against `caseLabels`.
+    public static func encode<T: Encodable & CaseIterable>(_ value: T) throws -> JSONValue {
+        .string(String(describing: value))
+    }
+
     public static func encode(_ values: [Date]) throws -> JSONValue {
         .array(MCPToolArgumentEncoder.encode(values).map(JSONValue.string))
     }
@@ -43,6 +50,12 @@ public enum MCPClientArgumentEncoder {
     }
 
     public static func encode<T: CaseIterable>(_ values: [T]) throws -> JSONValue {
+        .array(values.map { .string(String(describing: $0)) })
+    }
+
+    /// Tie-breaker for arrays of types conforming to both `Encodable` and `CaseIterable`.
+    /// Uses case labels to stay consistent with MCP parameter decoding.
+    public static func encode<T: Encodable & CaseIterable>(_ values: [T]) throws -> JSONValue {
         .array(values.map { .string(String(describing: $0)) })
     }
 }
