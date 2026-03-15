@@ -290,4 +290,14 @@ extension Session {
         let notification = JSONRPCMessage.notification(method: "notifications/prompts/list_changed")
         try await transport?.send(notification)
     }
+
+    /// Send a notification that a subscribed resource has been updated.
+    /// - Parameter uri: The URI of the resource that was updated.
+    public func sendResourceUpdated(uri: URL) async throws {
+        let notification = JSONRPCMessage.notification(
+            method: "notifications/resources/updated",
+            params: ["uri": .string(uri.absoluteString)]
+        )
+        try await transport?.send(notification)
+    }
 }

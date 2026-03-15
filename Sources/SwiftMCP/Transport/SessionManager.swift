@@ -205,4 +205,41 @@ actor SessionManager {
             }
         }
     }
+
+    /// Broadcast a tools list-changed notification to all sessions.
+    func broadcastToolsListChanged() async {
+        for session in sessions.values {
+            await session.work { session in
+                try? await session.sendToolListChanged()
+            }
+        }
+    }
+
+    /// Broadcast a resources list-changed notification to all sessions.
+    func broadcastResourcesListChanged() async {
+        for session in sessions.values {
+            await session.work { session in
+                try? await session.sendResourceListChanged()
+            }
+        }
+    }
+
+    /// Broadcast a prompts list-changed notification to all sessions.
+    func broadcastPromptsListChanged() async {
+        for session in sessions.values {
+            await session.work { session in
+                try? await session.sendPromptListChanged()
+            }
+        }
+    }
+
+    /// Broadcast a resource-updated notification to all sessions.
+    /// - Parameter uri: The URI of the resource that was updated.
+    func broadcastResourceUpdated(uri: URL) async {
+        for session in sessions.values {
+            await session.work { session in
+                try? await session.sendResourceUpdated(uri: uri)
+            }
+        }
+    }
 }
