@@ -47,6 +47,9 @@ public actor Session {
     /// Client capabilities received during initialization (if any).
     public var clientCapabilities: ClientCapabilities?
 
+    /// URIs that this session has subscribed to for resource-updated notifications.
+    private var subscribedResourceURIs: Set<String> = []
+
     /// Creates a new session.
     /// - Parameters:
     ///   - id: The unique session identifier.
@@ -289,6 +292,21 @@ extension Session {
     public func sendPromptListChanged() async throws {
         let notification = JSONRPCMessage.notification(method: "notifications/prompts/list_changed")
         try await transport?.send(notification)
+    }
+
+    /// Subscribe this session to resource-updated notifications for a URI.
+    public func subscribeResource(uri: String) {
+        subscribedResourceURIs.insert(uri)
+    }
+
+    /// Unsubscribe this session from resource-updated notifications for a URI.
+    public func unsubscribeResource(uri: String) {
+        subscribedResourceURIs.remove(uri)
+    }
+
+    /// Returns `true` if this session is subscribed to updates for the given URI.
+    public func isSubscribedToResource(uri: String) -> Bool {
+        subscribedResourceURIs.contains(uri)
     }
 
     /// Send a notification that a subscribed resource has been updated.

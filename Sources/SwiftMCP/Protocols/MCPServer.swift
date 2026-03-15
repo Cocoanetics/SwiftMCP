@@ -117,6 +117,12 @@ public extension MCPServer {
             case "resources/read":
                 return await createResourcesReadResponse(id: requestData.id, request: requestData)
 
+            case "resources/subscribe":
+                return await handleResourceSubscribe(requestData)
+
+            case "resources/unsubscribe":
+                return await handleResourceUnsubscribe(requestData)
+
             case "prompts/list":
                 return createPromptsListResponse(id: requestData.id)
 
@@ -249,7 +255,7 @@ public extension MCPServer {
         }
 
         if self is MCPResourceProviding {
-            capabilities.resources = .init(listChanged: true)
+            capabilities.resources = .init(subscribe: true, listChanged: true)
         }
 
         if self is MCPPromptProviding {
@@ -723,6 +729,48 @@ public extension MCPServer {
         await session.setMinimumLogLevel(level)
 
         // Return empty result for success
+        return JSONRPCMessage.response(id: request.id, result: [:])
+    }
+
+    // MARK: - Resource Subscriptions
+
+    private func handleResourceSubscribe(_ request: JSONRPCMessage.JSONRPCRequestData) async -> JSONRPCMessage? {
+        guard let session = Session.current else {
+            return JSONRPCMessage.errorResponse(
+                id: request.id,
+                error: .init(code: -32603, message: "No session context for resources/subscribe")
+            )
+        }
+
+        guard let params = request.params,
+              let uri = params["uri"]?.stringValue else {
+            return JSONRPCMessage.errorResponse(
+                id: request.id,
+                error: .init(code: -32602, message: "Invalid parameters: 'uri' parameter is required")
+            )
+        }
+
+        await session.subscribeResource(uri: uri)
+        return JSONRPCMessage.response(id: request.id, result: [:])
+    }
+
+    private func handleResourceUnsubscribe(_ request: JSONRPCMessage.JSONRPCRequestData) async -> JSONRPCMessage? {
+        guard let session = Session.current else {
+            return JSONRPCMessage.errorResponse(
+                id: request.id,
+                error: .init(code: -32603, message: "No session context for resources/unsubscribe")
+            )
+        }
+
+        guard let params = request.params,
+              let uri = params["uri"]?.stringValue else {
+            return JSONRPCMessage.errorResponse(
+                id: request.id,
+                error: .init(code: -32602, message: "Invalid parameters: 'uri' parameter is required")
+            )
+        }
+
+        await session.unsubscribeResource(uri: uri)
         return JSONRPCMessage.response(id: request.id, result: [:])
     }
 
