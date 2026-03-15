@@ -31,23 +31,53 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
     private let state = TransportState()
     internal lazy var sessionManager = SessionManager(transport: self)
 
+    /// Maximum delay between retry attempts (in seconds).
+    private static let maxRetryDelay: UInt64 = 60
+
+    // MARK: - Transport State
+
     private actor TransportState {
         private(set) var isRunning: Bool = false
+        private(set) var generation: UInt64 = 0
         private var listener: NWListener?
         private var connections: [UUID: NWConnection] = [:]
         private var runContinuation: CheckedContinuation<Void, Never>?
+        private var retryTask: Task<Void, Never>?
+        private(set) var retryAttempt: Int = 0
 
         func running() -> Bool {
             isRunning
         }
 
-        func start(listener: NWListener) {
+        /// Start a new listener generation.
+        /// Returns the generation token for this listener.
+        @discardableResult
+        func start(listener: NWListener) -> UInt64 {
+            generation += 1
             self.listener = listener
             isRunning = true
+            retryAttempt = 0
+            cancelRetryTask()
+            return generation
+        }
+
+        /// Replace the current listener with a new one during retry recovery.
+        /// Returns the new generation token, or nil if the transport is stopped.
+        func replaceListener(_ newListener: NWListener, expectedGeneration: UInt64) -> UInt64? {
+            guard isRunning, generation == expectedGeneration else {
+                return nil
+            }
+            listener?.cancel()
+            generation += 1
+            self.listener = newListener
+            return generation
         }
 
         func stop() {
             isRunning = false
+            generation += 1  // invalidate any in-flight retry / state callbacks
+            cancelRetryTask()
+            retryAttempt = 0
             listener?.cancel()
             listener = nil
             for connection in connections.values {
@@ -67,6 +97,36 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
             }
         }
 
+        /// Called when the listener reaches `.ready`.
+        /// Resets backoff, clears any pending retry, and returns the bound port (if available).
+        func listenerReady(generation listenerGen: UInt64) -> UInt16? {
+            guard listenerGen == generation, isRunning else { return nil }
+            retryAttempt = 0
+            cancelRetryTask()
+            return listener?.port?.rawValue
+        }
+
+        /// Called when the listener fails with a retryable error.
+        /// Increments the backoff attempt and returns the delay in seconds,
+        /// or nil if the transport is stopped or the generation is stale.
+        func listenerFailed(generation listenerGen: UInt64) -> UInt64? {
+            guard listenerGen == generation, isRunning else { return nil }
+            retryAttempt += 1
+            let delay = min(UInt64(1) << UInt64(min(retryAttempt - 1, 5)), TCPBonjourTransport.maxRetryDelay)
+            return delay
+        }
+
+        /// Store a retry task. Cancels any existing one first.
+        func setRetryTask(_ task: Task<Void, Never>) {
+            cancelRetryTask()
+            retryTask = task
+        }
+
+        private func cancelRetryTask() {
+            retryTask?.cancel()
+            retryTask = nil
+        }
+
         func addConnection(id: UUID, connection: NWConnection) {
             connections[id] = connection
         }
@@ -79,6 +139,8 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
             connections[id]
         }
     }
+
+    // MARK: - Init
 
     public init(
         server: MCPServer,
@@ -111,11 +173,37 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
         )
     }
 
+    // MARK: - Lifecycle
+
     public func start() async throws {
         if await state.running() {
             return
         }
 
+        let listener = try createListener()
+        let generation = await state.start(listener: listener)
+        installStateHandler(on: listener, generation: generation)
+        listener.start(queue: queue)
+    }
+
+    public func run() async throws {
+        try await start()
+        await state.waitUntilStopped()
+    }
+
+    public func stop() async throws {
+        await state.stop()
+    }
+
+    /// Broadcasts a log message to all connected sessions.
+    public func broadcastLog(_ message: LogMessage) async {
+        await sessionManager.broadcastLog(message)
+    }
+
+    // MARK: - Listener Creation
+
+    /// Creates a new NWListener with the transport's configuration.
+    private func createListener() throws -> NWListener {
         let parameters = NWParameters.tcp
         parameters.acceptLocalOnly = acceptLocalOnly
         parameters.includePeerToPeer = false
@@ -139,27 +227,100 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
         listener.newConnectionHandler = { [weak self] connection in
             self?.handleNewConnection(connection)
         }
+
+        return listener
+    }
+
+    /// Installs a state handler on a listener that captures only the generation token,
+    /// avoiding a strong reference to the listener itself.
+    private func installStateHandler(on listener: NWListener, generation: UInt64) {
         listener.stateUpdateHandler = { [weak self] newState in
-            self?.handleListenerState(newState, listener: listener)
+            guard let self else { return }
+            Task {
+                await self.handleListenerState(newState, generation: generation)
+            }
+        }
+    }
+
+    // MARK: - Listener State Handling
+
+    private func handleListenerState(_ newState: NWListener.State, generation: UInt64) async {
+        switch newState {
+        case .ready:
+            if let boundPort = await state.listenerReady(generation: generation) {
+                port = boundPort
+            }
+            logger.info("TCP+Bonjour transport ready on port \(port.map(String.init) ?? "unknown")")
+
+        case .failed(let error):
+            if Self.isRetryableError(error) {
+                guard let delay = await state.listenerFailed(generation: generation) else {
+                    return  // stopped or stale generation
+                }
+                logger.warning("Bonjour listener failed (mDNSResponder unavailable): \(error). Retrying in \(delay)s.")
+                scheduleRetry(afterDelay: delay, failedGeneration: generation)
+            } else {
+                logger.error("TCP+Bonjour listener failed: \(error)")
+            }
+
+        case .cancelled:
+            logger.info("TCP+Bonjour listener cancelled")
+
+        default:
+            break
+        }
+    }
+
+    /// Returns `true` when the error indicates the mDNS daemon is unavailable
+    /// (DNS service error -65563 / `kDNSServiceErr_ServiceNotRunning`).
+    private static func isRetryableError(_ error: NWError) -> Bool {
+        if case .dns(let dnsError) = error, dnsError == -65563 {
+            return true
+        }
+        return false
+    }
+
+    // MARK: - Retry
+
+    /// Schedules a single retry attempt after the given delay.
+    /// The retry task is tracked in state and can be cancelled by `stop()`.
+    private func scheduleRetry(afterDelay delay: UInt64, failedGeneration: UInt64) {
+        let task = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: delay * 1_000_000_000)
+            } catch {
+                return  // cancelled
+            }
+
+            guard let self else { return }
+
+            do {
+                let newListener = try self.createListener()
+                guard let newGeneration = await self.state.replaceListener(newListener, expectedGeneration: failedGeneration) else {
+                    // Transport was stopped or generation changed — discard
+                    newListener.cancel()
+                    return
+                }
+                self.installStateHandler(on: newListener, generation: newGeneration)
+                newListener.start(queue: self.queue)
+                self.logger.info("Bonjour listener re-created after retry, waiting for it to become ready.")
+            } catch {
+                // createListener() itself failed — schedule another retry
+                // with the same generation (state.listenerFailed already incremented attempt)
+                guard let nextDelay = await self.state.listenerFailed(generation: failedGeneration) else {
+                    return
+                }
+                self.logger.warning("Bonjour listener retry failed: \(error). Retrying in \(nextDelay)s.")
+                self.scheduleRetry(afterDelay: nextDelay, failedGeneration: failedGeneration)
+            }
         }
 
-        await state.start(listener: listener)
-        listener.start(queue: queue)
+        Task {
+            await state.setRetryTask(task)
+        }
     }
 
-    public func run() async throws {
-        try await start()
-        await state.waitUntilStopped()
-    }
-
-    public func stop() async throws {
-        await state.stop()
-    }
-
-    /// Broadcasts a log message to all connected sessions.
-    public func broadcastLog(_ message: LogMessage) async {
-        await sessionManager.broadcastLog(message)
-    }
+    // MARK: - Send
 
     public func send(_ data: Data) async throws {
         guard let currentSession = Session.current else {
@@ -188,21 +349,7 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
         }
     }
 
-    private func handleListenerState(_ state: NWListener.State, listener: NWListener) {
-        switch state {
-        case .ready:
-            if let boundPort = listener.port?.rawValue {
-                port = boundPort
-            }
-            logger.info("TCP+Bonjour transport ready on port \(port.map(String.init) ?? "unknown")")
-        case .failed(let error):
-            logger.error("TCP+Bonjour listener failed: \(error)")
-        case .cancelled:
-            logger.info("TCP+Bonjour listener cancelled")
-        default:
-            break
-        }
-    }
+    // MARK: - Connections
 
     private func handleNewConnection(_ connection: NWConnection) {
         let connectionID = UUID()
