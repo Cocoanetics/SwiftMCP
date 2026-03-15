@@ -52,8 +52,9 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
 
             // Initial HEAD Received
             case (.head(let head), _):
-                if let contentLength = head.headers.first(name: "content-length"), let length = Int(contentLength), length > transport.maxMessageSize {
-                    logger.warning("Rejecting request with Content-Length \(length) > max \(transport.maxMessageSize)")
+                let sizeLimit = maxBodySize(for: head)
+                if let contentLength = head.headers.first(name: "content-length"), let length = Int(contentLength), length > sizeLimit {
+                    logger.warning("Rejecting request with Content-Length \(length) > max \(sizeLimit)")
                     rejectOversizedRequest(context: context)
                     requestState = .rejected
                     return
@@ -62,8 +63,9 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
 
             // BODY Received after HEAD
 			case (.body(let buffer), .head(let head)):
-                guard buffer.readableBytes <= transport.maxMessageSize else {
-                    logger.warning("Rejecting request: first body chunk size \(buffer.readableBytes) > max \(transport.maxMessageSize)")
+                let sizeLimit = maxBodySize(for: head)
+                guard buffer.readableBytes <= sizeLimit else {
+                    logger.warning("Rejecting request: first body chunk size \(buffer.readableBytes) > max \(sizeLimit)")
                     rejectOversizedRequest(context: context)
                     requestState = .rejected
                     return
@@ -72,9 +74,10 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
 
             // Additional BODY chunks after initial BODY
             case (.body(var newBuffer), .body(let head, var priorBuffer)):
+                let sizeLimit = maxBodySize(for: head)
                 let combinedSize = priorBuffer.readableBytes + newBuffer.readableBytes
-                guard combinedSize <= transport.maxMessageSize else {
-                    logger.warning("Rejecting request: accumulated body size \(combinedSize) > max \(transport.maxMessageSize)")
+                guard combinedSize <= sizeLimit else {
+                    logger.warning("Rejecting request: accumulated body size \(combinedSize) > max \(sizeLimit)")
                     rejectOversizedRequest(context: context)
                     requestState = .rejected
                     return
@@ -112,6 +115,16 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         context.flush()
     }
     
+    /// Returns the applicable body size limit for a request.
+    /// Upload requests use the server's `maxUploadSize`; everything else uses `maxMessageSize`.
+    private func maxBodySize(for head: HTTPRequestHead) -> Int {
+        if head.uri.hasPrefix("/mcp/uploads"),
+           let uploadHandler = transport.server as? MCPFileUploadHandling {
+            return uploadHandler.maxUploadSize
+        }
+        return transport.maxMessageSize
+    }
+
     private func rejectOversizedRequest(context: ChannelHandlerContext) {
         var headers = HTTPHeaders()
         headers.add(name: "Connection", value: "close")
@@ -134,6 +147,12 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             // Handle all OPTIONS requests in one case
             case (.OPTIONS, _):
                 handleOPTIONS(channel: channel, head: head)
+
+            // Binary file upload endpoint
+            case (.POST, let path) where path.hasPrefix("/mcp/uploads"):
+                Task {
+                    await self.handleUpload(channel: channel, head: head, body: body)
+                }
 
             // Streamable HTTP Endpoint
             case (.POST, let path) where path.hasPrefix("/mcp"):
@@ -362,7 +381,18 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
                     }
                 } else {
                     // No SSE connection - use immediate HTTP response
-                    let responses = await transport.server.processBatch(messages, ignoringEmptyResponses: true)
+                    // Set up upload resolver if the server supports uploads
+                    let resolverContext: UploadResolverContext?
+                    if transport.server is MCPFileUploadHandling {
+                        let paths = await transport.uploadStore.filePaths(for: sessionID)
+                        resolverContext = paths.isEmpty ? nil : UploadResolverContext(filePaths: paths)
+                    } else {
+                        resolverContext = nil
+                    }
+
+                    let responses = await UploadResolver.$current.withValue(resolverContext) {
+                        await transport.server.processBatch(messages, ignoringEmptyResponses: true)
+                    }
 
                     if responses.isEmpty {
                         await self.sendResponseAsync(channel: channel, status: .accepted, headers: responseHeaders)
@@ -622,6 +652,119 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             let errorBuffer = self.stringBuffer("Internal Server Error encoding response", allocator: channel.allocator)
             await self.sendResponseAsync(channel: channel, status: .internalServerError, body: errorBuffer)
         }
+    }
+
+    // MARK: - File Upload
+
+    private func handleUpload(channel: Channel, head: HTTPRequestHead, body: ByteBuffer?) async {
+        // Check server conformance
+        guard let uploadHandler = transport.server as? MCPFileUploadHandling else {
+            let buffer = channel.allocator.buffer(string: "File uploads not supported by this server.")
+            await sendResponseAsync(channel: channel, status: .notFound, body: buffer)
+            return
+        }
+
+        // Extract session ID
+        let sessionID = UUID(uuidString: head.headers["Mcp-Session-Id"].first ?? "") ?? UUID()
+
+        // Check authorization
+        var token: String?
+        if let authHeader = head.headers["Authorization"].first {
+            let parts = authHeader.split(separator: " ")
+            if parts.count == 2 && parts[0].lowercased() == "bearer" {
+                token = String(parts[1])
+            }
+        }
+
+        let authResult = await transport.authorize(token, sessionID: sessionID)
+        switch authResult {
+        case .unauthorized(let message):
+            let buffer = channel.allocator.buffer(string: "Unauthorized: \(message)")
+            await sendResponseAsync(channel: channel, status: .unauthorized, body: buffer)
+            return
+        case .jweNotSupported(let message):
+            let buffer = channel.allocator.buffer(string: message)
+            await sendResponseAsync(channel: channel, status: .forbidden, body: buffer)
+            return
+        case .authorized:
+            break
+        }
+
+        // Require body
+        guard var body = body, let data = body.readData(length: body.readableBytes) else {
+            let buffer = channel.allocator.buffer(string: "Request body required.")
+            await sendResponseAsync(channel: channel, status: .badRequest, body: buffer)
+            return
+        }
+
+        // Check size
+        guard data.count <= uploadHandler.maxUploadSize else {
+            let buffer = channel.allocator.buffer(string: "Upload exceeds maximum size of \(uploadHandler.maxUploadSize) bytes.")
+            await sendResponseAsync(channel: channel, status: .payloadTooLarge, body: buffer)
+            return
+        }
+
+        // Extract metadata from headers
+        let contentType = head.headers["Content-Type"].first
+        let filename = Self.parseFilename(from: head.headers["Content-Disposition"].first)
+
+        // Store the upload
+        do {
+            let upload = try await transport.uploadStore.store(
+                data: data,
+                sessionID: sessionID,
+                contentType: contentType,
+                filename: filename
+            )
+
+            // Return the upload metadata
+            var responseDict: JSONDictionary = [
+                "uri": .string(upload.uri),
+                "size": .integer(upload.size)
+            ]
+            if let ct = upload.contentType {
+                responseDict["contentType"] = .string(ct)
+            }
+            if let fn = upload.filename {
+                responseDict["filename"] = .string(fn)
+            }
+
+            var headers = HTTPHeaders()
+            headers.add(name: "Content-Type", value: "application/json")
+            headers.add(name: "Access-Control-Allow-Origin", value: "*")
+            headers.add(name: "Mcp-Session-Id", value: sessionID.uuidString)
+
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let jsonData = try encoder.encode(responseDict)
+            let buffer = channel.allocator.buffer(data: jsonData)
+
+            await sendResponseAsync(channel: channel, status: .created, headers: headers, body: buffer)
+
+            logger.info("File upload stored: \(upload.uri) (\(upload.size) bytes)")
+        } catch {
+            logger.error("File upload failed: \(error)")
+            let buffer = channel.allocator.buffer(string: "Upload failed: \(error.localizedDescription)")
+            await sendResponseAsync(channel: channel, status: .internalServerError, body: buffer)
+        }
+    }
+
+    /// Parse filename from Content-Disposition header.
+    private static func parseFilename(from header: String?) -> String? {
+        guard let header else { return nil }
+        // Look for filename="..." or filename=...
+        let parts = header.split(separator: ";").map { $0.trimmingCharacters(in: .whitespaces) }
+        for part in parts {
+            if part.lowercased().hasPrefix("filename=") {
+                var value = String(part.dropFirst("filename=".count))
+                // Remove quotes
+                if value.hasPrefix("\"") && value.hasSuffix("\"") {
+                    value = String(value.dropFirst().dropLast())
+                }
+                return value.isEmpty ? nil : value
+            }
+        }
+        return nil
     }
 
     // MARK: - OpenAPI Handlers
@@ -1304,8 +1447,8 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
     private func handleOPTIONS(channel: Channel, head: HTTPRequestHead) {
         logger.info("Handling OPTIONS request for URI: \(head.uri)")
         var headers = HTTPHeaders()
-        headers.add(name: "Access-Control-Allow-Methods", value: "GET, POST, OPTIONS")
-        headers.add(name: "Access-Control-Allow-Headers", value: "Content-Type, Authorization, MCP-Protocol-Version")
+        headers.add(name: "Access-Control-Allow-Methods", value: "GET, POST, DELETE, OPTIONS")
+        headers.add(name: "Access-Control-Allow-Headers", value: "Content-Type, Content-Disposition, Authorization, MCP-Protocol-Version, Mcp-Session-Id")
         sendResponse(channel: channel, status: .ok, headers: headers)
     }
 

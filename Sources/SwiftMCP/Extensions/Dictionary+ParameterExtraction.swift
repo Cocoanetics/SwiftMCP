@@ -405,12 +405,26 @@ public extension Dictionary where Key == String, Value == JSONValue {
             preconditionFailure("Failed to retrieve value for parameter \(name)")
         }
 
-        if let stringValue = jsonValue.stringValue,
-           let data = Data(base64Encoded: stringValue) {
-            return data
+        if let stringValue = jsonValue.stringValue {
+            // Check for upload URI (resolved via UploadStore)
+            if stringValue.hasPrefix("upload://") {
+                if let data = UploadResolver.resolve(uri: stringValue) {
+                    return data
+                }
+                throw MCPToolError.invalidArgumentType(
+                    parameterName: name,
+                    expectedType: "valid upload:// URI",
+                    actualType: "expired or unknown upload URI"
+                )
+            }
+
+            // Fall back to base64 decoding
+            if let data = Data(base64Encoded: stringValue) {
+                return data
+            }
         }
 
-        throw invalidArgumentType(parameterName: name, expectedType: "Base64-encoded Data", actualValue: jsonValue)
+        throw invalidArgumentType(parameterName: name, expectedType: "Base64-encoded Data or upload:// URI", actualValue: jsonValue)
     }
 }
 

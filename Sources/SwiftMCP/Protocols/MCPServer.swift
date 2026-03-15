@@ -266,7 +266,12 @@ public extension MCPServer {
             capabilities.logging = .init(enabled: true)
         }
 
-
+        if let uploadHandler = self as? MCPFileUploadHandling {
+            capabilities.experimental["uploads"] = .object([
+                "endpoint": .string("/mcp/uploads"),
+                "maxSize": .integer(uploadHandler.maxUploadSize)
+            ])
+        }
 
         // Advertise completion support
         capabilities.completions = .object([:])

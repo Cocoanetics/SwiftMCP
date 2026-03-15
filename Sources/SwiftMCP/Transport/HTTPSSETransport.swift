@@ -36,6 +36,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     private let group: EventLoopGroup
     private var channel: Channel?
     internal lazy var sessionManager = SessionManager(transport: self)
+    internal let uploadStore = UploadStore()
     private var keepAliveTimer: DispatchSourceTimer?
 
     /// Flag to determine whether to serve OpenAPI endpoints.
@@ -278,6 +279,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         stopKeepAliveTimer()
 
         await sessionManager.removeAllSessions()
+        await uploadStore.removeAll()
 
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             group.shutdownGracefully { error in
@@ -342,11 +344,22 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     /// Handle a JSON-RPC request and send the response through the SSE channels.
     func handleJSONRPCRequest(_ request: JSONRPCMessage, from sessionID: UUID) {
         Task {
-            guard let response = await server.handleMessage(request) else {
+            // Set up upload resolver if the server supports uploads
+            let resolverContext: UploadResolverContext?
+            if server is MCPFileUploadHandling {
+                let paths = await uploadStore.filePaths(for: sessionID)
+                resolverContext = paths.isEmpty ? nil : UploadResolverContext(filePaths: paths)
+            } else {
+                resolverContext = nil
+            }
+
+            guard let response = await UploadResolver.$current.withValue(resolverContext, operation: {
+                await server.handleMessage(request)
+            }) else {
                 // No response to send (e.g., notification)
                 return
             }
-            
+
             try await send(response)
         }
     }
@@ -366,6 +379,8 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
             Task {
                 // Remove the entire session when the channel closes
                 await self.sessionManager.removeSession(id: id)
+                // Clean up any uploaded files for this session
+                await self.uploadStore.removeAll(sessionID: id)
                 let count = await self.sessionManager.channelCount
                 self.logger.info("SSE channel removed (remaining: \(count))")
             }
