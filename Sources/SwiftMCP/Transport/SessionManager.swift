@@ -233,12 +233,16 @@ actor SessionManager {
         }
     }
 
-    /// Broadcast a resource-updated notification to all sessions.
+    /// Send a resource-updated notification to all sessions subscribed to the given URI.
     /// - Parameter uri: The URI of the resource that was updated.
     func broadcastResourceUpdated(uri: URL) async {
+        let uriString = uri.absoluteString
         for session in sessions.values {
-            await session.work { session in
-                try? await session.sendResourceUpdated(uri: uri)
+            let subscribed = await session.isSubscribedToResource(uri: uriString)
+            if subscribed {
+                await session.work { session in
+                    try? await session.sendResourceUpdated(uri: uri)
+                }
             }
         }
     }
