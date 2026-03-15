@@ -972,10 +972,21 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         guard !parameters.isEmpty else { return [] }
         var lines = ["\(indent)var \(variableName): JSONDictionary = [:]"]
         for parameter in parameters {
-            if parameter.isOptional {
-                lines.append("\(indent)if let \(parameter.name) { \(variableName)[\"\(parameter.name)\"] = try MCPClientArgumentEncoder.encode(\(parameter.name)) }")
+            let isDataType = parameter.typeString == "Data"
+                || parameter.typeString == "Data?"
+                || parameter.typeString == "[Data]"
+                || parameter.typeString == "[Data]?"
+            let encodeCall: String
+            if isDataType {
+                // Use async proxy-aware encoding for Data parameters (upload if supported)
+                encodeCall = "try await MCPClientArgumentEncoder.encode(\(parameter.name), proxy: proxy)"
             } else {
-                lines.append("\(indent)\(variableName)[\"\(parameter.name)\"] = try MCPClientArgumentEncoder.encode(\(parameter.name))")
+                encodeCall = "try MCPClientArgumentEncoder.encode(\(parameter.name))"
+            }
+            if parameter.isOptional {
+                lines.append("\(indent)if let \(parameter.name) { \(variableName)[\"\(parameter.name)\"] = \(encodeCall) }")
+            } else {
+                lines.append("\(indent)\(variableName)[\"\(parameter.name)\"] = \(encodeCall)")
             }
         }
         return lines
