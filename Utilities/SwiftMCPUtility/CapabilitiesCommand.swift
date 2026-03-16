@@ -23,8 +23,13 @@ struct CapabilitiesCommand: AsyncParsableCommand {
     var output: String?
 
     func run() async throws {
+        UtilitySupport.configureLogging(from: connection)
         let config = try UtilitySupport.makeConfig(from: connection)
         let proxy = MCPServerProxy(config: config)
+
+        if let clientName = connection.clientName {
+            await proxy.setClientName(clientName)
+        }
 
         defer {
             Task {

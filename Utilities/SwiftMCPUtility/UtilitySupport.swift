@@ -1,5 +1,6 @@
 import Foundation
 import ArgumentParser
+import Logging
 import SwiftMCP
 
 struct ConnectionOptions: ParsableArguments {
@@ -20,9 +21,36 @@ struct ConnectionOptions: ParsableArguments {
 
     @Option(name: .long, help: "Environment variable in KEY=VALUE format (repeatable)")
     var env: [String] = []
+
+    @Option(name: .long, help: "Log level: trace, debug, info, notice, warning, error, critical")
+    var logLevel: String?
+
+    @Option(name: .long, help: "Client name sent in initialize (default: swiftmcp-client)")
+    var clientName: String?
 }
 
 enum UtilitySupport {
+    /// Configure the global log level if --log-level is provided.
+    static func configureLogging(from options: ConnectionOptions) {
+        guard let levelString = options.logLevel else { return }
+        let level: Logger.Level
+        switch levelString.lowercased() {
+        case "trace": level = .trace
+        case "debug": level = .debug
+        case "info": level = .info
+        case "notice": level = .notice
+        case "warning": level = .warning
+        case "error": level = .error
+        case "critical": level = .critical
+        default: return
+        }
+        LoggingSystem.bootstrap { label in
+            var handler = StreamLogHandler.standardError(label: label)
+            handler.logLevel = level
+            return handler
+        }
+    }
+
     static func makeConfig(from options: ConnectionOptions) throws -> MCPServerConfig {
         if let configPath = options.config {
             if options.sse != nil || options.command != nil || !options.header.isEmpty || options.cwd != nil || !options.env.isEmpty {

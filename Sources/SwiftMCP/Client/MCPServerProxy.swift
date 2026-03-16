@@ -50,6 +50,14 @@ public final actor MCPServerProxy: Sendable {
 
     /// Specifies whether the list of tools from the server should be cached.
     public let cacheToolsList: Bool
+
+    /// The client name sent in `initialize`. Defaults to `"swiftmcp-client"`.
+    public var clientName: String = "swiftmcp-client"
+
+    /// Sets the client name. Must be called before `connect()`.
+    public func setClientName(_ name: String) {
+        clientName = name
+    }
     
     /// Base metadata included in _meta for ALL requests (e.g., accessToken).
     public var meta: JSONDictionary = [:]
@@ -694,7 +702,7 @@ public final actor MCPServerProxy: Sendable {
         var params: JSONDictionary = [
             "protocolVersion": .string("2025-06-18"),
             "clientInfo": .object([
-                "name": .string("swiftmcp-client"),
+                "name": .string(clientName),
                 "version": .string("1.0.0")
             ]),
             "capabilities": .object(buildClientCapabilities())
