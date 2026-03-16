@@ -81,6 +81,9 @@ public struct MCPToolMacro: PeerMacro {
 
         let functionName = commonMetadata.functionName
 
+        // The name style parsed from the attribute (default: use function name as-is)
+        var nameStyle: ToolNameStyle = .functionName
+
         // Extract description from the attribute if provided, otherwise use from documentation
         var descriptionArg = "nil"
         var isConsequentialArg = "true"  // Default to true
@@ -96,7 +99,9 @@ public struct MCPToolMacro: PeerMacro {
 
         if let arguments = node.arguments?.as(LabeledExprListSyntax.self) {
             for argument in arguments {
-                if argument.label?.text == "description", let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
+                if argument.label?.text == "naming" {
+                    nameStyle = ToolNameStyle.parse(from: argument.expression)
+                } else if argument.label?.text == "description", let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
                     let stringValue = stringLiteral.segments.description
                     descriptionArg = "\"\(stringValue.escapedForSwiftString)\"" // Ensure proper escaping
                 } else if argument.label?.text == "hints", let arrayExpr = argument.expression.as(ArrayExprSyntax.self) {
@@ -120,6 +125,9 @@ public struct MCPToolMacro: PeerMacro {
                 }
             }
         }
+
+        // Apply the name style to derive the final tool name
+        let toolName = nameStyle.apply(to: functionName)
 
         // If no description was provided in the attribute, use from commonMetadata
         if descriptionArg == "nil" {
@@ -158,9 +166,9 @@ public struct MCPToolMacro: PeerMacro {
 
         // Generate the metadata variable
         let metadataDeclaration = """
-/// Metadata for the \(functionName) tool
+/// Metadata for the \(toolName) tool
 nonisolated private let __mcpMetadata_\(functionName) = MCPToolMetadata(
-   name: "\(functionName)",
+   name: "\(toolName)",
    description: \(descriptionArg),
    parameters: [\(parameterInfoStrings.joined(separator: ", "))],
    returnType: \(returnTypeString).self,
@@ -218,6 +226,83 @@ nonisolated private let __mcpMetadata_\(functionName) = MCPToolMetadata(
 			DeclSyntax(stringLiteral: metadataDeclaration),
 			DeclSyntax(stringLiteral: wrapperFuncString)
 		]
+    }
+
+    // MARK: - Tool Name Style
+
+    /// Internal mirror of `MCPToolNameStyle` for compile-time name transformation.
+    enum ToolNameStyle {
+        case functionName
+        case custom(String)
+        case pascalCase
+        case camelCase
+        case snakeCase
+
+        /// Parse a `MCPToolNameStyle` value from macro attribute syntax.
+        static func parse(from expr: ExprSyntax) -> ToolNameStyle {
+            // Simple cases: .functionName, .pascalCase, .camelCase, .snakeCase
+            if let memberAccess = expr.as(MemberAccessExprSyntax.self) {
+                switch memberAccess.declName.baseName.text {
+                case "functionName": return .functionName
+                case "pascalCase":   return .pascalCase
+                case "camelCase":    return .camelCase
+                case "snakeCase":    return .snakeCase
+                default:             return .functionName
+                }
+            }
+            // Associated value case: .custom("name")
+            if let funcCall = expr.as(FunctionCallExprSyntax.self),
+               let memberAccess = funcCall.calledExpression.as(MemberAccessExprSyntax.self),
+               memberAccess.declName.baseName.text == "custom",
+               let firstArg = funcCall.arguments.first,
+               let stringLiteral = firstArg.expression.as(StringLiteralExprSyntax.self) {
+                return .custom(stringLiteral.segments.description)
+            }
+            return .functionName
+        }
+
+        /// Apply this style to a Swift function name to produce the MCP tool name.
+        func apply(to functionName: String) -> String {
+            switch self {
+            case .functionName:
+                return functionName
+            case .custom(let name):
+                return name
+            case .pascalCase:
+                return functionName.prefix(1).uppercased() + functionName.dropFirst()
+            case .camelCase:
+                return functionName.prefix(1).lowercased() + functionName.dropFirst()
+            case .snakeCase:
+                return Self.toSnakeCase(functionName)
+            }
+        }
+
+        /// Convert a camelCase/PascalCase string to snake_case.
+        ///
+        /// Handles consecutive uppercase letters (acronyms) correctly:
+        /// - `listWindows` → `list_windows`
+        /// - `getURLForRequest` → `get_url_for_request`
+        /// - `HTMLParser` → `html_parser`
+        private static func toSnakeCase(_ input: String) -> String {
+            guard !input.isEmpty else { return input }
+            var result = ""
+            let chars = Array(input)
+            for (index, char) in chars.enumerated() {
+                if char.isUppercase {
+                    if index > 0 {
+                        let prevIsLower = chars[index - 1].isLowercase
+                        let nextIsLower = (index + 1 < chars.count) && chars[index + 1].isLowercase
+                        if prevIsLower || nextIsLower {
+                            result.append("_")
+                        }
+                    }
+                    result.append(char.lowercased())
+                } else {
+                    result.append(String(char))
+                }
+            }
+            return result
+        }
     }
 
     /// Builds the annotations argument string for MCPToolMetadata initialization

@@ -14,6 +14,30 @@ import Foundation
  generate metadata for functions and classes in the MCP.
  */
 
+/// The naming style for an MCP tool derived from a Swift function name.
+///
+/// Use this to control how the Swift function name is transformed into the
+/// MCP tool name exposed to clients.
+///
+/// Examples (given `func listWindows()`):
+/// - `.functionName` → `"listWindows"` (default, unchanged)
+/// - `.custom("ListAllWindows")` → `"ListAllWindows"`
+/// - `.pascalCase` → `"ListWindows"`
+/// - `.camelCase` → `"listWindows"`
+/// - `.snakeCase` → `"list_windows"`
+public enum MCPToolNaming {
+    /// Use the Swift function name unchanged (default).
+    case functionName
+    /// Provide a fully custom tool name.
+    case custom(String)
+    /// PascalCase — capitalize the first letter of each word (e.g. `listWindows` → `ListWindows`).
+    case pascalCase
+    /// camelCase — lowercase the first letter, keep the rest (e.g. `ListWindows` → `listWindows`).
+    case camelCase
+    /// snake_case — split on word boundaries and join with underscores (e.g. `listWindows` → `list_windows`).
+    case snakeCase
+}
+
 /// A macro that automatically extracts parameter information from a function declaration.
 ///
 /// Apply this macro to functions that should be exposed to AI models.
@@ -25,6 +49,18 @@ import Foundation
 /// func add(a: Int, b: Int) -> Int {
 ///     return a + b
 /// }
+///
+/// // With a custom tool name
+/// @MCPTool(naming: .custom("ListAllWindows"))
+/// func listWindows() -> [Window]
+///
+/// // Automatic PascalCase
+/// @MCPTool(naming: .pascalCase)
+/// func listWindows() -> [Window]  // → "ListWindows"
+///
+/// // Automatic snake_case
+/// @MCPTool(naming: .snakeCase)
+/// func listWindows() -> [Window]  // → "list_windows"
 ///
 /// // With hints using OptionSet API (preferred)
 /// @MCPTool(hints: [.readOnly])
@@ -38,6 +74,7 @@ import Foundation
 /// ```
 ///
 /// - Parameters:
+///   - naming: The naming style for the tool name (default: `.functionName`).
 ///   - description: Optional override for the function's documentation description
 ///   - hints: OptionSet of tool behavior hints (preferred API)
 ///   - isConsequential: Whether the function's actions are consequential (defaults to true, deprecated - use hints instead)
@@ -47,6 +84,7 @@ import Foundation
 ///   - openWorldHint: If true, tool may interact with external entities (deprecated - use hints: [.openWorld])
 @attached(peer, names: prefixed(__mcpMetadata_), prefixed(__mcpCall_))
 public macro MCPTool(
+    naming: MCPToolNaming = .functionName,
     description: String? = nil,
     hints: MCPToolHints = [],
     isConsequential: Bool = true,
