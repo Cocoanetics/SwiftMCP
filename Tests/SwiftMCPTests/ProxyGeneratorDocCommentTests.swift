@@ -21,10 +21,8 @@ struct ProxyGeneratorDocCommentTests {
             headerMetadata: metadata
         ).description
 
-        #expect(source.contains("/**"))
-        #expect(source.contains("Line one."))
-        #expect(source.contains("Line \"two\"."))
-        #expect(source.contains("Line three."))
-        #expect(source.contains("*/"))
+        #expect(source.contains("/// Line one."))
+        #expect(source.contains("/// Line \"two\"."))
+        #expect(source.contains("/// Line three."))
     }
 }

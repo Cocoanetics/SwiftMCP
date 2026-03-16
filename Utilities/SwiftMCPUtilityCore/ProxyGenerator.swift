@@ -228,12 +228,8 @@ public enum ProxyGenerator {
     }
 
     private static func docBlockLines(_ text: String) -> [String] {
-        var lines: [String] = ["/**"]
-        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
-            lines.append(" \(line)")
-        }
-        lines.append("*/")
-        return lines
+        return text.split(separator: "\n", omittingEmptySubsequences: false)
+            .map { "/// \($0)" }
     }
 
     private static func serverDisplayName(from metadata: HeaderMetadata) -> String {
@@ -476,11 +472,10 @@ public enum ProxyGenerator {
             return []
         }
 
-        var lines = ["    /**"]
+        var lines: [String] = []
         for bodyLine in bodyLines {
-            lines.append("     \(bodyLine)")
+            lines.append("    /// \(bodyLine)")
         }
-        lines.append("     */")
         return lines
     }
 
@@ -556,11 +551,9 @@ public enum ProxyGenerator {
             return lines
         }
 
-        lines.append("    /**")
         for bodyLine in bodyLines {
-            lines.append("     \(bodyLine)")
+            lines.append("    /// \(bodyLine)")
         }
-        lines.append("     */")
         return lines
     }
 
