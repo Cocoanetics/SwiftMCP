@@ -31,6 +31,9 @@ struct GenerateProxyCommand: AsyncParsableCommand {
     @Option(name: .long, help: "OpenAPI JSON URL or file path to infer return types")
     var openapi: String?
 
+    @Flag(name: .long, help: "Pause after connect to allow MCP server approval (e.g. Xcode mcpbridge)")
+    var interactive: Bool = false
+
     func run() async throws {
         UtilitySupport.configureLogging(from: connection)
         let config = try UtilitySupport.makeConfig(from: connection)
@@ -47,6 +50,12 @@ struct GenerateProxyCommand: AsyncParsableCommand {
         }
 
         try await proxy.connect()
+
+        if interactive {
+            print("Connected to \(await proxy.serverName ?? "server"). Approve the connection in the MCP server, then press Enter to continue...")
+            _ = readLine()
+        }
+
         let tools = try await proxy.listTools()
         let supportsResources = await proxy.serverCapabilities?.resources != nil
         let supportsPrompts = await proxy.serverCapabilities?.prompts != nil
