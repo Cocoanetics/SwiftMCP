@@ -36,6 +36,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     private let group: EventLoopGroup
     private var channel: Channel?
     internal lazy var sessionManager = SessionManager(transport: self)
+    internal let pendingUploadStore = PendingUploadStore()
     private var keepAliveTimer: DispatchSourceTimer?
 
     /// Flag to determine whether to serve OpenAPI endpoints.
@@ -342,11 +343,14 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     /// Handle a JSON-RPC request and send the response through the SSE channels.
     func handleJSONRPCRequest(_ request: JSONRPCMessage, from sessionID: UUID) {
         Task {
-            guard let response = await server.handleMessage(request) else {
-                // No response to send (e.g., notification)
+            let pending = server is MCPFileUploadHandling ? pendingUploadStore : nil
+
+            guard let response = await PendingUploadResolver.$current.withValue(pending, operation: {
+                await server.handleMessage(request)
+            }) else {
                 return
             }
-            
+
             try await send(response)
         }
     }

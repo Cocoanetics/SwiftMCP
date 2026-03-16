@@ -178,6 +178,9 @@ public final actor MCPServerProxy: Sendable {
     private var lineConnection: (any StdioConnection)?
     private var endpointContinuation: CheckedContinuation<URL, Error>?
 
+    /// Pending CID uploads queued during argument encoding, to be uploaded after the tool call is sent.
+    private var pendingUploads: [(cid: String, data: Data)] = []
+
     public init(config: MCPServerConfig, cacheToolsList: Bool = false) {
         self.config = config
         self.service = nil
@@ -306,6 +309,88 @@ public final actor MCPServerProxy: Sendable {
         )
     }
 
+    // MARK: - File Upload
+
+    /// Register a pending upload that will be sent after the tool call request.
+    /// Called by `MCPClientArgumentEncoder.encode(Data, proxy:)`.
+    public func registerPendingUpload(cid: String, data: Data) {
+        pendingUploads.append((cid: cid, data: data))
+    }
+
+    /// Uploads binary data to the server's upload endpoint.
+    ///
+    /// - Parameters:
+    ///   - data: The binary data to upload.
+    ///   - contentType: MIME type of the data (e.g. `"image/png"`).
+    ///   - filename: Optional original filename.
+    ///   - cid: Content ID for CID-targeted uploads.
+    /// - Returns: The CID or URI string from the server response.
+    @discardableResult
+    public func uploadFile(
+        data: Data,
+        contentType: String? = nil,
+        filename: String? = nil,
+        cid: String? = nil
+    ) async throws -> String {
+        var uploadURL = try resolveUploadURL()
+        if let cid {
+            uploadURL = uploadURL.appendingPathComponent(cid)
+        }
+
+        var request = URLRequest(url: uploadURL)
+        request.httpMethod = "POST"
+        request.httpBody = data
+        request.setValue(contentType ?? "application/octet-stream", forHTTPHeaderField: "Content-Type")
+
+        if let filename {
+            request.setValue("attachment; filename=\"\(filename)\"", forHTTPHeaderField: "Content-Disposition")
+        }
+        if let sessionID {
+            request.setValue(sessionID, forHTTPHeaderField: "Mcp-Session-Id")
+        }
+        if let token = meta["accessToken"]?.stringValue {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        let (responseData, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...201).contains(httpResponse.statusCode) else {
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let body = String(data: responseData, encoding: .utf8) ?? "unknown error"
+            throw MCPServerProxyError.communicationError("Upload failed (\(status)): \(body)")
+        }
+
+        let result = try JSONDecoder().decode(JSONDictionary.self, from: responseData)
+        if let uri = result["uri"]?.stringValue { return uri }
+        if let cidValue = result["cid"]?.stringValue { return "cid:\(cidValue)" }
+        throw MCPServerProxyError.communicationError("Upload response missing 'uri' or 'cid'")
+    }
+
+    /// Whether the connected server supports file uploads.
+    public var supportsFileUpload: Bool {
+        serverCapabilities?.experimental["uploads"] != nil
+    }
+
+    /// Maximum upload size advertised by the server, or nil if uploads aren't supported.
+    public var maxUploadSize: Int? {
+        serverCapabilities?.experimental["uploads"]?.dictionaryValue?["maxSize"]?.intValue
+    }
+
+    private func resolveUploadURL() throws -> URL {
+        if case .sse(let sseConfig) = config {
+            var components = URLComponents(url: sseConfig.url, resolvingAgainstBaseURL: false)
+            components?.path = "/mcp/uploads"
+            if let url = components?.url { return url }
+        }
+        if let endpoint = endpointURL {
+            var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)
+            components?.path = "/mcp/uploads"
+            if let url = components?.url { return url }
+        }
+        throw MCPServerProxyError.communicationError("Cannot determine upload URL — only HTTP transports support file upload")
+    }
+
     /// Lists all prompts available from the server.
     public func listPrompts() async throws -> [Prompt] {
         let result: PromptsListResult = try await requestResult(method: "prompts/list", as: PromptsListResult.self)
@@ -349,7 +434,39 @@ public final actor MCPServerProxy: Sendable {
         }
         
         let request = JSONRPCMessage.request(id: requestId, method: "tools/call", params: params)
-        let responseMessage = try await send(request)
+
+        // If there are pending CID uploads, send the tool call and uploads concurrently.
+        // The server blocks the tool call until all CID uploads arrive.
+        let hasPendingUploads = !pendingUploads.isEmpty
+        let responseMessage: JSONRPCMessage
+
+        if hasPendingUploads {
+            let uploads = pendingUploads
+            pendingUploads = []
+
+            responseMessage = try await withThrowingTaskGroup(of: JSONRPCMessage?.self) { group in
+                group.addTask {
+                    return try await self.send(request)
+                }
+                group.addTask {
+                    for upload in uploads {
+                        try await self.uploadFile(data: upload.data, cid: upload.cid)
+                    }
+                    return nil
+                }
+
+                var result: JSONRPCMessage?
+                for try await value in group {
+                    if let value { result = value }
+                }
+                guard let result else {
+                    throw MCPServerProxyError.communicationError("No response received from tool call")
+                }
+                return result
+            }
+        } else {
+            responseMessage = try await send(request)
+        }
 
         let result: JSONDictionary
         switch responseMessage {
