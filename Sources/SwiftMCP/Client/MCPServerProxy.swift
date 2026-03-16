@@ -750,13 +750,14 @@ public final actor MCPServerProxy: Sendable {
             request.httpMethod = "POST"
             request.httpBody = data
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            if let sessionID {
-                request.setValue(sessionID, forHTTPHeaderField: "Mcp-Session-Id")
+            configureSSEPOSTRequest(&request, sseConfig: sseConfig)
+            let (_, response) = try await URLSession.shared.data(for: request)
+            if let httpResponse = response as? HTTPURLResponse,
+               !(200...299).contains(httpResponse.statusCode) {
+                throw MCPServerProxyError.communicationError(
+                    "Notification rejected by server (HTTP \(httpResponse.statusCode))"
+                )
             }
-            for (key, value) in sseConfig.headers {
-                request.setValue(value, forHTTPHeaderField: key)
-            }
-            _ = try await URLSession.shared.data(for: request)
         }
     }
 
