@@ -731,6 +731,45 @@ public final actor MCPServerProxy: Sendable {
             service = serverName
         }
         logger.info("Connected to MCP server: \(serverName ?? "unknown") version \(serverVersion ?? "unknown")")
+
+        // Send the required notifications/initialized to complete the handshake.
+        // The server must receive this before accepting tools/list or other requests.
+        let initializedNotification = JSONRPCMessage.notification(
+            method: "notifications/initialized"
+        )
+        try await sendNotification(initializedNotification)
+    }
+
+    /// Sends a JSON-RPC notification (no response expected).
+    private func sendNotification(_ message: JSONRPCMessage) async throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = try encoder.encode(message)
+
+        switch config {
+        case .stdio, .stdioHandles, .tcp:
+            let messageWithNewline = data + "\n".data(using: .utf8)!
+            guard let lineConnection else {
+                throw MCPServerProxyError.communicationError("Not connected to line-based server")
+            }
+            await lineConnection.write(messageWithNewline)
+
+        case .sse(let sseConfig):
+            guard let endpointURL = endpointURL ?? (isStreamableMCPURL(sseConfig.url) ? sseConfig.url : nil) else {
+                throw MCPServerProxyError.communicationError("Not connected to server")
+            }
+            var urlRequest = URLRequest(url: endpointURL)
+            urlRequest.httpMethod = "POST"
+            urlRequest.httpBody = data
+            urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            if let sessionID {
+                urlRequest.setValue(sessionID, forHTTPHeaderField: "Mcp-Session-Id")
+            }
+            for (key, value) in sseConfig.headers {
+                urlRequest.setValue(value, forHTTPHeaderField: key)
+            }
+            _ = try await URLSession.shared.data(for: urlRequest)
+        }
     }
 
     private func resolveTcpConfig(_ config: MCPServerTcpConfig) -> MCPServerTcpConfig {
