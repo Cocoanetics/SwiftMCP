@@ -1,6 +1,6 @@
 //
-//  XcodeProxy.swift
-//  Generated: 2026-03-17T10:48:41+01:00
+//  XcodeTools.swift
+//  Generated: 2026-03-17T10:48:05+01:00
 //  Server: xcode-tools (24886.5)
 //  Source: command python3 /tmp/xcode-mcp-replay.py
 //
@@ -9,7 +9,7 @@ import Foundation
 import SwiftMCP
 
 /// A generated proxy for the xcode-tools MCP server (24886.5).
-public enum XcodeProxy {
+public enum XcodeTools {
     // MARK: - Declarations
     public struct BuildProjectResponse: Codable, Sendable {
         /// The message indicating the result of the build operation
