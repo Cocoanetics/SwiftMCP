@@ -1,6 +1,6 @@
 //
 //  XcodeProxy.swift
-//  Generated: 2026-03-16T23:18:29+01:00
+//  Generated: 2026-03-17T07:11:53+01:00
 //  Server: xcode-tools (24886.5)
 //  Source: command python3 /tmp/xcode-mcp-replay.py
 //
@@ -422,7 +422,7 @@ public actor XcodeProxy {
 
     /// Builds an Xcode project and waits until the build completes.
     /// - Parameter tabIdentifier: The workspace tab identifier
-    public func BuildProject(tabIdentifier: String) async throws -> BuildProjectResponse {
+    public func buildProject(tabIdentifier: String) async throws -> BuildProjectResponse {
         var arguments: JSONDictionary = [:]
         arguments["tabIdentifier"] = try MCPClientArgumentEncoder.encode(tabIdentifier)
         let text = try await proxy.callTool("BuildProject", arguments: arguments)
@@ -435,7 +435,7 @@ public actor XcodeProxy {
     /// - Parameter sourceFilePath: The path to a Swift source file within the Xcode project organization (e.g., 'ProjectName/Sources/MyFile.swift') whose context the code snippet will have access to (including `fileprivate` declarations).
     /// - Parameter tabIdentifier: The workspace tab identifier.
     /// - Parameter timeout: The time in seconds to wait for the execution of the snippet to complete. Defaults to 120 seconds.
-    public func ExecuteSnippet(codeSnippet: String, purpose: String, sourceFilePath: String, tabIdentifier: String, timeout: Double? = nil) async throws -> ExecuteSnippetResponse {
+    public func executeSnippet(codeSnippet: String, purpose: String, sourceFilePath: String, tabIdentifier: String, timeout: Double? = nil) async throws -> ExecuteSnippetResponse {
         var arguments: JSONDictionary = [:]
         arguments["codeSnippet"] = try MCPClientArgumentEncoder.encode(codeSnippet)
         arguments["purpose"] = try MCPClientArgumentEncoder.encode(purpose)
@@ -451,7 +451,7 @@ public actor XcodeProxy {
     /// - Parameter pattern: Regex to filter the returned build log entries. Will match against the 'message' field of any emitted issues, as well as the task description, command line, and console output of any build tasks.
     /// - Parameter severity: Limit the output of build log entries to those that emitted issues of the specified severity or higher. Valid values in order of decreasing severity are 'error', 'warning', 'remark'. Defaults to 'error'. Values: remark, warning, error
     /// - Parameter tabIdentifier: The workspace tab identifier
-    public func GetBuildLog(glob: String? = nil, pattern: String? = nil, severity: String? = nil, tabIdentifier: String) async throws -> GetBuildLogResponse {
+    public func getBuildLog(glob: String? = nil, pattern: String? = nil, severity: String? = nil, tabIdentifier: String) async throws -> GetBuildLogResponse {
         var arguments: JSONDictionary = [:]
         if let glob { arguments["glob"] = try MCPClientArgumentEncoder.encode(glob) }
         if let pattern { arguments["pattern"] = try MCPClientArgumentEncoder.encode(pattern) }
@@ -463,7 +463,7 @@ public actor XcodeProxy {
 
     /// Gets all available tests from the active scheme's active test plan. Results are limited to 100 tests. The complete list is written to fullTestListPath in grep-friendly format. Use grep with keys like TEST_TARGET, TEST_IDENTIFIER, or TEST_FILE_PATH to find specific tests.
     /// - Parameter tabIdentifier: The workspace tab identifier
-    public func GetTestList(tabIdentifier: String) async throws -> GetTestListResponse {
+    public func getTestList(tabIdentifier: String) async throws -> GetTestListResponse {
         var arguments: JSONDictionary = [:]
         arguments["tabIdentifier"] = try MCPClientArgumentEncoder.encode(tabIdentifier)
         let text = try await proxy.callTool("GetTestList", arguments: arguments)
@@ -475,7 +475,7 @@ public actor XcodeProxy {
     /// - Parameter sourceFilePath: The path to the file within the Xcode project organization (e.g., 'ProjectName/Sources/MyFile.swift')
     /// - Parameter tabIdentifier: The workspace tab identifier
     /// - Parameter timeout: The time in seconds to wait for the rendering of the preview to complete. Defaults to 120 seconds.
-    public func RenderPreview(previewDefinitionIndexInFile: Double? = nil, sourceFilePath: String, tabIdentifier: String, timeout: Double? = nil) async throws -> RenderPreviewResponse {
+    public func renderPreview(previewDefinitionIndexInFile: Double? = nil, sourceFilePath: String, tabIdentifier: String, timeout: Double? = nil) async throws -> RenderPreviewResponse {
         var arguments: JSONDictionary = [:]
         if let previewDefinitionIndexInFile { arguments["previewDefinitionIndexInFile"] = try MCPClientArgumentEncoder.encode(previewDefinitionIndexInFile) }
         arguments["sourceFilePath"] = try MCPClientArgumentEncoder.encode(sourceFilePath)
@@ -487,7 +487,7 @@ public actor XcodeProxy {
 
     /// Runs all tests from the active scheme's active test plan
     /// - Parameter tabIdentifier: The workspace tab identifier
-    public func RunAllTests(tabIdentifier: String) async throws -> RunAllTestsResponse {
+    public func runAllTests(tabIdentifier: String) async throws -> RunAllTestsResponse {
         var arguments: JSONDictionary = [:]
         arguments["tabIdentifier"] = try MCPClientArgumentEncoder.encode(tabIdentifier)
         let text = try await proxy.callTool("RunAllTests", arguments: arguments)
@@ -497,7 +497,7 @@ public actor XcodeProxy {
     /// Runs specific tests using the active scheme's active test plan
     /// - Parameter tabIdentifier: The workspace tab identifier
     /// - Parameter tests: Array of test specifiers to run. Each specifier contains 'targetName' and 'testIdentifier' fields. Use GetTestList action to discover available tests and their identifiers, then extract the 'targetName' and 'identifier' fields from the TestActionInfo results to construct TestActionSpecifier objects.
-    public func RunSomeTests(tabIdentifier: String, tests: [JSONDictionary]) async throws -> RunSomeTestsResponse {
+    public func runSomeTests(tabIdentifier: String, tests: [JSONDictionary]) async throws -> RunSomeTestsResponse {
         var arguments: JSONDictionary = [:]
         arguments["tabIdentifier"] = try MCPClientArgumentEncoder.encode(tabIdentifier)
         arguments["tests"] = try MCPClientArgumentEncoder.encode(tests)
@@ -509,7 +509,7 @@ public actor XcodeProxy {
     /// - Parameter path: Which project directory to search in (optional, defaults to root)
     /// - Parameter pattern: File matching pattern using wildcards (* ** ? [abc] {swift,m}). Examples: '*.swift', '**/*.json', 'src/**/*.{swift,m}'. Defaults to '**/*' if not provided.
     /// - Parameter tabIdentifier: The workspace tab identifier
-    public func XcodeGlob(path: String? = nil, pattern: String? = nil, tabIdentifier: String) async throws -> XcodeGlobResponse {
+    public func xcodeGlob(path: String? = nil, pattern: String? = nil, tabIdentifier: String) async throws -> XcodeGlobResponse {
         var arguments: JSONDictionary = [:]
         if let path { arguments["path"] = try MCPClientArgumentEncoder.encode(path) }
         if let pattern { arguments["pattern"] = try MCPClientArgumentEncoder.encode(pattern) }
@@ -532,7 +532,7 @@ public actor XcodeProxy {
     /// - Parameter showLineNumbers: Show line numbers with results (content mode only)
     /// - Parameter tabIdentifier: The workspace tab identifier
     /// - Parameter type: Shortcut for common file types (swift, js, py, etc.)
-    public func XcodeGrep(glob: String? = nil, headLimit: Double? = nil, ignoreCase: Bool? = nil, linesAfter: Double? = nil, linesBefore: Double? = nil, linesContext: Double? = nil, multiline: Bool? = nil, outputMode: String? = nil, path: String? = nil, pattern: String, showLineNumbers: Bool? = nil, tabIdentifier: String, type: String? = nil) async throws -> XcodeGrepResponse {
+    public func xcodeGrep(glob: String? = nil, headLimit: Double? = nil, ignoreCase: Bool? = nil, linesAfter: Double? = nil, linesBefore: Double? = nil, linesContext: Double? = nil, multiline: Bool? = nil, outputMode: String? = nil, path: String? = nil, pattern: String, showLineNumbers: Bool? = nil, tabIdentifier: String, type: String? = nil) async throws -> XcodeGrepResponse {
         var arguments: JSONDictionary = [:]
         if let glob { arguments["glob"] = try MCPClientArgumentEncoder.encode(glob) }
         if let headLimit { arguments["headLimit"] = try MCPClientArgumentEncoder.encode(headLimit) }
@@ -556,7 +556,7 @@ public actor XcodeProxy {
     /// - Parameter pattern: Regex to filter the returned issues. Will match against the 'message' field.
     /// - Parameter severity: Limit the returned issues to those that have the specified severity or higher. Valid values in order of decreasing severity are 'error', 'warning', 'remark'. Defaults to 'error'.
     /// - Parameter tabIdentifier: The workspace tab identifier
-    public func XcodeListNavigatorIssues(glob: String? = nil, pattern: String? = nil, severity: String? = nil, tabIdentifier: String) async throws -> XcodeListNavigatorIssuesResponse {
+    public func xcodeListNavigatorIssues(glob: String? = nil, pattern: String? = nil, severity: String? = nil, tabIdentifier: String) async throws -> XcodeListNavigatorIssuesResponse {
         var arguments: JSONDictionary = [:]
         if let glob { arguments["glob"] = try MCPClientArgumentEncoder.encode(glob) }
         if let pattern { arguments["pattern"] = try MCPClientArgumentEncoder.encode(pattern) }
@@ -567,7 +567,7 @@ public actor XcodeProxy {
     }
 
     /// Lists the current Xcode windows and their workspace information
-    public func XcodeListWindows() async throws -> XcodeListWindowsResponse {
+    public func xcodeListWindows() async throws -> XcodeListWindowsResponse {
         let text = try await proxy.callTool("XcodeListWindows")
         return try MCPClientResultDecoder.decode(XcodeListWindowsResponse.self, from: text)
     }
@@ -577,7 +577,7 @@ public actor XcodeProxy {
     /// - Parameter path: The project path to browse (e.g., 'ProjectName/Sources/')
     /// - Parameter recursive: Recursively list all files (truncated to 100 lines). Default: true
     /// - Parameter tabIdentifier: The workspace tab identifier
-    public func XcodeLS(ignore: [String]? = nil, path: String, recursive: Bool? = nil, tabIdentifier: String) async throws -> XcodeLSResponse {
+    public func xcodeLs(ignore: [String]? = nil, path: String, recursive: Bool? = nil, tabIdentifier: String) async throws -> XcodeLSResponse {
         var arguments: JSONDictionary = [:]
         if let ignore { arguments["ignore"] = try MCPClientArgumentEncoder.encode(ignore) }
         arguments["path"] = try MCPClientArgumentEncoder.encode(path)
@@ -590,7 +590,7 @@ public actor XcodeProxy {
     /// Creates directories and groups in the Xcode project structure.
     /// - Parameter directoryPath: Project navigator relative path for the directory to create
     /// - Parameter tabIdentifier: The workspace tab identifier
-    public func XcodeMakeDir(directoryPath: String, tabIdentifier: String) async throws -> XcodeMakeDirResponse {
+    public func xcodeMakeDir(directoryPath: String, tabIdentifier: String) async throws -> XcodeMakeDirResponse {
         var arguments: JSONDictionary = [:]
         arguments["directoryPath"] = try MCPClientArgumentEncoder.encode(directoryPath)
         arguments["tabIdentifier"] = try MCPClientArgumentEncoder.encode(tabIdentifier)
@@ -604,7 +604,7 @@ public actor XcodeProxy {
     /// - Parameter overwriteExisting: Whether to overwrite existing files at the destination
     /// - Parameter sourcePath: Project navigator relative path of the source item to move/rename
     /// - Parameter tabIdentifier: The workspace tab identifier
-    public func XcodeMV(destinationPath: String, operation: String? = nil, overwriteExisting: Bool? = nil, sourcePath: String, tabIdentifier: String) async throws -> XcodeMVResponse {
+    public func xcodeMv(destinationPath: String, operation: String? = nil, overwriteExisting: Bool? = nil, sourcePath: String, tabIdentifier: String) async throws -> XcodeMVResponse {
         var arguments: JSONDictionary = [:]
         arguments["destinationPath"] = try MCPClientArgumentEncoder.encode(destinationPath)
         if let operation { arguments["operation"] = try MCPClientArgumentEncoder.encode(operation) }
@@ -620,7 +620,7 @@ public actor XcodeProxy {
     /// - Parameter limit: The number of lines to read (only provide if the file is too large to read at once)
     /// - Parameter offset: The line number to start reading from (only provide if the file is too large to read at once)
     /// - Parameter tabIdentifier: The workspace tab identifier
-    public func XcodeRead(filePath: String, limit: Double? = nil, offset: Double? = nil, tabIdentifier: String) async throws -> XcodeReadResponse {
+    public func xcodeRead(filePath: String, limit: Double? = nil, offset: Double? = nil, tabIdentifier: String) async throws -> XcodeReadResponse {
         var arguments: JSONDictionary = [:]
         arguments["filePath"] = try MCPClientArgumentEncoder.encode(filePath)
         if let limit { arguments["limit"] = try MCPClientArgumentEncoder.encode(limit) }
@@ -633,7 +633,7 @@ public actor XcodeProxy {
     /// Retrieves current compiler diagnostics (errors, warnings, notes) for a file in the Xcode project. Returns formatted diagnostic information including severity levels and messages.
     /// - Parameter filePath: The path to the file within the Xcode project organization (e.g., 'ProjectName/Sources/MyFile.swift')
     /// - Parameter tabIdentifier: The workspace tab identifier
-    public func XcodeRefreshCodeIssuesInFile(filePath: String, tabIdentifier: String) async throws -> XcodeRefreshCodeIssuesInFileResponse {
+    public func xcodeRefreshCodeIssuesInFile(filePath: String, tabIdentifier: String) async throws -> XcodeRefreshCodeIssuesInFileResponse {
         var arguments: JSONDictionary = [:]
         arguments["filePath"] = try MCPClientArgumentEncoder.encode(filePath)
         arguments["tabIdentifier"] = try MCPClientArgumentEncoder.encode(tabIdentifier)
@@ -646,7 +646,7 @@ public actor XcodeProxy {
     /// - Parameter path: The project path to remove (e.g., 'ProjectName/Sources/MyFile.swift')
     /// - Parameter recursive: Remove directories and their contents recursively
     /// - Parameter tabIdentifier: The workspace tab identifier
-    public func XcodeRM(deleteFiles: Bool? = nil, path: String, recursive: Bool? = nil, tabIdentifier: String) async throws -> XcodeRMResponse {
+    public func xcodeRm(deleteFiles: Bool? = nil, path: String, recursive: Bool? = nil, tabIdentifier: String) async throws -> XcodeRMResponse {
         var arguments: JSONDictionary = [:]
         if let deleteFiles { arguments["deleteFiles"] = try MCPClientArgumentEncoder.encode(deleteFiles) }
         arguments["path"] = try MCPClientArgumentEncoder.encode(path)
@@ -662,7 +662,7 @@ public actor XcodeProxy {
     /// - Parameter oldString: REQUIRED: The text to replace
     /// - Parameter replaceAll: Replace all occurrences of oldString (default false)
     /// - Parameter tabIdentifier: The workspace tab identifier
-    public func XcodeUpdate(filePath: String, newString: String, oldString: String, replaceAll: Bool? = nil, tabIdentifier: String) async throws -> XcodeUpdateResponse {
+    public func xcodeUpdate(filePath: String, newString: String, oldString: String, replaceAll: Bool? = nil, tabIdentifier: String) async throws -> XcodeUpdateResponse {
         var arguments: JSONDictionary = [:]
         arguments["filePath"] = try MCPClientArgumentEncoder.encode(filePath)
         arguments["newString"] = try MCPClientArgumentEncoder.encode(newString)
@@ -677,7 +677,7 @@ public actor XcodeProxy {
     /// - Parameter content: REQUIRED: The content to write to the file
     /// - Parameter filePath: REQUIRED: The path to the file within the Xcode project organization (e.g., 'ProjectName/Sources/MyFile.swift')
     /// - Parameter tabIdentifier: The workspace tab identifier (required)
-    public func XcodeWrite(content: String, filePath: String, tabIdentifier: String) async throws -> XcodeWriteResponse {
+    public func xcodeWrite(content: String, filePath: String, tabIdentifier: String) async throws -> XcodeWriteResponse {
         var arguments: JSONDictionary = [:]
         arguments["content"] = try MCPClientArgumentEncoder.encode(content)
         arguments["filePath"] = try MCPClientArgumentEncoder.encode(filePath)

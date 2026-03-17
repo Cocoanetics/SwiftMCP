@@ -32,6 +32,16 @@ public enum ProxyGenerator {
         }
     }
 
+    /// Naming convention for generated Swift function names.
+    public enum FunctionNaming {
+        /// Use the tool name as-is (no conversion).
+        case verbatim
+        /// Convert to lowerCamelCase (default — idiomatic Swift).
+        case lowerCamelCase
+        /// Convert to snake_case.
+        case snakeCase
+    }
+
     public static func generate(
         typeName: String,
         tools: [MCPTool],
@@ -41,6 +51,7 @@ public enum ProxyGenerator {
         supportsResources: Bool = false,
         supportsPrompts: Bool = false,
         openapiReturnSchemas: [String: OpenAPIReturnInfo] = [:],
+        functionNaming: FunctionNaming = .lowerCamelCase,
         fileName: String? = nil,
         headerMetadata: HeaderMetadata? = nil
     ) -> SourceFileSyntax {
@@ -73,7 +84,8 @@ public enum ProxyGenerator {
             returnTypes: returnTypes,
             typeDefinitions: typeDefinitions,
             typeDocComment: typeDocComment,
-            metadata: metadata
+            metadata: metadata,
+            functionNaming: functionNaming
         )
 
         let headerAndImports = "\(headerComment)\n\nimport Foundation\nimport SwiftMCP\n"
@@ -100,7 +112,8 @@ public enum ProxyGenerator {
         returnTypes: [String: OpenAPIReturnInfo],
         typeDefinitions: [String],
         typeDocComment: [String],
-        metadata: HeaderMetadata
+        metadata: HeaderMetadata,
+        functionNaming: FunctionNaming = .lowerCamelCase
     ) -> String {
         var lines: [String] = []
         if !typeDocComment.isEmpty {
@@ -141,7 +154,7 @@ public enum ProxyGenerator {
         for tool in sortedTools {
             lines.append("")
             let returnInfo = returnTypes[tool.name]
-            lines.append(contentsOf: makeMethodLines(tool: tool, returnInfo: returnInfo))
+            lines.append(contentsOf: makeMethodLines(tool: tool, returnInfo: returnInfo, functionNaming: functionNaming))
         }
 
         if includesResources {
@@ -257,9 +270,18 @@ public enum ProxyGenerator {
         return lines
     }
 
-    private static func makeMethodLines(tool: MCPTool, returnInfo: OpenAPIReturnInfo?) -> [String] {
+    private static func makeMethodLines(tool: MCPTool, returnInfo: OpenAPIReturnInfo?, functionNaming: FunctionNaming = .lowerCamelCase) -> [String] {
         var lines: [String] = []
-        let methodName = swiftIdentifier(from: tool.name, lowerCamel: true)
+        let rawName = swiftIdentifier(from: tool.name, lowerCamel: true)
+        let methodName: String
+        switch functionNaming {
+        case .verbatim:
+            methodName = rawName
+        case .lowerCamelCase:
+            methodName = NamingConverter.toLowerCamelCase(rawName)
+        case .snakeCase:
+            methodName = NamingConverter.toSnakeCase(rawName)
+        }
 
         let parameters = methodParameters(for: tool)
         lines.append(contentsOf: docCommentLines(tool: tool, parameters: parameters, returnInfo: returnInfo))

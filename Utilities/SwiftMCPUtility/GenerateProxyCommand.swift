@@ -31,6 +31,9 @@ struct GenerateProxyCommand: AsyncParsableCommand {
     @Option(name: .long, help: "OpenAPI JSON URL or file path to infer return types")
     var openapi: String?
 
+    @Option(name: .long, help: "Naming style for generated Swift functions: verbatim, lowerCamelCase (default), snakeCase")
+    var functionNaming: String?
+
     func run() async throws {
         let config = try UtilitySupport.makeConfig(from: connection)
         let proxy = MCPServerProxy(config: config)
@@ -63,6 +66,13 @@ struct GenerateProxyCommand: AsyncParsableCommand {
             source: sourceDescription,
             openAPI: openapi
         )
+        let naming: ProxyGenerator.FunctionNaming
+        switch functionNaming?.lowercased() {
+        case "verbatim": naming = .verbatim
+        case "snakecase", "snake_case": naming = .snakeCase
+        default: naming = .lowerCamelCase
+        }
+
         let source = ProxyGenerator.generate(
             typeName: typeName,
             tools: tools,
@@ -72,6 +82,7 @@ struct GenerateProxyCommand: AsyncParsableCommand {
             supportsResources: supportsResources,
             supportsPrompts: supportsPrompts,
             openapiReturnSchemas: openAPIReturnInfo,
+            functionNaming: naming,
             fileName: fileName,
             headerMetadata: headerMetadata
         )
