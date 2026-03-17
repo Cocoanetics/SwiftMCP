@@ -97,8 +97,7 @@ public enum ProxyGenerator {
     }
 
     public static func defaultTypeName(serverName: String?) -> String {
-        let base = serverName.flatMap { pascalCase($0) } ?? "MCPServer"
-        return "\(base)Proxy"
+        serverName.flatMap { pascalCase($0) } ?? "MCPServer"
     }
 
     private static func makeActorSource(
@@ -119,7 +118,7 @@ public enum ProxyGenerator {
         if !typeDocComment.isEmpty {
             lines.append(contentsOf: typeDocComment)
         }
-        lines.append("public actor \(typeName) {")
+        lines.append("public enum \(typeName) {")
         if !typeDefinitions.isEmpty {
             lines.append("    // MARK: - Declarations")
             lines.append(contentsOf: indentDefinitions(typeDefinitions, indent: "    "))
@@ -128,13 +127,16 @@ public enum ProxyGenerator {
         lines.append("    // MARK: - Metadata")
         lines.append("    public static let serverName: String? = \(swiftOptionalStringLiteral(metadata.serverName))")
         lines.append("")
-        lines.append("    // MARK: - Public Properties")
-        lines.append("    public let proxy: MCPServerProxy")
+        lines.append("    // MARK: - Client")
+        lines.append("    public actor Client {")
+        lines.append("        public let proxy: MCPServerProxy")
         lines.append("")
-        lines.append("    // MARK: - Initialization")
-        lines.append("    public init(proxy: MCPServerProxy) {")
-        lines.append("        self.proxy = proxy")
-        lines.append("    }")
+        lines.append("        public init(proxy: MCPServerProxy) {")
+        lines.append("            self.proxy = proxy")
+        lines.append("        }")
+
+        // Build client body at base indent, then shift into the enum
+        var clientBody: [String] = []
 
         let sortedTools = tools.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         let includesResources = supportsResources || !resources.isEmpty || !resourceTemplates.isEmpty
@@ -148,20 +150,20 @@ public enum ProxyGenerator {
         }
 
         if !sortedTools.isEmpty {
-            lines.append("")
-            lines.append("    // MARK: - Functions")
+            clientBody.append("")
+            clientBody.append("    // MARK: - Functions")
         }
         for tool in sortedTools {
-            lines.append("")
+            clientBody.append("")
             let returnInfo = returnTypes[tool.name]
-            lines.append(contentsOf: makeMethodLines(tool: tool, returnInfo: returnInfo, functionNaming: functionNaming))
+            clientBody.append(contentsOf: makeMethodLines(tool: tool, returnInfo: returnInfo, functionNaming: functionNaming))
         }
 
         if includesResources {
-            lines.append("")
-            lines.append("    // MARK: - Resources")
-            lines.append("")
-            lines.append(contentsOf: makeResourceMethodLines(
+            clientBody.append("")
+            clientBody.append("    // MARK: - Resources")
+            clientBody.append("")
+            clientBody.append(contentsOf: makeResourceMethodLines(
                 resources: resources,
                 resourceTemplates: resourceTemplates,
                 usedMethodNames: &usedMethodNames
@@ -169,16 +171,22 @@ public enum ProxyGenerator {
         }
 
         if includesPrompts {
-            lines.append("")
-            lines.append("    // MARK: - Prompts")
-            lines.append("")
-            lines.append(contentsOf: makePromptMethodLines(
+            clientBody.append("")
+            clientBody.append("    // MARK: - Prompts")
+            clientBody.append("")
+            clientBody.append(contentsOf: makePromptMethodLines(
                 prompts: prompts,
                 usedMethodNames: &usedMethodNames
             ))
         }
 
-        lines.append("}")
+        // Indent client body one extra level into the enum namespace
+        for line in clientBody {
+            lines.append(line.isEmpty ? "" : "    \(line)")
+        }
+
+        lines.append("    }")  // close Client actor
+        lines.append("}")  // close namespace enum
         return lines.joined(separator: "\n")
     }
 
