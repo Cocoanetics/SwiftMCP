@@ -32,7 +32,7 @@ struct CapabilitiesCommand: AsyncParsableCommand {
             }
         }
 
-        try await proxy.connect()
+        try await proxy.connect(clientName: "SwiftMCP Utility")
         let description = formatCapabilities(
             name: await proxy.serverName,
             version: await proxy.serverVersion,

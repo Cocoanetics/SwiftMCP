@@ -94,9 +94,13 @@ public struct MCPToolMacro: PeerMacro {
         var idempotentHintArg: String? = nil
         var openWorldHintArg: String? = nil
 
+        var customName: String? = nil
+
         if let arguments = node.arguments?.as(LabeledExprListSyntax.self) {
             for argument in arguments {
-                if argument.label?.text == "description", let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
+                if argument.label?.text == "name", let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
+                    customName = stringLiteral.segments.description
+                } else if argument.label?.text == "description", let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
                     let stringValue = stringLiteral.segments.description
                     descriptionArg = "\"\(stringValue.escapedForSwiftString)\"" // Ensure proper escaping
                 } else if argument.label?.text == "hints", let arrayExpr = argument.expression.as(ArrayExprSyntax.self) {
@@ -156,11 +160,14 @@ public struct MCPToolMacro: PeerMacro {
             openWorldHint: openWorldHintArg
         )
 
+        // Apply custom name override if provided
+        let toolName = customName ?? functionName
+
         // Generate the metadata variable
         let metadataDeclaration = """
-/// Metadata for the \(functionName) tool
+/// Metadata for the \(toolName) tool
 nonisolated private let __mcpMetadata_\(functionName) = MCPToolMetadata(
-   name: "\(functionName)",
+   name: "\(toolName)",
    description: \(descriptionArg),
    parameters: [\(parameterInfoStrings.joined(separator: ", "))],
    returnType: \(returnTypeString).self,

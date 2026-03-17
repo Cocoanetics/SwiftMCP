@@ -174,17 +174,28 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro, MemberAttributeMacro 
         let descriptionProperty = "private let __mcpServerDescription: String? = \(serverDescription)"
 
         // Find all functions with the MCPTool macro
-        var mcpTools: [String] = []
+        var mcpTools: [(functionName: String, toolName: String)] = []
         var toolFunctions: [FunctionDeclSyntax] = []
 
         for member in declaration.memberBlock.members {
             if let funcDecl = member.decl.as(FunctionDeclSyntax.self) {
-                // Check if the function has the MCPTool macro
                 for attribute in funcDecl.attributes {
                     if let identifierAttr = attribute.as(AttributeSyntax.self),
 					   let identifier = identifierAttr.attributeName.as(IdentifierTypeSyntax.self),
 					   identifier.name.text == "MCPTool" {
-                        mcpTools.append(funcDecl.name.text)
+                        let functionName = funcDecl.name.text
+                        // Check for name: override in @MCPTool arguments
+                        var toolName = functionName
+                        if let arguments = identifierAttr.arguments?.as(LabeledExprListSyntax.self) {
+                            for argument in arguments {
+                                if argument.label?.text == "name",
+                                   let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
+                                    toolName = stringLiteral.segments.description
+                                    break
+                                }
+                            }
+                        }
+                        mcpTools.append((functionName: functionName, toolName: toolName))
                         toolFunctions.append(funcDecl)
                         break
                     }
@@ -239,9 +250,9 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro, MemberAttributeMacro 
         if !mcpTools.isEmpty || hasAppShortcutsProvider {
             // Create a callTool method that uses a switch statement to call the appropriate wrapper function
             var switchCases = ""
-            for (index, funcName) in mcpTools.enumerated() {
-                switchCases += "      case \"\(funcName)\":\n"
-                switchCases += "         return try await __mcpCall_\(funcName)(enrichedArguments)"
+            for (index, tool) in mcpTools.enumerated() {
+                switchCases += "      case \"\(tool.toolName)\":\n"
+                switchCases += "         return try await __mcpCall_\(tool.functionName)(enrichedArguments)"
                 if index < mcpTools.count - 1 {
                     switchCases += "\n"
                 }
@@ -294,7 +305,7 @@ public func callTool(_ name: String, arguments: JSONDictionary) async throws -> 
 
         // Add static mcpToolMetadata property
         if !mcpTools.isEmpty || hasAppShortcutsProvider {
-            let metadataArray = mcpTools.map { "__mcpMetadata_\($0)" }.joined(separator: ", ")
+            let metadataArray = mcpTools.map { "__mcpMetadata_\($0.functionName)" }.joined(separator: ", ")
             let metadataSeed = mcpTools.isEmpty ? "[]" : "[\(metadataArray)]"
             let metadataDeclaration = hasAppShortcutsProvider ? "var" : "let"
             let appShortcutsBlock: String

@@ -33,7 +33,7 @@ struct ToolsCommand: AsyncParsableCommand {
             }
         }
 
-        try await proxy.connect()
+        try await proxy.connect(clientName: "SwiftMCP Utility")
         let tools = try await proxy.listTools()
 
         if let output {

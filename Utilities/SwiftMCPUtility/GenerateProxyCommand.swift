@@ -44,7 +44,7 @@ struct GenerateProxyCommand: AsyncParsableCommand {
             }
         }
 
-        try await proxy.connect()
+        try await proxy.connect(clientName: "SwiftMCP Utility")
         let tools = try await proxy.listTools()
         let supportsResources = await proxy.serverCapabilities?.resources != nil
         let supportsPrompts = await proxy.serverCapabilities?.prompts != nil

@@ -50,6 +50,8 @@ public final actor MCPServerProxy: Sendable {
 
     /// Specifies whether the list of tools from the server should be cached.
     public let cacheToolsList: Bool
+
+
     
     /// Base metadata included in _meta for ALL requests (e.g., accessToken).
     public var meta: JSONDictionary = [:]
@@ -65,6 +67,8 @@ public final actor MCPServerProxy: Sendable {
     private var responseTasks: [JSONRPCID: CheckedContinuation<JSONRPCMessage, Error>] = [:]
     private var streamFailure: Error?
     private var isDisconnecting = false
+
+
 
     public private(set) var endpointURL: URL?
     public private(set) var sessionID: String?
@@ -188,7 +192,10 @@ public final actor MCPServerProxy: Sendable {
     }
 
     /// Connects to the MCP server and establishes an SSE, TCP, or stdio connection.
-    public func connect() async throws {
+    /// - Parameters:
+    ///   - clientName: The client name sent during the MCP handshake.
+    ///   - clientVersion: The client version sent during the MCP handshake.
+    public func connect(clientName: String = "swiftmcp-client", clientVersion: String = "1.0.0") async throws {
         isDisconnecting = false
         streamFailure = nil
         endpointURL = nil
@@ -198,29 +205,29 @@ public final actor MCPServerProxy: Sendable {
             case .stdio(let stdioConfig):
                 lineConnection = MCPServerProcess(config: stdioConfig)
                 try await startLineConnection()
-                try await initialize()
+                try await initialize(clientName: clientName, clientVersion: clientVersion)
 
             case .stdioHandles(let server):
                 lineConnection = InProcessStdioBridge(server: server)
                 try await startLineConnection()
-                try await initialize()
+                try await initialize(clientName: clientName, clientVersion: clientVersion)
 
             case .tcp(let tcpConfig):
 #if canImport(Network)
                 let resolvedConfig = resolveTcpConfig(tcpConfig)
                 lineConnection = TCPConnection(config: resolvedConfig)
                 try await startLineConnection()
-                try await initialize()
+                try await initialize(clientName: clientName, clientVersion: clientVersion)
 #else
                 throw MCPServerProxyError.unsupportedPlatform("TCP connections require the Network framework.")
 #endif
 
             case .sse(let sseConfig):
 #if os(Linux)
-                try await connectSSELinux(sseConfig: sseConfig)
+                try await connectSSELinux(sseConfig: sseConfig, clientName: clientName, clientVersion: clientVersion)
 #else
                 if #available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, macCatalyst 15.0, *) {
-                    try await connectSSEApple(sseConfig: sseConfig)
+                    try await connectSSEApple(sseConfig: sseConfig, clientName: clientName, clientVersion: clientVersion)
                 } else {
                     throw MCPServerProxyError.unsupportedPlatform("SSE client connections require macOS 12.0 or newer.")
                 }
@@ -689,13 +696,13 @@ public final actor MCPServerProxy: Sendable {
         }
     }
 
-    private func initialize() async throws {
+    private func initialize(clientName: String, clientVersion: String) async throws {
         let requestId = nextRequestID()
         var params: JSONDictionary = [
             "protocolVersion": .string("2025-06-18"),
             "clientInfo": .object([
-                "name": .string("swiftmcp-client"),
-                "version": .string("1.0.0")
+                "name": .string(clientName),
+                "version": .string(clientVersion)
             ]),
             "capabilities": .object(buildClientCapabilities())
         ]
@@ -1266,7 +1273,7 @@ public final actor MCPServerProxy: Sendable {
 
     #if !os(Linux)
     @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, macCatalyst 15.0, *)
-    private func connectSSEApple(sseConfig: MCPServerSseConfig) async throws {
+    private func connectSSEApple(sseConfig: MCPServerSseConfig, clientName: String, clientVersion: String) async throws {
         let isStreamableMCP = isStreamableMCPURL(sseConfig.url)
         if isStreamableMCP {
             endpointURL = sseConfig.url
@@ -1304,14 +1311,14 @@ public final actor MCPServerProxy: Sendable {
         }
 
         try await waitForEndpointIfNeeded(isStreamableMCP: isStreamableMCP)
-        try await initialize()
+        try await initialize(clientName: clientName, clientVersion: clientVersion)
     }
     #endif
 
     // MARK: - SSE Connection (Linux)
 
     #if os(Linux)
-    private func connectSSELinux(sseConfig: MCPServerSseConfig) async throws {
+    private func connectSSELinux(sseConfig: MCPServerSseConfig, clientName: String, clientVersion: String) async throws {
         let isStreamableMCP = isStreamableMCPURL(sseConfig.url)
         if isStreamableMCP {
             endpointURL = sseConfig.url
@@ -1355,7 +1362,7 @@ public final actor MCPServerProxy: Sendable {
         }
 
         try await waitForEndpointIfNeeded(isStreamableMCP: isStreamableMCP)
-        try await initialize()
+        try await initialize(clientName: clientName, clientVersion: clientVersion)
     }
     #endif
 

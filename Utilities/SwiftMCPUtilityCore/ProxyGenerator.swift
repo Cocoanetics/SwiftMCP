@@ -127,12 +127,25 @@ public enum ProxyGenerator {
         lines.append("    // MARK: - Metadata")
         lines.append("    public static let serverName: String? = \(swiftOptionalStringLiteral(metadata.serverName))")
         lines.append("")
+        // Derive client name from server name (PascalCased)
+        // e.g., server "xcode-tools" → "XcodeTools Client"
+        let clientBaseName = metadata.serverName.map { pascalCase($0) } ?? typeName
+        let defaultClientName = "\(clientBaseName) Client"
         lines.append("    // MARK: - Client")
         lines.append("    public actor Client {")
         lines.append("        public let proxy: MCPServerProxy")
+        lines.append("        public let clientName: String")
+        lines.append("        public let clientVersion: String")
         lines.append("")
-        lines.append("        public init(proxy: MCPServerProxy) {")
+        lines.append("        public init(proxy: MCPServerProxy, clientName: String = \"\(defaultClientName)\", clientVersion: String = \"1.0.0\") {")
         lines.append("            self.proxy = proxy")
+        lines.append("            self.clientName = clientName")
+        lines.append("            self.clientVersion = clientVersion")
+        lines.append("        }")
+        lines.append("")
+        lines.append("        /// Connects to the MCP server, identifying as this client.")
+        lines.append("        public func connect() async throws {")
+        lines.append("            try await proxy.connect(clientName: clientName, clientVersion: clientVersion)")
         lines.append("        }")
 
         // Build client body at base indent, then shift into the enum
