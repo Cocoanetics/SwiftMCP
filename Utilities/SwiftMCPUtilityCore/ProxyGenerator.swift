@@ -281,15 +281,17 @@ public enum ProxyGenerator {
     private static func makeMethodLines(tool: MCPTool, returnInfo: OpenAPIReturnInfo?, functionNaming: FunctionNaming = .lowerCamelCase) -> [String] {
         var lines: [String] = []
         let rawName = swiftIdentifier(from: tool.name, lowerCamel: true)
-        let methodName: String
+        let converted: String
         switch functionNaming {
         case .verbatim:
-            methodName = rawName
+            converted = rawName
         case .lowerCamelCase:
-            methodName = NamingConverter.toLowerCamelCase(rawName)
+            converted = NamingConverter.toLowerCamelCase(rawName)
         case .snakeCase:
-            methodName = NamingConverter.toSnakeCase(rawName)
+            converted = NamingConverter.toSnakeCase(rawName)
         }
+        // Re-sanitize after conversion (e.g., tool "class" → "class_" → "class" needs escaping again)
+        let methodName = reservedKeywords.contains(converted) ? "`\(converted)`" : converted
 
         let parameters = methodParameters(for: tool)
         lines.append(contentsOf: docCommentLines(tool: tool, parameters: parameters, returnInfo: returnInfo))
