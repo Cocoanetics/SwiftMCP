@@ -1,6 +1,6 @@
 //
 //  XcodeProxy.swift
-//  Generated: 2026-03-17T10:48:41+01:00
+//  Generated: 2026-03-17T11:10:15+01:00
 //  Server: xcode-tools (24886.5)
 //  Source: command python3 /tmp/xcode-mcp-replay.py
 //
@@ -413,13 +413,18 @@ public enum XcodeProxy {
     // MARK: - Client
     public actor Client {
         public let proxy: MCPServerProxy
+        public let clientName: String
+        public let clientVersion: String
 
-        public init(proxy: MCPServerProxy) {
+        public init(proxy: MCPServerProxy, clientName: String = "XcodeTools Client", clientVersion: String = "1.0.0") {
             self.proxy = proxy
+            self.clientName = clientName
+            self.clientVersion = clientVersion
         }
 
-        public init(config: MCPServerConfig, clientName: String = "XcodeTools Client", clientVersion: String = "1.0.0") {
-            self.proxy = MCPServerProxy(config: config, clientName: clientName, clientVersion: clientVersion)
+        /// Connects to the MCP server, identifying as this client.
+        public func connect() async throws {
+            try await proxy.connect(clientName: clientName, clientVersion: clientVersion)
         }
 
         // MARK: - Functions

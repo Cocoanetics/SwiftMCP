@@ -1,8 +1,8 @@
 //
 //  XcodeTools.swift
-//  Generated: 2026-03-17T10:48:05+01:00
+//  Generated: 2026-03-17T10:50:00+01:00
 //  Server: xcode-tools (24886.5)
-//  Source: command python3 /tmp/xcode-mcp-replay.py
+//  Source: command /Applications/Xcode-beta.app/Contents/Developer/usr/bin/mcpbridge
 //
 
 import Foundation

@@ -51,11 +51,7 @@ public final actor MCPServerProxy: Sendable {
     /// Specifies whether the list of tools from the server should be cached.
     public let cacheToolsList: Bool
 
-    /// The client name sent in `initialize`.
-    public let clientName: String
 
-    /// The client version sent in `initialize`.
-    public let clientVersion: String
     
     /// Base metadata included in _meta for ALL requests (e.g., accessToken).
     public var meta: JSONDictionary = [:]
@@ -71,6 +67,10 @@ public final actor MCPServerProxy: Sendable {
     private var responseTasks: [JSONRPCID: CheckedContinuation<JSONRPCMessage, Error>] = [:]
     private var streamFailure: Error?
     private var isDisconnecting = false
+
+    // Set by connect(), used by initialize()
+    private var _clientName: String = "swiftmcp-client"
+    private var _clientVersion: String = "1.0.0"
 
     public private(set) var endpointURL: URL?
     public private(set) var sessionID: String?
@@ -187,21 +187,19 @@ public final actor MCPServerProxy: Sendable {
     /// Pending CID uploads queued during argument encoding, to be uploaded after the tool call is sent.
     private var pendingUploads: [(cid: String, data: Data)] = []
 
-    public init(
-        config: MCPServerConfig,
-        cacheToolsList: Bool = false,
-        clientName: String = "swiftmcp-client",
-        clientVersion: String = "1.0.0"
-    ) {
+    public init(config: MCPServerConfig, cacheToolsList: Bool = false) {
         self.config = config
         self.service = nil
         self.cacheToolsList = cacheToolsList
-        self.clientName = clientName
-        self.clientVersion = clientVersion
     }
 
     /// Connects to the MCP server and establishes an SSE, TCP, or stdio connection.
-    public func connect() async throws {
+    /// - Parameters:
+    ///   - clientName: The client name sent during the MCP handshake.
+    ///   - clientVersion: The client version sent during the MCP handshake.
+    public func connect(clientName: String = "swiftmcp-client", clientVersion: String = "1.0.0") async throws {
+        _clientName = clientName
+        _clientVersion = clientVersion
         isDisconnecting = false
         streamFailure = nil
         endpointURL = nil
@@ -707,8 +705,8 @@ public final actor MCPServerProxy: Sendable {
         var params: JSONDictionary = [
             "protocolVersion": .string("2025-06-18"),
             "clientInfo": .object([
-                "name": .string(clientName),
-                "version": .string(clientVersion)
+                "name": .string(_clientName),
+                "version": .string(_clientVersion)
             ]),
             "capabilities": .object(buildClientCapabilities())
         ]

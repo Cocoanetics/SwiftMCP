@@ -36,7 +36,7 @@ struct GenerateProxyCommand: AsyncParsableCommand {
 
     func run() async throws {
         let config = try UtilitySupport.makeConfig(from: connection)
-        let proxy = MCPServerProxy(config: config, clientName: "SwiftMCP Utility")
+        let proxy = MCPServerProxy(config: config)
 
         defer {
             Task {
@@ -44,7 +44,7 @@ struct GenerateProxyCommand: AsyncParsableCommand {
             }
         }
 
-        try await proxy.connect()
+        try await proxy.connect(clientName: "SwiftMCP Utility")
         let tools = try await proxy.listTools()
         let supportsResources = await proxy.serverCapabilities?.resources != nil
         let supportsPrompts = await proxy.serverCapabilities?.prompts != nil
