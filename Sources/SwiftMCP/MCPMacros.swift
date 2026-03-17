@@ -26,6 +26,10 @@ import Foundation
 ///     return a + b
 /// }
 ///
+/// // With a custom tool name
+/// @MCPTool(name: "list_all_windows")
+/// func listWindows() -> [Window]  // exposed as "list_all_windows"
+///
 /// // With hints using OptionSet API (preferred)
 /// @MCPTool(hints: [.readOnly])
 /// func search(query: String) -> [Result]
@@ -38,6 +42,7 @@ import Foundation
 /// ```
 ///
 /// - Parameters:
+///   - name: Optional custom tool name override. If nil, uses the Swift function name.
 ///   - description: Optional override for the function's documentation description
 ///   - hints: OptionSet of tool behavior hints (preferred API)
 ///   - isConsequential: Whether the function's actions are consequential (defaults to true, deprecated - use hints instead)
@@ -47,6 +52,7 @@ import Foundation
 ///   - openWorldHint: If true, tool may interact with external entities (deprecated - use hints: [.openWorld])
 @attached(peer, names: prefixed(__mcpMetadata_), prefixed(__mcpCall_))
 public macro MCPTool(
+    name: String? = nil,
     description: String? = nil,
     hints: MCPToolHints = [],
     isConsequential: Bool = true,

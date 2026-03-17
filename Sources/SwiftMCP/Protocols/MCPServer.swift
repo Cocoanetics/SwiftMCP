@@ -885,23 +885,33 @@ public extension MCPServer {
     func mcpToolMetadata(for toolName: String) -> MCPToolMetadata?
         {
         let metadataKey = "__mcpMetadata_\(toolName)"
-
-        // Find the metadata for the function using reflection
         let mirror = Mirror(reflecting: self)
-        guard let child = mirror.children.first(where: { $0.label == metadataKey }),
-			  let metadata = child.value as? MCPToolMetadata else {
-            #if canImport(AppIntents)
-            if #available(macOS 13.0, iOS 16.0, tvOS 16.0, watchOS 9.0, *) {
-                if let providerType = Self.self as? MCPAppShortcutsProvider.Type {
-                    let shortcutMetadata = MCPAppIntentTools.toolMetadata(for: providerType)
-                    return shortcutMetadata.first(where: { $0.name == toolName })
-                }
-            }
-            #endif
-            return nil
+
+        // Direct lookup (tool name == function name)
+        if let child = mirror.children.first(where: { $0.label == metadataKey }),
+           let metadata = child.value as? MCPToolMetadata {
+            return metadata
         }
 
-        return metadata
+        // Fallback: search all metadata by name property
+        // (handles custom name overrides where tool name ≠ function name)
+        for child in mirror.children {
+            guard let label = child.label, label.hasPrefix("__mcpMetadata_"),
+                  let metadata = child.value as? MCPToolMetadata,
+                  metadata.name == toolName else { continue }
+            return metadata
+        }
+
+        #if canImport(AppIntents)
+        if #available(macOS 13.0, iOS 16.0, tvOS 16.0, watchOS 9.0, *) {
+            if let providerType = Self.self as? MCPAppShortcutsProvider.Type {
+                let shortcutMetadata = MCPAppIntentTools.toolMetadata(for: providerType)
+                return shortcutMetadata.first(where: { $0.name == toolName })
+            }
+        }
+        #endif
+
+        return nil
     }
 
     /// Retrieves metadata for a prompt function by name
