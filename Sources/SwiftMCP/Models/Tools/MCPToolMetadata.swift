@@ -84,4 +84,22 @@ public struct MCPToolMetadata: Sendable {
     public func enrichArguments(_ arguments: JSONDictionary) throws -> JSONDictionary {
         return try functionMetadata.enrichArguments(arguments)
     }
+
+    /// Returns a copy of this metadata with a different tool name.
+    ///
+    /// Used by `@MCPServer(toolNaming:)` to apply a server-level naming
+    /// convention while preserving all other metadata.
+    public func renamed(_ newName: String) -> MCPToolMetadata {
+        MCPToolMetadata(
+            name: newName,
+            description: description,
+            parameters: parameters,
+            returnType: returnType,
+            returnTypeDescription: returnTypeDescription,
+            isAsync: isAsync,
+            isThrowing: isThrowing,
+            isConsequential: isConsequential,
+            annotations: annotations
+        )
+    }
 } 
