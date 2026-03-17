@@ -84,10 +84,11 @@ struct NamingConverterTests {
         #expect(NamingConverter.toUpperCamelCase("getBuildLog") == "GetBuildLog")
     }
 
-    @Test("lowerCamelCase to PascalCase — already PascalCase")
+    @Test("lowerCamelCase to PascalCase — already PascalCase preserved")
     func alreadyPascalCase() {
         #expect(NamingConverter.toUpperCamelCase("BuildProject") == "BuildProject")
-        #expect(NamingConverter.toUpperCamelCase("HTMLParser") == "HtmlParser")
+        #expect(NamingConverter.toUpperCamelCase("HTMLParser") == "HTMLParser")
+        #expect(NamingConverter.toUpperCamelCase("MCPServer") == "MCPServer")
     }
 
     // MARK: - snake_case → lowerCamelCase

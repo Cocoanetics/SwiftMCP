@@ -7,7 +7,7 @@ import Foundation
 public enum NamingConverter {
 
     /// The supported naming conventions.
-    public enum Convention {
+    public enum Convention: Equatable {
         /// lowerCamelCase (e.g., `buildProject`, `htmlParser`)
         case lowerCamelCase
         /// UpperCamelCase / PascalCase (e.g., `BuildProject`, `HTMLParser`)
@@ -32,7 +32,12 @@ public enum NamingConverter {
     ) -> String {
         guard !identifier.isEmpty else { return identifier }
 
-        let words = splitIntoWords(identifier, convention: source ?? detect(identifier))
+        let detected = source ?? detect(identifier)
+
+        // Return as-is when already in the target convention
+        if detected == target { return identifier }
+
+        let words = splitIntoWords(identifier, convention: detected)
 
         switch target {
         case .lowerCamelCase:
