@@ -25,7 +25,7 @@ struct ToolsCommand: AsyncParsableCommand {
 
     func run() async throws {
         let config = try UtilitySupport.makeConfig(from: connection)
-        let proxy = MCPServerProxy(config: config)
+        let proxy = MCPServerProxy(config: config, clientName: "SwiftMCP Utility")
 
         defer {
             Task {
