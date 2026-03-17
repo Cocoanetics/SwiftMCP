@@ -889,7 +889,8 @@ public extension MCPServer {
 
         // Direct lookup (tool name == function name)
         if let child = mirror.children.first(where: { $0.label == metadataKey }),
-           let metadata = child.value as? MCPToolMetadata {
+           let metadata = child.value as? MCPToolMetadata,
+           metadata.name == toolName {
             return metadata
         }
 
