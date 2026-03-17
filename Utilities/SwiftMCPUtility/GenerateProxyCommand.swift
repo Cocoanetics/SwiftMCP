@@ -22,14 +22,17 @@ struct GenerateProxyCommand: AsyncParsableCommand {
     @OptionGroup
     var connection: ConnectionOptions
 
-    @Option(name: .long, help: "Name of the generated proxy type")
+    @Option(name: .long, help: "Override the namespace type name (mutually exclusive with -o)")
     var name: String?
 
-    @Option(name: [.customShort("o"), .long], help: "Write the generated Swift file to this path")
+    @Option(name: [.customShort("o"), .long], help: "Output file path (default: inferred from server name, mutually exclusive with --name)")
     var output: String?
 
     @Option(name: .long, help: "OpenAPI JSON URL or file path to infer return types")
     var openapi: String?
+
+    @Option(name: .long, help: "Naming style for generated Swift functions: verbatim, lowerCamelCase (default), snakeCase")
+    var functionNaming: String?
 
     func run() async throws {
         let config = try UtilitySupport.makeConfig(from: connection)
@@ -51,18 +54,40 @@ struct GenerateProxyCommand: AsyncParsableCommand {
         let serverName = await proxy.serverName
         let serverVersion = await proxy.serverVersion
         let serverDescription = await proxy.serverDescription
-        let typeName = name ?? ProxyGenerator.defaultTypeName(serverName: serverName)
+        if name != nil && output != nil {
+            throw ValidationError("Use --name or -o, not both. The file name is derived from the type name.")
+        }
+
+        let typeName: String
+        if let name {
+            typeName = name
+        } else if let output {
+            // Derive type name from output filename
+            let base = URL(fileURLWithPath: output).deletingPathExtension().lastPathComponent
+            typeName = ProxyGenerator.defaultTypeName(serverName: base)
+        } else {
+            typeName = ProxyGenerator.defaultTypeName(serverName: serverName)
+        }
+
+        let outputPath = output ?? "\(typeName).swift"
         let openAPIReturnInfo = try await OpenAPIProxyLoader.loadReturnSchemas(from: openapi)
-        let fileName = output.map { URL(fileURLWithPath: $0).lastPathComponent }
+        let fileName = URL(fileURLWithPath: outputPath).lastPathComponent
         let sourceDescription = connectionSourceDescription()
         let headerMetadata = ProxyGenerator.HeaderMetadata(
-            fileName: fileName ?? "\(typeName).swift",
+            fileName: fileName,
             serverName: serverName,
             serverVersion: serverVersion,
             serverDescription: serverDescription,
             source: sourceDescription,
             openAPI: openapi
         )
+        let naming: ProxyGenerator.FunctionNaming
+        switch functionNaming?.lowercased() {
+        case "verbatim": naming = .verbatim
+        case "snakecase", "snake_case": naming = .snakeCase
+        default: naming = .lowerCamelCase
+        }
+
         let source = ProxyGenerator.generate(
             typeName: typeName,
             tools: tools,
@@ -72,11 +97,12 @@ struct GenerateProxyCommand: AsyncParsableCommand {
             supportsResources: supportsResources,
             supportsPrompts: supportsPrompts,
             openapiReturnSchemas: openAPIReturnInfo,
+            functionNaming: naming,
             fileName: fileName,
             headerMetadata: headerMetadata
         )
         let outputText = source.description
-        try UtilitySupport.writeOutput(outputText, to: output)
+        try UtilitySupport.writeOutput(outputText, to: outputPath)
     }
 
     private func connectionSourceDescription() -> String? {

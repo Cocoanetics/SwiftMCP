@@ -32,6 +32,16 @@ public enum ProxyGenerator {
         }
     }
 
+    /// Naming convention for generated Swift function names.
+    public enum FunctionNaming {
+        /// Use the tool name as-is (no conversion).
+        case verbatim
+        /// Convert to lowerCamelCase (default — idiomatic Swift).
+        case lowerCamelCase
+        /// Convert to snake_case.
+        case snakeCase
+    }
+
     public static func generate(
         typeName: String,
         tools: [MCPTool],
@@ -41,6 +51,7 @@ public enum ProxyGenerator {
         supportsResources: Bool = false,
         supportsPrompts: Bool = false,
         openapiReturnSchemas: [String: OpenAPIReturnInfo] = [:],
+        functionNaming: FunctionNaming = .lowerCamelCase,
         fileName: String? = nil,
         headerMetadata: HeaderMetadata? = nil
     ) -> SourceFileSyntax {
@@ -73,7 +84,8 @@ public enum ProxyGenerator {
             returnTypes: returnTypes,
             typeDefinitions: typeDefinitions,
             typeDocComment: typeDocComment,
-            metadata: metadata
+            metadata: metadata,
+            functionNaming: functionNaming
         )
 
         let headerAndImports = "\(headerComment)\n\nimport Foundation\nimport SwiftMCP\n"
@@ -85,8 +97,7 @@ public enum ProxyGenerator {
     }
 
     public static func defaultTypeName(serverName: String?) -> String {
-        let base = serverName.flatMap { pascalCase($0) } ?? "MCPServer"
-        return "\(base)Proxy"
+        serverName.flatMap { pascalCase($0) } ?? "MCPServer"
     }
 
     private static func makeActorSource(
@@ -100,13 +111,14 @@ public enum ProxyGenerator {
         returnTypes: [String: OpenAPIReturnInfo],
         typeDefinitions: [String],
         typeDocComment: [String],
-        metadata: HeaderMetadata
+        metadata: HeaderMetadata,
+        functionNaming: FunctionNaming = .lowerCamelCase
     ) -> String {
         var lines: [String] = []
         if !typeDocComment.isEmpty {
             lines.append(contentsOf: typeDocComment)
         }
-        lines.append("public actor \(typeName) {")
+        lines.append("public enum \(typeName) {")
         if !typeDefinitions.isEmpty {
             lines.append("    // MARK: - Declarations")
             lines.append(contentsOf: indentDefinitions(typeDefinitions, indent: "    "))
@@ -115,13 +127,16 @@ public enum ProxyGenerator {
         lines.append("    // MARK: - Metadata")
         lines.append("    public static let serverName: String? = \(swiftOptionalStringLiteral(metadata.serverName))")
         lines.append("")
-        lines.append("    // MARK: - Public Properties")
-        lines.append("    public let proxy: MCPServerProxy")
+        lines.append("    // MARK: - Client")
+        lines.append("    public actor Client {")
+        lines.append("        public let proxy: MCPServerProxy")
         lines.append("")
-        lines.append("    // MARK: - Initialization")
-        lines.append("    public init(proxy: MCPServerProxy) {")
-        lines.append("        self.proxy = proxy")
-        lines.append("    }")
+        lines.append("        public init(proxy: MCPServerProxy) {")
+        lines.append("            self.proxy = proxy")
+        lines.append("        }")
+
+        // Build client body at base indent, then shift into the enum
+        var clientBody: [String] = []
 
         let sortedTools = tools.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         let includesResources = supportsResources || !resources.isEmpty || !resourceTemplates.isEmpty
@@ -135,20 +150,20 @@ public enum ProxyGenerator {
         }
 
         if !sortedTools.isEmpty {
-            lines.append("")
-            lines.append("    // MARK: - Functions")
+            clientBody.append("")
+            clientBody.append("    // MARK: - Functions")
         }
         for tool in sortedTools {
-            lines.append("")
+            clientBody.append("")
             let returnInfo = returnTypes[tool.name]
-            lines.append(contentsOf: makeMethodLines(tool: tool, returnInfo: returnInfo))
+            clientBody.append(contentsOf: makeMethodLines(tool: tool, returnInfo: returnInfo, functionNaming: functionNaming))
         }
 
         if includesResources {
-            lines.append("")
-            lines.append("    // MARK: - Resources")
-            lines.append("")
-            lines.append(contentsOf: makeResourceMethodLines(
+            clientBody.append("")
+            clientBody.append("    // MARK: - Resources")
+            clientBody.append("")
+            clientBody.append(contentsOf: makeResourceMethodLines(
                 resources: resources,
                 resourceTemplates: resourceTemplates,
                 usedMethodNames: &usedMethodNames
@@ -156,16 +171,22 @@ public enum ProxyGenerator {
         }
 
         if includesPrompts {
-            lines.append("")
-            lines.append("    // MARK: - Prompts")
-            lines.append("")
-            lines.append(contentsOf: makePromptMethodLines(
+            clientBody.append("")
+            clientBody.append("    // MARK: - Prompts")
+            clientBody.append("")
+            clientBody.append(contentsOf: makePromptMethodLines(
                 prompts: prompts,
                 usedMethodNames: &usedMethodNames
             ))
         }
 
-        lines.append("}")
+        // Indent client body one extra level into the enum namespace
+        for line in clientBody {
+            lines.append(line.isEmpty ? "" : "    \(line)")
+        }
+
+        lines.append("    }")  // close Client actor
+        lines.append("}")  // close namespace enum
         return lines.joined(separator: "\n")
     }
 
@@ -257,9 +278,20 @@ public enum ProxyGenerator {
         return lines
     }
 
-    private static func makeMethodLines(tool: MCPTool, returnInfo: OpenAPIReturnInfo?) -> [String] {
+    private static func makeMethodLines(tool: MCPTool, returnInfo: OpenAPIReturnInfo?, functionNaming: FunctionNaming = .lowerCamelCase) -> [String] {
         var lines: [String] = []
-        let methodName = swiftIdentifier(from: tool.name, lowerCamel: true)
+        let rawName = swiftIdentifier(from: tool.name, lowerCamel: true)
+        let converted: String
+        switch functionNaming {
+        case .verbatim:
+            converted = rawName
+        case .lowerCamelCase:
+            converted = NamingConverter.toLowerCamelCase(rawName)
+        case .snakeCase:
+            converted = NamingConverter.toSnakeCase(rawName)
+        }
+        // Re-sanitize after conversion (e.g., tool "class" → "class_" → "class" needs escaping again)
+        let methodName = reservedKeywords.contains(converted) ? "`\(converted)`" : converted
 
         let parameters = methodParameters(for: tool)
         lines.append(contentsOf: docCommentLines(tool: tool, parameters: parameters, returnInfo: returnInfo))
