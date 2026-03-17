@@ -126,6 +126,7 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro, MemberAttributeMacro 
         let nameArg = arguments?.first(where: { $0.label?.text == "name" })?.expression.description.trimmingCharacters(in: .punctuationCharacters)
         let versionArg = arguments?.first(where: { $0.label?.text == "version" })?.expression.description.trimmingCharacters(in: .punctuationCharacters)
         var generateClient = false
+        var toolNaming: String? = nil  // nil or "snakeCase" or "pascalCase"
 
         var descriptionArg: String? = nil
         var serverDescriptionText: String? = nil
@@ -139,6 +140,12 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro, MemberAttributeMacro 
                 } else if argument.label?.text == "generateClient",
                           let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
                     generateClient = boolLiteral.literal.text == "true"
+                } else if argument.label?.text == "toolNaming",
+                          let memberAccess = argument.expression.as(MemberAccessExprSyntax.self) {
+                    let convention = memberAccess.declName.baseName.text
+                    if convention != "functionName" {
+                        toolNaming = convention
+                    }
                 }
             }
         }
@@ -195,7 +202,24 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro, MemberAttributeMacro 
                                 }
                             }
                         }
-                        mcpTools.append((functionName: functionName, toolName: toolName))
+                        // Apply server-level toolNaming if no explicit name: override
+                        let hasExplicitName = toolName != functionName
+                        let finalToolName: String
+                        if hasExplicitName {
+                            finalToolName = toolName
+                        } else if let toolNaming {
+                            switch toolNaming {
+                            case "snakeCase":
+                                finalToolName = ToolNamingConverter.toSnakeCase(functionName)
+                            case "pascalCase":
+                                finalToolName = ToolNamingConverter.toPascalCase(functionName)
+                            default:
+                                finalToolName = functionName
+                            }
+                        } else {
+                            finalToolName = functionName
+                        }
+                        mcpTools.append((functionName: functionName, toolName: finalToolName))
                         toolFunctions.append(funcDecl)
                         break
                     }
@@ -285,8 +309,8 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro, MemberAttributeMacro 
 /// - Returns: The result of the tool call
 /// - Throws: MCPToolError if the tool doesn't exist or cannot be called
 public func callTool(_ name: String, arguments: JSONDictionary) async throws -> (Encodable & Sendable) {
-   // Find the tool metadata by name
-   guard let metadata = mcpToolMetadata(for: name) else {
+   // Find the tool metadata by name (use the property which reflects any toolNaming transforms)
+   guard let metadata = mcpToolMetadata.first(where: { $0.name == name }) ?? mcpToolMetadata(for: name) else {
       throw MCPToolError.unknownTool(name: name)
    }
    
@@ -305,7 +329,14 @@ public func callTool(_ name: String, arguments: JSONDictionary) async throws -> 
 
         // Add static mcpToolMetadata property
         if !mcpTools.isEmpty || hasAppShortcutsProvider {
-            let metadataArray = mcpTools.map { "__mcpMetadata_\($0.functionName)" }.joined(separator: ", ")
+            let metadataArray = mcpTools.map { tool -> String in
+                // When server-level toolNaming changes the name, use .renamed() to
+                // produce metadata whose .name matches the switch-case strings.
+                if tool.toolName != tool.functionName {
+                    return "__mcpMetadata_\(tool.functionName).renamed(\"\(tool.toolName)\")"
+                }
+                return "__mcpMetadata_\(tool.functionName)"
+            }.joined(separator: ", ")
             let metadataSeed = mcpTools.isEmpty ? "[]" : "[\(metadataArray)]"
             let metadataDeclaration = hasAppShortcutsProvider ? "var" : "let"
             let appShortcutsBlock: String
@@ -506,6 +537,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         if generateClient, !(toolFunctions.isEmpty && resourceFunctions.isEmpty && promptFunctions.isEmpty) {
             let clientType = makeClientType(
                 toolFunctions: toolFunctions,
+                mcpTools: mcpTools,
                 resourceFunctions: resourceFunctions,
                 promptFunctions: promptFunctions,
                 serverDescription: serverDescriptionText
@@ -675,10 +707,13 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
 
     private static func makeClientType(
         toolFunctions: [FunctionDeclSyntax],
+        mcpTools: [(functionName: String, toolName: String)] = [],
         resourceFunctions: [FunctionDeclSyntax],
         promptFunctions: [FunctionDeclSyntax],
         serverDescription: String?
     ) -> String {
+        // Build a lookup from function name → wire tool name
+        let toolNameMap = Dictionary(mcpTools.map { ($0.functionName, $0.toolName) }, uniquingKeysWith: { _, last in last })
         var lines: [String] = []
         lines.append(contentsOf: clientTypeDocCommentLines(description: serverDescription))
         lines.append("public struct Client: Sendable {")
@@ -694,9 +729,11 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
             lines.append("    // MARK: - Tools")
         }
         for funcDecl in toolFunctions {
+            let funcName = funcDecl.name.text
+            let wireToolName = toolNameMap[funcName]
             let metadata = clientFunctionMetadata(from: funcDecl, kind: .tool)
             lines.append("")
-            lines.append(contentsOf: makeClientMethodLines(metadata: metadata))
+            lines.append(contentsOf: makeClientMethodLines(metadata: metadata, wireToolName: wireToolName))
         }
 
         if !resourceFunctions.isEmpty {
@@ -796,7 +833,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         return attributes
     }
 
-    private static func makeClientMethodLines(metadata: ClientFunctionMetadata) -> [String] {
+    private static func makeClientMethodLines(metadata: ClientFunctionMetadata, wireToolName: String? = nil) -> [String] {
         var lines: [String] = []
         lines.append(contentsOf: docCommentLines(for: metadata))
 
@@ -825,7 +862,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
             }
 
             let callExpression = toolCallExpression(
-                toolName: metadata.name,
+                toolName: wireToolName ?? metadata.name,
                 hasParameters: hasParameters,
                 argumentsName: argumentsName,
                 isAsync: metadata.isAsync,

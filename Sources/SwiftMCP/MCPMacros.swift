@@ -14,6 +14,32 @@ import Foundation
  generate metadata for functions and classes in the MCP.
  */
 
+/// Naming convention to apply to all tools on an `@MCPServer`.
+///
+/// When set on `@MCPServer(toolNaming:)`, every `@MCPTool` function name
+/// is transformed to the chosen convention **unless** the tool provides an
+/// explicit `name:` override (which always wins).
+///
+/// Example:
+/// ```swift
+/// @MCPServer(toolNaming: .snakeCase)
+/// class MyServer {
+///     @MCPTool               // → "list_windows"
+///     func listWindows() -> [Window]
+///
+///     @MCPTool(name: "health") // → "health" (explicit override wins)
+///     func checkHealth() -> Status
+/// }
+/// ```
+public enum MCPToolNaming {
+    /// Use the Swift function name unchanged (default).
+    case functionName
+    /// Convert camelCase to snake_case (e.g. `listWindows` → `list_windows`).
+    case snakeCase
+    /// Convert camelCase to PascalCase (e.g. `listWindows` → `ListWindows`).
+    case pascalCase
+}
+
 /// A macro that automatically extracts parameter information from a function declaration.
 ///
 /// Apply this macro to functions that should be exposed to AI models.
@@ -94,6 +120,7 @@ public macro MCPServer(
     name: String? = nil,
     version: String? = nil,
     description: String? = nil,
+    toolNaming: MCPToolNaming = .functionName,
     generateClient: Bool = false
 ) = #externalMacro(module: "SwiftMCPMacros", type: "MCPServerMacro")
 
