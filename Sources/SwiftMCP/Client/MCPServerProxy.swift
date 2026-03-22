@@ -199,21 +199,23 @@ public final actor MCPServerProxy: Sendable {
         isDisconnecting = false
         streamFailure = nil
         endpointURL = nil
-        sessionID = nil
 
         switch config {
             case .stdio(let stdioConfig):
+                sessionID = UUID().uuidString
                 lineConnection = MCPServerProcess(config: stdioConfig)
                 try await startLineConnection()
                 try await initialize(clientName: clientName, clientVersion: clientVersion)
 
             case .stdioHandles(let server):
+                sessionID = UUID().uuidString
                 lineConnection = InProcessStdioBridge(server: server)
                 try await startLineConnection()
                 try await initialize(clientName: clientName, clientVersion: clientVersion)
 
             case .tcp(let tcpConfig):
 #if canImport(Network)
+                sessionID = UUID().uuidString
                 let resolvedConfig = resolveTcpConfig(tcpConfig)
                 lineConnection = TCPConnection(config: resolvedConfig)
                 try await startLineConnection()
@@ -249,7 +251,11 @@ public final actor MCPServerProxy: Sendable {
         streamTask?.cancel()
         streamTask = nil
         endpointURL = nil
-        sessionID = nil
+
+        // Clean up session-scoped upload directory before clearing sessionID
+        if let uploadDirectory {
+            try? FileManager.default.removeItem(at: uploadDirectory)
+        }
 
         switch config {
         case .stdio, .stdioHandles, .tcp:
@@ -259,8 +265,7 @@ public final actor MCPServerProxy: Sendable {
             break
         }
 
-        // Clean up session-scoped upload directory
-        try? FileManager.default.removeItem(at: uploadDirectory)
+        sessionID = nil
     }
 
     /// Lists all available tools from the server.
@@ -336,20 +341,17 @@ public final actor MCPServerProxy: Sendable {
     /// Pending file uploads for local transports (cid → file URL).
     private var pendingFileUploads: [String: URL] = [:]
 
-    /// Stable identifier for session-scoped upload directories.
-    private let localSessionID = UUID()
-
     /// The session-scoped upload directory for this proxy instance.
-    private var uploadDirectory: URL {
-        FileManager.default.temporaryDirectory
+    private var uploadDirectory: URL? {
+        guard let sessionID else { return nil }
+        return FileManager.default.temporaryDirectory
             .appendingPathComponent("mcp-uploads", isDirectory: true)
-            .appendingPathComponent(localSessionID.uuidString, isDirectory: true)
+            .appendingPathComponent(sessionID, isDirectory: true)
     }
 
     public func registerPendingUpload(cid: String, data: Data) {
-        if isLocalTransport {
+        if isLocalTransport, let dir = uploadDirectory {
             // Write to session-scoped temp directory
-            let dir = uploadDirectory
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             let fileURL = dir.appendingPathComponent("\(cid).bin")
             try? data.write(to: fileURL)
@@ -483,7 +485,9 @@ public final actor MCPServerProxy: Sendable {
                 uploadsDict[cid] = .string(url.absoluteString)
             }
             requestMeta["uploads"] = .object(uploadsDict)
-            requestMeta["uploadSessionID"] = .string(localSessionID.uuidString)
+            if let sessionID {
+                requestMeta["uploadSessionID"] = .string(sessionID)
+            }
             pendingFileUploads.removeAll()
         }
 
