@@ -199,21 +199,23 @@ public final actor MCPServerProxy: Sendable {
         isDisconnecting = false
         streamFailure = nil
         endpointURL = nil
-        sessionID = nil
 
         switch config {
             case .stdio(let stdioConfig):
+                sessionID = UUID().uuidString
                 lineConnection = MCPServerProcess(config: stdioConfig)
                 try await startLineConnection()
                 try await initialize(clientName: clientName, clientVersion: clientVersion)
 
             case .stdioHandles(let server):
+                sessionID = UUID().uuidString
                 lineConnection = InProcessStdioBridge(server: server)
                 try await startLineConnection()
                 try await initialize(clientName: clientName, clientVersion: clientVersion)
 
             case .tcp(let tcpConfig):
 #if canImport(Network)
+                sessionID = UUID().uuidString
                 let resolvedConfig = resolveTcpConfig(tcpConfig)
                 lineConnection = TCPConnection(config: resolvedConfig)
                 try await startLineConnection()
@@ -249,7 +251,6 @@ public final actor MCPServerProxy: Sendable {
         streamTask?.cancel()
         streamTask = nil
         endpointURL = nil
-        sessionID = nil
 
         switch config {
         case .stdio, .stdioHandles, .tcp:
@@ -258,6 +259,8 @@ public final actor MCPServerProxy: Sendable {
         case .sse:
             break
         }
+
+        sessionID = nil
     }
 
     /// Lists all available tools from the server.
@@ -320,8 +323,32 @@ public final actor MCPServerProxy: Sendable {
 
     /// Register a pending upload that will be sent after the tool call request.
     /// Called by `MCPClientArgumentEncoder.encode(Data, proxy:)`.
+    /// Whether the current transport supports file-based uploads via `_meta.uploads`.
+    public var isLocalTransport: Bool {
+        switch config {
+        case .stdio, .stdioHandles, .tcp:
+            return true
+        case .sse:
+            return false
+        }
+    }
+
+    /// Pending file uploads for local transports (cid → data, written to disk in callTool).
+    private var pendingLocalUploads: [(cid: String, data: Data)] = []
+
+    /// Returns the upload directory for a specific progress token.
+    private static func uploadDirectory(for token: String) -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("mcp-uploads", isDirectory: true)
+            .appendingPathComponent(token, isDirectory: true)
+    }
+
     public func registerPendingUpload(cid: String, data: Data) {
-        pendingUploads.append((cid: cid, data: data))
+        if isLocalTransport {
+            pendingLocalUploads.append((cid: cid, data: data))
+        } else {
+            pendingUploads.append((cid: cid, data: data))
+        }
     }
 
     /// Uploads binary data to the server's upload endpoint.
@@ -440,6 +467,21 @@ public final actor MCPServerProxy: Sendable {
         if let progressToken {
             requestMeta["progressToken"] = progressToken
         }
+
+        // Write local uploads to disk scoped by progressToken
+        if !pendingLocalUploads.isEmpty, let tokenString = progressToken?.stringValue {
+            let dir = Self.uploadDirectory(for: tokenString)
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            var uploadsDict: JSONDictionary = [:]
+            for upload in pendingLocalUploads {
+                let fileURL = dir.appendingPathComponent("\(upload.cid).bin")
+                try? upload.data.write(to: fileURL)
+                uploadsDict[upload.cid] = .string(fileURL.absoluteString)
+            }
+            requestMeta["uploads"] = .object(uploadsDict)
+            pendingLocalUploads.removeAll()
+        }
+
         if !requestMeta.isEmpty {
             params["_meta"] = .object(requestMeta)
         }

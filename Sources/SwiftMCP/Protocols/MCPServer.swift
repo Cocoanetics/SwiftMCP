@@ -335,16 +335,27 @@ public extension MCPServer {
         // Extract progress token for upload progress notifications
         let progressToken = params["_meta"]?.dictionaryValue?["progressToken"]
 
-        // Resolve any cid: placeholders by waiting for uploads
+        // Resolve file:// uploads from _meta.uploads — try file path first, fall through to HTTP.
+        let meta = params["_meta"]?.dictionaryValue
+        var resolvedUploadData: [String: Data] = [:]
+        if let progressTokenString = progressToken?.stringValue,
+           let metaUploads = meta?["uploads"]?.dictionaryValue,
+           let result = try? Self.resolveFileUploads(in: arguments, metaUploads: metaUploads, progressToken: progressTokenString) {
+            arguments = result.arguments
+            resolvedUploadData = result.resolvedData
+        }
+
+        // Resolve remaining cid: placeholders by waiting for HTTP uploads
         if let pendingStore = PendingUploadResolver.current {
             do {
-                if let resolved = try await Self.resolveCIDPlaceholders(
+                if let result = try await Self.resolveCIDPlaceholders(
                     in: arguments,
                     sessionID: Session.current?.id ?? UUID(),
                     progressToken: progressToken,
                     pendingStore: pendingStore
                 ) {
-                    arguments = resolved
+                    arguments = result.arguments
+                    resolvedUploadData.merge(result.resolvedData) { _, new in new }
                 }
             } catch {
                 return JSONRPCMessage.errorResponse(
@@ -356,9 +367,13 @@ public extension MCPServer {
 
         let metadata = mcpToolMetadata(for: toolName)
 
-        // Call the appropriate wrapper method based on the tool name
+        // Call the appropriate wrapper method based on the tool name.
+        // Set resolved upload data as task-local so extractData(named:) can pull directly.
         do {
-            let result = try await toolProvider.callTool(toolName, arguments: arguments)
+            let uploadData = resolvedUploadData.isEmpty ? nil : resolvedUploadData
+            let result = try await ResolvedUploads.$current.withValue(uploadData) {
+                try await toolProvider.callTool(toolName, arguments: arguments)
+            }
             let wrappedResult = try metadata?.wrapOutputIfNeeded(result) ?? result
 
             var content: JSONDictionary
@@ -775,14 +790,70 @@ public extension MCPServer {
 
     // MARK: - CID Upload Resolution
 
+    /// The base directory for file-based uploads.
+    static var uploadBaseDirectory: URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("mcp-uploads", isDirectory: true)
+    }
+
+    /// Resolves `cid:` placeholders that have a matching `file://` path in `_meta.uploads`.
+    /// Only accepts files inside the session-scoped upload directory to prevent path traversal.
+    /// The file is memory-mapped and base64-encoded into the arguments. Temp files are deleted after reading.
+    /// Returns the updated arguments, or nil if no file-based CIDs were resolved.
+    /// Resolves `cid:` placeholders that have a matching `file://` path in `_meta.uploads`.
+    /// Files within the allowed upload directory are memory-mapped and stored in
+    /// `resolvedData` (keyed by parameter name) for direct extraction — no base64 round-trip.
+    /// CIDs whose files are not accessible are left in place for the HTTP upload fallback.
+    /// Returns the updated arguments (with resolved CIDs removed) and the raw data map.
+    private static func resolveFileUploads(
+        in arguments: JSONDictionary,
+        metaUploads: JSONDictionary?,
+        progressToken: String
+    ) throws -> (arguments: JSONDictionary, resolvedData: [String: Data])? {
+        guard let metaUploads else { return nil }
+
+        // Only accept files from the progress-token-scoped upload directory
+        let allowedDir = uploadBaseDirectory
+            .appendingPathComponent(progressToken, isDirectory: true)
+            .path
+
+        var resolved = arguments
+        var resolvedData: [String: Data] = [:]
+
+        for (key, value) in arguments {
+            guard let str = value.stringValue, str.hasPrefix("cid:") else { continue }
+            let cid = String(str.dropFirst(4))
+
+            guard let filePath = metaUploads[cid]?.stringValue,
+                  filePath.hasPrefix("file://"),
+                  let fileURL = URL(string: filePath),
+                  fileURL.path.hasPrefix(allowedDir),
+                  let data = try? Data(contentsOf: fileURL, options: .mappedIfSafe) else {
+                continue  // File not accessible — leave cid: for HTTP upload fallback
+            }
+
+            resolvedData[key] = data
+            resolved.removeValue(forKey: key)  // Remove from arguments — data is in side channel
+            try? FileManager.default.removeItem(at: fileURL)
+        }
+
+        guard !resolvedData.isEmpty else { return nil }
+
+        // Clean up the per-request upload directory
+        let uploadDir = uploadBaseDirectory.appendingPathComponent(progressToken, isDirectory: true)
+        try? FileManager.default.removeItem(at: uploadDir)
+
+        return (resolved, resolvedData)
+    }
+
     /// Scans tool call arguments for `cid:` placeholders and waits for corresponding uploads.
-    /// Returns the arguments with CIDs replaced by base64 data, or nil if no CIDs found.
+    /// Returns the updated arguments (with resolved CIDs removed) and resolved data for the side channel.
     private static func resolveCIDPlaceholders(
         in arguments: JSONDictionary,
         sessionID: UUID,
         progressToken: JSONValue?,
         pendingStore: PendingUploadStore
-    ) async throws -> JSONDictionary? {
+    ) async throws -> (arguments: JSONDictionary, resolvedData: [String: Data])? {
         var cidEntries: [(key: String, cid: String)] = []
         for (key, value) in arguments {
             if let str = value.stringValue, str.hasPrefix("cid:") {
@@ -793,6 +864,7 @@ public extension MCPServer {
         guard !cidEntries.isEmpty else { return nil }
 
         var resolved = arguments
+        var resolvedData: [String: Data] = [:]
 
         for (index, entry) in cidEntries.enumerated() {
             if let token = progressToken, let session = Session.current {
@@ -815,7 +887,8 @@ public extension MCPServer {
             )
 
             let data = try Data(contentsOf: fileURL, options: .mappedIfSafe)
-            resolved[entry.key] = .string(data.base64EncodedString())
+            resolvedData[entry.key] = data
+            resolved.removeValue(forKey: entry.key)
             try? FileManager.default.removeItem(at: fileURL)
         }
 
@@ -828,7 +901,7 @@ public extension MCPServer {
             )
         }
 
-        return resolved
+        return (resolved, resolvedData)
     }
 
     // MARK: - Resource Subscriptions
