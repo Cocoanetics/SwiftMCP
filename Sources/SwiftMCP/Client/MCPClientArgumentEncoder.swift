@@ -22,9 +22,11 @@ public enum MCPClientArgumentEncoder {
         .string(MCPToolArgumentEncoder.encode(value))
     }
 
-    /// Proxy-aware encoding for `Data`: generates CID placeholder if uploads supported, falls back to base64.
+    /// Proxy-aware encoding for `Data`: generates CID placeholder if uploads supported and data exceeds
+    /// the inline threshold, falls back to base64.
     public static func encode(_ value: Data, proxy: MCPServerProxy) async throws -> JSONValue {
-        if await proxy.supportsFileUpload {
+        let threshold = await proxy.inlineUploadThreshold
+        if await proxy.supportsFileUpload, value.count > threshold {
             let cid = UUID().uuidString
             await proxy.registerPendingUpload(cid: cid, data: value)
             return .string("cid:\(cid)")
@@ -59,18 +61,22 @@ public enum MCPClientArgumentEncoder {
         .array(MCPToolArgumentEncoder.encode(values).map(JSONValue.string))
     }
 
-    /// Proxy-aware encoding for `[Data]`: generates CID placeholders if uploads supported, falls back to base64.
+    /// Proxy-aware encoding for `[Data]`: generates CID placeholders if uploads supported and data exceeds
+    /// the inline threshold, falls back to base64 per element.
     public static func encode(_ values: [Data], proxy: MCPServerProxy) async throws -> JSONValue {
-        if await proxy.supportsFileUpload {
-            var results: [JSONValue] = []
-            for value in values {
+        let supportsUpload = await proxy.supportsFileUpload
+        let threshold = await proxy.inlineUploadThreshold
+        var results: [JSONValue] = []
+        for value in values {
+            if supportsUpload, value.count > threshold {
                 let cid = UUID().uuidString
                 await proxy.registerPendingUpload(cid: cid, data: value)
                 results.append(.string("cid:\(cid)"))
+            } else {
+                results.append(.string(MCPToolArgumentEncoder.encode(value)))
             }
-            return .array(results)
         }
-        return .array(MCPToolArgumentEncoder.encode(values).map(JSONValue.string))
+        return .array(results)
     }
 
     public static func encode<T: CaseIterable>(_ values: [T]) throws -> JSONValue {
