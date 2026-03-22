@@ -335,10 +335,12 @@ public extension MCPServer {
         // Extract progress token for upload progress notifications
         let progressToken = params["_meta"]?.dictionaryValue?["progressToken"]
 
-        // Resolve file:// uploads from _meta.uploads (local transports)
+        // Resolve file:// uploads from _meta.uploads (local transports only).
+        // PendingUploadResolver.current is only set on HTTP — its absence means local transport.
         let meta = params["_meta"]?.dictionaryValue
-        let metaUploads = meta?["uploads"]?.dictionaryValue
-        if let progressTokenString = progressToken?.stringValue,
+        if PendingUploadResolver.current == nil,
+           let progressTokenString = progressToken?.stringValue,
+           let metaUploads = meta?["uploads"]?.dictionaryValue,
            let resolved = try? Self.resolveFileUploads(in: arguments, metaUploads: metaUploads, progressToken: progressTokenString) {
             arguments = resolved
         }
@@ -783,9 +785,10 @@ public extension MCPServer {
 
     // MARK: - CID Upload Resolution
 
-    /// The base directory for session-scoped file uploads.
+    /// The base directory for file-based uploads.
     static var uploadBaseDirectory: URL {
-        FileManager.default.temporaryDirectory.appendingPathComponent("mcp-uploads", isDirectory: true)
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("mcp-uploads", isDirectory: true)
     }
 
     /// Resolves `cid:` placeholders that have a matching `file://` path in `_meta.uploads`.
