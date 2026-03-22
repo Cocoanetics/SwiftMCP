@@ -808,13 +808,15 @@ public extension MCPServer {
                 )
             }
 
-            let data = try await pendingStore.waitForUpload(
+            let fileURL = try await pendingStore.waitForUpload(
                 cid: entry.cid,
                 progressToken: progressToken,
                 sessionID: sessionID
             )
 
+            let data = try Data(contentsOf: fileURL, options: .mappedIfSafe)
             resolved[entry.key] = .string(data.base64EncodedString())
+            try? FileManager.default.removeItem(at: fileURL)
         }
 
         if let token = progressToken, let session = Session.current {

@@ -8,19 +8,19 @@ import Foundation
 actor PendingUploadStore {
 
     struct Expectation {
-        let continuation: CheckedContinuation<Data, Error>
+        let continuation: CheckedContinuation<URL, Error>
         let progressToken: JSONValue?
         let sessionID: UUID
     }
 
     private var expectations: [String: Expectation] = [:]  // cid → expectation
 
-    /// Register a pending upload. Returns when the data arrives or the caller cancels.
+    /// Register a pending upload. Returns when the file arrives or the caller cancels.
     func waitForUpload(
         cid: String,
         progressToken: JSONValue?,
         sessionID: UUID
-    ) async throws -> Data {
+    ) async throws -> URL {
         try await withCheckedThrowingContinuation { continuation in
             expectations[cid] = Expectation(
                 continuation: continuation,
@@ -30,14 +30,14 @@ actor PendingUploadStore {
         }
     }
 
-    /// Fulfill a pending upload. Called by the upload endpoint.
+    /// Fulfill a pending upload with a temp file URL. Called by the upload endpoint.
     /// Returns the progress token associated with this CID (for progress notifications).
     @discardableResult
-    func fulfill(cid: String, data: Data) -> JSONValue? {
+    func fulfill(cid: String, fileURL: URL) -> JSONValue? {
         guard let expectation = expectations.removeValue(forKey: cid) else {
             return nil
         }
-        expectation.continuation.resume(returning: data)
+        expectation.continuation.resume(returning: fileURL)
         return expectation.progressToken
     }
 

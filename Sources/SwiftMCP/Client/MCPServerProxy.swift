@@ -374,6 +374,10 @@ public final actor MCPServerProxy: Sendable {
         throw MCPServerProxyError.communicationError("Upload response missing 'uri' or 'cid'")
     }
 
+    /// Data payloads at or below this size are sent inline as base64 instead of using the CID upload path.
+    /// Default is 32 KB. Set to 0 to always use CID uploads when the server supports them.
+    public var inlineUploadThreshold: Int = 32_768
+
     /// Whether the connected server supports file uploads.
     public var supportsFileUpload: Bool {
         serverCapabilities?.experimental["uploads"] != nil
