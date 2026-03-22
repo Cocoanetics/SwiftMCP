@@ -59,9 +59,40 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
                     requestState = .rejected
                     return
                 }
-                requestState = .head(head)
 
-            // BODY Received after HEAD
+                // For upload requests, start streaming to a temp file immediately
+                if head.uri.hasPrefix("/mcp/uploads") && head.method == .POST {
+                    let tempURL = URL(fileURLWithPath: NSTemporaryDirectory())
+                        .appendingPathComponent("mcp-upload-\(UUID().uuidString).bin")
+                    FileManager.default.createFile(atPath: tempURL.path, contents: nil)
+                    if let handle = FileHandle(forWritingAtPath: tempURL.path) {
+                        requestState = .upload(head: head, fileHandle: handle, fileURL: tempURL, bytesWritten: 0)
+                    } else {
+                        logger.error("Failed to create temp file for upload")
+                        requestState = .head(head)
+                    }
+                } else {
+                    requestState = .head(head)
+                }
+
+            // BODY chunk for streaming upload — append directly to file
+            case (.body(let buffer), .upload(let head, let fileHandle, let fileURL, let bytesWritten)):
+                let sizeLimit = maxBodySize(for: head)
+                let newTotal = bytesWritten + buffer.readableBytes
+                guard newTotal <= sizeLimit else {
+                    logger.warning("Rejecting upload: accumulated size \(newTotal) > max \(sizeLimit)")
+                    fileHandle.closeFile()
+                    try? FileManager.default.removeItem(at: fileURL)
+                    rejectOversizedRequest(context: context)
+                    requestState = .rejected
+                    return
+                }
+                if let bytes = buffer.getBytes(at: buffer.readerIndex, length: buffer.readableBytes) {
+                    fileHandle.write(Data(bytes))
+                }
+                requestState = .upload(head: head, fileHandle: fileHandle, fileURL: fileURL, bytesWritten: newTotal)
+
+            // BODY Received after HEAD (non-upload)
 			case (.body(let buffer), .head(let head)):
                 let sizeLimit = maxBodySize(for: head)
                 guard buffer.readableBytes <= sizeLimit else {
@@ -72,7 +103,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
                 }
                 requestState = .body(head: head, data: buffer)
 
-            // Additional BODY chunks after initial BODY
+            // Additional BODY chunks after initial BODY (non-upload)
             case (.body(var newBuffer), .body(let head, var priorBuffer)):
                 let sizeLimit = maxBodySize(for: head)
                 let combinedSize = priorBuffer.readableBytes + newBuffer.readableBytes
@@ -99,6 +130,14 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             case (.end, .head(let head)):
                 defer { requestState = .idle }
                 handleRequest(context: context, head: head, body: nil)
+
+            // END Received after streaming upload — file is complete
+            case (.end, .upload(let head, let fileHandle, let fileURL, let bytesWritten)):
+                defer { requestState = .idle }
+                fileHandle.closeFile()
+                Task {
+                    await self.handleStreamedUpload(channel: context.channel, head: head, fileURL: fileURL, bytesWritten: bytesWritten)
+                }
 
             // END Received after BODY
             case (.end, .body(let head, let buffer)):
@@ -646,6 +685,110 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
     }
 
     // MARK: - File Upload
+
+    /// Handles an upload where body chunks were streamed directly to a temp file during channelRead.
+    private func handleStreamedUpload(channel: Channel, head: HTTPRequestHead, fileURL: URL, bytesWritten: Int) async {
+        guard transport.server is MCPFileUploadHandling else {
+            try? FileManager.default.removeItem(at: fileURL)
+            let buffer = channel.allocator.buffer(string: "File uploads not supported by this server.")
+            await sendResponseAsync(channel: channel, status: .notFound, body: buffer)
+            return
+        }
+
+        guard bytesWritten > 0 else {
+            try? FileManager.default.removeItem(at: fileURL)
+            let buffer = channel.allocator.buffer(string: "Request body required.")
+            await sendResponseAsync(channel: channel, status: .badRequest, body: buffer)
+            return
+        }
+
+        let sessionID = UUID(uuidString: head.headers["Mcp-Session-Id"].first ?? "") ?? UUID()
+
+        // Authorization
+        var token: String?
+        if let authHeader = head.headers["Authorization"].first {
+            let parts = authHeader.split(separator: " ")
+            if parts.count == 2 && parts[0].lowercased() == "bearer" {
+                token = String(parts[1])
+            }
+        }
+
+        let authResult = await transport.authorize(token, sessionID: sessionID)
+        switch authResult {
+        case .unauthorized(let message):
+            try? FileManager.default.removeItem(at: fileURL)
+            let buffer = channel.allocator.buffer(string: "Unauthorized: \(message)")
+            await sendResponseAsync(channel: channel, status: .unauthorized, body: buffer)
+            return
+        case .jweNotSupported(let message):
+            try? FileManager.default.removeItem(at: fileURL)
+            let buffer = channel.allocator.buffer(string: message)
+            await sendResponseAsync(channel: channel, status: .forbidden, body: buffer)
+            return
+        case .authorized:
+            break
+        }
+
+        // Extract CID from path: /mcp/uploads/{cid}
+        let pathComponents = head.uri.split(separator: "/")
+        guard pathComponents.count == 3,
+              pathComponents[0] == "mcp",
+              pathComponents[1] == "uploads",
+              let cid = String(pathComponents[2]).removingPercentEncoding else {
+            try? FileManager.default.removeItem(at: fileURL)
+            let buffer = channel.allocator.buffer(string: "Missing CID in upload path. Use POST /mcp/uploads/{cid}")
+            await sendResponseAsync(channel: channel, status: .badRequest, body: buffer)
+            return
+        }
+
+        guard await transport.pendingUploadStore.isExpected(cid: cid) else {
+            try? FileManager.default.removeItem(at: fileURL)
+            let buffer = channel.allocator.buffer(string: "No pending upload expected for CID: \(cid)")
+            await sendResponseAsync(channel: channel, status: .notFound, body: buffer)
+            return
+        }
+
+        // Send upload progress notification
+        if let progressToken = await transport.pendingUploadStore.progressToken(for: cid) {
+            let session = await transport.sessionManager.session(id: sessionID)
+            await session.work { session in
+                await session.sendProgressNotification(
+                    progressToken: progressToken,
+                    progress: Double(bytesWritten),
+                    total: Double(bytesWritten),
+                    message: "Upload received (\(bytesWritten) bytes)"
+                )
+            }
+        }
+
+        // Fulfill with the temp file URL — this resumes the tool call
+        let progressTokenResult = await transport.pendingUploadStore.fulfill(cid: cid, fileURL: fileURL)
+        if progressTokenResult == nil {
+            try? FileManager.default.removeItem(at: fileURL)
+        }
+
+        var headers = HTTPHeaders()
+        headers.add(name: "Content-Type", value: "application/json")
+        headers.add(name: "Access-Control-Allow-Origin", value: "*")
+        headers.add(name: "Mcp-Session-Id", value: sessionID.uuidString)
+
+        let responseDict: JSONDictionary = [
+            "cid": .string(cid),
+            "size": .integer(bytesWritten),
+            "status": .string("fulfilled")
+        ]
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        if let jsonData = try? encoder.encode(responseDict),
+           let jsonString = String(data: jsonData, encoding: .utf8) {
+            let buffer = channel.allocator.buffer(string: jsonString)
+            await sendResponseAsync(channel: channel, status: .ok, headers: headers, body: buffer)
+        } else {
+            let errorBuffer = channel.allocator.buffer(string: "{\"error\":\"Failed to encode response\"}")
+            await sendResponseAsync(channel: channel, status: .internalServerError, body: errorBuffer)
+        }
+    }
 
     private func handleUpload(channel: Channel, head: HTTPRequestHead, body: ByteBuffer?) async {
         guard transport.server is MCPFileUploadHandling else {

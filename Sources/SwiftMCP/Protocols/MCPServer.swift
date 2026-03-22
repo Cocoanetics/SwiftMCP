@@ -348,13 +348,14 @@ public extension MCPServer {
         // Resolve remaining cid: placeholders by waiting for HTTP uploads
         if let pendingStore = PendingUploadResolver.current {
             do {
-                if let resolved = try await Self.resolveCIDPlaceholders(
+                if let result = try await Self.resolveCIDPlaceholders(
                     in: arguments,
                     sessionID: Session.current?.id ?? UUID(),
                     progressToken: progressToken,
                     pendingStore: pendingStore
                 ) {
-                    arguments = resolved
+                    arguments = result.arguments
+                    resolvedUploadData.merge(result.resolvedData) { _, new in new }
                 }
             } catch {
                 return JSONRPCMessage.errorResponse(
@@ -846,13 +847,13 @@ public extension MCPServer {
     }
 
     /// Scans tool call arguments for `cid:` placeholders and waits for corresponding uploads.
-    /// Returns the arguments with CIDs replaced by base64 data, or nil if no CIDs found.
+    /// Returns the updated arguments (with resolved CIDs removed) and resolved data for the side channel.
     private static func resolveCIDPlaceholders(
         in arguments: JSONDictionary,
         sessionID: UUID,
         progressToken: JSONValue?,
         pendingStore: PendingUploadStore
-    ) async throws -> JSONDictionary? {
+    ) async throws -> (arguments: JSONDictionary, resolvedData: [String: Data])? {
         var cidEntries: [(key: String, cid: String)] = []
         for (key, value) in arguments {
             if let str = value.stringValue, str.hasPrefix("cid:") {
@@ -863,6 +864,7 @@ public extension MCPServer {
         guard !cidEntries.isEmpty else { return nil }
 
         var resolved = arguments
+        var resolvedData: [String: Data] = [:]
 
         for (index, entry) in cidEntries.enumerated() {
             if let token = progressToken, let session = Session.current {
@@ -885,7 +887,8 @@ public extension MCPServer {
             )
 
             let data = try Data(contentsOf: fileURL, options: .mappedIfSafe)
-            resolved[entry.key] = .string(data.base64EncodedString())
+            resolvedData[entry.key] = data
+            resolved.removeValue(forKey: entry.key)
             try? FileManager.default.removeItem(at: fileURL)
         }
 
@@ -898,7 +901,7 @@ public extension MCPServer {
             )
         }
 
-        return resolved
+        return (resolved, resolvedData)
     }
 
     // MARK: - Resource Subscriptions
