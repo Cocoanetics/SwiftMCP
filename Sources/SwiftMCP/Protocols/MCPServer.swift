@@ -335,9 +335,11 @@ public extension MCPServer {
         // Extract progress token for upload progress notifications
         let progressToken = params["_meta"]?.dictionaryValue?["progressToken"]
 
-        // Resolve file:// uploads from _meta.uploads (works on all transports)
-        let metaUploads = params["_meta"]?.dictionaryValue?["uploads"]?.dictionaryValue
-        if let resolved = try? Self.resolveFileUploads(in: arguments, metaUploads: metaUploads) {
+        // Resolve file:// uploads from _meta.uploads (local transports)
+        let meta = params["_meta"]?.dictionaryValue
+        let metaUploads = meta?["uploads"]?.dictionaryValue
+        let uploadSessionID = meta?["uploadSessionID"]?.stringValue
+        if let uploadSessionID, let resolved = try? Self.resolveFileUploads(in: arguments, metaUploads: metaUploads, uploadSessionID: uploadSessionID) {
             arguments = resolved
         }
 
@@ -781,14 +783,26 @@ public extension MCPServer {
 
     // MARK: - CID Upload Resolution
 
+    /// The base directory for session-scoped file uploads.
+    static var uploadBaseDirectory: URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("mcp-uploads", isDirectory: true)
+    }
+
     /// Resolves `cid:` placeholders that have a matching `file://` path in `_meta.uploads`.
+    /// Only accepts files inside the session-scoped upload directory to prevent path traversal.
     /// The file is memory-mapped and base64-encoded into the arguments. Temp files are deleted after reading.
     /// Returns the updated arguments, or nil if no file-based CIDs were resolved.
     private static func resolveFileUploads(
         in arguments: JSONDictionary,
-        metaUploads: JSONDictionary?
+        metaUploads: JSONDictionary?,
+        uploadSessionID: String
     ) throws -> JSONDictionary? {
         guard let metaUploads else { return nil }
+
+        // Only accept files from the session-scoped upload directory
+        let allowedDir = uploadBaseDirectory
+            .appendingPathComponent(uploadSessionID, isDirectory: true)
+            .path
 
         var resolved = arguments
         var didResolve = false
@@ -800,6 +814,9 @@ public extension MCPServer {
             guard let filePath = metaUploads[cid]?.stringValue,
                   filePath.hasPrefix("file://"),
                   let fileURL = URL(string: filePath) else { continue }
+
+            // Reject paths outside the session upload directory
+            guard fileURL.path.hasPrefix(allowedDir) else { continue }
 
             let data = try Data(contentsOf: fileURL, options: .mappedIfSafe)
             resolved[key] = .string(data.base64EncodedString())

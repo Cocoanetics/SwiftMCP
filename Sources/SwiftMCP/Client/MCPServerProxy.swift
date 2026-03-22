@@ -258,6 +258,9 @@ public final actor MCPServerProxy: Sendable {
         case .sse:
             break
         }
+
+        // Clean up session-scoped upload directory
+        try? FileManager.default.removeItem(at: uploadDirectory)
     }
 
     /// Lists all available tools from the server.
@@ -333,12 +336,22 @@ public final actor MCPServerProxy: Sendable {
     /// Pending file uploads for local transports (cid → file URL).
     private var pendingFileUploads: [String: URL] = [:]
 
+    /// Stable identifier for session-scoped upload directories.
+    private let localSessionID = UUID()
+
+    /// The session-scoped upload directory for this proxy instance.
+    private var uploadDirectory: URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("mcp-uploads", isDirectory: true)
+            .appendingPathComponent(localSessionID.uuidString, isDirectory: true)
+    }
+
     public func registerPendingUpload(cid: String, data: Data) {
         if isLocalTransport {
-            // Write to temp file for local transports
-            let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("mcp-uploads", isDirectory: true)
-            try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-            let fileURL = tempDir.appendingPathComponent("\(cid).bin")
+            // Write to session-scoped temp directory
+            let dir = uploadDirectory
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let fileURL = dir.appendingPathComponent("\(cid).bin")
             try? data.write(to: fileURL)
             pendingFileUploads[cid] = fileURL
         } else {
@@ -470,6 +483,7 @@ public final actor MCPServerProxy: Sendable {
                 uploadsDict[cid] = .string(url.absoluteString)
             }
             requestMeta["uploads"] = .object(uploadsDict)
+            requestMeta["uploadSessionID"] = .string(localSessionID.uuidString)
             pendingFileUploads.removeAll()
         }
 
