@@ -338,8 +338,8 @@ public extension MCPServer {
         // Resolve file:// uploads from _meta.uploads (local transports)
         let meta = params["_meta"]?.dictionaryValue
         let metaUploads = meta?["uploads"]?.dictionaryValue
-        let uploadSessionID = meta?["uploadSessionID"]?.stringValue
-        if let uploadSessionID, let resolved = try? Self.resolveFileUploads(in: arguments, metaUploads: metaUploads, uploadSessionID: uploadSessionID) {
+        if let progressTokenString = progressToken?.stringValue,
+           let resolved = try? Self.resolveFileUploads(in: arguments, metaUploads: metaUploads, progressToken: progressTokenString) {
             arguments = resolved
         }
 
@@ -795,13 +795,13 @@ public extension MCPServer {
     private static func resolveFileUploads(
         in arguments: JSONDictionary,
         metaUploads: JSONDictionary?,
-        uploadSessionID: String
+        progressToken: String
     ) throws -> JSONDictionary? {
         guard let metaUploads else { return nil }
 
-        // Only accept files from the session-scoped upload directory
+        // Only accept files from the progress-token-scoped upload directory
         let allowedDir = uploadBaseDirectory
-            .appendingPathComponent(uploadSessionID, isDirectory: true)
+            .appendingPathComponent(progressToken, isDirectory: true)
             .path
 
         var resolved = arguments
@@ -822,6 +822,12 @@ public extension MCPServer {
             resolved[key] = .string(data.base64EncodedString())
             try? FileManager.default.removeItem(at: fileURL)
             didResolve = true
+        }
+
+        // Clean up the per-request upload directory
+        if didResolve {
+            let uploadDir = uploadBaseDirectory.appendingPathComponent(progressToken, isDirectory: true)
+            try? FileManager.default.removeItem(at: uploadDir)
         }
 
         return didResolve ? resolved : nil

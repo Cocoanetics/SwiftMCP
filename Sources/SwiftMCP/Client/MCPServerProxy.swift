@@ -252,11 +252,6 @@ public final actor MCPServerProxy: Sendable {
         streamTask = nil
         endpointURL = nil
 
-        // Clean up session-scoped upload directory before clearing sessionID
-        if let uploadDirectory {
-            try? FileManager.default.removeItem(at: uploadDirectory)
-        }
-
         switch config {
         case .stdio, .stdioHandles, .tcp:
             await lineConnection?.stop()
@@ -338,24 +333,19 @@ public final actor MCPServerProxy: Sendable {
         }
     }
 
-    /// Pending file uploads for local transports (cid → file URL).
-    private var pendingFileUploads: [String: URL] = [:]
+    /// Pending file uploads for local transports (cid → data, written to disk in callTool).
+    private var pendingLocalUploads: [(cid: String, data: Data)] = []
 
-    /// The session-scoped upload directory for this proxy instance.
-    private var uploadDirectory: URL? {
-        guard let sessionID else { return nil }
-        return FileManager.default.temporaryDirectory
+    /// Returns the upload directory for a specific progress token.
+    private static func uploadDirectory(for token: String) -> URL {
+        FileManager.default.temporaryDirectory
             .appendingPathComponent("mcp-uploads", isDirectory: true)
-            .appendingPathComponent(sessionID, isDirectory: true)
+            .appendingPathComponent(token, isDirectory: true)
     }
 
     public func registerPendingUpload(cid: String, data: Data) {
-        if isLocalTransport, let dir = uploadDirectory {
-            // Write to session-scoped temp directory
-            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            let fileURL = dir.appendingPathComponent("\(cid).bin")
-            try? data.write(to: fileURL)
-            pendingFileUploads[cid] = fileURL
+        if isLocalTransport {
+            pendingLocalUploads.append((cid: cid, data: data))
         } else {
             pendingUploads.append((cid: cid, data: data))
         }
@@ -478,17 +468,18 @@ public final actor MCPServerProxy: Sendable {
             requestMeta["progressToken"] = progressToken
         }
 
-        // Attach file URLs for local transport uploads
-        if !pendingFileUploads.isEmpty {
+        // Write local uploads to disk scoped by progressToken
+        if !pendingLocalUploads.isEmpty, let tokenString = progressToken?.stringValue {
+            let dir = Self.uploadDirectory(for: tokenString)
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             var uploadsDict: JSONDictionary = [:]
-            for (cid, url) in pendingFileUploads {
-                uploadsDict[cid] = .string(url.absoluteString)
+            for upload in pendingLocalUploads {
+                let fileURL = dir.appendingPathComponent("\(upload.cid).bin")
+                try? upload.data.write(to: fileURL)
+                uploadsDict[upload.cid] = .string(fileURL.absoluteString)
             }
             requestMeta["uploads"] = .object(uploadsDict)
-            if let sessionID {
-                requestMeta["uploadSessionID"] = .string(sessionID)
-            }
-            pendingFileUploads.removeAll()
+            pendingLocalUploads.removeAll()
         }
 
         if !requestMeta.isEmpty {
