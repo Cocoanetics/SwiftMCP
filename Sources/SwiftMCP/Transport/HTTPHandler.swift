@@ -679,7 +679,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             break
         }
 
-        guard var body = body, let data = body.readData(length: body.readableBytes) else {
+        guard var body = body, body.readableBytes > 0 else {
             let buffer = channel.allocator.buffer(string: "Request body required.")
             await sendResponseAsync(channel: channel, status: .badRequest, body: buffer)
             return
@@ -702,21 +702,38 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             return
         }
 
+        // Write body to temp file to avoid holding all data in memory
+        let tempURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent(UUID().uuidString)
+        let byteCount = body.readableBytes
+        do {
+            guard let data = body.readData(length: byteCount) else {
+                let buffer = channel.allocator.buffer(string: "Failed to read upload body.")
+                await sendResponseAsync(channel: channel, status: .internalServerError, body: buffer)
+                return
+            }
+            try data.write(to: tempURL)
+        } catch {
+            let buffer = channel.allocator.buffer(string: "Failed to write temp file: \(error.localizedDescription)")
+            await sendResponseAsync(channel: channel, status: .internalServerError, body: buffer)
+            return
+        }
+
         // Send upload progress notification
         if let progressToken = await transport.pendingUploadStore.progressToken(for: cid) {
             let session = await transport.sessionManager.session(id: sessionID)
             await session.work { session in
                 await session.sendProgressNotification(
                     progressToken: progressToken,
-                    progress: Double(data.count),
-                    total: Double(data.count),
-                    message: "Upload received (\(data.count) bytes)"
+                    progress: Double(byteCount),
+                    total: Double(byteCount),
+                    message: "Upload received (\(byteCount) bytes)"
                 )
             }
         }
 
-        // Fulfill the pending upload — this resumes the tool call
-        await transport.pendingUploadStore.fulfill(cid: cid, data: data)
+        // Fulfill the pending upload with the temp file URL — this resumes the tool call
+        await transport.pendingUploadStore.fulfill(cid: cid, fileURL: tempURL)
 
         var headers = HTTPHeaders()
         headers.add(name: "Content-Type", value: "application/json")
@@ -725,7 +742,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
 
         let responseDict: JSONDictionary = [
             "cid": .string(cid),
-            "size": .integer(data.count),
+            "size": .integer(byteCount),
             "status": .string("fulfilled")
         ]
 
@@ -736,7 +753,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             await sendResponseAsync(channel: channel, status: .ok, headers: headers, body: buffer)
         }
 
-        logger.info("CID upload fulfilled: \(cid) (\(data.count) bytes)")
+        logger.info("CID upload fulfilled: \(cid) (\(byteCount) bytes)")
     }
 
     /// Parse filename from Content-Disposition header.
