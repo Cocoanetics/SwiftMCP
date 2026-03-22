@@ -335,7 +335,13 @@ public extension MCPServer {
         // Extract progress token for upload progress notifications
         let progressToken = params["_meta"]?.dictionaryValue?["progressToken"]
 
-        // Resolve any cid: placeholders by waiting for uploads
+        // Resolve file:// uploads from _meta.uploads (works on all transports)
+        let metaUploads = params["_meta"]?.dictionaryValue?["uploads"]?.dictionaryValue
+        if let resolved = try? Self.resolveFileUploads(in: arguments, metaUploads: metaUploads) {
+            arguments = resolved
+        }
+
+        // Resolve remaining cid: placeholders by waiting for HTTP uploads
         if let pendingStore = PendingUploadResolver.current {
             do {
                 if let resolved = try await Self.resolveCIDPlaceholders(
@@ -774,6 +780,35 @@ public extension MCPServer {
     }
 
     // MARK: - CID Upload Resolution
+
+    /// Resolves `cid:` placeholders that have a matching `file://` path in `_meta.uploads`.
+    /// The file is memory-mapped and base64-encoded into the arguments. Temp files are deleted after reading.
+    /// Returns the updated arguments, or nil if no file-based CIDs were resolved.
+    private static func resolveFileUploads(
+        in arguments: JSONDictionary,
+        metaUploads: JSONDictionary?
+    ) throws -> JSONDictionary? {
+        guard let metaUploads else { return nil }
+
+        var resolved = arguments
+        var didResolve = false
+
+        for (key, value) in arguments {
+            guard let str = value.stringValue, str.hasPrefix("cid:") else { continue }
+            let cid = String(str.dropFirst(4))
+
+            guard let filePath = metaUploads[cid]?.stringValue,
+                  filePath.hasPrefix("file://"),
+                  let fileURL = URL(string: filePath) else { continue }
+
+            let data = try Data(contentsOf: fileURL, options: .mappedIfSafe)
+            resolved[key] = .string(data.base64EncodedString())
+            try? FileManager.default.removeItem(at: fileURL)
+            didResolve = true
+        }
+
+        return didResolve ? resolved : nil
+    }
 
     /// Scans tool call arguments for `cid:` placeholders and waits for corresponding uploads.
     /// Returns the arguments with CIDs replaced by base64 data, or nil if no CIDs found.

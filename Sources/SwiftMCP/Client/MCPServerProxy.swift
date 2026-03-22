@@ -320,8 +320,30 @@ public final actor MCPServerProxy: Sendable {
 
     /// Register a pending upload that will be sent after the tool call request.
     /// Called by `MCPClientArgumentEncoder.encode(Data, proxy:)`.
+    /// Whether the current transport supports file-based uploads via `_meta.uploads`.
+    public var isLocalTransport: Bool {
+        switch config {
+        case .stdio, .stdioHandles, .tcp:
+            return true
+        case .sse:
+            return false
+        }
+    }
+
+    /// Pending file uploads for local transports (cid → file URL).
+    private var pendingFileUploads: [String: URL] = [:]
+
     public func registerPendingUpload(cid: String, data: Data) {
-        pendingUploads.append((cid: cid, data: data))
+        if isLocalTransport {
+            // Write to temp file for local transports
+            let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("mcp-uploads", isDirectory: true)
+            try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+            let fileURL = tempDir.appendingPathComponent("\(cid).bin")
+            try? data.write(to: fileURL)
+            pendingFileUploads[cid] = fileURL
+        } else {
+            pendingUploads.append((cid: cid, data: data))
+        }
     }
 
     /// Uploads binary data to the server's upload endpoint.
@@ -440,6 +462,17 @@ public final actor MCPServerProxy: Sendable {
         if let progressToken {
             requestMeta["progressToken"] = progressToken
         }
+
+        // Attach file URLs for local transport uploads
+        if !pendingFileUploads.isEmpty {
+            var uploadsDict: JSONDictionary = [:]
+            for (cid, url) in pendingFileUploads {
+                uploadsDict[cid] = .string(url.absoluteString)
+            }
+            requestMeta["uploads"] = .object(uploadsDict)
+            pendingFileUploads.removeAll()
+        }
+
         if !requestMeta.isEmpty {
             params["_meta"] = .object(requestMeta)
         }
