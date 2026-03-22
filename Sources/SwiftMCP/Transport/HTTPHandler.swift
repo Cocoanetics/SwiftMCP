@@ -732,8 +732,13 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             }
         }
 
-        // Fulfill the pending upload with the temp file URL — this resumes the tool call
-        await transport.pendingUploadStore.fulfill(cid: cid, fileURL: tempURL)
+        // Fulfill the pending upload with the temp file URL — this resumes the tool call.
+        // If the expectation vanished (e.g. duplicate upload for same CID), clean up the temp file.
+        let progressTokenResult = await transport.pendingUploadStore.fulfill(cid: cid, fileURL: tempURL)
+        if progressTokenResult == nil {
+            // Expectation vanished (e.g. duplicate upload for same CID) — clean up orphaned temp file
+            try? FileManager.default.removeItem(at: tempURL)
+        }
 
         var headers = HTTPHeaders()
         headers.add(name: "Content-Type", value: "application/json")
