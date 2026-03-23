@@ -135,8 +135,11 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             case (.end, .upload(let head, let fileHandle, let fileURL, let bytesWritten)):
                 defer { requestState = .idle }
                 fileHandle.closeFile()
+                
+                let channel = context.channel
+                
                 Task {
-                    await self.handleStreamedUpload(channel: context.channel, head: head, fileURL: fileURL, bytesWritten: bytesWritten)
+                    await self.handleStreamedUpload(channel: channel, head: head, fileURL: fileURL, bytesWritten: bytesWritten)
                 }
 
             // END Received after BODY
