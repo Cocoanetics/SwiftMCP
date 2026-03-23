@@ -8,7 +8,7 @@ import Logging
 
 
 /// HTTP request handler for the SSE transport
-final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @unchecked Sendable, URLSessionTaskDelegate {
+final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @unchecked Sendable {
     typealias InboundIn = HTTPServerRequestPart
     typealias OutboundOut = HTTPServerResponsePart
 
@@ -17,7 +17,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
     let id = UUID()
     private var sessionID: UUID?
 
-    private let logger = Logger(label: "com.cocoanetics.SwiftMCP.HTTPHandler")
+    internal let logger = Logger(label: "com.cocoanetics.SwiftMCP.HTTPHandler")
 
     // MARK: - Initialization
 
@@ -1514,14 +1514,6 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             let err = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32603, message: "Failed to proxy request to OAuth server: \(error.localizedDescription)"))
             await self.sendJSONResponseAsync(channel: channel, status: .internalServerError, json: err)
         }
-    }
-
-    // MARK: - URLSessionTaskDelegate
-    
-    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
-        // Don't follow redirects. Let the original data task complete with the redirect response.
-        logger.info("URLSession delegate detected redirect, preventing follow.")
-        completionHandler(nil)
     }
 
     // MARK: - Helpers
