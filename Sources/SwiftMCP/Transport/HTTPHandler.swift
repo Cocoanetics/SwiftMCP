@@ -226,12 +226,10 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             case (_, let path) where path.hasPrefix("/messages"):
                 sendResponse(channel: channel, status: .methodNotAllowed)
 
-            // if OpenAPI is disabled: everything else is NOT FOUND
-
-            case (_, _) where !transport.serveOpenAPI:
-                sendResponse(channel: channel, status: .notFound)
-
             // AI Plugin Manifest (OpenAPI)
+
+            case (_, "/.well-known/ai-plugin.json") where !transport.serveOpenAPI:
+                sendResponse(channel: channel, status: .notFound)
 
             case (.GET, "/.well-known/ai-plugin.json"):
                 handleAIPluginManifest(context: context, head: head)
@@ -240,6 +238,9 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
                 sendResponse(channel: channel, status: .methodNotAllowed)
 
             // OpenAPI Spec
+
+            case (_, "/openapi.json") where !transport.serveOpenAPI:
+                sendResponse(channel: channel, status: .notFound)
 
             case (.GET, "/openapi.json"):
                 handleOpenAPISpec(channel: channel, head: head)
@@ -744,14 +745,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             return
         }
 
-        guard await transport.pendingUploadStore.isExpected(cid: cid) else {
-            try? FileManager.default.removeItem(at: fileURL)
-            let buffer = channel.allocator.buffer(string: "No pending upload expected for CID: \(cid)")
-            await sendResponseAsync(channel: channel, status: .notFound, body: buffer)
-            return
-        }
-
-        // Send upload progress notification
+        // Send upload progress notification (only if expectation already registered)
         if let progressToken = await transport.pendingUploadStore.progressToken(for: cid) {
             let session = await transport.sessionManager.session(id: sessionID)
             await session.work { session in
@@ -764,7 +758,8 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             }
         }
 
-        // Fulfill with the temp file URL — this resumes the tool call
+        // Fulfill with the temp file URL — this resumes the tool call,
+        // or stores as early arrival if the expectation hasn't been registered yet.
         let progressTokenResult = await transport.pendingUploadStore.fulfill(cid: cid, fileURL: fileURL)
         if progressTokenResult == nil {
             try? FileManager.default.removeItem(at: fileURL)
@@ -839,12 +834,6 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
               let cid = String(pathComponents[2]).removingPercentEncoding else {
             let buffer = channel.allocator.buffer(string: "Missing CID in upload path. Use POST /mcp/uploads/{cid}")
             await sendResponseAsync(channel: channel, status: .badRequest, body: buffer)
-            return
-        }
-
-        guard await transport.pendingUploadStore.isExpected(cid: cid) else {
-            let buffer = channel.allocator.buffer(string: "No pending upload expected for CID: \(cid)")
-            await sendResponseAsync(channel: channel, status: .notFound, body: buffer)
             return
         }
 
