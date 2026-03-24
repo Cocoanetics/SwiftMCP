@@ -45,18 +45,27 @@ actor PendingUploadStore {
         }
     }
 
+    /// Result of a fulfill attempt.
+    enum FulfillResult {
+        /// Expectation was waiting — upload delivered, tool call resumed.
+        case fulfilled(progressToken: JSONValue?)
+        /// No expectation yet — stored as early arrival for later pickup.
+        case earlyArrival
+        /// No expectation and not stored — CID was unknown.
+        case missed
+    }
+
     /// Fulfill a pending upload with a temp file URL. Called by the upload endpoint.
-    /// Returns the progress token associated with this CID (for progress notifications).
     /// If no expectation exists yet, stores the upload as an early arrival.
     @discardableResult
-    func fulfill(cid: String, fileURL: URL) -> JSONValue? {
+    func fulfill(cid: String, fileURL: URL) -> FulfillResult {
         guard let expectation = expectations.removeValue(forKey: cid) else {
             // No expectation yet — store as early arrival
             earlyArrivals[cid] = EarlyArrival(fileURL: fileURL, arrivedAt: Date())
-            return nil
+            return .earlyArrival
         }
         expectation.continuation.resume(returning: fileURL)
-        return expectation.progressToken
+        return .fulfilled(progressToken: expectation.progressToken)
     }
 
     /// Fail a pending upload (e.g. on cancellation or timeout).

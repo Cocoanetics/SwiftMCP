@@ -760,9 +760,17 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
 
         // Fulfill with the temp file URL — this resumes the tool call,
         // or stores as early arrival if the expectation hasn't been registered yet.
-        let progressTokenResult = await transport.pendingUploadStore.fulfill(cid: cid, fileURL: fileURL)
-        if progressTokenResult == nil {
+        let fulfillResult = await transport.pendingUploadStore.fulfill(cid: cid, fileURL: fileURL)
+        if case .missed = fulfillResult {
+            // Genuinely unknown CID — clean up orphaned temp file
             try? FileManager.default.removeItem(at: fileURL)
+        }
+
+        let statusString: String
+        switch fulfillResult {
+        case .fulfilled: statusString = "fulfilled"
+        case .earlyArrival: statusString = "buffered"
+        case .missed: statusString = "missed"
         }
 
         var headers = HTTPHeaders()
@@ -773,7 +781,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         let responseDict: JSONDictionary = [
             "cid": .string(cid),
             "size": .integer(bytesWritten),
-            "status": .string("fulfilled")
+            "status": .string(statusString)
         ]
 
         let encoder = JSONEncoder()
@@ -868,10 +876,10 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         }
 
         // Fulfill the pending upload with the temp file URL — this resumes the tool call.
-        // If the expectation vanished (e.g. duplicate upload for same CID), clean up the temp file.
-        let progressTokenResult = await transport.pendingUploadStore.fulfill(cid: cid, fileURL: tempURL)
-        if progressTokenResult == nil {
-            // Expectation vanished (e.g. duplicate upload for same CID) — clean up orphaned temp file
+        // If genuinely missed (unknown CID), clean up the temp file.
+        // Early arrivals are preserved for later pickup.
+        let fulfillResult = await transport.pendingUploadStore.fulfill(cid: cid, fileURL: tempURL)
+        if case .missed = fulfillResult {
             try? FileManager.default.removeItem(at: tempURL)
         }
 
