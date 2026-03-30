@@ -209,23 +209,15 @@ public extension MCPServer {
 /**
      Handles an initialization request from the client.
      
-     This processes the client capabilities and stores them in the current session,
+     This processes the client capabilities and client info, stores them in the current session,
      then creates and returns an initialization response.
      
      - Parameter request: The initialization request data
      - Returns: A JSON-RPC message containing the initialization response
      */
     private func handleInitializeRequest(_ request: JSONRPCMessage.JSONRPCRequestData) async -> JSONRPCMessage? {
-        // Extract and store client capabilities if provided
-        if let params = request.params,
-           let capabilitiesValue = params["capabilities"],
-           let clientCapabilities: ClientCapabilities = try? capabilitiesValue.decoded(ClientCapabilities.self) {
-
-            if let session = Session.current {
-                await session.setClientCapabilities(clientCapabilities)
-            }
-        }
-        
+        await extractAndStoreCapabilities(request)
+        await extractAndStoreClientInfo(request)
         // Extract and store authentication metadata from _meta
         if let meta = RequestContext.current?.meta {
             if let accessToken = meta.accessToken {
@@ -253,6 +245,26 @@ public extension MCPServer {
         }
 
         return response
+    }
+    
+    private func extractAndStoreCapabilities(_ request: JSONRPCMessage.JSONRPCRequestData) async {
+        if let params = request.params,
+           let capabilitiesValue = params["capabilities"],
+           let clientCapabilities: ClientCapabilities = try? capabilitiesValue.decoded(ClientCapabilities.self) {
+            if let session = Session.current {
+                await session.setClientCapabilities(clientCapabilities)
+            }
+        }
+    }
+
+    private func extractAndStoreClientInfo(_ request: JSONRPCMessage.JSONRPCRequestData) async {
+        if let params = request.params,
+           let clientInfoValue = params["clientInfo"],
+           let clientInfo: Implementation = try? clientInfoValue.decoded(Implementation.self) {
+            if let session = Session.current {
+                await session.setClientInfo(clientInfo)
+            }
+        }
     }
 
 /**
