@@ -107,7 +107,7 @@ struct ClientInfoTests {
             let icon = Icon(
                 src: URL(string: "https://example.com/icon.png")!,
                 mimeType: "image/png",
-                sizes: ["64x64", "128x128"],
+                sizes: [.pixels(width: 64, height: 64), .pixels(width: 128, height: 128)],
                 theme: .dark
             )
 
@@ -119,7 +119,7 @@ struct ClientInfoTests {
 
             #expect(decoded.src == URL(string: "https://example.com/icon.png")!)
             #expect(decoded.mimeType == "image/png")
-            #expect(decoded.sizes == ["64x64", "128x128"])
+            #expect(decoded.sizes == [.pixels(width: 64, height: 64), .pixels(width: 128, height: 128)])
             #expect(decoded.theme == .dark)
         }
 
@@ -158,15 +158,94 @@ struct ClientInfoTests {
             }
         }
 
+        @Test("Icon.Size pixels encodes to WxH string")
+        func iconSizePixelsEncodesToStringTest() throws {
+            let size = Icon.Size.pixels(width: 48, height: 96)
+
+            let data = try JSONEncoder().encode(size)
+            let string = String(data: data, encoding: .utf8)!
+
+            #expect(string == "\"48x96\"")
+        }
+
+        @Test("Icon.Size any encodes to \"any\" string")
+        func iconSizeAnyEncodesToStringTest() throws {
+            let size = Icon.Size.any
+
+            let data = try JSONEncoder().encode(size)
+            let string = String(data: data, encoding: .utf8)!
+
+            #expect(string == "\"any\"")
+        }
+
+        @Test("Icon.Size decodes from WxH string")
+        func iconSizeDecodesFromWxHTest() throws {
+            let json = "\"96x48\""
+            let data = json.data(using: .utf8)!
+
+            let decoded = try JSONDecoder().decode(Icon.Size.self, from: data)
+
+            #expect(decoded == .pixels(width: 96, height: 48))
+        }
+
+        @Test("Icon.Size decodes \"any\" string")
+        func iconSizeDecodesAnyStringTest() throws {
+            let json = "\"any\""
+            let data = json.data(using: .utf8)!
+
+            let decoded = try JSONDecoder().decode(Icon.Size.self, from: data)
+
+            #expect(decoded == .any)
+        }
+
         @Test("Icon.Size from invalid string throws")
         func iconSizeInvalidTest() throws {
             let json = "\"invalid\""
             let data = json.data(using: .utf8)!
-            let decoder = JSONDecoder()
 
             #expect(throws: DecodingError.self) {
-                _ = try decoder.decode(Icon.Size.self, from: data)
+                _ = try JSONDecoder().decode(Icon.Size.self, from: data)
             }
+        }
+
+        @Test("Icon.Size from single number throws")
+        func iconSizeSingleNumberStringTest() throws {
+            let json = "\"64\""
+            let data = json.data(using: .utf8)!
+
+            #expect(throws: DecodingError.self) {
+                _ = try JSONDecoder().decode(Icon.Size.self, from: data)
+            }
+        }
+
+        @Test("Icon.Size from non-numeric WxH throws")
+        func iconSizeNonNumericTest() throws {
+            let json = "\"abcxdef\""
+            let data = json.data(using: .utf8)!
+
+            #expect(throws: DecodingError.self) {
+                _ = try JSONDecoder().decode(Icon.Size.self, from: data)
+            }
+        }
+
+        @Test("Icon.Size from empty string throws")
+        func iconSizeEmptyStringTest() throws {
+            let json = "\"\""
+            let data = json.data(using: .utf8)!
+
+            #expect(throws: DecodingError.self) {
+                _ = try JSONDecoder().decode(Icon.Size.self, from: data)
+            }
+        }
+
+        @Test("Icon.Size pixels round-trips with asymmetric dimensions")
+        func iconSizeAsymmetricRoundTripTest() throws {
+            let size = Icon.Size.pixels(width: 192, height: 64)
+
+            let data = try JSONEncoder().encode(size)
+            let decoded = try JSONDecoder().decode(Icon.Size.self, from: data)
+
+            #expect(decoded == size)
         }
     }
 

@@ -13,7 +13,7 @@ public struct Icon: Codable, Sendable {
         case dark
     }
     
-    public enum Size: Sendable {
+    public enum Size: Sendable, Equatable {
         case pixels(width: Int, height: Int)
         case any
     }
@@ -22,7 +22,7 @@ public struct Icon: Codable, Sendable {
     
     public var mimeType: String?
     
-    public var sizes: [String]?
+    public var sizes: [Size]?
     
     public var theme: Theme?
 }
