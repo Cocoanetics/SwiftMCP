@@ -46,6 +46,9 @@ public actor Session {
 
     /// Client capabilities received during initialization (if any).
     public var clientCapabilities: ClientCapabilities?
+    
+    /// Client info received during initialization (if any).
+    public var clientInfo: Implementation?
 
     /// URIs that this session has subscribed to for resource-updated notifications.
     private var subscribedResourceURIs: Set<String> = []
@@ -129,6 +132,11 @@ public actor Session {
         self.clientCapabilities = capabilities
     }
     
+    /// Update the client info stored for this session.
+    public func setClientInfo(_ info: Implementation?) {
+        self.clientInfo = info
+    }
+
     /// Sends a JSON-RPC message to the client and waits for the response.
     /// - Parameter message: The JSON-RPC message to send
     /// - Returns: The response message from the client
