@@ -22,8 +22,8 @@ actor PendingUploadStore {
         let arrivedAt: Date
     }
 
-    private var expectations: [String: Expectation] = [:]  // cid → expectation
-    private var earlyArrivals: [String: EarlyArrival] = [:]  // cid → early arrival
+    internal var expectations: [String: Expectation] = [:]  // cid → expectation
+    internal var earlyArrivals: [String: EarlyArrival] = [:]  // cid → early arrival
 
     /// Register a pending upload. Returns when the file arrives or the caller cancels.
     func waitForUpload(

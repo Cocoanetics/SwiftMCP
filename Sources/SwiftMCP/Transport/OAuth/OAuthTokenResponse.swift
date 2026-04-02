@@ -37,7 +37,7 @@ public struct OAuthTokenResponse: Codable, Sendable {
         self.idToken = idToken
     }
     
-    private enum CodingKeys: String, CodingKey {
+    internal enum CodingKeys: String, CodingKey {
         case accessToken = "access_token"
         case tokenType = "token_type"
         case expiresIn = "expires_in"
@@ -45,4 +45,4 @@ public struct OAuthTokenResponse: Codable, Sendable {
         case scope
         case idToken = "id_token"
     }
-} 
+}

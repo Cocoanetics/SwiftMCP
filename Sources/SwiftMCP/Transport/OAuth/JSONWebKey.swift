@@ -1,7 +1,7 @@
-import Foundation
 import Crypto
-import _CryptoExtras
+import Foundation
 import X509
+import _CryptoExtras
 
 /// JSON Web Key (JWK) for signature verification according to RFC 7517
 public struct JSONWebKey: Codable, Sendable {
@@ -75,4 +75,4 @@ public struct JSONWebKey: Codable, Sendable {
         let exponentData = try Data(base64URLEncoded: e)
         return try _RSA.Signing.PublicKey(n: modulusData, e: exponentData)
     }
-} 
+}

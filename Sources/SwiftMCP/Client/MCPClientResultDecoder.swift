@@ -6,9 +6,17 @@ public enum MCPClientResultDecoder {
         ()
     }
 
-    /// Decodes `Data` from a tool result string. When the server returns MCP content JSON
-    /// (e.g. `[{"type":"image","data":"<base64>","mimeType":"..."}]`), extracts and decodes
-    /// the base64 `data` field to avoid mojibake from mistakenly base64-decoding the whole JSON.
+    /// Decodes `Data` from a tool result string.
+    ///
+    /// The server encodes `Data` return values as a base64 JSON string via
+    /// `JSONEncoder.DataEncodingStrategy.base64`, which produces a quoted string like
+    /// `"SGVsb..."`; after `removingQuotes` the wire text is bare base64, potentially
+    /// with embedded newlines (Foundation inserts `\n` every 76 chars by default).
+    ///
+    /// Priority:
+    /// 1. MCP media content (`[{"type":"image","data":"..."}]`) — extract inner base64.
+    /// 2. Bare base64 string (with or without embedded newlines).
+    /// 3. JSON-quoted base64 string (legacy `"SGVsb..."` variant).
     public static func decode(_ type: Data.Type, from text: String) throws -> Data {
         let data = Data(text.utf8)
         if let json = try? JSONSerialization.jsonObject(with: data) {
@@ -20,11 +28,14 @@ public enum MCPClientResultDecoder {
             } else {
                 object = nil
             }
-            if let object, let base64 = object["data"] as? String, let decoded = Data(base64Encoded: base64) {
+            if let object, let base64 = object["data"] as? String,
+               let decoded = Data(base64Encoded: base64, options: .ignoreUnknownCharacters) {
                 return decoded
             }
         }
-        if let decoded = Data(base64Encoded: text) {
+        // Base64 produced by Foundation's .base64 DataEncodingStrategy may contain
+        // newline characters every 76 characters — use .ignoreUnknownCharacters.
+        if let decoded = Data(base64Encoded: text, options: .ignoreUnknownCharacters) {
             return decoded
         }
         let quoted = "\"\(text)\""

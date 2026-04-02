@@ -20,4 +20,8 @@ struct NoOpLogHandler: LogHandler {
 	func log(level: Logger.Level, message: Logger.Message, metadata: Logger.Metadata?, source: String, file: String, function: String, line: UInt) {
 		// Discard all log messages.
 	}
+
+	func log(level: Logger.Level, message: Logger.Message, metadata: Logger.Metadata?, file: String, function: String, line: UInt) {
+		// Discard all log messages.
+	}
 }

@@ -1,9 +1,9 @@
 import Foundation
+import Logging
 import NIOCore
+import NIOFoundationCompat
 import NIOHTTP1
 import NIOPosix
-import NIOFoundationCompat
-import Logging
 
 /**
  A transport that exposes an HTTP server with Server-Sent Events (SSE) and JSON-RPC endpoints.
@@ -33,11 +33,17 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     /// Logger for logging transport events and errors.
     public let logger = Logger(label: "com.cocoanetics.SwiftMCP.HTTPSSETransport")
 
-    private let group: EventLoopGroup
-    private var channel: Channel?
+    internal let group: EventLoopGroup
+    internal var channel: Channel?
     internal lazy var sessionManager = SessionManager(transport: self)
     internal let pendingUploadStore = PendingUploadStore()
-    private var keepAliveTimer: DispatchSourceTimer?
+    internal var keepAliveTimer: DispatchSourceTimer?
+
+    /// The HTTP router that dispatches incoming requests to route handlers.
+    internal lazy var router: Router = buildRouter()
+
+    /// Custom routes registered by the user via `addRoute`.
+    internal var customRoutes: [HTTPRoute] = []
 
     /// Flag to determine whether to serve OpenAPI endpoints.
     public var serveOpenAPI: Bool = false
@@ -145,7 +151,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     }
     
     /// Validate a new token using OAuth configuration or authorization handler
-    private func validateNewToken(_ token: String) async -> Bool {
+    internal func validateNewToken(_ token: String) async -> Bool {
         // If we have OAuth configuration, use its validation
         if let oauthConfiguration {
             // In transparent proxy mode, only accept tokens that are already stored in a session
@@ -294,7 +300,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     }
 
     /// Start the keep-alive timer that sends messages every 60 seconds.
-    private func startKeepAliveTimer() {
+    internal func startKeepAliveTimer() {
         keepAliveTimer = DispatchSource.makeTimerSource(queue: DispatchQueue.global())
         keepAliveTimer?.schedule(deadline: .now(), repeating: .seconds(60))
         keepAliveTimer?.setEventHandler { [weak self] in
@@ -305,14 +311,14 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     }
 
     /// Stop the keep-alive timer.
-    private func stopKeepAliveTimer() {
+    internal func stopKeepAliveTimer() {
         keepAliveTimer?.cancel()
         keepAliveTimer = nil
         logger.trace("Stopped keep-alive timer")
     }
 
     /// Send a keep-alive message to all connected SSE clients.
-    private func sendKeepAlive() {
+    internal func sendKeepAlive() {
         Task { [weak self] in
             guard let self = self else { return }
 
@@ -357,7 +363,18 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
 
     // MARK: - Handling SSE Connections
 
-    /// Register a new SSE channel.
+    /// Prepare an SSE session: create the stream, store the continuation,
+    /// and return the `AsyncStream<Data>` for the route handler to include
+    /// in its response. Does **not** touch the NIO channel.
+    func prepareSSEStream(sessionID: UUID) async -> AsyncStream<Data> {
+        let (stream, continuation) = AsyncStream<Data>.makeStream()
+        let session = await sessionManager.session(id: sessionID)
+        await session.setSSEContinuation(continuation)
+        return stream
+    }
+
+    /// Register the NIO channel for an SSE session and set up close handling.
+    /// Called by `HTTPHandler` after the route handler returns a streaming response.
     func registerSSEChannel(_ channel: Channel, id: UUID) {
         Task {
             await sessionManager.register(channel: channel, id: id)
@@ -423,5 +440,52 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         let string = String(data: data, encoding: .utf8) ?? ""
         let message = SSEMessage(data: string)
         await session.sendSSE(message)
+    }
+
+    // MARK: - Route Registration
+
+    /// Register a route with buffered input and buffered output.
+    ///
+    /// Must be called before ``start()``.
+    public func addRoute(
+        _ method: RouteMethod,
+        _ path: String,
+        handler: @escaping @Sendable (HTTPRouteRequest<Data?>) async throws -> HTTPRouteResponse<Data?>
+    ) {
+        customRoutes.append(HTTPRoute(method: method, pathPattern: path, handler: { _, request in
+            RouteResponse(try await handler(request))
+        }))
+    }
+
+    /// Register a route with buffered input and streaming output.
+    ///
+    /// Must be called before ``start()``.
+    public func addRoute(
+        _ method: RouteMethod,
+        _ path: String,
+        handler: @escaping @Sendable (HTTPRouteRequest<Data?>) async throws -> HTTPRouteResponse<AsyncStream<Data>>
+    ) {
+        customRoutes.append(HTTPRoute(method: method, pathPattern: path, handler: { _, request in
+            RouteResponse(try await handler(request))
+        }))
+    }
+
+    // MARK: - Router Assembly
+
+    /// Build the router with all built-in and custom routes.
+    internal func buildRouter() -> Router {
+        let router = Router()
+
+        // Built-in routes (order matters — first match wins)
+        router.addRoutes(corsRoutes())
+        router.addRoutes(mcpRoutes())
+        router.addRoutes(legacySSERoutes())
+        router.addRoutes(uploadRoutes())
+        router.addRoutes(openAPIRoutes())
+        router.addRoutes(oauthRoutes())
+
+        // Custom routes registered by the user
+        router.addRoutes(customRoutes)
+        return router
     }
 }

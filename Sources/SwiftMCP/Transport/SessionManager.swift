@@ -1,16 +1,9 @@
-//
-//  SessionManager.swift
-//  SwiftMCP
-//
-//  Created by Oliver Drobnik on 18.03.25.
-//
-
 import Foundation
 import NIO
 
 actor SessionManager {
-    private var sessions: [UUID: Session] = [:]
-    private weak var transport: (any Transport)?
+    internal var sessions: [UUID: Session] = [:]
+    internal weak var transport: (any Transport)?
 
     // OAuth state management removed - using transparent proxy instead
 
@@ -145,12 +138,16 @@ actor SessionManager {
         if let session = sessions[id] {
             // Cancel all waiting tasks (like ping continuations)
             await session.cancelAllWaitingTasks()
-            
+
+            // Finish the SSE stream so the response completes
+            await session.sseContinuation?.finish()
+            await session.setSSEContinuation(nil)
+
             // Close the channel if it exists
             if let channel = await session.channel {
                 channel.close(promise: nil)
             }
-            
+
             // Clear the channel reference
             await session.setChannel(nil)
         }

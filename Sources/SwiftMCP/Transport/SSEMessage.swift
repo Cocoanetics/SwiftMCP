@@ -1,21 +1,4 @@
-//
-//  SSEMessage.swift
-//  SwiftMCP
-//
-//  Created by Oliver Drobnik on 17.03.25.
-//
-
-
 import Foundation
-
-/// Represents the different types of SSE content as defined by the ABNF specification
-enum SSEEvent {
-    /// A comment line starting with colon
-    case comment(String)
-    
-    /// A field with name and value
-    case field(name: String, value: String, eventName: String? = nil)
-}
 
 /// A Server-Sent Events (SSE) message
 struct SSEMessage: LosslessStringConvertible {

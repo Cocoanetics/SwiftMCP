@@ -1,7 +1,8 @@
-#if canImport(Network)
 import Foundation
-import Network
 import Logging
+
+#if canImport(Network)
+import Network
 
 /// A TCP transport that advertises via Bonjour and exchanges newline-delimited JSON-RPC.
 public final class TCPBonjourTransport: Transport, @unchecked Sendable {
@@ -547,3 +548,4 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
     }
 }
 #endif
+
