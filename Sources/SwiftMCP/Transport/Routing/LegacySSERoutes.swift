@@ -79,8 +79,7 @@ extension HTTPSSETransport {
 	// MARK: - Helpers
 
 	/// Construct the endpoint URL for the legacy SSE protocol.
-	func endpointUrl(from request: HTTPRouteRequest<Data?>) -> URL? {
-		let sessionID = UUID(uuidString: request.sessionID ?? "") ?? UUID()
+	func endpointUrl(from request: HTTPRouteRequest<Data?>, sessionID: UUID) -> URL? {
 		var components = URLComponents()
 
 		if let host = request.header("Host") {

@@ -159,9 +159,10 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         let status = nioStatus(response.status)
 
         if let stream = response.bodyStream {
+            // For streaming responses (SSE), don't set Content-Length.
+            // Write head immediately so the client can start consuming.
             let head = HTTPResponseHead(version: .http1_1, status: status, headers: nioHeaders)
-            channel.write(HTTPServerResponsePart.head(head), promise: nil)
-            channel.flush()
+            channel.writeAndFlush(HTTPServerResponsePart.head(head), promise: nil)
 
             for await chunk in stream {
                 let buffer = channel.allocator.buffer(data: chunk)

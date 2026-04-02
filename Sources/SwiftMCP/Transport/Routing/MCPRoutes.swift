@@ -152,7 +152,7 @@ extension HTTPSSETransport {
 
 		// For the legacy protocol, send the endpoint event as the first stream item
 		if isLegacy {
-			if let endpointUrl = endpointUrl(from: request) {
+			if let endpointUrl = endpointUrl(from: request, sessionID: sessionID) {
 				logger.info("Sending endpoint event with URL: \(endpointUrl)")
 				let message = SSEMessage(data: endpointUrl.absoluteString, eventName: "endpoint")
 				sendSSE(message, to: sessionID)
