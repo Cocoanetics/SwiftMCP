@@ -15,6 +15,11 @@ public actor Session {
     /// The SSE channel associated with this session, if any.
     public var channel: Channel?
 
+    /// Continuation for the SSE response stream.
+    /// When set, `sendSSE` yields formatted event data into this stream
+    /// instead of writing directly to the NIO channel.
+    var sseContinuation: AsyncStream<Data>.Continuation?
+
     // MARK: - Request/Response Tracking
     /// Continuations for sent requests, to match up responses
     private var responseTasks: [String: CheckedContinuation<JSONRPCMessage, Error>] = [:]
@@ -73,16 +78,22 @@ public actor Session {
         }
     }
 
-    /// Indicates whether this session currently has an active SSE channel.
+    /// Indicates whether this session currently has an active SSE connection.
     public var hasActiveConnection: Bool {
-        channel?.isActive ?? false
+        sseContinuation != nil && (channel?.isActive ?? false)
     }
 
-    /// Send an SSE message through the session's channel if available.
+    /// Send an SSE message through the session's stream continuation.
     /// - Parameter message: The message to send.
     func sendSSE(_ message: SSEMessage) {
-        guard let channel, channel.isActive else { return }
-        channel.sendSSE(message)
+        guard let sseContinuation else { return }
+        let text = message.description
+        sseContinuation.yield(Data(text.utf8))
+    }
+
+    /// Set the SSE stream continuation for this session.
+    func setSSEContinuation(_ continuation: AsyncStream<Data>.Continuation?) {
+        self.sseContinuation = continuation
     }
 
     // MARK: - Convenience Mutators

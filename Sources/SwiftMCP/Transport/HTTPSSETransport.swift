@@ -39,6 +39,12 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     internal let pendingUploadStore = PendingUploadStore()
     private var keepAliveTimer: DispatchSourceTimer?
 
+    /// The HTTP router that dispatches incoming requests to route handlers.
+    internal lazy var router: Router = buildRouter()
+
+    /// Custom routes registered by the user via `addRoute`.
+    private var customRoutes: [HTTPRoute] = []
+
     /// Flag to determine whether to serve OpenAPI endpoints.
     public var serveOpenAPI: Bool = false
     
@@ -357,7 +363,18 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
 
     // MARK: - Handling SSE Connections
 
-    /// Register a new SSE channel.
+    /// Prepare an SSE session: create the stream, store the continuation,
+    /// and return the `AsyncStream<Data>` for the route handler to include
+    /// in its response. Does **not** touch the NIO channel.
+    func prepareSSEStream(sessionID: UUID) async -> AsyncStream<Data> {
+        let (stream, continuation) = AsyncStream<Data>.makeStream()
+        let session = await sessionManager.session(id: sessionID)
+        await session.setSSEContinuation(continuation)
+        return stream
+    }
+
+    /// Register the NIO channel for an SSE session and set up close handling.
+    /// Called by `HTTPHandler` after the route handler returns a streaming response.
     func registerSSEChannel(_ channel: Channel, id: UUID) {
         Task {
             await sessionManager.register(channel: channel, id: id)
@@ -423,5 +440,52 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         let string = String(data: data, encoding: .utf8) ?? ""
         let message = SSEMessage(data: string)
         await session.sendSSE(message)
+    }
+
+    // MARK: - Route Registration
+
+    /// Register a route with buffered input and buffered output.
+    ///
+    /// Must be called before ``start()``.
+    public func addRoute(
+        _ method: RouteMethod,
+        _ path: String,
+        handler: @escaping @Sendable (HTTPRouteRequest<Data?>) async throws -> HTTPRouteResponse<Data?>
+    ) {
+        customRoutes.append(HTTPRoute(method: method, pathPattern: path, handler: { _, request in
+            RouteResponse(try await handler(request))
+        }))
+    }
+
+    /// Register a route with buffered input and streaming output.
+    ///
+    /// Must be called before ``start()``.
+    public func addRoute(
+        _ method: RouteMethod,
+        _ path: String,
+        handler: @escaping @Sendable (HTTPRouteRequest<Data?>) async throws -> HTTPRouteResponse<AsyncStream<Data>>
+    ) {
+        customRoutes.append(HTTPRoute(method: method, pathPattern: path, handler: { _, request in
+            RouteResponse(try await handler(request))
+        }))
+    }
+
+    // MARK: - Router Assembly
+
+    /// Build the router with all built-in and custom routes.
+    private func buildRouter() -> Router {
+        let router = Router()
+
+        // Built-in routes (order matters — first match wins)
+        router.addRoutes(corsRoutes())
+        router.addRoutes(mcpRoutes())
+        router.addRoutes(legacySSERoutes())
+        router.addRoutes(uploadRoutes())
+        router.addRoutes(openAPIRoutes())
+        router.addRoutes(oauthRoutes())
+
+        // Custom routes registered by the user
+        router.addRoutes(customRoutes)
+        return router
     }
 }

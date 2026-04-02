@@ -145,12 +145,16 @@ actor SessionManager {
         if let session = sessions[id] {
             // Cancel all waiting tasks (like ping continuations)
             await session.cancelAllWaitingTasks()
-            
+
+            // Finish the SSE stream so the response completes
+            await session.sseContinuation?.finish()
+            await session.setSSEContinuation(nil)
+
             // Close the channel if it exists
             if let channel = await session.channel {
                 channel.close(promise: nil)
             }
-            
+
             // Clear the channel reference
             await session.setChannel(nil)
         }
