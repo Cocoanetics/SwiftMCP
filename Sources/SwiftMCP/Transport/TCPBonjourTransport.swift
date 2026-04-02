@@ -1,13 +1,8 @@
 import Foundation
-import Foundation
 import Logging
-import Logging
-import Network
 
 #if canImport(Network)
-import Foundation
 import Network
-import Logging
 
 /// A TCP transport that advertises via Bonjour and exchanges newline-delimited JSON-RPC.
 public final class TCPBonjourTransport: Transport, @unchecked Sendable {
