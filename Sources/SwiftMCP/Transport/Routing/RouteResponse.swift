@@ -6,19 +6,23 @@ struct RouteResponse: Sendable {
 	var headers: [(String, String)]
 	var body: Data?
 	var bodyStream: AsyncStream<Data>?
+	/// Optional SSE session identifier used to register streaming channels.
+	var streamSessionID: UUID?
 
 	init(status: HTTPStatus, headers: [(String, String)] = [], body: Data? = nil) {
 		self.status = status
 		self.headers = headers
 		self.body = body
 		self.bodyStream = nil
+		self.streamSessionID = nil
 	}
 
-	init(status: HTTPStatus, headers: [(String, String)] = [], bodyStream: AsyncStream<Data>) {
+	init(status: HTTPStatus, headers: [(String, String)] = [], bodyStream: AsyncStream<Data>, streamSessionID: UUID? = nil) {
 		self.status = status
 		self.headers = headers
 		self.body = nil
 		self.bodyStream = bodyStream
+		self.streamSessionID = streamSessionID
 	}
 
 	init(_ response: HTTPRouteResponse<Data?>) {
@@ -26,6 +30,7 @@ struct RouteResponse: Sendable {
 		self.headers = response.headers
 		self.body = response.body
 		self.bodyStream = nil
+		self.streamSessionID = nil
 	}
 
 	init(_ response: HTTPRouteResponse<AsyncStream<Data>>) {
@@ -33,6 +38,7 @@ struct RouteResponse: Sendable {
 		self.headers = response.headers
 		self.body = nil
 		self.bodyStream = response.body
+		self.streamSessionID = nil
 	}
 
 	static func json<T: Encodable>(_ value: T, status: HTTPStatus = .ok, sessionId: String? = nil) -> RouteResponse {

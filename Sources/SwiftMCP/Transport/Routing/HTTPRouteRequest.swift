@@ -33,7 +33,7 @@ public struct HTTPRouteRequest<Body: Sendable>: Sendable {
 
 	/// Extracts the Bearer token from the Authorization header, if present.
 	public var bearerToken: String? {
-		guard let auth = header("Authorization") ?? header("authorization") else { return nil }
+		guard let auth = header("Authorization") else { return nil }
 		let prefix = "Bearer "
 		guard auth.hasPrefix(prefix) else { return nil }
 		return String(auth.dropFirst(prefix.count))
@@ -41,11 +41,11 @@ public struct HTTPRouteRequest<Body: Sendable>: Sendable {
 
 	/// Extracts the session ID from the `Mcp-Session-Id` header, if present.
 	public var sessionID: String? {
-		header("Mcp-Session-Id") ?? header("mcp-session-id")
+		header("Mcp-Session-Id")
 	}
 
-	/// Returns the first header value matching the given name (case-sensitive).
+	/// Returns the first header value matching the given name (case-insensitive).
 	public func header(_ name: String) -> String? {
-		headers.first(where: { $0.0 == name })?.1
+		headers.first(where: { $0.0.caseInsensitiveCompare(name) == .orderedSame })?.1
 	}
 }

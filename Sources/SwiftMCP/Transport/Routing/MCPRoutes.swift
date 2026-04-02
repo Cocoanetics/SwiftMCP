@@ -177,7 +177,7 @@ extension HTTPSSETransport {
 			headers.append(("Mcp-Session-Id", sessionID.uuidString))
 		}
 
-		return RouteResponse(status: .ok, headers: headers, bodyStream: stream)
+		return RouteResponse(status: .ok, headers: headers, bodyStream: stream, streamSessionID: sessionID)
 	}
 
 	/// Handle DELETE /mcp — remove a session.

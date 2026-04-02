@@ -129,11 +129,15 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             do {
                 let response = try await handler(self.transport, request)
 
-                // For SSE streaming responses, register the NIO channel
-                if response.bodyStream != nil,
-                   let sessionId = response.headers.first(where: { $0.0 == "Mcp-Session-Id" })?.1,
-                   let sessionUUID = UUID(uuidString: sessionId) {
-                    self.transport.registerSSEChannel(channel, id: sessionUUID)
+                // For SSE streaming responses, register the NIO channel.
+                // Legacy /sse does not emit Mcp-Session-Id, so prefer the explicit streamSessionID.
+                if response.bodyStream != nil {
+                    if let sessionUUID = response.streamSessionID {
+                        self.transport.registerSSEChannel(channel, id: sessionUUID)
+                    } else if let sessionId = response.headers.first(where: { $0.0.caseInsensitiveCompare("Mcp-Session-Id") == .orderedSame })?.1,
+                              let sessionUUID = UUID(uuidString: sessionId) {
+                        self.transport.registerSSEChannel(channel, id: sessionUUID)
+                    }
                 }
 
                 await self.writeRouteResponse(response, to: channel)
