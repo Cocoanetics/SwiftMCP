@@ -169,6 +169,10 @@ struct HTTPTransportTests {
 
 	@Test("POST /mcp: with active SSE returns 202 and streams response")
 	func modernSSEStreaming() async throws {
+		#if canImport(FoundationNetworking)
+		// URLSession.bytes(for:) is unavailable on Linux FoundationNetworking.
+		return
+		#else
 		let (transport, baseURL) = try await startTransport()
 		defer { Task { try? await transport.stop() } }
 
@@ -267,12 +271,17 @@ struct HTTPTransportTests {
 			return true
 		}
 		#expect(pingEvent != nil, "Expected ping response via SSE")
+		#endif
 	}
 
 	// MARK: - Legacy SSE Protocol (GET /sse + POST /messages)
 
 	@Test("Legacy SSE: connect, get endpoint, initialize, ping")
 	func legacySSEFullFlow() async throws {
+		#if canImport(FoundationNetworking)
+		// URLSession.bytes(for:) is unavailable on Linux FoundationNetworking.
+		return
+		#else
 		let (transport, baseURL) = try await startTransport()
 		defer { Task { try? await transport.stop() } }
 
@@ -409,6 +418,7 @@ struct HTTPTransportTests {
 			return true
 		}
 		#expect(pingEvent != nil, "Expected ping response via SSE")
+		#endif
 	}
 
 	// MARK: - DELETE /mcp
