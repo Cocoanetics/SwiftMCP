@@ -315,21 +315,29 @@ struct HTTPTransportTests {
 		let (_, initResp) = try await postSession.data(for: initReq)
 		#expect((initResp as! HTTPURLResponse).statusCode == 202)
 
-		// Wait for SSE to deliver the response
-		try await Task.sleep(for: .milliseconds(500))
-
-		let initEvents = receivedEvents.value.filter { $0.event != "endpoint" }
-		#expect(!initEvents.isEmpty, "Expected initialize response via SSE. All events: \(receivedEvents.value.map { "[\($0.event)] \($0.data.prefix(80))" })")
-
-		if let initEvent = initEvents.first {
-			let message = try decode(Data(initEvent.data.utf8))
-			guard case .response(let resp) = message else {
-				Issue.record("Expected response in SSE event, got: \(initEvent.data)")
-				sseTask.cancel()
-				return
+		// Wait for SSE to deliver the initialize response.
+		// Ignore later notifications like ping; explicitly look for the response with id 1.
+		let deadline = Date().addingTimeInterval(2)
+		var initResponse: JSONRPCMessage.JSONRPCResponseData?
+		while Date() < deadline, initResponse == nil {
+			for event in receivedEvents.value where event.event != "endpoint" {
+				let message = try decode(Data(event.data.utf8))
+				if case .response(let resp) = message, resp.id == .int(1) {
+					initResponse = resp
+					break
+				}
 			}
-			#expect(resp.id == .int(1))
+			if initResponse == nil {
+				try await Task.sleep(for: .milliseconds(100))
+			}
 		}
+
+		guard let initResponse else {
+			Issue.record("Expected initialize response via SSE. All events: \(receivedEvents.value.map { "[\($0.event)] \($0.data.prefix(80))" })")
+			sseTask.cancel()
+			return
+		}
+		#expect(initResponse.id == .int(1))
 
 		// Send initialized notification
 		let initializedNotification = JSONRPCMessage.notification(method: "notifications/initialized")

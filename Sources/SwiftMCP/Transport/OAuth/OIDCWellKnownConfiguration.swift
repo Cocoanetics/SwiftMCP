@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// Configuration for enabling OAuth validation on ``HTTPSSETransport``.
 public struct OAuthConfiguration: Sendable {
