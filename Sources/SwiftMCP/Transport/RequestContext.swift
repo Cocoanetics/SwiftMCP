@@ -64,7 +64,7 @@ public final class RequestContext: Sendable {
     }
 
     @TaskLocal
-    private static var taskContext: RequestContext?
+    internal static var taskContext: RequestContext?
 
     /// Accessor for the current context stored in task local storage.
     public static var current: RequestContext! { taskContext }

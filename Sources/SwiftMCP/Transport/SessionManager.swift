@@ -1,16 +1,9 @@
-//
-//  SessionManager.swift
-//  SwiftMCP
-//
-//  Created by Oliver Drobnik on 18.03.25.
-//
-
 import Foundation
 import NIO
 
 actor SessionManager {
-    private var sessions: [UUID: Session] = [:]
-    private weak var transport: (any Transport)?
+    internal var sessions: [UUID: Session] = [:]
+    internal weak var transport: (any Transport)?
 
     // OAuth state management removed - using transparent proxy instead
 

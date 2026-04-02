@@ -1,10 +1,3 @@
-//
-//  JWTTokenValidator.swift
-//  SwiftMCP
-//
-//  Created by Oliver Drobnik on 02.07.25.
-//
-
 import Foundation
 
 // MARK: - Convenience Token Validator
@@ -16,10 +9,10 @@ import Foundation
 /// with built-in JWKS caching for performance.
 public struct JWTTokenValidator: Sendable {
     /// The validation options to apply to JWT tokens
-    private let options: JWTValidationOptions
+    internal let options: JWTValidationOptions
     
     /// The JWKS cache used for signature verification
-    private let jwksCache: JWKSCache
+    internal let jwksCache: JWKSCache
     
     /// Initialize a JWT token validator
     /// 

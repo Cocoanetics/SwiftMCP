@@ -1,10 +1,3 @@
-//
-//  JWTValidationOptions.swift
-//  SwiftMCP
-//
-//  Created by Oliver Drobnik on 02.07.25.
-//
-
 import Foundation
 
 /// Validation options for JWT tokens

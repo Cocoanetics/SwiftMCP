@@ -1,10 +1,3 @@
-//
-//  TransportError.swift
-//  SwiftMCP
-//
-//  Created by Oliver Drobnik on 21.03.25.
-//
-
 import Foundation
 
 /**

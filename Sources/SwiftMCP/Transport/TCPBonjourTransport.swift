@@ -1,3 +1,9 @@
+import Foundation
+import Foundation
+import Logging
+import Logging
+import Network
+
 #if canImport(Network)
 import Foundation
 import Network
@@ -547,3 +553,4 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
     }
 }
 #endif
+

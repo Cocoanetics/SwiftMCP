@@ -1,8 +1,8 @@
 import Foundation
 import Logging
+import NIOConcurrencyHelpers
 import NIOCore
 import NIOHTTP1
-import NIOConcurrencyHelpers
 
 /// A channel handler that logs both incoming and outgoing HTTP messages
 /// It's unchecked Sendable because we use NIOLock for sequential access to request/response state
@@ -12,16 +12,16 @@ final class HTTPLogger: ChannelDuplexHandler, @unchecked Sendable {
     typealias OutboundIn = HTTPServerResponsePart
     typealias OutboundOut = HTTPServerResponsePart
 
-    private lazy var httpLogger = Logger(label: "com.cocoanetics.SwiftMCP.HTTP")
-    private lazy var sseLogger = Logger(label: "com.cocoanetics.SwiftMCP.SSE")
-    private let lock = NIOLock()
+    internal lazy var httpLogger = Logger(label: "com.cocoanetics.SwiftMCP.HTTP")
+    internal lazy var sseLogger = Logger(label: "com.cocoanetics.SwiftMCP.SSE")
+    internal let lock = NIOLock()
 
     // Track current request/response state
-    private var currentRequestHead: HTTPRequestHead?
-    private var currentRequestBody = ""
-    private var currentResponseHead: HTTPResponseHead?
-    private var currentResponseBody = ""
-    private var isSSEConnection = false
+    internal var currentRequestHead: HTTPRequestHead?
+    internal var currentRequestBody = ""
+    internal var currentResponseHead: HTTPResponseHead?
+    internal var currentResponseBody = ""
+    internal var isSSEConnection = false
 
     /// Log incoming requests and forward them to the next handler
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
@@ -104,7 +104,7 @@ final class HTTPLogger: ChannelDuplexHandler, @unchecked Sendable {
         context.flush()
     }
 
-    private func logCurrentRequest() {
+    internal func logCurrentRequest() {
         guard let head = currentRequestHead else { return }
 
         var log = "\(head.method) \(head.uri) HTTP/\(head.version.major).\(head.version.minor)\n"
@@ -118,7 +118,7 @@ final class HTTPLogger: ChannelDuplexHandler, @unchecked Sendable {
         httpLogger.trace("\(log)")
     }
 
-    private func logCurrentResponse() {
+    internal func logCurrentResponse() {
         guard let head = currentResponseHead else { return }
 
         var log = "HTTP/\(head.version.major).\(head.version.minor) \(head.status.code) \(head.status.reasonPhrase)\n"

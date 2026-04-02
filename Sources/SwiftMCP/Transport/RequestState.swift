@@ -1,6 +1,6 @@
-import NIOHTTP1
-import NIOCore
 import Foundation
+import NIOCore
+import NIOHTTP1
 
 /// Represents the state of an HTTP request being processed.
 ///
