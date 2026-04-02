@@ -47,7 +47,9 @@ extension HTTPSSETransport {
 		// Stream body chunks to a temp file
 		let tempURL = URL(fileURLWithPath: NSTemporaryDirectory())
 			.appendingPathComponent("mcp-upload-\(UUID().uuidString).bin")
-		FileManager.default.createFile(atPath: tempURL.path, contents: nil)
+		guard FileManager.default.createFile(atPath: tempURL.path, contents: nil) else {
+			return RouteResponse(status: .internalServerError, body: Data("Failed to create temp file.".utf8))
+		}
 		guard let handle = FileHandle(forWritingAtPath: tempURL.path) else {
 			return RouteResponse(status: .internalServerError, body: Data("Failed to create temp file.".utf8))
 		}
