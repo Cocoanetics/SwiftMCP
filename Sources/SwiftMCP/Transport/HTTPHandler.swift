@@ -241,17 +241,40 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         nioHeaders.map { ($0.name, $0.value) }
     }
 
-    private func sendResponse(channel: Channel, status: HTTPResponseStatus, headers: HTTPHeaders? = nil, body: ByteBuffer? = nil) {
-        var responseHeaders = headers ?? HTTPHeaders()
-        responseHeaders.add(name: "Access-Control-Allow-Origin", value: "*")
+    static func responseHeadersApplyingDefaults(
+        _ headers: [(String, String)],
+        bodyLength: Int?
+    ) -> [(String, String)] {
+        var responseHeaders = HTTPHeaders()
+        for (name, value) in headers {
+            responseHeaders.add(name: name, value: value)
+        }
 
-        if let body = body {
+        if responseHeaders["Access-Control-Allow-Origin"].isEmpty {
+            responseHeaders.add(name: "Access-Control-Allow-Origin", value: "*")
+        }
+
+        if let bodyLength {
             if responseHeaders["Content-Type"].isEmpty {
                 responseHeaders.add(name: "Content-Type", value: "text/plain; charset=utf-8")
             }
-            responseHeaders.add(name: "Content-Length", value: "\(body.readableBytes)")
-        } else {
+            if responseHeaders["Content-Length"].isEmpty {
+                responseHeaders.add(name: "Content-Length", value: "\(bodyLength)")
+            }
+        } else if responseHeaders["Content-Length"].isEmpty {
             responseHeaders.add(name: "Content-Length", value: "0")
+        }
+
+        return responseHeaders.map { ($0.name, $0.value) }
+    }
+
+    private func sendResponse(channel: Channel, status: HTTPResponseStatus, headers: HTTPHeaders? = nil, body: ByteBuffer? = nil) {
+        let headerPairs = (headers ?? HTTPHeaders()).map { ($0.name, $0.value) }
+        let resolvedHeaders = Self.responseHeadersApplyingDefaults(headerPairs, bodyLength: body?.readableBytes)
+
+        var responseHeaders = HTTPHeaders()
+        for (name, value) in resolvedHeaders {
+            responseHeaders.add(name: name, value: value)
         }
 
         let head = HTTPResponseHead(version: .http1_1, status: status, headers: responseHeaders)
