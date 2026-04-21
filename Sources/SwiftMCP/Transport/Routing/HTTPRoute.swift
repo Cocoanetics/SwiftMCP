@@ -9,6 +9,10 @@ struct HTTPRoute: Sendable {
 	/// The path pattern, e.g. `/mcp/uploads/:cid` or `/oauth/*`.
 	let pathPattern: String
 
+	/// Per-route maximum body size in bytes. `nil` means the route inherits the
+	/// transport's `maxMessageSize`.
+	let maxBodySize: Int?
+
 	/// The handler — always receives the raw body stream internally.
 	/// The init wraps it to collect or forward based on the handler's body type.
 	let handler: @Sendable (HTTPSSETransport, HTTPRouteRequest<AsyncStream<Data>>) async throws -> RouteResponse
@@ -18,10 +22,11 @@ struct HTTPRoute: Sendable {
 	/// The `Body` type is inferred from the handler's request type:
 	/// - `Data?` → body stream is collected before the handler is called.
 	/// - `AsyncStream<Data>` → body stream is forwarded directly.
-	init<Body: RouteBody>(method: RouteMethod?, pathPattern: String,
+	init<Body: RouteBody>(method: RouteMethod?, pathPattern: String, maxBodySize: Int? = nil,
 		 handler: @escaping @Sendable (HTTPSSETransport, HTTPRouteRequest<Body>) async throws -> RouteResponse) {
 		self.method = method
 		self.pathPattern = pathPattern
+		self.maxBodySize = maxBodySize
 		self.handler = { transport, streamingRequest in
 			let body = await Body.collect(from: streamingRequest.body)
 			let request = HTTPRouteRequest<Body>(
@@ -40,9 +45,9 @@ struct HTTPRoute: Sendable {
 	/// HTTPRoute(.POST, "/mcp", calling: HTTPSSETransport.handleStreamableHTTP)
 	/// HTTPRoute(.POST, "/upload", calling: HTTPSSETransport.handleUpload)
 	/// ```
-	init<Body: RouteBody>(_ method: RouteMethod, _ pathPattern: String,
+	init<Body: RouteBody>(_ method: RouteMethod, _ pathPattern: String, maxBodySize: Int? = nil,
 		 calling: @escaping @Sendable (HTTPSSETransport) -> @Sendable (HTTPRouteRequest<Body>) async throws -> RouteResponse) {
-		self.init(method: method, pathPattern: pathPattern, handler: { transport, request in
+		self.init(method: method, pathPattern: pathPattern, maxBodySize: maxBodySize, handler: { transport, request in
 			try await calling(transport)(request)
 		})
 	}

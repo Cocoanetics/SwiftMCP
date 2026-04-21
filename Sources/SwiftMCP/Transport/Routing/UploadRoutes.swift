@@ -6,9 +6,14 @@ extension HTTPSSETransport {
 
 	/// Returns the upload-related routes.
 	func uploadRoutes() -> [HTTPRoute] {
-		[
+		// The CID upload route inherits `MCPFileUploadHandling.maxUploadSize`
+		// (when the server conforms) as its per-route body-size cap, so huge
+		// binary payloads aren't clamped by the transport's general
+		// `maxMessageSize` default.
+		let uploadMax = (server as? MCPFileUploadHandling)?.maxUploadSize
+		return [
 			// POST /mcp/uploads/:cid — binary file upload (streaming input)
-			HTTPRoute(.POST, "/mcp/uploads/:cid",
+			HTTPRoute(.POST, "/mcp/uploads/:cid", maxBodySize: uploadMax,
 				calling: HTTPSSETransport.handleUpload),
 		]
 	}

@@ -187,9 +187,12 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
     // MARK: - Helpers
 
     private func maxBodySize(for head: HTTPRequestHead) -> Int {
-        if head.uri.hasPrefix("/mcp/uploads"),
-           let uploadHandler = transport.server as? MCPFileUploadHandling {
-            return uploadHandler.maxUploadSize
+        if let method = convertMethod(head.method) {
+            let (path, _) = parseURI(head.uri)
+            if let match = transport.router.match(method: method, path: path),
+               let perRoute = match.route.maxBodySize {
+                return perRoute
+            }
         }
         return transport.maxMessageSize
     }
