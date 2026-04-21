@@ -470,6 +470,43 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         }))
     }
 
+    /// Register a route with streaming input and buffered output.
+    ///
+    /// Each incoming body chunk is yielded on the handler's `AsyncStream<Data>` as
+    /// it arrives from the underlying HTTP transport, without the full body being
+    /// buffered first. Use this for uploads larger than memory, or when the handler
+    /// needs to tee / forward chunks (e.g. to a remote resumable upload) while the
+    /// client is still sending.
+    ///
+    /// The `streamingHandler:` label distinguishes the overload from the two
+    /// buffered-input variants above.
+    ///
+    /// Must be called before ``start()``.
+    public func addRoute(
+        _ method: RouteMethod,
+        _ path: String,
+        streamingHandler: @escaping @Sendable (HTTPRouteRequest<AsyncStream<Data>>) async throws -> HTTPRouteResponse<Data?>
+    ) {
+        customRoutes.append(HTTPRoute(method: method, pathPattern: path, handler: { _, request in
+            RouteResponse(try await streamingHandler(request))
+        }))
+    }
+
+    /// Register a route with streaming input and streaming output.
+    ///
+    /// See ``addRoute(_:_:streamingHandler:)-<Data?>`` for input behaviour.
+    ///
+    /// Must be called before ``start()``.
+    public func addRoute(
+        _ method: RouteMethod,
+        _ path: String,
+        streamingHandler: @escaping @Sendable (HTTPRouteRequest<AsyncStream<Data>>) async throws -> HTTPRouteResponse<AsyncStream<Data>>
+    ) {
+        customRoutes.append(HTTPRoute(method: method, pathPattern: path, handler: { _, request in
+            RouteResponse(try await streamingHandler(request))
+        }))
+    }
+
     // MARK: - Router Assembly
 
     /// Build the router with all built-in and custom routes.
