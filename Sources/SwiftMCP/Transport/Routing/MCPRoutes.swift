@@ -24,7 +24,24 @@ extension HTTPSSETransport {
 	func handleStreamableHTTP(request: HTTPRouteRequest<Data?>) async throws -> RouteResponse {
 
 		// Extract or generate session ID
-		let sessionID = UUID(uuidString: request.sessionID ?? "") ?? UUID()
+		let clientSessionID = request.sessionID.flatMap { UUID(uuidString: $0) }
+		let sessionID: UUID
+		let isNewSession: Bool
+
+		if let existing = clientSessionID, await sessionManager.hasSession(id: existing) {
+			sessionID = existing
+			isNewSession = false
+		} else if clientSessionID == nil {
+			// No session header — allowed only for initialize requests.
+			// We generate a new ID; if the request isn't initialize, we'll
+			// reject below after parsing the body.
+			sessionID = UUID()
+			isNewSession = true
+		} else {
+			// Client sent an unknown session ID
+			return RouteResponse(status: .notFound, body: Data("Unknown session. Send initialize first.".utf8))
+		}
+
 		let sid = sessionID.uuidString
 
 		let baseHeaders: [(String, String)] = [
@@ -64,6 +81,19 @@ extension HTTPSSETransport {
 
 		do {
 			let messages = try JSONRPCMessage.decodeMessages(from: body)
+
+			// Enforce session ID on non-initialize requests per MCP spec:
+			// after initialize, all requests must carry the assigned Mcp-Session-Id.
+			if isNewSession {
+				let isInitialize = messages.contains { msg in
+					if case .request(let req) = msg, req.method == "initialize" { return true }
+					return false
+				}
+				if !isInitialize {
+					logger.warning("Rejected request without valid session ID (method is not initialize)")
+					return RouteResponse(status: .badRequest, headers: baseHeaders, body: Data("Missing or unknown Mcp-Session-Id. Send initialize first.".utf8))
+				}
+			}
 
 			let result: RouteResponse = await sessionManager.session(id: sessionID).work { session in
 
