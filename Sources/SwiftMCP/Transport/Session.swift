@@ -58,6 +58,17 @@ public actor Session {
     /// URIs that this session has subscribed to for resource-updated notifications.
     internal var subscribedResourceURIs: Set<String> = []
 
+    // MARK: - SSE Event Resumption (Last-Event-ID)
+
+    /// Monotonic counter for SSE event IDs within this session.
+    private var nextEventId: Int = 1
+
+    /// Bounded ring buffer of recent SSE events for Last-Event-ID replay.
+    private var eventBuffer: [(id: String, message: SSEMessage)] = []
+
+    /// Maximum events to retain for replay. Older events are evicted.
+    private let eventBufferCapacity = 256
+
     /// Creates a new session.
     /// - Parameters:
     ///   - id: The unique session identifier.
@@ -87,11 +98,39 @@ public actor Session {
     }
 
     /// Send an SSE message through the session's stream continuation.
+    /// Automatically assigns a monotonic event ID for resumption support.
     /// - Parameter message: The message to send.
     func sendSSE(_ message: SSEMessage) {
         guard let sseContinuation else { return }
-        let text = message.description
+
+        var tagged = message
+        // Assign an event ID for data messages (not comments/keepalives)
+        if case .field = message.event, message.id == nil {
+            let eid = String(nextEventId)
+            nextEventId += 1
+            tagged.id = eid
+
+            eventBuffer.append((id: eid, message: tagged))
+            if eventBuffer.count > eventBufferCapacity {
+                eventBuffer.removeFirst(eventBuffer.count - eventBufferCapacity)
+            }
+        }
+
+        let text = tagged.description
         sseContinuation.yield(Data(text.utf8))
+    }
+
+    /// Replay buffered events that were sent after the given event ID.
+    /// Used for Last-Event-ID resumption on SSE reconnect.
+    /// - Parameter lastEventId: The last event ID the client received.
+    func replayEvents(after lastEventId: String) {
+        guard let sseContinuation else { return }
+        guard let idx = eventBuffer.firstIndex(where: { $0.id == lastEventId }) else { return }
+        let toReplay = eventBuffer[(idx + 1)...]
+        for entry in toReplay {
+            let text = entry.message.description
+            sseContinuation.yield(Data(text.utf8))
+        }
     }
 
     /// Set the SSE stream continuation for this session.

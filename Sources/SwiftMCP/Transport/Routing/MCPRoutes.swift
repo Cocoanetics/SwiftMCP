@@ -150,6 +150,14 @@ extension HTTPSSETransport {
 		// Create the SSE stream — events will be yielded into it by Session.sendSSE
 		let stream = await prepareSSEStream(sessionID: sessionID)
 
+		// Last-Event-ID resumption: replay any buffered events the client missed
+		let lastEventId = request.header("Last-Event-ID") ?? request.header("last-event-id")
+		if let lastEventId, !isLegacy {
+			let session = await sessionManager.session(id: sessionID)
+			await session.replayEvents(after: lastEventId)
+			logger.info("Replayed events after Last-Event-ID: \(lastEventId)")
+		}
+
 		// For the legacy protocol, send the endpoint event as the first stream item
 		if isLegacy {
 			if let endpointUrl = endpointUrl(from: request, sessionID: sessionID) {
