@@ -126,7 +126,18 @@ public final class StdioTransport: Transport, @unchecked Sendable {
     func handleReceived(_ data: Data) async throws
     {
         do {
+            guard let session = Session.current else {
+                logger.error("Received stdio data without an active session")
+                return
+            }
+
             let messages = try JSONRPCMessage.decodeMessages(from: data)
+
+            if await SessionInitializationGate.shouldReject(messages, for: session) {
+                logger.warning("Rejected stdio request before initialize")
+                try await send(SessionInitializationGate.rejectionResponses(for: messages))
+                return
+            }
 
             let responses = await server.processBatch(messages)
 

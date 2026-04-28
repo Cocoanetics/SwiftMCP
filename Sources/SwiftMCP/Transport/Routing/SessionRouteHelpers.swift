@@ -24,18 +24,6 @@ extension HTTPSSETransport {
         return .unknown(sessionID)
     }
 
-    func batchStartsWithInitialize(_ messages: [JSONRPCMessage]) -> Bool {
-        guard let first = messages.first else {
-            return false
-        }
-
-        if case .request(let request) = first {
-            return request.method == "initialize"
-        }
-
-        return false
-    }
-
     func sessionNeedsInitialize(_ sessionID: UUID) async -> Bool {
         guard let session = await sessionManager.existingSession(id: sessionID) else {
             return false

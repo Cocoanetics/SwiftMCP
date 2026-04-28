@@ -467,6 +467,12 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
         await session.work { _ in
             do {
                 let messages = try JSONRPCMessage.decodeMessages(from: data)
+                if await SessionInitializationGate.shouldReject(messages, for: session) {
+                    logger.warning("Rejected TCP request before initialize (\(session.id))")
+                    try await send(SessionInitializationGate.rejectionResponses(for: messages))
+                    return
+                }
+
                 let responses = await server.processBatch(messages)
                 guard !responses.isEmpty else { return }
                 try await send(responses)
@@ -548,4 +554,3 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
     }
 }
 #endif
-

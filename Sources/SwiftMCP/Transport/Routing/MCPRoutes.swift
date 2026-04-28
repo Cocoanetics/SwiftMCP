@@ -55,14 +55,14 @@ extension HTTPSSETransport {
 			let authSessionID: UUID?
 
 				if case .missing = sessionHeader {
-					guard batchStartsWithInitialize(messages) else {
+					guard SessionInitializationGate.batchStartsWithInitialize(messages) else {
 						logger.warning("Rejected request without session ID before initialize")
 						return textResponse(status: .badRequest, body: "Missing Mcp-Session-Id. Send initialize first.")
 					}
 					sessionID = UUID()
 					authSessionID = nil
 				} else if case .existing(let existingSessionID) = sessionHeader {
-					if await sessionNeedsInitialize(existingSessionID), !batchStartsWithInitialize(messages) {
+					if await sessionNeedsInitialize(existingSessionID), !SessionInitializationGate.batchStartsWithInitialize(messages) {
 						logger.warning("Rejected request for uninitialized session \(existingSessionID)")
 						return textResponse(
 							status: .badRequest,
