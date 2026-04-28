@@ -26,7 +26,18 @@ extension HTTPSSETransport {
 			return RouteResponse(status: .notFound, body: Data("File uploads not supported by this server.".utf8))
 		}
 
-		let sessionID = UUID(uuidString: request.sessionID ?? "") ?? UUID()
+		let sessionHeader = await resolveSessionHeader(for: request)
+		let sessionID: UUID
+		switch sessionHeader {
+		case .missing:
+			return textResponse(status: .badRequest, body: "Missing Mcp-Session-Id. Send initialize first.")
+		case .malformed:
+			return textResponse(status: .badRequest, body: "Invalid Mcp-Session-Id header.")
+		case .unknown:
+			return textResponse(status: .notFound, body: "Unknown session. Send initialize first.")
+		case .existing(let existingSessionID):
+			sessionID = existingSessionID
+		}
 
 		let token = request.bearerToken
 
@@ -38,6 +49,14 @@ extension HTTPSSETransport {
 			return RouteResponse(status: .forbidden, body: Data(message.utf8))
 		case .authorized:
 			break
+		}
+
+		if await sessionNeedsInitialize(sessionID) {
+			return textResponse(
+				status: .badRequest,
+				body: "Session not initialized. Send initialize first.",
+				sessionID: sessionID
+			)
 		}
 
 		// Extract CID from path
