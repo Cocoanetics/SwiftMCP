@@ -216,6 +216,7 @@ public extension MCPServer {
      - Returns: A JSON-RPC message containing the initialization response
      */
     private func handleInitializeRequest(_ request: JSONRPCMessage.JSONRPCRequestData) async -> JSONRPCMessage? {
+        await Session.current?.markInitializeRequestReceived()
         await extractAndStoreCapabilities(request)
         await extractAndStoreClientInfo(request)
         // Extract and store authentication metadata from _meta

@@ -74,7 +74,11 @@ final class InProcessStdioBridge: StdioConnection, @unchecked Sendable {
         do {
             let messages = try JSONRPCMessage.decodeMessages(from: lineData)
             let responses = await session.work { _ in
-                await server.processBatch(messages)
+                if await SessionInitializationGate.shouldReject(messages, for: session) {
+                    return SessionInitializationGate.rejectionResponses(for: messages)
+                }
+
+                return await server.processBatch(messages)
             }
             guard !responses.isEmpty else { return }
 

@@ -24,12 +24,27 @@ actor SessionManager {
         }
     }
 
+    /// Check whether a session with the given identifier exists.
+    func hasSession(id: UUID) -> Bool {
+        sessions[id] != nil
+    }
+
+    /// Retrieve an existing session without creating a new one.
+    func existingSession(id: UUID) async -> Session? {
+        guard let existing = sessions[id] else {
+            return nil
+        }
+
+        if await existing.transport == nil {
+            await existing.setTransport(transport)
+        }
+
+        return existing
+    }
+
     /// Retrieve or create a session for the given identifier.
     func session(id: UUID) async -> Session {
-        if let existing = sessions[id] {
-            if await existing.transport == nil {
-                await existing.setTransport(transport)
-            }
+        if let existing = await existingSession(id: id) {
             return existing
         }
 

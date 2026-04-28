@@ -89,8 +89,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         }
         
         // 1. If we have a session ID, check token against session-stored value
-        if let id = sessionID {
-            let session = await sessionManager.session(id: id)
+        if let id = sessionID, let session = await sessionManager.existingSession(id: id) {
             if let stored = await session.accessToken {
                 if stored == token, (await session.accessTokenExpiry ?? Date.distantFuture) > Date() {
                     return .authorized

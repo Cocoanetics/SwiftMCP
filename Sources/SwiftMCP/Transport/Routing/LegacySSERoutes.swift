@@ -37,6 +37,11 @@ extension HTTPSSETransport {
 			return RouteResponse(status: .badRequest)
 		}
 
+		guard await sessionManager.hasSession(id: sessionID) else {
+			logger.warning("Rejected message for unknown legacy SSE session \(sessionID)")
+			return textResponse(status: .notFound, body: "Unknown session. Connect to /sse first.")
+		}
+
 		// Check authorization
 		let token = request.bearerToken
 
@@ -58,6 +63,14 @@ extension HTTPSSETransport {
 
 		do {
 			let messages = try JSONRPCMessage.decodeMessages(from: body)
+			if await sessionNeedsInitialize(sessionID), !SessionInitializationGate.batchStartsWithInitialize(messages) {
+				logger.warning("Rejected legacy SSE request for uninitialized session \(sessionID)")
+				return textResponse(
+					status: .badRequest,
+					body: "Session not initialized. Send initialize first.",
+					sessionID: sessionID
+				)
+			}
 
 			await sessionManager.session(id: sessionID).work { session in
 				for message in messages {
