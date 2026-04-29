@@ -213,9 +213,11 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     }
 
     internal static let latestProtocolVersion = "2025-11-25"
+    internal static let intermediateHTTPProtocolVersion = "2025-06-18"
     internal static let fallbackHTTPProtocolVersion = "2025-03-26"
     internal static let supportedProtocolVersions: Set<String> = [
         latestProtocolVersion,
+        intermediateHTTPProtocolVersion,
         fallbackHTTPProtocolVersion,
     ]
 

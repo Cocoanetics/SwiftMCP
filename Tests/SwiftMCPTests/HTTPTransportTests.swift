@@ -217,6 +217,16 @@ struct HTTPTransportTests {
 		}
 	}
 
+	private func errorResponseEvent(_ events: [SSEClientMessage], id: Int) -> SSEClientMessage? {
+		events.first { event in
+			guard let message = try? decodeEventMessage(event),
+				  case .errorResponse(let errorResponse) = message else {
+				return false
+			}
+			return errorResponse.id == .int(id)
+		}
+	}
+
 	// MARK: - Modern Streamable HTTP
 
 	@Test("POST /mcp: initialize returns SSE response stream")
@@ -293,6 +303,86 @@ struct HTTPTransportTests {
 		}
 
 		#expect(protocolVersion == "2025-03-26")
+		#endif
+	}
+
+	@Test("POST /mcp: initialize preserves negotiated intermediate protocol version")
+	func initializeNegotiatesIntermediateProtocolVersion() async throws {
+		#if canImport(FoundationNetworking)
+		return
+		#else
+		let (transport, baseURL) = try await startTransport()
+		defer { Task { try? await transport.stop() } }
+
+		let request = try streamablePOSTRequest(
+			url: baseURL.appendingPathComponent("mcp"),
+			message: .request(
+				id: 1,
+				method: "initialize",
+				params: [
+					"protocolVersion": .string("2025-06-18"),
+					"capabilities": .object([:]),
+					"clientInfo": .object([
+						"name": .string("TestClient"),
+						"version": .string("1.0")
+					])
+				]
+			),
+			protocolVersion: "2025-06-18"
+		)
+
+		let (response, events) = try await readFiniteSSEResponse(request)
+		#expect(response.statusCode == 200)
+
+		let initEvent = try #require(responseEvent(events, id: 1))
+		let message = try #require(try decodeEventMessage(initEvent))
+		guard case .response(let responseData) = message,
+			  let result = responseData.result,
+			  let protocolVersion = result["protocolVersion"]?.stringValue else {
+			Issue.record("Expected initialize response payload")
+			return
+		}
+
+		#expect(protocolVersion == "2025-06-18")
+		#endif
+	}
+
+	@Test("POST /mcp: initialize rejects unsupported protocol version")
+	func initializeRejectsUnsupportedProtocolVersion() async throws {
+		#if canImport(FoundationNetworking)
+		return
+		#else
+		let (transport, baseURL) = try await startTransport()
+		defer { Task { try? await transport.stop() } }
+
+		let request = try streamablePOSTRequest(
+			url: baseURL.appendingPathComponent("mcp"),
+			message: .request(
+				id: 1,
+				method: "initialize",
+				params: [
+					"protocolVersion": .string("2024-11-05"),
+					"capabilities": .object([:]),
+					"clientInfo": .object([
+						"name": .string("TestClient"),
+						"version": .string("1.0")
+					])
+				]
+			)
+		)
+
+		let (response, events) = try await readFiniteSSEResponse(request)
+		#expect(response.statusCode == 200)
+
+		let initEvent = try #require(errorResponseEvent(events, id: 1))
+		let message = try #require(try decodeEventMessage(initEvent))
+		guard case .errorResponse(let errorData) = message else {
+			Issue.record("Expected initialize error response")
+			return
+		}
+
+		#expect(errorData.error.code == -32602)
+		#expect(errorData.error.message.contains("Unsupported protocol version"))
 		#endif
 	}
 
