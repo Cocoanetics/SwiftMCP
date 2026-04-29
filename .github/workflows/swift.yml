@@ -26,21 +26,22 @@ jobs:
 
   build-ios:
     runs-on: macos-latest
-
     steps:
-      - uses: actions/checkout@v4
-
+      - uses: actions/checkout@v6
+      - name: Select Xcode 26.0
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "26.0"
       - name: Build (iOS)
         run: xcodebuild -scheme SwiftMCP -destination 'generic/platform=iOS' build
 
   build-linux:
     runs-on: ubuntu-latest
-
     steps:
-      - uses: actions/checkout@v4
-      
+      - uses: actions/checkout@v6
       - name: Verify Swift version
         run: swift --version
-      
-      - name: Build & Test (Linux)
-        run: swift test
+      - name: Build (Linux)
+        run: swift build --build-tests -v
+      - name: Test (Linux)
+        run: swift test -v --skip-build
