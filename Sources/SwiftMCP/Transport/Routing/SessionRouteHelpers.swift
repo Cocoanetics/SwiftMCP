@@ -32,6 +32,55 @@ extension HTTPSSETransport {
         return !(await session.hasReceivedInitializeRequest)
     }
 
+    func batchContainsRequests(_ messages: [JSONRPCMessage]) -> Bool {
+        messages.contains {
+            if case .request = $0 {
+                return true
+            }
+            return false
+        }
+    }
+
+    func validateHTTPProtocolVersion<Body: Sendable>(
+        for request: HTTPRouteRequest<Body>,
+        sessionID: UUID?
+    ) async -> RouteResponse? {
+        if let headerVersion = request.header("MCP-Protocol-Version") {
+            guard HTTPSSETransport.supportedProtocolVersions.contains(headerVersion) else {
+                return textResponse(status: .badRequest, body: "Invalid or unsupported MCP-Protocol-Version header.")
+            }
+
+            if let sessionID,
+               let session = await sessionManager.existingSession(id: sessionID),
+               let negotiatedVersion = await session.negotiatedProtocolVersion,
+               negotiatedVersion != headerVersion {
+                return textResponse(status: .badRequest, body: "MCP-Protocol-Version does not match the negotiated session version.", sessionID: sessionID)
+            }
+
+            return nil
+        }
+
+        return nil
+    }
+
+    func resolvedHTTPProtocolVersion<Body: Sendable>(
+        for request: HTTPRouteRequest<Body>,
+        sessionID: UUID?
+    ) async -> String {
+        if let headerVersion = request.header("MCP-Protocol-Version"),
+           HTTPSSETransport.supportedProtocolVersions.contains(headerVersion) {
+            return headerVersion
+        }
+
+        if let sessionID,
+           let session = await sessionManager.existingSession(id: sessionID),
+           let negotiatedVersion = await session.negotiatedProtocolVersion {
+            return negotiatedVersion
+        }
+
+        return HTTPSSETransport.fallbackHTTPProtocolVersion
+    }
+
     func bindBearerTokenIfNeeded(_ token: String?, to sessionID: UUID) async {
         guard let token else {
             return

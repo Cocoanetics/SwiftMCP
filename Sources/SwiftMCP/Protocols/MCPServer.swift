@@ -217,6 +217,7 @@ public extension MCPServer {
      */
     private func handleInitializeRequest(_ request: JSONRPCMessage.JSONRPCRequestData) async -> JSONRPCMessage? {
         await Session.current?.markInitializeRequestReceived()
+        await Session.current?.setNegotiatedProtocolVersion(HTTPSSETransport.latestProtocolVersion)
         await extractAndStoreCapabilities(request)
         await extractAndStoreClientInfo(request)
         // Extract and store authentication metadata from _meta
@@ -310,7 +311,7 @@ public extension MCPServer {
         )
 
         let result = InitializeResult(
-            protocolVersion: "2025-06-18",
+            protocolVersion: HTTPSSETransport.latestProtocolVersion,
             capabilities: capabilities,
             serverInfo: serverInfo
         )

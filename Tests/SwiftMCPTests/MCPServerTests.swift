@@ -11,7 +11,7 @@ func testInitializeRequest() async throws {
         id: 1,
         method: "initialize",
         params: [
-            "protocolVersion": "2025-06-18",
+            "protocolVersion": "2025-11-25",
             "capabilities": .object([
                 "experimental": .object([:]),
                 "resources": .object(["listChanged": false]),
@@ -48,7 +48,7 @@ func testInitializeRequest() async throws {
     guard let protocolVersion = result["protocolVersion"]?.value as? String else {
         throw TestError("protocolVersion not found")
     }
-    #expect(protocolVersion == "2025-06-18")
+    #expect(protocolVersion == "2025-11-25")
 
     // Extract the server capabilities
     guard let capabilitiesDict = result["capabilities"]?.value as? [String: Any] else {

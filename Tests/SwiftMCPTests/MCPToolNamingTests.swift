@@ -159,7 +159,7 @@ func testToolsListReturnsTransformedNames() async throws {
         id: 1,
         method: "initialize",
         params: [
-            "protocolVersion": "2025-06-18",
+            "protocolVersion": "2025-11-25",
             "capabilities": .object([:]),
             "clientInfo": .object(["name": "test", "version": "1.0"])
         ]

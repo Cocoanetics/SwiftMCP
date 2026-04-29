@@ -594,6 +594,18 @@ public final actor MCPServerProxy: Sendable {
             }
 
         case .sse(let sseConfig):
+            if isStreamableMCPURL(endpointURL ?? sseConfig.url) {
+#if os(Linux)
+                return try await sendStreamableRequestLinux(message, sseConfig: sseConfig)
+#else
+                if #available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, macCatalyst 15.0, *) {
+                    return try await sendStreamableRequestApple(message, sseConfig: sseConfig)
+                } else {
+                    throw MCPServerProxyError.unsupportedPlatform("Streamable HTTP requires macOS 12.0 or newer.")
+                }
+#endif
+            }
+
             guard let endpointURL = endpointURL else {
                 throw MCPServerProxyError.communicationError("Not connected to server")
             }
@@ -745,7 +757,7 @@ public final actor MCPServerProxy: Sendable {
     private func initialize(clientName: String, clientVersion: String) async throws {
         let requestId = nextRequestID()
         var params: JSONDictionary = [
-            "protocolVersion": .string("2025-06-18"),
+            "protocolVersion": .string(HTTPSSETransport.latestProtocolVersion),
             "clientInfo": .object([
                 "name": .string(clientName),
                 "version": .string(clientVersion)
@@ -830,6 +842,10 @@ public final actor MCPServerProxy: Sendable {
     }
 
     private func processIncomingMessage(event: String = "", data: String) async {
+        if data.isEmpty {
+            return
+        }
+
         if event == "endpoint" {
             if case .sse(let sseConfig) = config, isStreamableMCPURL(sseConfig.url) {
                 // Ignore legacy endpoint events for streamable /mcp mode.
@@ -1287,12 +1303,37 @@ public final actor MCPServerProxy: Sendable {
         }
     }
 
+    private func applyStreamableProtocolHeaders(_ request: inout URLRequest) {
+        request.setValue(HTTPSSETransport.latestProtocolVersion, forHTTPHeaderField: "MCP-Protocol-Version")
+        if let sessionID {
+            request.setValue(sessionID, forHTTPHeaderField: "Mcp-Session-Id")
+        }
+    }
+
     private func configureSSEPOSTRequest(_ request: inout URLRequest, sseConfig: MCPServerSseConfig) {
         applyConfiguredSSEHeaders(&request, sseConfig: sseConfig)
         request.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
 
-        if let sessionID {
+        if isStreamableMCPURL(sseConfig.url) {
+            applyStreamableProtocolHeaders(&request)
+        } else if let sessionID {
             request.setValue(sessionID, forHTTPHeaderField: "Mcp-Session-Id")
+        }
+    }
+
+    private func configureSSEGETRequest(
+        _ request: inout URLRequest,
+        sseConfig: MCPServerSseConfig,
+        lastEventID: String? = nil
+    ) {
+        applyConfiguredSSEHeaders(&request, sseConfig: sseConfig)
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+
+        if isStreamableMCPURL(sseConfig.url) {
+            applyStreamableProtocolHeaders(&request)
+            if let lastEventID {
+                request.setValue(lastEventID, forHTTPHeaderField: "Last-Event-ID")
+            }
         }
     }
 
@@ -1315,6 +1356,206 @@ public final actor MCPServerProxy: Sendable {
         }
     }
 
+    #if !os(Linux)
+    @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, macCatalyst 15.0, *)
+    private func sendStreamableRequestApple(_ message: JSONRPCMessage, sseConfig: MCPServerSseConfig) async throws -> JSONRPCMessage {
+        guard let requestID = message.id else {
+            throw MCPServerProxyError.communicationError("Message must have an ID")
+        }
+        guard let endpointURL = endpointURL ?? (isStreamableMCPURL(sseConfig.url) ? sseConfig.url : nil) else {
+            throw MCPServerProxyError.communicationError("Not connected to server")
+        }
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let requestBody = try encoder.encode(message)
+
+        return try await streamableRequestResponseApple(
+            endpointURL: endpointURL,
+            sseConfig: sseConfig,
+            requestID: requestID,
+            requestBody: requestBody,
+            lastEventID: nil,
+            retryMilliseconds: 1000
+        )
+    }
+
+    @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, macCatalyst 15.0, *)
+    private func streamableRequestResponseApple(
+        endpointURL: URL,
+        sseConfig: MCPServerSseConfig,
+        requestID: JSONRPCID,
+        requestBody: Data?,
+        lastEventID: String?,
+        retryMilliseconds: Int
+    ) async throws -> JSONRPCMessage {
+        let sessionConfig = URLSessionConfiguration.default
+        sessionConfig.timeoutIntervalForRequest = .infinity
+        sessionConfig.timeoutIntervalForResource = .infinity
+
+        let session = URLSession(configuration: sessionConfig)
+        var request = URLRequest(url: endpointURL)
+        request.httpMethod = requestBody == nil ? "GET" : "POST"
+
+        if let requestBody {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            configureSSEPOSTRequest(&request, sseConfig: sseConfig)
+            request.httpBody = requestBody
+        } else {
+            configureSSEGETRequest(&request, sseConfig: sseConfig, lastEventID: lastEventID)
+        }
+
+        let (asyncBytes, response) = try await session.bytes(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw MCPServerProxyError.communicationError("Invalid HTTP response")
+        }
+
+        if let updatedSessionID = httpResponse.value(forHTTPHeaderField: "Mcp-Session-Id") {
+            sessionID = updatedSessionID
+        }
+
+        let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type")?.lowercased() ?? ""
+        switch httpResponse.statusCode {
+        case 200:
+            if contentType.contains("application/json") {
+                var data = Data()
+                for try await byte in asyncBytes {
+                    data.append(byte)
+                }
+
+                guard let responseMessage = try responseMessage(for: requestID, from: data) else {
+                    throw MCPServerProxyError.communicationError("HTTP 200 did not include JSON-RPC response for request \(requestID.stringValue)")
+                }
+                return responseMessage
+            }
+
+            if contentType.contains("text/event-stream") {
+                return try await readStreamableSSEApple(
+                    asyncBytes: asyncBytes,
+                    endpointURL: endpointURL,
+                    sseConfig: sseConfig,
+                    requestID: requestID,
+                    lastEventID: lastEventID,
+                    retryMilliseconds: retryMilliseconds
+                )
+            }
+
+            throw MCPServerProxyError.communicationError("Unsupported response content type: \(contentType)")
+        case 202:
+            throw MCPServerProxyError.communicationError("Unexpected HTTP 202 for request \(requestID.stringValue)")
+        default:
+            var data = Data()
+            for try await byte in asyncBytes {
+                data.append(byte)
+            }
+            let responseBody = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let details = responseBody.isEmpty ? "" : ": \(responseBody)"
+            throw MCPServerProxyError.communicationError("HTTP error \(httpResponse.statusCode)\(details)")
+        }
+    }
+
+    @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, macCatalyst 15.0, *)
+    private func readStreamableSSEApple(
+        asyncBytes: URLSession.AsyncBytes,
+        endpointURL: URL,
+        sseConfig: MCPServerSseConfig,
+        requestID: JSONRPCID,
+        lastEventID: String?,
+        retryMilliseconds: Int
+    ) async throws -> JSONRPCMessage {
+        var latestEventID = lastEventID
+        var retryMilliseconds = retryMilliseconds
+
+        do {
+            for try await message in asyncBytes.lines.sseMessages() {
+                if let id = message.id {
+                    latestEventID = id
+                }
+                if let retry = message.retry {
+                    retryMilliseconds = retry
+                }
+
+                if message.data.isEmpty {
+                    continue
+                }
+
+                if let jsonData = message.data.data(using: .utf8),
+                   let decoded = try? JSONDecoder().decode(JSONRPCMessage.self, from: jsonData),
+                   decoded.id == requestID {
+                    switch decoded {
+                    case .response, .errorResponse:
+                        return decoded
+                    case .request, .notification:
+                        break
+                    }
+                }
+
+                await processIncomingMessage(event: message.event, data: message.data)
+            }
+        } catch is CancellationError {
+            throw MCPServerProxyError.communicationError("Request stream cancelled before response was received")
+        } catch {
+            if let latestEventID {
+                try await Task.sleep(nanoseconds: UInt64(retryMilliseconds) * 1_000_000)
+                return try await streamableRequestResponseApple(
+                    endpointURL: endpointURL,
+                    sseConfig: sseConfig,
+                    requestID: requestID,
+                    requestBody: nil,
+                    lastEventID: latestEventID,
+                    retryMilliseconds: retryMilliseconds
+                )
+            }
+            throw MCPServerProxyError.communicationError(error.localizedDescription)
+        }
+
+        if let latestEventID {
+            try await Task.sleep(nanoseconds: UInt64(retryMilliseconds) * 1_000_000)
+            return try await streamableRequestResponseApple(
+                endpointURL: endpointURL,
+                sseConfig: sseConfig,
+                requestID: requestID,
+                requestBody: nil,
+                lastEventID: latestEventID,
+                retryMilliseconds: retryMilliseconds
+            )
+        }
+
+        throw MCPServerProxyError.communicationError("SSE stream closed before response was received")
+    }
+    #endif
+
+    #if os(Linux)
+    private func sendStreamableRequestLinux(_ message: JSONRPCMessage, sseConfig: MCPServerSseConfig) async throws -> JSONRPCMessage {
+        guard let endpointURL = endpointURL ?? (isStreamableMCPURL(sseConfig.url) ? sseConfig.url : nil) else {
+            throw MCPServerProxyError.communicationError("Not connected to server")
+        }
+        guard let requestID = message.id else {
+            throw MCPServerProxyError.communicationError("Message must have an ID")
+        }
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+
+        var request = URLRequest(url: endpointURL)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try encoder.encode(message)
+        configureSSEPOSTRequest(&request, sseConfig: sseConfig)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        if let httpResponse = response as? HTTPURLResponse,
+           let updatedSessionID = httpResponse.value(forHTTPHeaderField: "Mcp-Session-Id") {
+            sessionID = updatedSessionID
+        }
+
+        guard let responseMessage = try responseMessage(for: requestID, from: data) else {
+            throw MCPServerProxyError.communicationError("HTTP response did not include JSON-RPC response for request \(requestID.stringValue)")
+        }
+        return responseMessage
+    }
+    #endif
+
     // MARK: - SSE Connection (Apple platforms)
 
     #if !os(Linux)
@@ -1323,6 +1564,9 @@ public final actor MCPServerProxy: Sendable {
         let isStreamableMCP = isStreamableMCPURL(sseConfig.url)
         if isStreamableMCP {
             endpointURL = sseConfig.url
+            try await initialize(clientName: clientName, clientVersion: clientVersion)
+            startStreamableGeneralSSEApple(sseConfig: sseConfig)
+            return
         }
 
         let sessionConfig = URLSessionConfiguration.default
@@ -1332,8 +1576,7 @@ public final actor MCPServerProxy: Sendable {
         let session = URLSession(configuration: sessionConfig)
         var request = URLRequest(url: sseConfig.url)
         request.httpMethod = "GET"
-        applyConfiguredSSEHeaders(&request, sseConfig: sseConfig)
-        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        configureSSEGETRequest(&request, sseConfig: sseConfig)
 
         streamTask = Task {
             do {
@@ -1368,14 +1611,16 @@ public final actor MCPServerProxy: Sendable {
         let isStreamableMCP = isStreamableMCPURL(sseConfig.url)
         if isStreamableMCP {
             endpointURL = sseConfig.url
+            try await initialize(clientName: clientName, clientVersion: clientVersion)
+            startStreamableGeneralSSELinux(sseConfig: sseConfig)
+            return
         }
 
         let sessionConfig = URLSessionConfiguration.default
 
         var request = URLRequest(url: sseConfig.url)
         request.httpMethod = "GET"
-        applyConfiguredSSEHeaders(&request, sseConfig: sseConfig)
-        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        configureSSEGETRequest(&request, sseConfig: sseConfig)
 
         // Use a streaming delegate since URLSession.bytes is unavailable on Linux
         let proxy = self
@@ -1409,6 +1654,119 @@ public final actor MCPServerProxy: Sendable {
 
         try await waitForEndpointIfNeeded(isStreamableMCP: isStreamableMCP)
         try await initialize(clientName: clientName, clientVersion: clientVersion)
+    }
+    #endif
+
+    #if !os(Linux)
+    @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, macCatalyst 15.0, *)
+    private func startStreamableGeneralSSEApple(sseConfig: MCPServerSseConfig) {
+        streamTask = Task {
+            var lastEventID: String?
+            var retryMilliseconds = 1000
+
+            while !self.isDisconnecting {
+                do {
+                    let sessionConfig = URLSessionConfiguration.default
+                    sessionConfig.timeoutIntervalForRequest = .infinity
+                    sessionConfig.timeoutIntervalForResource = .infinity
+
+                    let session = URLSession(configuration: sessionConfig)
+                    var request = URLRequest(url: sseConfig.url)
+                    request.httpMethod = "GET"
+                    self.configureSSEGETRequest(&request, sseConfig: sseConfig, lastEventID: lastEventID)
+
+                    let (asyncBytes, response) = try await session.bytes(for: request)
+                    self.handleSSEResponse(response, sseConfig: sseConfig, isStreamableMCP: true)
+
+                    for try await message in asyncBytes.lines.sseMessages() {
+                        if let id = message.id {
+                            lastEventID = id
+                        }
+                        if let retry = message.retry {
+                            retryMilliseconds = retry
+                        }
+                        await self.processIncomingMessage(event: message.event, data: message.data)
+                    }
+                } catch is CancellationError {
+                    return
+                } catch {
+                    if self.isDisconnecting {
+                        return
+                    }
+                    self.logger.error("[MCP DEBUG] Streamable general SSE stream error: \(error)")
+                }
+
+                if self.isDisconnecting {
+                    return
+                }
+
+                do {
+                    try await Task.sleep(nanoseconds: UInt64(retryMilliseconds) * 1_000_000)
+                } catch {
+                    return
+                }
+            }
+        }
+    }
+    #endif
+
+    #if os(Linux)
+    private func startStreamableGeneralSSELinux(sseConfig: MCPServerSseConfig) {
+        streamTask = Task {
+            var lastEventID: String?
+            var retryMilliseconds = 1000
+
+            while !self.isDisconnecting {
+                let sessionConfig = URLSessionConfiguration.default
+                let proxy = self
+                let delegate = SSEStreamingDelegate { response in
+                    Task {
+                        await proxy.handleSSEResponse(response, sseConfig: sseConfig, isStreamableMCP: true)
+                    }
+                }
+
+                var request = URLRequest(url: sseConfig.url)
+                request.httpMethod = "GET"
+                self.configureSSEGETRequest(&request, sseConfig: sseConfig, lastEventID: lastEventID)
+
+                let session = URLSession(configuration: sessionConfig, delegate: delegate, delegateQueue: nil)
+                let task = session.dataTask(with: request)
+                task.resume()
+
+                do {
+                    for try await message in delegate.lines.sseMessages() {
+                        if let id = message.id {
+                            lastEventID = id
+                        }
+                        if let retry = message.retry {
+                            retryMilliseconds = retry
+                        }
+                        await self.processIncomingMessage(event: message.event, data: message.data)
+                    }
+                } catch is CancellationError {
+                    task.cancel()
+                    return
+                } catch {
+                    if self.isDisconnecting {
+                        task.cancel()
+                        return
+                    }
+                    self.logger.error("[MCP DEBUG] Streamable general SSE stream error: \(error)")
+                }
+
+                if self.isDisconnecting {
+                    task.cancel()
+                    return
+                }
+
+                do {
+                    try await Task.sleep(nanoseconds: UInt64(retryMilliseconds) * 1_000_000)
+                } catch {
+                    task.cancel()
+                    return
+                }
+            }
+        }
     }
     #endif
 

@@ -55,11 +55,20 @@ public actor Session {
     /// Client info received during initialization (if any).
     public var clientInfo: Implementation?
 
+    /// The protocol version negotiated during initialize.
+    public var negotiatedProtocolVersion: String?
+
     /// Whether this session has received an MCP initialize request.
     public var hasReceivedInitializeRequest: Bool = false
 
     /// URIs that this session has subscribed to for resource-updated notifications.
     internal var subscribedResourceURIs: Set<String> = []
+
+    /// Timestamp of the most recent activity associated with this session.
+    public var lastActivityAt: Date = Date()
+
+    /// Optional expiry deadline used for retained sessions after disconnect.
+    public var expiresAt: Date?
 
     /// Creates a new session.
     /// - Parameters:
@@ -72,15 +81,34 @@ public actor Session {
     @TaskLocal
     internal static var taskSession: Session?
 
+    @TaskLocal
+    internal static var taskStreamContext: OutboundStreamContext?
+
     /// Accessor for the current session stored in task local storage.
     public static var current: Session! {
         taskSession
+    }
+
+    internal static var currentStreamContext: OutboundStreamContext? {
+        taskStreamContext
     }
 
     /// Runs `operation` with this session bound to `Session.current`.
     public func work<T: Sendable>(_ operation: @Sendable (Session) async throws -> T) async rethrows -> T {
         try await Self.$taskSession.withValue(self) {
             try await operation(self)
+        }
+    }
+
+    /// Runs `operation` with this session and an outbound stream context bound.
+    internal func work<T: Sendable>(
+        onStream streamContext: OutboundStreamContext?,
+        _ operation: @Sendable (Session) async throws -> T
+    ) async rethrows -> T {
+        try await Self.$taskSession.withValue(self) {
+            try await Self.$taskStreamContext.withValue(streamContext) {
+                try await operation(self)
+            }
         }
     }
 
@@ -91,10 +119,13 @@ public actor Session {
 
     /// Send an SSE message through the session's stream continuation.
     /// - Parameter message: The message to send.
-    func sendSSE(_ message: SSEMessage) {
-        guard let sseContinuation else { return }
-        let text = message.description
-        sseContinuation.yield(Data(text.utf8))
+    func sendSSE(_ message: SSEMessage) async {
+        guard let transport = transport as? HTTPSSETransport else { return }
+        await transport.routeSSEMessage(
+            message,
+            sessionID: id,
+            preferredStreamID: Self.currentStreamContext?.streamID
+        )
     }
 
     /// Set the SSE stream continuation for this session.
@@ -151,9 +182,25 @@ public actor Session {
         self.clientInfo = info
     }
 
+    /// Update the negotiated protocol version for this session.
+    public func setNegotiatedProtocolVersion(_ version: String?) {
+        self.negotiatedProtocolVersion = version
+    }
+
     /// Mark the session as having received an MCP initialize request.
     public func markInitializeRequestReceived() {
         hasReceivedInitializeRequest = true
+    }
+
+    /// Record session activity and clear any pending expiry.
+    public func touchActivity() {
+        lastActivityAt = Date()
+        expiresAt = nil
+    }
+
+    /// Update the expiry deadline used for retained sessions.
+    public func setExpiresAt(_ date: Date?) {
+        expiresAt = date
     }
 
     /// Sends a JSON-RPC message to the client and waits for the response.

@@ -166,7 +166,7 @@ actor Calculator {
     }
 }
 
-let url = URL(string: "http://localhost:8080/sse")!
+let url = URL(string: "http://localhost:8080/mcp")!
 let config = MCPServerConfig.sse(config: MCPServerSseConfig(url: url))
 let proxy = MCPServerProxy(config: config)
 try await proxy.connect()
@@ -186,6 +186,7 @@ try await proxy.connect()
 Notes:
 - Client generation is opt-in (`generateClient` defaults to `false`).
 - Client methods always `throw` to surface transport or server errors.
+- Prefer the Streamable HTTP `/mcp` endpoint for new clients. The legacy `/sse` endpoint remains available for backwards compatibility.
 
 ## Client Notification Handlers
 
@@ -216,7 +217,7 @@ formats such as `date-time`, `uri`, `uuid`, and `byte` can be mapped to native
 types (`Date`, `URL`, `UUID`, `Data`).
 
 ```bash
-SwiftMCPUtility generate-proxy --sse http://localhost:8080/sse -o ToolsProxy.swift
+SwiftMCPUtility generate-proxy --sse http://localhost:8080/mcp -o ToolsProxy.swift
 ```
 
 All generated methods are `async throws` so transport and server errors are surfaced.
@@ -230,7 +231,7 @@ responses, and uses those types in the proxy's return signatures.
 
 ```bash
 SwiftMCPUtility generate-proxy \
-  --sse http://localhost:8080/sse \
+  --sse http://localhost:8080/mcp \
   --openapi http://localhost:8080/openapi.json \
   -o ToolsProxy.swift
 ```
