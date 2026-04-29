@@ -1636,7 +1636,7 @@ public final actor MCPServerProxy: Sendable {
         var latestEventID = lastEventID
         var retryMilliseconds = retryMilliseconds
 
-        for await message in delegate.lines.sseMessages() {
+        for try await message in delegate.lines.sseMessages() {
             if let id = message.id {
                 latestEventID = id
             }
