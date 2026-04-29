@@ -255,6 +255,47 @@ struct HTTPTransportTests {
 		#endif
 	}
 
+	@Test("POST /mcp: initialize preserves negotiated fallback protocol version")
+	func initializeNegotiatesFallbackProtocolVersion() async throws {
+		#if canImport(FoundationNetworking)
+		return
+		#else
+		let (transport, baseURL) = try await startTransport()
+		defer { Task { try? await transport.stop() } }
+
+		let request = try streamablePOSTRequest(
+			url: baseURL.appendingPathComponent("mcp"),
+			message: .request(
+				id: 1,
+				method: "initialize",
+				params: [
+					"protocolVersion": .string("2025-03-26"),
+					"capabilities": .object([:]),
+					"clientInfo": .object([
+						"name": .string("TestClient"),
+						"version": .string("1.0")
+					])
+				]
+			),
+			protocolVersion: "2025-03-26"
+		)
+
+		let (response, events) = try await readFiniteSSEResponse(request)
+		#expect(response.statusCode == 200)
+
+		let initEvent = try #require(responseEvent(events, id: 1))
+		let message = try #require(try decodeEventMessage(initEvent))
+		guard case .response(let responseData) = message,
+			  let result = responseData.result,
+			  let protocolVersion = result["protocolVersion"]?.stringValue else {
+			Issue.record("Expected initialize response payload")
+			return
+		}
+
+		#expect(protocolVersion == "2025-03-26")
+		#endif
+	}
+
 	@Test("POST /mcp: request stream returns response for existing session")
 	func modernPing() async throws {
 		#if canImport(FoundationNetworking)
