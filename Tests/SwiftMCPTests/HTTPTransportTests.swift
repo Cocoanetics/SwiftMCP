@@ -15,17 +15,30 @@ private final class UploadCapableServer {
 
 extension UploadCapableServer: MCPFileUploadHandling {}
 
+@MCPServer(name: "ResumableServer")
+private final class ResumableServer {
+	@MCPTool(description: "Emits progress before returning pong")
+	func slowPing() async -> String {
+		await RequestContext.current?.reportProgress(0.2, total: 1.0, message: "starting")
+		try? await Task.sleep(nanoseconds: 150_000_000)
+		await RequestContext.current?.reportProgress(0.6, total: 1.0, message: "middle")
+		try? await Task.sleep(nanoseconds: 150_000_000)
+		return "pong"
+	}
+}
+
 @Suite("HTTP Transport Integration")
 struct HTTPTransportTests {
 
 	/// Create a transport, start it, and return the base URL.
-	private func startTransport() async throws -> (HTTPSSETransport, URL) {
-		try await startTransport(server: Calculator())
-	}
-
-	/// Create a transport for a specific server, start it, and return the base URL.
-	private func startTransport(server: some MCPServer) async throws -> (HTTPSSETransport, URL) {
+	private func startTransport(
+		server: some MCPServer = Calculator(),
+		retentionInterval: TimeInterval? = nil
+	) async throws -> (HTTPSSETransport, URL) {
 		let transport = HTTPSSETransport(server: server, host: "127.0.0.1", port: 0)
+		if let retentionInterval {
+			transport.streamRetentionInterval = retentionInterval
+		}
 		try await transport.start()
 		let baseURL = URL(string: "http://127.0.0.1:\(transport.port)")!
 		return (transport, baseURL)
@@ -47,7 +60,7 @@ struct HTTPTransportTests {
 			id: id,
 			method: "initialize",
 			params: [
-				"protocolVersion": .string("2025-06-18"),
+				"protocolVersion": .string("2025-11-25"),
 				"capabilities": .object([:]),
 				"clientInfo": .object([
 					"name": .string("TestClient"),
@@ -57,83 +70,345 @@ struct HTTPTransportTests {
 		)
 	}
 
-	// MARK: - Modern Streamable HTTP (POST /mcp)
-
-	@Test("POST /mcp: initialize without SSE returns immediate response")
-	func modernInitialize() async throws {
-		let (transport, baseURL) = try await startTransport()
-		defer { Task { try? await transport.stop() } }
-
-		let session = URLSession(configuration: .ephemeral)
-		var request = URLRequest(url: baseURL.appendingPathComponent("mcp"))
+	private func streamablePOSTRequest(
+		url: URL,
+		message: JSONRPCMessage,
+		sessionID: String? = nil,
+		protocolVersion: String = "2025-11-25"
+	) throws -> URLRequest {
+		var request = URLRequest(url: url)
 		request.httpMethod = "POST"
 		request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-		request.setValue("application/json", forHTTPHeaderField: "Accept")
-		request.httpBody = try encode(initializeRequest())
-
-		let (data, httpResponse) = try await session.data(for: request)
-		let response = httpResponse as! HTTPURLResponse
-
-		#expect(response.statusCode == 200)
-		#expect(response.value(forHTTPHeaderField: "Mcp-Session-Id") != nil)
-
-		let message = try decode(data)
-		guard case .response(let resp) = message else {
-			Issue.record("Expected response, got \(message)")
-			return
+		request.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
+		request.setValue(protocolVersion, forHTTPHeaderField: "MCP-Protocol-Version")
+		if let sessionID {
+			request.setValue(sessionID, forHTTPHeaderField: "Mcp-Session-Id")
 		}
-		#expect(resp.id == .int(1))
-
-		guard let result = resp.result,
-			  let protocolVersion = result["protocolVersion"]?.value as? String else {
-			Issue.record("Missing protocolVersion in result")
-			return
-		}
-		#expect(protocolVersion == "2025-06-18")
+		request.httpBody = try encode(message)
+		return request
 	}
 
-	@Test("POST /mcp: ping returns pong")
-	func modernPing() async throws {
+	private func generalSSERequest(
+		url: URL,
+		sessionID: String,
+		lastEventID: String? = nil,
+		protocolVersion: String = "2025-11-25"
+	) -> URLRequest {
+		var request = URLRequest(url: url)
+		request.httpMethod = "GET"
+		request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+		request.setValue(sessionID, forHTTPHeaderField: "Mcp-Session-Id")
+		request.setValue(protocolVersion, forHTTPHeaderField: "MCP-Protocol-Version")
+		if let lastEventID {
+			request.setValue(lastEventID, forHTTPHeaderField: "Last-Event-ID")
+		}
+		return request
+	}
+
+	private func readFiniteSSEResponse(_ request: URLRequest) async throws -> (HTTPURLResponse, [SSEClientMessage]) {
+		#if canImport(FoundationNetworking)
+		let delegate = SSEStreamingDelegate { _ in }
+		let session = URLSession(configuration: .ephemeral, delegate: delegate, delegateQueue: nil)
+		let task = session.dataTask(with: request)
+		task.resume()
+
+		var events: [SSEClientMessage] = []
+		for try await message in delegate.lines.sseMessages() {
+			events.append(message)
+		}
+
+		guard let httpResponse = delegate.response as? HTTPURLResponse else {
+			throw TestError("Expected HTTPURLResponse")
+		}
+
+		return (httpResponse, events)
+		#else
+		let session = URLSession(configuration: .ephemeral)
+		let (bytes, response) = try await session.bytes(for: request)
+		guard let httpResponse = response as? HTTPURLResponse else {
+			throw TestError("Expected HTTPURLResponse")
+		}
+
+		var events: [SSEClientMessage] = []
+		for try await message in bytes.lines.sseMessages() {
+			events.append(message)
+		}
+
+		return (httpResponse, events)
+		#endif
+	}
+
+	private func openStreamingRequest(_ request: URLRequest) -> StreamCapture {
+		let responseBox = Box<HTTPURLResponse?>(nil)
+		let eventsBox = Box<[SSEClientMessage]>([])
+
+		let task = Task {
+			#if canImport(FoundationNetworking)
+			let delegate = SSEStreamingDelegate { response in
+				responseBox.value = response as? HTTPURLResponse
+			}
+			let session = URLSession(configuration: .ephemeral, delegate: delegate, delegateQueue: nil)
+			let dataTask = session.dataTask(with: request)
+			dataTask.resume()
+			for try await message in delegate.lines.sseMessages() {
+				eventsBox.value.append(message)
+			}
+			#else
+			let session = URLSession(configuration: .ephemeral)
+			let (bytes, response) = try await session.bytes(for: request)
+			responseBox.value = response as? HTTPURLResponse
+			for try await message in bytes.lines.sseMessages() {
+				eventsBox.value.append(message)
+			}
+			#endif
+		}
+
+		return StreamCapture(response: responseBox, events: eventsBox, task: task)
+	}
+
+	private func waitForCondition(
+		timeoutNanoseconds: UInt64 = 2_000_000_000,
+		pollNanoseconds: UInt64 = 50_000_000,
+		_ condition: @escaping @Sendable () -> Bool
+	) async -> Bool {
+		let deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanoseconds
+		while DispatchTime.now().uptimeNanoseconds < deadline {
+			if condition() {
+				return true
+			}
+			try? await Task.sleep(nanoseconds: pollNanoseconds)
+		}
+		return condition()
+	}
+
+	private func initializeSession(url: URL) async throws -> (String, [SSEClientMessage]) {
+		let request = try streamablePOSTRequest(url: url, message: initializeRequest())
+		let (response, events) = try await readFiniteSSEResponse(request)
+		guard let sessionID = response.value(forHTTPHeaderField: "Mcp-Session-Id") else {
+			throw TestError("Expected Mcp-Session-Id header")
+		}
+		return (sessionID, events)
+	}
+
+	private func decodeEventMessage(_ event: SSEClientMessage) throws -> JSONRPCMessage? {
+		guard !event.data.isEmpty else {
+			return nil
+		}
+		return try decode(Data(event.data.utf8))
+	}
+
+	private func responseEvent(_ events: [SSEClientMessage], id: Int) -> SSEClientMessage? {
+		events.first { event in
+			guard let message = try? decodeEventMessage(event),
+				  case .response(let response) = message else {
+				return false
+			}
+			return response.id == .int(id)
+		}
+	}
+
+	private func notificationEvent(_ events: [SSEClientMessage], method: String) -> SSEClientMessage? {
+		events.first { event in
+			guard let message = try? decodeEventMessage(event),
+				  case .notification(let notification) = message else {
+				return false
+			}
+			return notification.method == method
+		}
+	}
+
+	private func errorResponseEvent(_ events: [SSEClientMessage], id: Int) -> SSEClientMessage? {
+		events.first { event in
+			guard let message = try? decodeEventMessage(event),
+				  case .errorResponse(let errorResponse) = message else {
+				return false
+			}
+			return errorResponse.id == .int(id)
+		}
+	}
+
+	// MARK: - Modern Streamable HTTP
+
+	@Test("POST /mcp: initialize returns SSE response stream")
+	func modernInitialize() async throws {
+		#if canImport(FoundationNetworking)
+		return
+		#else
 		let (transport, baseURL) = try await startTransport()
 		defer { Task { try? await transport.stop() } }
 
-		let session = URLSession(configuration: .ephemeral)
-		let url = baseURL.appendingPathComponent("mcp")
+		let (response, events) = try await readFiniteSSEResponse(
+			try streamablePOSTRequest(
+				url: baseURL.appendingPathComponent("mcp"),
+				message: initializeRequest()
+			)
+		)
 
-		// Initialize first
-		var initReq = URLRequest(url: url)
-		initReq.httpMethod = "POST"
-		initReq.setValue("application/json", forHTTPHeaderField: "Content-Type")
-		initReq.setValue("application/json", forHTTPHeaderField: "Accept")
-		initReq.httpBody = try encode(initializeRequest())
+		#expect(response.statusCode == 200)
+		#expect(response.value(forHTTPHeaderField: "Content-Type")?.contains("text/event-stream") == true)
+		#expect(response.value(forHTTPHeaderField: "Mcp-Session-Id") != nil)
 
-		let (_, initResp) = try await session.data(for: initReq)
-		let sessionId = (initResp as! HTTPURLResponse).value(forHTTPHeaderField: "Mcp-Session-Id")!
+		let primingEvent = try #require(events.first)
+		#expect(primingEvent.id != nil)
+		#expect(primingEvent.data == "")
 
-		// Ping
-		let pingMessage = JSONRPCMessage.request(id: 2, method: "ping")
-		var pingReq = URLRequest(url: url)
-		pingReq.httpMethod = "POST"
-		pingReq.setValue("application/json", forHTTPHeaderField: "Content-Type")
-		pingReq.setValue("application/json", forHTTPHeaderField: "Accept")
-		pingReq.setValue(sessionId, forHTTPHeaderField: "Mcp-Session-Id")
-		pingReq.httpBody = try encode(pingMessage)
-
-		let (pingData, pingResp) = try await session.data(for: pingReq)
-		let pingHTTP = pingResp as! HTTPURLResponse
-		#expect(pingHTTP.statusCode == 200)
-
-		// Session ID must be preserved across requests
-		let pingSessionId = pingHTTP.value(forHTTPHeaderField: "Mcp-Session-Id")
-		#expect(pingSessionId == sessionId, "Session ID changed between requests")
-
-		let message = try decode(pingData)
-		guard case .response(let resp) = message else {
-			Issue.record("Expected response, got \(message)")
+		let initEvent = try #require(responseEvent(events, id: 1))
+		let message = try #require(try decodeEventMessage(initEvent))
+		guard case .response(let responseData) = message,
+			  let result = responseData.result,
+			  let protocolVersion = result["protocolVersion"]?.stringValue else {
+			Issue.record("Expected initialize response payload")
 			return
 		}
-		#expect(resp.id == .int(2))
-		#expect(resp.result != nil) // empty object = pong
+
+		#expect(protocolVersion == "2025-11-25")
+		#endif
+	}
+
+	@Test("POST /mcp: initialize preserves negotiated fallback protocol version")
+	func initializeNegotiatesFallbackProtocolVersion() async throws {
+		#if canImport(FoundationNetworking)
+		return
+		#else
+		let (transport, baseURL) = try await startTransport()
+		defer { Task { try? await transport.stop() } }
+
+		let request = try streamablePOSTRequest(
+			url: baseURL.appendingPathComponent("mcp"),
+			message: .request(
+				id: 1,
+				method: "initialize",
+				params: [
+					"protocolVersion": .string("2025-03-26"),
+					"capabilities": .object([:]),
+					"clientInfo": .object([
+						"name": .string("TestClient"),
+						"version": .string("1.0")
+					])
+				]
+			),
+			protocolVersion: "2025-03-26"
+		)
+
+		let (response, events) = try await readFiniteSSEResponse(request)
+		#expect(response.statusCode == 200)
+
+		let initEvent = try #require(responseEvent(events, id: 1))
+		let message = try #require(try decodeEventMessage(initEvent))
+		guard case .response(let responseData) = message,
+			  let result = responseData.result,
+			  let protocolVersion = result["protocolVersion"]?.stringValue else {
+			Issue.record("Expected initialize response payload")
+			return
+		}
+
+		#expect(protocolVersion == "2025-03-26")
+		#endif
+	}
+
+	@Test("POST /mcp: initialize preserves negotiated intermediate protocol version")
+	func initializeNegotiatesIntermediateProtocolVersion() async throws {
+		#if canImport(FoundationNetworking)
+		return
+		#else
+		let (transport, baseURL) = try await startTransport()
+		defer { Task { try? await transport.stop() } }
+
+		let request = try streamablePOSTRequest(
+			url: baseURL.appendingPathComponent("mcp"),
+			message: .request(
+				id: 1,
+				method: "initialize",
+				params: [
+					"protocolVersion": .string("2025-06-18"),
+					"capabilities": .object([:]),
+					"clientInfo": .object([
+						"name": .string("TestClient"),
+						"version": .string("1.0")
+					])
+				]
+			),
+			protocolVersion: "2025-06-18"
+		)
+
+		let (response, events) = try await readFiniteSSEResponse(request)
+		#expect(response.statusCode == 200)
+
+		let initEvent = try #require(responseEvent(events, id: 1))
+		let message = try #require(try decodeEventMessage(initEvent))
+		guard case .response(let responseData) = message,
+			  let result = responseData.result,
+			  let protocolVersion = result["protocolVersion"]?.stringValue else {
+			Issue.record("Expected initialize response payload")
+			return
+		}
+
+		#expect(protocolVersion == "2025-06-18")
+		#endif
+	}
+
+	@Test("POST /mcp: initialize rejects unsupported protocol version")
+	func initializeRejectsUnsupportedProtocolVersion() async throws {
+		#if canImport(FoundationNetworking)
+		return
+		#else
+		let (transport, baseURL) = try await startTransport()
+		defer { Task { try? await transport.stop() } }
+
+		let request = try streamablePOSTRequest(
+			url: baseURL.appendingPathComponent("mcp"),
+			message: .request(
+				id: 1,
+				method: "initialize",
+				params: [
+					"protocolVersion": .string("2024-11-05"),
+					"capabilities": .object([:]),
+					"clientInfo": .object([
+						"name": .string("TestClient"),
+						"version": .string("1.0")
+					])
+				]
+			)
+		)
+
+		let (response, events) = try await readFiniteSSEResponse(request)
+		#expect(response.statusCode == 200)
+
+		let initEvent = try #require(errorResponseEvent(events, id: 1))
+		let message = try #require(try decodeEventMessage(initEvent))
+		guard case .errorResponse(let errorData) = message else {
+			Issue.record("Expected initialize error response")
+			return
+		}
+
+		#expect(errorData.error.code == -32602)
+		#expect(errorData.error.message.contains("Unsupported protocol version"))
+		#endif
+	}
+
+	@Test("POST /mcp: request stream returns response for existing session")
+	func modernPing() async throws {
+		#if canImport(FoundationNetworking)
+		return
+		#else
+		let (transport, baseURL) = try await startTransport()
+		defer { Task { try? await transport.stop() } }
+
+		let url = baseURL.appendingPathComponent("mcp")
+		let (sessionID, _) = try await initializeSession(url: url)
+
+		let (response, events) = try await readFiniteSSEResponse(
+			try streamablePOSTRequest(
+				url: url,
+				message: .request(id: 2, method: "ping"),
+				sessionID: sessionID
+			)
+		)
+
+		#expect(response.statusCode == 200)
+		#expect(response.value(forHTTPHeaderField: "Mcp-Session-Id") == sessionID)
+		#expect(responseEvent(events, id: 2) != nil)
+		#endif
 	}
 
 	@Test("POST /mcp: missing session on non-initialize returns 400 without creating a session")
@@ -145,7 +420,7 @@ struct HTTPTransportTests {
 		var request = URLRequest(url: baseURL.appendingPathComponent("mcp"))
 		request.httpMethod = "POST"
 		request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-		request.setValue("application/json", forHTTPHeaderField: "Accept")
+		request.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
 		request.httpBody = try encode(JSONRPCMessage.request(id: 1, method: "ping"))
 
 		let (_, response) = try await session.data(for: request)
@@ -164,7 +439,7 @@ struct HTTPTransportTests {
 		var request = URLRequest(url: baseURL.appendingPathComponent("mcp"))
 		request.httpMethod = "POST"
 		request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-		request.setValue("application/json", forHTTPHeaderField: "Accept")
+		request.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
 		request.setValue(UUID().uuidString, forHTTPHeaderField: "Mcp-Session-Id")
 		request.httpBody = try encode(JSONRPCMessage.request(id: 1, method: "ping"))
 
@@ -174,52 +449,35 @@ struct HTTPTransportTests {
 		#expect(await transport.sessionManager.sessionIDs.isEmpty)
 	}
 
-	@Test("POST /mcp: session ID is preserved across requests")
-	func sessionIdPreserved() async throws {
+	@Test("GET /mcp: missing session returns 400")
+	func modernGeneralStreamRequiresSession() async throws {
 		let (transport, baseURL) = try await startTransport()
 		defer { Task { try? await transport.stop() } }
 
 		let session = URLSession(configuration: .ephemeral)
-		let url = baseURL.appendingPathComponent("mcp")
-
-		// Request 1: Initialize
-		var req1 = URLRequest(url: url)
-		req1.httpMethod = "POST"
-		req1.setValue("application/json", forHTTPHeaderField: "Content-Type")
-		req1.setValue("application/json", forHTTPHeaderField: "Accept")
-		req1.httpBody = try encode(initializeRequest())
-
-		let (_, resp1) = try await session.data(for: req1)
-		let sessionId = (resp1 as! HTTPURLResponse).value(forHTTPHeaderField: "Mcp-Session-Id")!
-		#expect(UUID(uuidString: sessionId) != nil, "Session ID is not a valid UUID")
-
-		// Request 2: Ping with same session ID
-		var req2 = URLRequest(url: url)
-		req2.httpMethod = "POST"
-		req2.setValue("application/json", forHTTPHeaderField: "Content-Type")
-		req2.setValue("application/json", forHTTPHeaderField: "Accept")
-		req2.setValue(sessionId, forHTTPHeaderField: "Mcp-Session-Id")
-		req2.httpBody = try encode(JSONRPCMessage.request(id: 2, method: "ping"))
-
-		let (_, resp2) = try await session.data(for: req2)
-		let sessionId2 = (resp2 as! HTTPURLResponse).value(forHTTPHeaderField: "Mcp-Session-Id")!
-		#expect(sessionId2 == sessionId, "Session ID changed: \(sessionId) → \(sessionId2)")
-
-		// Request 3: tools/list with same session ID
-		var req3 = URLRequest(url: url)
-		req3.httpMethod = "POST"
-		req3.setValue("application/json", forHTTPHeaderField: "Content-Type")
-		req3.setValue("application/json", forHTTPHeaderField: "Accept")
-		req3.setValue(sessionId, forHTTPHeaderField: "Mcp-Session-Id")
-		req3.httpBody = try encode(JSONRPCMessage.request(id: 3, method: "tools/list"))
-
-		let (_, resp3) = try await session.data(for: req3)
-		let sessionId3 = (resp3 as! HTTPURLResponse).value(forHTTPHeaderField: "Mcp-Session-Id")!
-		#expect(sessionId3 == sessionId, "Session ID changed: \(sessionId) → \(sessionId3)")
+		var request = URLRequest(url: baseURL.appendingPathComponent("mcp"))
+		request.httpMethod = "GET"
+		request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+		let (_, response) = try await session.data(for: request)
+		#expect((response as! HTTPURLResponse).statusCode == 400)
 	}
 
-	@Test("POST /mcp: SSE-created session still requires initialize")
-	func modernSSESessionRequiresInitialize() async throws {
+	@Test("GET /mcp: unknown session returns 404")
+	func unknownModernSSESession() async throws {
+		let (transport, baseURL) = try await startTransport()
+		defer { Task { try? await transport.stop() } }
+
+		let session = URLSession(configuration: .ephemeral)
+		let request = generalSSERequest(
+			url: baseURL.appendingPathComponent("mcp"),
+			sessionID: UUID().uuidString
+		)
+		let (_, response) = try await session.data(for: request)
+		#expect((response as! HTTPURLResponse).statusCode == 404)
+	}
+
+	@Test("GET /mcp: general stream primes and can resume missed notifications")
+	func generalStreamResume() async throws {
 		#if canImport(FoundationNetworking)
 		return
 		#else
@@ -227,301 +485,169 @@ struct HTTPTransportTests {
 		defer { Task { try? await transport.stop() } }
 
 		let url = baseURL.appendingPathComponent("mcp")
-		let sessionIDBox = Box<String?>(nil)
+		let (sessionID, _) = try await initializeSession(url: url)
+		let capture = openStreamingRequest(generalSSERequest(url: url, sessionID: sessionID))
 
-		var sseRequest = URLRequest(url: url)
-		sseRequest.setValue("text/event-stream", forHTTPHeaderField: "Accept")
-
-		let sseTask = Task {
-			let session = URLSession(configuration: .ephemeral)
-			let (bytes, response) = try await session.bytes(for: sseRequest)
-			sessionIDBox.value = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Mcp-Session-Id")
-			for try await _ in bytes.lines {
-				// Keep the SSE connection open until the test cancels it.
-			}
+		let primed = await waitForCondition {
+			capture.response.value != nil && !capture.events.value.isEmpty
 		}
+		#expect(primed)
 
-		try await Task.sleep(for: .milliseconds(200))
-		await transport.sessionManager.broadcastSSE(SSEMessage(data: "warmup", eventName: "warmup"))
+		let primingEvent = try #require(capture.events.value.first)
+		let primingEventID = try #require(primingEvent.id)
+		capture.task.cancel()
 
-		let deadline = Date().addingTimeInterval(2)
-		while sessionIDBox.value == nil, Date() < deadline {
-			try await Task.sleep(for: .milliseconds(50))
+		try? await Task.sleep(nanoseconds: 100_000_000)
+		await transport.broadcastToolsListChanged()
+		try? await Task.sleep(nanoseconds: 50_000_000)
+
+		let resumed = openStreamingRequest(generalSSERequest(url: url, sessionID: sessionID, lastEventID: primingEventID))
+		let resumedReceived = await waitForCondition {
+			notificationEvent(resumed.events.value, method: "notifications/tools/list_changed") != nil
 		}
+		#expect(resumedReceived)
 
-		guard let sessionId = sessionIDBox.value else {
-			sseTask.cancel()
-			Issue.record("Expected SSE connection to return a session ID")
-			return
-		}
-
-		var pingRequest = URLRequest(url: url)
-		pingRequest.httpMethod = "POST"
-		pingRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-		pingRequest.setValue("application/json", forHTTPHeaderField: "Accept")
-		pingRequest.setValue(sessionId, forHTTPHeaderField: "Mcp-Session-Id")
-		pingRequest.httpBody = try encode(JSONRPCMessage.request(id: 1, method: "ping"))
-
-		let (_, response) = try await URLSession(configuration: .ephemeral).data(for: pingRequest)
-		let http = response as! HTTPURLResponse
-		#expect(http.statusCode == 400)
-		#expect(http.value(forHTTPHeaderField: "Mcp-Session-Id") == sessionId)
-
-		sseTask.cancel()
+		let notification = try #require(notificationEvent(resumed.events.value, method: "notifications/tools/list_changed"))
+		#expect(notification.id != nil)
+		resumed.task.cancel()
 		#endif
 	}
 
-	@Test("POST /mcp: with active SSE returns 202 and streams response")
-	func modernSSEStreaming() async throws {
+	@Test("POST /mcp: request stream can resume after disconnect")
+	func requestStreamResume() async throws {
 		#if canImport(FoundationNetworking)
-		// URLSession.bytes(for:) is unavailable on Linux FoundationNetworking.
+		return
+		#else
+		let (transport, baseURL) = try await startTransport(server: ResumableServer())
+		defer { Task { try? await transport.stop() } }
+
+		let url = baseURL.appendingPathComponent("mcp")
+		let (sessionID, _) = try await initializeSession(url: url)
+
+		let requestCapture = openStreamingRequest(
+			try streamablePOSTRequest(
+				url: url,
+				message: .request(
+					id: 2,
+					method: "tools/call",
+					params: [
+						"name": .string("slowPing"),
+						"arguments": .object([:]),
+						"_meta": .object([
+							"progressToken": .string("slow-request")
+						])
+					]
+				),
+				sessionID: sessionID
+			)
+		)
+
+		let sawProgress = await waitForCondition {
+			notificationEvent(requestCapture.events.value, method: "notifications/progress") != nil
+		}
+		#expect(sawProgress)
+
+		let lastSeenEventID = try #require(requestCapture.events.value.last?.id)
+		requestCapture.task.cancel()
+
+		try? await Task.sleep(nanoseconds: 500_000_000)
+
+		let resumedRequest = try await readFiniteSSEResponse(
+			generalSSERequest(url: url, sessionID: sessionID, lastEventID: lastSeenEventID)
+		)
+
+		#expect(notificationEvent(resumedRequest.1, method: "notifications/progress") != nil)
+		#expect(responseEvent(resumedRequest.1, id: 2) != nil)
+		#endif
+	}
+
+	@Test("Multiple general streams route unsolicited notifications only to the newest active stream")
+	func multipleGeneralStreamsPrimarySelection() async throws {
+		#if canImport(FoundationNetworking)
 		return
 		#else
 		let (transport, baseURL) = try await startTransport()
 		defer { Task { try? await transport.stop() } }
 
 		let url = baseURL.appendingPathComponent("mcp")
-		let postSession = URLSession(configuration: .ephemeral)
+		let (sessionID, _) = try await initializeSession(url: url)
 
-		// Step 1: Initialize WITHOUT SSE to get a session ID (immediate 200 response)
-		var initReq = URLRequest(url: url)
-		initReq.httpMethod = "POST"
-		initReq.setValue("application/json", forHTTPHeaderField: "Content-Type")
-		initReq.setValue("application/json", forHTTPHeaderField: "Accept")
-		initReq.httpBody = try encode(initializeRequest())
-
-		let (_, initResp) = try await postSession.data(for: initReq)
-		let sessionId = (initResp as! HTTPURLResponse).value(forHTTPHeaderField: "Mcp-Session-Id")!
-		#expect((initResp as! HTTPURLResponse).statusCode == 200)
-
-		// Step 2: Open SSE connection in background Task
-		// bytes(for:) blocks until first body bytes arrive.
-		let receivedEvents = Box<[SSEClientMessage]>([])
-		var sseReq = URLRequest(url: url)
-		sseReq.setValue("text/event-stream", forHTTPHeaderField: "Accept")
-		sseReq.setValue(sessionId, forHTTPHeaderField: "Mcp-Session-Id")
-
-		let sseTask = Task {
-			let session = URLSession(configuration: .ephemeral)
-			let (sseBytes, _) = try await session.bytes(for: sseReq)
-			for try await message in sseBytes.lines.sseMessages() {
-				receivedEvents.value.append(message)
-			}
+		let streamA = openStreamingRequest(generalSSERequest(url: url, sessionID: sessionID))
+		let streamAReady = await waitForCondition {
+			!streamA.events.value.isEmpty
 		}
+		#expect(streamAReady)
 
-		// Wait for SSE channel registration
-		try await Task.sleep(for: .milliseconds(300))
-
-		// Step 3: List tools via POST — should get 202, response via SSE
-		let toolsMessage = JSONRPCMessage.request(id: 2, method: "tools/list")
-		var toolsReq = URLRequest(url: url)
-		toolsReq.httpMethod = "POST"
-		toolsReq.setValue("application/json", forHTTPHeaderField: "Content-Type")
-		toolsReq.setValue("application/json", forHTTPHeaderField: "Accept")
-		toolsReq.setValue(sessionId, forHTTPHeaderField: "Mcp-Session-Id")
-		toolsReq.httpBody = try encode(toolsMessage)
-
-		let (_, toolsResp) = try await postSession.data(for: toolsReq)
-		let toolsHTTP = toolsResp as! HTTPURLResponse
-		#expect(toolsHTTP.statusCode == 202)
-		#expect(toolsHTTP.value(forHTTPHeaderField: "Mcp-Session-Id") == sessionId, "Session ID changed on tools/list")
-
-		try await Task.sleep(for: .milliseconds(500))
-
-		// Step 4: Ping via POST — should get 202
-		let pingMessage = JSONRPCMessage.request(id: 3, method: "ping")
-		var pingReq = URLRequest(url: url)
-		pingReq.httpMethod = "POST"
-		pingReq.setValue("application/json", forHTTPHeaderField: "Content-Type")
-		pingReq.setValue("application/json", forHTTPHeaderField: "Accept")
-		pingReq.setValue(sessionId, forHTTPHeaderField: "Mcp-Session-Id")
-		pingReq.httpBody = try encode(pingMessage)
-
-		let (_, pingResp) = try await postSession.data(for: pingReq)
-		#expect((pingResp as! HTTPURLResponse).statusCode == 202)
-
-		try await Task.sleep(for: .milliseconds(500))
-
-		sseTask.cancel()
-
-		// Verify tools/list response arrived via SSE
-		let toolsEvent = receivedEvents.value.first { event in
-			guard let msg = try? decode(Data(event.data.utf8)),
-				  case .response(let r) = msg, r.id == .int(2) else { return false }
-			return true
+		let streamB = openStreamingRequest(generalSSERequest(url: url, sessionID: sessionID))
+		let streamBReady = await waitForCondition {
+			!streamB.events.value.isEmpty
 		}
-		#expect(toolsEvent != nil, "Expected tools/list response via SSE")
+		#expect(streamBReady)
 
-		if let event = toolsEvent {
-			let message = try decode(Data(event.data.utf8))
-			guard case .response(let resp) = message,
-				  let result = resp.result,
-				  let tools = result["tools"] else {
-				Issue.record("Expected tools in response")
-				return
-			}
-			// Calculator has tools (add, subtract, etc.)
-			guard case .array(let toolArray) = tools else {
-				Issue.record("Expected tools array")
-				return
-			}
-			#expect(!toolArray.isEmpty, "Calculator should have tools")
+		await transport.broadcastPromptsListChanged()
+		let received = await waitForCondition {
+			notificationEvent(streamB.events.value, method: "notifications/prompts/list_changed") != nil
 		}
+		#expect(received)
+		#expect(notificationEvent(streamA.events.value, method: "notifications/prompts/list_changed") == nil)
 
-		// Verify ping response arrived via SSE
-		let pingEvent = receivedEvents.value.first { event in
-			guard let msg = try? decode(Data(event.data.utf8)),
-				  case .response(let r) = msg, r.id == .int(3) else { return false }
-			return true
-		}
-		#expect(pingEvent != nil, "Expected ping response via SSE")
+		streamA.task.cancel()
+		streamB.task.cancel()
 		#endif
 	}
 
-	// MARK: - Legacy SSE Protocol (GET /sse + POST /messages)
+	// MARK: - Legacy SSE Protocol
 
 	@Test("Legacy SSE: connect, get endpoint, initialize, ping")
 	func legacySSEFullFlow() async throws {
 		#if canImport(FoundationNetworking)
-		// URLSession.bytes(for:) is unavailable on Linux FoundationNetworking.
 		return
 		#else
 		let (transport, baseURL) = try await startTransport()
 		defer { Task { try? await transport.stop() } }
 
-		let receivedEvents = Box<[SSEClientMessage]>([])
+		let capture = openStreamingRequest({
+			var request = URLRequest(url: baseURL.appendingPathComponent("sse"))
+			request.httpMethod = "GET"
+			request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+			return request
+		}())
 
-		// bytes(for:) blocks until first body bytes arrive,
-		// so the SSE connection must be opened in a background Task.
-		var sseReq = URLRequest(url: baseURL.appendingPathComponent("sse"))
-		sseReq.setValue("text/event-stream", forHTTPHeaderField: "Accept")
-
-		let sseTask = Task {
-			let session = URLSession(configuration: .ephemeral)
-			let (sseBytes, _) = try await session.bytes(for: sseReq)
-			for try await message in sseBytes.lines.sseMessages() {
-				receivedEvents.value.append(message)
-			}
+		let hasEndpoint = await waitForCondition {
+			notificationEvent(capture.events.value, method: "endpoint") != nil || capture.events.value.contains { $0.event == "endpoint" }
 		}
 
-		// Wait for endpoint event (legacy SSE sends it immediately)
-		try await Task.sleep(for: .milliseconds(500))
-
-		let endpointEvent = receivedEvents.value.first { $0.event == "endpoint" }
-		guard let endpointData = endpointEvent?.data,
-			  let messagesURL = URL(string: endpointData) else {
-			sseTask.cancel()
-			Issue.record("Never received endpoint event. Events: \(receivedEvents.value.map { "[\($0.event)] \($0.data)" })")
-			return
-		}
-
+		let endpointEvent = try #require(capture.events.value.first(where: { $0.event == "endpoint" }))
+		let messagesURL = try #require(URL(string: endpointEvent.data))
+		#expect(hasEndpoint)
 		#expect(messagesURL.path.hasPrefix("/messages/"))
 
-		// Extract the session ID from the endpoint URL — must be a valid UUID
-		let legacySessionId = messagesURL.lastPathComponent
-		#expect(UUID(uuidString: legacySessionId) != nil, "Endpoint session ID is not a valid UUID: \(legacySessionId)")
-
-		// Initialize via POST to the messages endpoint
 		let postSession = URLSession(configuration: .ephemeral)
-		var initReq = URLRequest(url: messagesURL)
-		initReq.httpMethod = "POST"
-		initReq.setValue("application/json", forHTTPHeaderField: "Content-Type")
-		initReq.httpBody = try encode(initializeRequest())
+		var initRequest = URLRequest(url: messagesURL)
+		initRequest.httpMethod = "POST"
+		initRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+		initRequest.httpBody = try encode(initializeRequest())
+		let (_, initResponse) = try await postSession.data(for: initRequest)
+		#expect((initResponse as! HTTPURLResponse).statusCode == 202)
 
-		let (_, initResp) = try await postSession.data(for: initReq)
-		#expect((initResp as! HTTPURLResponse).statusCode == 202)
-
-		// Wait for SSE to deliver the initialize response.
-		// Ignore later notifications like ping; explicitly look for the response with id 1.
-		let deadline = Date().addingTimeInterval(2)
-		var initResponse: JSONRPCMessage.JSONRPCResponseData?
-		while Date() < deadline, initResponse == nil {
-			for event in receivedEvents.value where event.event != "endpoint" {
-				let message = try decode(Data(event.data.utf8))
-				if case .response(let resp) = message, resp.id == .int(1) {
-					initResponse = resp
-					break
-				}
-			}
-			if initResponse == nil {
-				try await Task.sleep(for: .milliseconds(100))
-			}
+		let initDelivered = await waitForCondition {
+			responseEvent(capture.events.value, id: 1) != nil
 		}
+		#expect(initDelivered)
 
-		guard let initResponse else {
-			Issue.record("Expected initialize response via SSE. All events: \(receivedEvents.value.map { "[\($0.event)] \($0.data.prefix(80))" })")
-			sseTask.cancel()
-			return
+		var pingRequest = URLRequest(url: messagesURL)
+		pingRequest.httpMethod = "POST"
+		pingRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+		pingRequest.httpBody = try encode(JSONRPCMessage.request(id: 3, method: "ping"))
+		let (_, pingResponse) = try await postSession.data(for: pingRequest)
+		#expect((pingResponse as! HTTPURLResponse).statusCode == 202)
+
+		let pingDelivered = await waitForCondition {
+			responseEvent(capture.events.value, id: 3) != nil
 		}
-		#expect(initResponse.id == .int(1))
+		#expect(pingDelivered)
 
-		// Send initialized notification
-		let initializedNotification = JSONRPCMessage.notification(method: "notifications/initialized")
-		var notifReq = URLRequest(url: messagesURL)
-		notifReq.httpMethod = "POST"
-		notifReq.setValue("application/json", forHTTPHeaderField: "Content-Type")
-		notifReq.httpBody = try encode(initializedNotification)
-
-		let (_, notifResp) = try await postSession.data(for: notifReq)
-		#expect((notifResp as! HTTPURLResponse).statusCode == 202)
-
-		// List tools
-		let toolsMessage = JSONRPCMessage.request(id: 2, method: "tools/list")
-		var toolsReq = URLRequest(url: messagesURL)
-		toolsReq.httpMethod = "POST"
-		toolsReq.setValue("application/json", forHTTPHeaderField: "Content-Type")
-		toolsReq.httpBody = try encode(toolsMessage)
-
-		let (_, toolsResp) = try await postSession.data(for: toolsReq)
-		#expect((toolsResp as! HTTPURLResponse).statusCode == 202)
-
-		try await Task.sleep(for: .milliseconds(500))
-
-		// Ping
-		let pingMessage = JSONRPCMessage.request(id: 3, method: "ping")
-		var pingReq = URLRequest(url: messagesURL)
-		pingReq.httpMethod = "POST"
-		pingReq.setValue("application/json", forHTTPHeaderField: "Content-Type")
-		pingReq.httpBody = try encode(pingMessage)
-
-		let (_, pingResp) = try await postSession.data(for: pingReq)
-		#expect((pingResp as! HTTPURLResponse).statusCode == 202)
-
-		try await Task.sleep(for: .milliseconds(500))
-
-		sseTask.cancel()
-
-		// Verify tools/list response
-		let allDataEvents = receivedEvents.value.filter { $0.event != "endpoint" }
-		let toolsEvent = allDataEvents.first { event in
-			guard let msg = try? decode(Data(event.data.utf8)),
-				  case .response(let r) = msg, r.id == .int(2) else { return false }
-			return true
-		}
-		#expect(toolsEvent != nil, "Expected tools/list response via SSE")
-
-		if let event = toolsEvent {
-			let message = try decode(Data(event.data.utf8))
-			guard case .response(let resp) = message,
-				  let result = resp.result,
-				  let tools = result["tools"] else {
-				Issue.record("Expected tools in response")
-				return
-			}
-			guard case .array(let toolArray) = tools else {
-				Issue.record("Expected tools array")
-				return
-			}
-			#expect(!toolArray.isEmpty, "Calculator should have tools")
-		}
-
-		// Verify ping response
-		let pingEvent = allDataEvents.first { event in
-			guard let msg = try? decode(Data(event.data.utf8)),
-				  case .response(let r) = msg, r.id == .int(3) else { return false }
-			return true
-		}
-		#expect(pingEvent != nil, "Expected ping response via SSE")
+		capture.task.cancel()
 		#endif
 	}
 
@@ -551,23 +677,12 @@ struct HTTPTransportTests {
 		let (transport, baseURL) = try await startTransport()
 		defer { Task { try? await transport.stop() } }
 
+		let (sessionID, _) = try await initializeSession(url: baseURL.appendingPathComponent("mcp"))
 		let session = URLSession(configuration: .ephemeral)
-		let url = baseURL.appendingPathComponent("mcp")
 
-		// Initialize to create a session
-		var initReq = URLRequest(url: url)
-		initReq.httpMethod = "POST"
-		initReq.setValue("application/json", forHTTPHeaderField: "Content-Type")
-		initReq.setValue("application/json", forHTTPHeaderField: "Accept")
-		initReq.httpBody = try encode(initializeRequest())
-
-		let (_, initResp) = try await session.data(for: initReq)
-		let sessionId = (initResp as! HTTPURLResponse).value(forHTTPHeaderField: "Mcp-Session-Id")!
-
-		// DELETE /mcp to remove the session
-		var deleteReq = URLRequest(url: url)
+		var deleteReq = URLRequest(url: baseURL.appendingPathComponent("mcp"))
 		deleteReq.httpMethod = "DELETE"
-		deleteReq.setValue(sessionId, forHTTPHeaderField: "Mcp-Session-Id")
+		deleteReq.setValue(sessionID, forHTTPHeaderField: "Mcp-Session-Id")
 
 		let (_, deleteResp) = try await session.data(for: deleteReq)
 		#expect((deleteResp as! HTTPURLResponse).statusCode == 204)
@@ -585,6 +700,50 @@ struct HTTPTransportTests {
 
 		let (_, response) = try await session.data(for: request)
 		#expect((response as! HTTPURLResponse).statusCode == 404)
+	}
+
+	@Test("Resumable request streams expire after the retention interval")
+	func expiredRequestStreamResume() async throws {
+		#if canImport(FoundationNetworking)
+		return
+		#else
+		let (transport, baseURL) = try await startTransport(server: ResumableServer(), retentionInterval: 0.2)
+		defer { Task { try? await transport.stop() } }
+
+		let url = baseURL.appendingPathComponent("mcp")
+		let (sessionID, _) = try await initializeSession(url: url)
+
+		let capture = openStreamingRequest(
+			try streamablePOSTRequest(
+				url: url,
+				message: .request(
+					id: 9,
+					method: "tools/call",
+					params: [
+						"name": .string("slowPing"),
+						"arguments": .object([:]),
+						"_meta": .object([
+							"progressToken": .string("expiring-request")
+						])
+					]
+				),
+				sessionID: sessionID
+			)
+		)
+
+		let sawProgress = await waitForCondition {
+			notificationEvent(capture.events.value, method: "notifications/progress") != nil
+		}
+		#expect(sawProgress)
+		let lastEventID = try #require(capture.events.value.last?.id)
+		capture.task.cancel()
+
+		try? await Task.sleep(nanoseconds: 700_000_000)
+
+		let session = URLSession(configuration: .ephemeral)
+		let (_, response) = try await session.data(for: generalSSERequest(url: url, sessionID: sessionID, lastEventID: lastEventID))
+		#expect((response as! HTTPURLResponse).statusCode == 404)
+		#endif
 	}
 
 	// MARK: - Uploads
@@ -610,7 +769,7 @@ struct HTTPTransportTests {
 		#expect((response as! HTTPURLResponse).statusCode == 404)
 	}
 
-	// MARK: - CORS
+	// MARK: - CORS / OpenAPI / Error cases
 
 	@Test("OPTIONS returns CORS headers")
 	func corsHeaders() async throws {
@@ -628,8 +787,6 @@ struct HTTPTransportTests {
 		#expect(http.value(forHTTPHeaderField: "Access-Control-Allow-Headers")?.contains("Content-Type") == true)
 		#expect(http.value(forHTTPHeaderField: "Access-Control-Allow-Headers")?.contains("Mcp-Session-Id") == true)
 	}
-
-	// MARK: - OpenAPI
 
 	@Test("GET /.well-known/ai-plugin.json returns manifest when serveOpenAPI is true")
 	func aiPluginManifest() async throws {
@@ -681,13 +838,10 @@ struct HTTPTransportTests {
 
 		let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 		#expect(json["openapi"] as? String == "3.1.0")
-
 		let info = json["info"] as? [String: Any]
 		#expect(info?["title"] as? String == "Calculator")
-
-		// Should have paths for Calculator tools
 		let paths = json["paths"] as? [String: Any]
-		#expect(paths?["/calculator/add"] != nil, "Expected /calculator/add path")
+		#expect(paths?["/calculator/add"] != nil)
 	}
 
 	@Test("POST /{serverName}/{toolName} calls tool and returns result")
@@ -709,13 +863,9 @@ struct HTTPTransportTests {
 		let (data, response) = try await session.data(for: request)
 		let http = response as! HTTPURLResponse
 		#expect(http.statusCode == 200)
-
-		// The result should contain 10 (3 + 7)
 		let body = String(data: data, encoding: .utf8) ?? ""
-		#expect(body.contains("10"), "Expected result to contain 10, got: \(body)")
+		#expect(body.contains("10"))
 	}
-
-	// MARK: - Error cases
 
 	@Test("POST /mcp: missing body returns 400")
 	func missingBody() async throws {
@@ -726,8 +876,7 @@ struct HTTPTransportTests {
 		var request = URLRequest(url: baseURL.appendingPathComponent("mcp"))
 		request.httpMethod = "POST"
 		request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-		request.setValue("application/json", forHTTPHeaderField: "Accept")
-		// No body
+		request.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
 
 		let (_, response) = try await session.data(for: request)
 		#expect((response as! HTTPURLResponse).statusCode == 400)
@@ -746,18 +895,19 @@ struct HTTPTransportTests {
 		#expect((response as! HTTPURLResponse).statusCode == 400)
 	}
 
-	@Test("GET /mcp: unknown session returns 404")
-	func unknownModernSSESession() async throws {
+	@Test("POST /mcp: invalid protocol header returns 400")
+	func invalidProtocolVersionHeader() async throws {
 		let (transport, baseURL) = try await startTransport()
 		defer { Task { try? await transport.stop() } }
 
 		let session = URLSession(configuration: .ephemeral)
-		var request = URLRequest(url: baseURL.appendingPathComponent("mcp"))
-		request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
-		request.setValue(UUID().uuidString, forHTTPHeaderField: "Mcp-Session-Id")
-
+		let request = try streamablePOSTRequest(
+			url: baseURL.appendingPathComponent("mcp"),
+			message: initializeRequest(),
+			protocolVersion: "bogus"
+		)
 		let (_, response) = try await session.data(for: request)
-		#expect((response as! HTTPURLResponse).statusCode == 404)
+		#expect((response as! HTTPURLResponse).statusCode == 400)
 	}
 
 	@Test("unknown path returns 404")
@@ -771,6 +921,11 @@ struct HTTPTransportTests {
 	}
 }
 
+private struct StreamCapture {
+	let response: Box<HTTPURLResponse?>
+	let events: Box<[SSEClientMessage]>
+	let task: Task<Void, Error>
+}
 
 /// Thread-safe box for capturing values from @Sendable closures.
 private final class Box<T: Sendable>: @unchecked Sendable {

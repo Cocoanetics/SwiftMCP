@@ -9,21 +9,31 @@ final class SSEStreamingDelegate: NSObject, URLSessionDataDelegate, @unchecked S
     private let lineContinuation: AsyncStream<String>.Continuation
     private var buffer = Data()
     private var responseHandler: ((URLResponse) -> Void)?
+    private var responseContinuation: CheckedContinuation<URLResponse, Never>?
 
     /// The async stream of lines received from the SSE connection.
     let lines: AsyncStream<String>
 
     /// The HTTP response, available after the first data callback.
     private(set) var response: URLResponse?
-    private let responseContinuation: CheckedContinuation<URLResponse, Never>?
+    private(set) var completionError: Error?
 
     init(onResponse: @escaping (URLResponse) -> Void) {
         var cont: AsyncStream<String>.Continuation!
         self.lines = AsyncStream<String> { cont = $0 }
         self.lineContinuation = cont
         self.responseHandler = onResponse
-        self.responseContinuation = nil
         super.init()
+    }
+
+    func waitForResponse() async -> URLResponse {
+        if let response {
+            return response
+        }
+
+        return await withCheckedContinuation { continuation in
+            responseContinuation = continuation
+        }
     }
 
     func urlSession(
@@ -35,6 +45,8 @@ final class SSEStreamingDelegate: NSObject, URLSessionDataDelegate, @unchecked S
         self.response = response
         responseHandler?(response)
         responseHandler = nil
+        responseContinuation?.resume(returning: response)
+        responseContinuation = nil
         completionHandler(.allow)
     }
 
@@ -60,6 +72,8 @@ final class SSEStreamingDelegate: NSObject, URLSessionDataDelegate, @unchecked S
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        completionError = error
+
         // Flush any remaining data in buffer as a final line
         if !buffer.isEmpty {
             let line = String(data: buffer, encoding: .utf8) ?? ""

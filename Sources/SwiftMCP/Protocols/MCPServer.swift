@@ -217,6 +217,14 @@ public extension MCPServer {
      */
     private func handleInitializeRequest(_ request: JSONRPCMessage.JSONRPCRequestData) async -> JSONRPCMessage? {
         await Session.current?.markInitializeRequestReceived()
+        let negotiatedProtocolVersion = request.params?["protocolVersion"]?.stringValue ?? HTTPSSETransport.latestProtocolVersion
+        guard HTTPSSETransport.supportedProtocolVersions.contains(negotiatedProtocolVersion) else {
+            return JSONRPCMessage.errorResponse(
+                id: request.id,
+                error: .init(code: -32602, message: "Unsupported protocol version: \(negotiatedProtocolVersion)")
+            )
+        }
+        await Session.current?.setNegotiatedProtocolVersion(negotiatedProtocolVersion)
         await extractAndStoreCapabilities(request)
         await extractAndStoreClientInfo(request)
         // Extract and store authentication metadata from _meta
@@ -226,7 +234,7 @@ public extension MCPServer {
             }
         }
         
-        var response = createInitializeResponse(id: request.id)
+        var response = createInitializeResponse(id: request.id, protocolVersion: negotiatedProtocolVersion)
 
         // Conditionally advertise upload capability only on HTTP transports
         if let uploadHandler = self as? MCPFileUploadHandling,
@@ -279,7 +287,10 @@ public extension MCPServer {
      - Parameter id: The request ID to include in the response
      - Returns: A JSON-RPC message containing the initialization response
      */
-    func createInitializeResponse(id: JSONRPCID) -> JSONRPCMessage {
+    func createInitializeResponse(
+        id: JSONRPCID,
+        protocolVersion: String = "2025-11-25"
+    ) -> JSONRPCMessage {
         var capabilities = ServerCapabilities()
 
         if self is MCPToolProviding {
@@ -310,7 +321,7 @@ public extension MCPServer {
         )
 
         let result = InitializeResult(
-            protocolVersion: "2025-06-18",
+            protocolVersion: protocolVersion,
             capabilities: capabilities,
             serverInfo: serverInfo
         )

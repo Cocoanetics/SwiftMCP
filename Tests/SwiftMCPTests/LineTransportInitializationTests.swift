@@ -9,7 +9,7 @@ struct LineTransportInitializationTests {
             id: id,
             method: "initialize",
             params: [
-                "protocolVersion": .string("2025-06-18"),
+                "protocolVersion": .string("2025-11-25"),
                 "capabilities": .object([:]),
                 "clientInfo": .object([
                     "name": .string("TestClient"),

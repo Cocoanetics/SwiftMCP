@@ -35,8 +35,13 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
 
     internal let group: EventLoopGroup
     internal var channel: Channel?
-    internal lazy var sessionManager = SessionManager(transport: self)
     internal let pendingUploadStore = PendingUploadStore()
+    public var streamRetentionInterval: TimeInterval = 5 * 60
+    internal lazy var sessionManager = SessionManager(
+        transport: self,
+        pendingUploadStore: pendingUploadStore,
+        retentionInterval: streamRetentionInterval
+    )
     internal var keepAliveTimer: DispatchSourceTimer?
 
     /// The HTTP router that dispatches incoming requests to route handlers.
@@ -207,6 +212,15 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         get async { await sessionManager.channelCount }
     }
 
+    internal static let latestProtocolVersion = "2025-11-25"
+    internal static let intermediateHTTPProtocolVersion = "2025-06-18"
+    internal static let fallbackHTTPProtocolVersion = "2025-03-26"
+    internal static let supportedProtocolVersions: Set<String> = [
+        latestProtocolVersion,
+        intermediateHTTPProtocolVersion,
+        fallbackHTTPProtocolVersion,
+    ]
+
 
     // MARK: - Initialization
 
@@ -325,17 +339,21 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
                 case .none:
                     return
                 case .sse:
-                    await self.sessionManager.forEachSession { session in
-                        await session.sendSSE(SSEMessage(comment: "keep-alive"))
+                    let activeStreamIDs = await self.sessionManager.activeStreamIDs()
+                    for streamID in activeStreamIDs {
+                        _ = await self.sessionManager.sendComment("keep-alive", to: streamID)
                     }
                 case .ping:
                     await self.sessionManager.forEachSession { session in
+                        guard await self.sessionManager.hasActivePrimaryGeneralConnection(for: session.id) else {
+                            return
+                        }
+
                         Task {
                             let ping = JSONRPCMessage.request(id: .string(UUID().uuidString), method: "ping")
                             do {
                                 try await session.send(ping)
                             } catch {
-                                // Log error but don't fail the keep-alive cycle
                                 print("Failed to send ping to session \(session.id): \(error)")
                             }
                         }
@@ -344,50 +362,33 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         }
     }
 
-    // MARK: - Request Handling
-    /// Handle a JSON-RPC request and send the response through the SSE channels.
-    func handleJSONRPCRequest(_ request: JSONRPCMessage, from sessionID: UUID) {
-        Task {
-            let pending = server is MCPFileUploadHandling ? pendingUploadStore : nil
-
-            guard let response = await PendingUploadResolver.$current.withValue(pending, operation: {
-                await server.handleMessage(request)
-            }) else {
-                return
-            }
-
-            try await send(response)
-        }
-    }
-
     // MARK: - Handling SSE Connections
 
-    /// Prepare an SSE session: create the stream, store the continuation,
-    /// and return the `AsyncStream<Data>` for the route handler to include
-    /// in its response. Does **not** touch the NIO channel.
-    func prepareSSEStream(sessionID: UUID) async -> AsyncStream<Data> {
-        let (stream, continuation) = AsyncStream<Data>.makeStream()
-        let session = await sessionManager.session(id: sessionID)
-        await session.setSSEContinuation(continuation)
-        return stream
+    func createSSEStream(sessionID: UUID, kind: SSEStreamKind) async -> (AsyncStream<Data>, StreamRouteResponseInfo) {
+        await sessionManager.createStream(sessionID: sessionID, kind: kind)
     }
 
-    /// Register the NIO channel for an SSE session and set up close handling.
+    func resumeSSEStream(sessionID: UUID, lastEventID: String) async throws -> (AsyncStream<Data>, StreamRouteResponseInfo) {
+        try await sessionManager.resumeStream(sessionID: sessionID, after: lastEventID)
+    }
+
+    /// Register the NIO channel for an SSE stream and set up close handling.
     /// Called by `HTTPHandler` after the route handler returns a streaming response.
-    func registerSSEChannel(_ channel: Channel, id: UUID) {
+    func registerSSEChannel(_ channel: Channel, sessionID: UUID, streamID: UUID) {
         Task {
-            await sessionManager.register(channel: channel, id: id)
+            guard let connectionToken = await sessionManager.register(channel: channel, sessionID: sessionID, streamID: streamID) else {
+                return
+            }
             let count = await sessionManager.channelCount
             logger.info("New SSE channel registered (total: \(count))")
-        }
 
-        channel.closeFuture.whenComplete { [weak self] _ in
-            guard let self = self else { return }
-            Task {
-                // Remove the entire session when the channel closes
-                await self.sessionManager.removeSession(id: id)
-                let count = await self.sessionManager.channelCount
-                self.logger.info("SSE channel removed (remaining: \(count))")
+            channel.closeFuture.whenComplete { [weak self] _ in
+                guard let self = self else { return }
+                Task {
+                    await self.sessionManager.markStreamDisconnected(streamID: streamID, connectionToken: connectionToken)
+                    let count = await self.sessionManager.channelCount
+                    self.logger.info("SSE channel removed (remaining: \(count))")
+                }
             }
         }
     }
@@ -395,9 +396,22 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     /// Send a message to a specific client.
     func sendSSE(_ message: SSEMessage, to sessionID: UUID) {
         Task {
-            let session = await sessionManager.session(id: sessionID)
-            await session.sendSSE(message)
+            _ = await sessionManager.routeSSEMessage(message, sessionID: sessionID, preferredStreamID: nil)
         }
+    }
+
+    @discardableResult
+    func routeSSEMessage(_ message: SSEMessage, sessionID: UUID, preferredStreamID: UUID?) async -> Bool {
+        await sessionManager.routeSSEMessage(message, sessionID: sessionID, preferredStreamID: preferredStreamID)
+    }
+
+    @discardableResult
+    func sendJSONRPC(_ message: JSONRPCMessage, to streamID: UUID) async throws -> Bool {
+        try await sessionManager.sendJSONRPC(message, to: streamID)
+    }
+
+    func finishSSEStream(_ streamID: UUID) async {
+        await sessionManager.finishStream(streamID: streamID)
     }
 
     /// Broadcast a log message to all connected clients.
@@ -438,7 +452,14 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
 
         let string = String(data: data, encoding: .utf8) ?? ""
         let message = SSEMessage(data: string)
-        await session.sendSSE(message)
+        let routed = await sessionManager.routeSSEMessage(
+            message,
+            sessionID: session.id,
+            preferredStreamID: Session.currentStreamContext?.streamID
+        )
+        if !routed {
+            throw TransportError.bindingFailed("No routable SSE stream for session \(session.id)")
+        }
     }
 
     // MARK: - Route Registration

@@ -72,14 +72,13 @@ extension HTTPSSETransport {
 				)
 			}
 
-			await sessionManager.session(id: sessionID).work { session in
-				for message in messages {
-					switch message {
-					case .response, .errorResponse:
-						await session.handleResponse(message)
-					default:
-						self.handleJSONRPCRequest(message, from: sessionID)
-					}
+			let responses = await sessionManager.session(id: sessionID).work { _ in
+				await self.server.processBatch(messages, ignoringEmptyResponses: true)
+			}
+
+			if let generalStreamID = await sessionManager.primaryGeneralStreamID(for: sessionID) {
+				for response in responses {
+					_ = try? await self.sendJSONRPC(response, to: generalStreamID)
 				}
 			}
 		} catch {
