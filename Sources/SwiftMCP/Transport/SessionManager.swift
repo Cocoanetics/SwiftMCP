@@ -240,13 +240,13 @@ actor SessionManager {
         await updateSessionExpiry(for: record.sessionID)
     }
 
-    /// Broadcast an SSE message to all currently active streams.
-    /// - Parameter message: The SSE message to send.
+    /// Broadcast an SSE message to every session, routing to each session's primary general stream.
+    /// Messages for sessions whose channel is currently disconnected are buffered for replay on resume.
     func broadcastSSE(_ message: SSEMessage) async {
         await cleanupExpiredState()
-        let activeStreamIDs = streams.values.filter(\.isActive).map(\.id)
-        for streamID in activeStreamIDs {
-            _ = await sendSSE(message, to: streamID)
+        let sessionIDs = Array(sessions.keys)
+        for sessionID in sessionIDs {
+            _ = await routeSSEMessage(message, sessionID: sessionID, preferredStreamID: nil)
         }
     }
 
