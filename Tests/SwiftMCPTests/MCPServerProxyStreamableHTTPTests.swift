@@ -42,8 +42,10 @@ struct MCPServerProxyStreamableHTTPTests {
         defer { Task { await proxy.disconnect() } }
 
         try await proxy.connect()
+        let sessionID = try #require(await proxy.sessionID)
+        let sessionUUID = try #require(UUID(uuidString: sessionID))
         let generalStreamReady = await waitForCondition {
-            await transport.sseChannelCount > 0
+            await transport.sessionManager.hasActivePrimaryGeneralConnection(for: sessionUUID)
         }
         #expect(generalStreamReady)
         await transport.broadcastToolsListChanged()
