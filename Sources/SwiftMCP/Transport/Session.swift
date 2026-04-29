@@ -55,6 +55,9 @@ public actor Session {
     /// Client info received during initialization (if any).
     public var clientInfo: Implementation?
 
+    /// Whether this session has received an MCP initialize request.
+    public var hasReceivedInitializeRequest: Bool = false
+
     /// URIs that this session has subscribed to for resource-updated notifications.
     internal var subscribedResourceURIs: Set<String> = []
 
@@ -146,6 +149,11 @@ public actor Session {
     /// Update the client info stored for this session.
     public func setClientInfo(_ info: Implementation?) {
         self.clientInfo = info
+    }
+
+    /// Mark the session as having received an MCP initialize request.
+    public func markInitializeRequestReceived() {
+        hasReceivedInitializeRequest = true
     }
 
     /// Sends a JSON-RPC message to the client and waits for the response.

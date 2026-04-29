@@ -5,13 +5,26 @@ import FoundationNetworking
 #endif
 @testable import SwiftMCP
 
+@MCPServer(name: "UploadCapableServer")
+private final class UploadCapableServer {
+	@MCPTool(description: "Health check")
+	func ping() -> String {
+		"pong"
+	}
+}
+
+extension UploadCapableServer: MCPFileUploadHandling {}
 
 @Suite("HTTP Transport Integration")
 struct HTTPTransportTests {
 
 	/// Create a transport, start it, and return the base URL.
 	private func startTransport() async throws -> (HTTPSSETransport, URL) {
-		let server = Calculator()
+		try await startTransport(server: Calculator())
+	}
+
+	/// Create a transport for a specific server, start it, and return the base URL.
+	private func startTransport(server: some MCPServer) async throws -> (HTTPSSETransport, URL) {
 		let transport = HTTPSSETransport(server: server, host: "127.0.0.1", port: 0)
 		try await transport.start()
 		let baseURL = URL(string: "http://127.0.0.1:\(transport.port)")!
@@ -123,6 +136,44 @@ struct HTTPTransportTests {
 		#expect(resp.result != nil) // empty object = pong
 	}
 
+	@Test("POST /mcp: missing session on non-initialize returns 400 without creating a session")
+	func modernNonInitializeWithoutSessionRejected() async throws {
+		let (transport, baseURL) = try await startTransport()
+		defer { Task { try? await transport.stop() } }
+
+		let session = URLSession(configuration: .ephemeral)
+		var request = URLRequest(url: baseURL.appendingPathComponent("mcp"))
+		request.httpMethod = "POST"
+		request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+		request.setValue("application/json", forHTTPHeaderField: "Accept")
+		request.httpBody = try encode(JSONRPCMessage.request(id: 1, method: "ping"))
+
+		let (_, response) = try await session.data(for: request)
+		let http = response as! HTTPURLResponse
+		#expect(http.statusCode == 400)
+		#expect(http.value(forHTTPHeaderField: "Mcp-Session-Id") == nil)
+		#expect(await transport.sessionManager.sessionIDs.isEmpty)
+	}
+
+	@Test("POST /mcp: unknown session returns 404")
+	func modernUnknownSessionRejected() async throws {
+		let (transport, baseURL) = try await startTransport()
+		defer { Task { try? await transport.stop() } }
+
+		let session = URLSession(configuration: .ephemeral)
+		var request = URLRequest(url: baseURL.appendingPathComponent("mcp"))
+		request.httpMethod = "POST"
+		request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+		request.setValue("application/json", forHTTPHeaderField: "Accept")
+		request.setValue(UUID().uuidString, forHTTPHeaderField: "Mcp-Session-Id")
+		request.httpBody = try encode(JSONRPCMessage.request(id: 1, method: "ping"))
+
+		let (_, response) = try await session.data(for: request)
+		let http = response as! HTTPURLResponse
+		#expect(http.statusCode == 404)
+		#expect(await transport.sessionManager.sessionIDs.isEmpty)
+	}
+
 	@Test("POST /mcp: session ID is preserved across requests")
 	func sessionIdPreserved() async throws {
 		let (transport, baseURL) = try await startTransport()
@@ -165,6 +216,59 @@ struct HTTPTransportTests {
 		let (_, resp3) = try await session.data(for: req3)
 		let sessionId3 = (resp3 as! HTTPURLResponse).value(forHTTPHeaderField: "Mcp-Session-Id")!
 		#expect(sessionId3 == sessionId, "Session ID changed: \(sessionId) → \(sessionId3)")
+	}
+
+	@Test("POST /mcp: SSE-created session still requires initialize")
+	func modernSSESessionRequiresInitialize() async throws {
+		#if canImport(FoundationNetworking)
+		return
+		#else
+		let (transport, baseURL) = try await startTransport()
+		defer { Task { try? await transport.stop() } }
+
+		let url = baseURL.appendingPathComponent("mcp")
+		let sessionIDBox = Box<String?>(nil)
+
+		var sseRequest = URLRequest(url: url)
+		sseRequest.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+
+		let sseTask = Task {
+			let session = URLSession(configuration: .ephemeral)
+			let (bytes, response) = try await session.bytes(for: sseRequest)
+			sessionIDBox.value = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Mcp-Session-Id")
+			for try await _ in bytes.lines {
+				// Keep the SSE connection open until the test cancels it.
+			}
+		}
+
+		try await Task.sleep(for: .milliseconds(200))
+		await transport.sessionManager.broadcastSSE(SSEMessage(data: "warmup", eventName: "warmup"))
+
+		let deadline = Date().addingTimeInterval(2)
+		while sessionIDBox.value == nil, Date() < deadline {
+			try await Task.sleep(for: .milliseconds(50))
+		}
+
+		guard let sessionId = sessionIDBox.value else {
+			sseTask.cancel()
+			Issue.record("Expected SSE connection to return a session ID")
+			return
+		}
+
+		var pingRequest = URLRequest(url: url)
+		pingRequest.httpMethod = "POST"
+		pingRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+		pingRequest.setValue("application/json", forHTTPHeaderField: "Accept")
+		pingRequest.setValue(sessionId, forHTTPHeaderField: "Mcp-Session-Id")
+		pingRequest.httpBody = try encode(JSONRPCMessage.request(id: 1, method: "ping"))
+
+		let (_, response) = try await URLSession(configuration: .ephemeral).data(for: pingRequest)
+		let http = response as! HTTPURLResponse
+		#expect(http.statusCode == 400)
+		#expect(http.value(forHTTPHeaderField: "Mcp-Session-Id") == sessionId)
+
+		sseTask.cancel()
+		#endif
 	}
 
 	@Test("POST /mcp: with active SSE returns 202 and streams response")
@@ -421,6 +525,25 @@ struct HTTPTransportTests {
 		#endif
 	}
 
+	@Test("Legacy SSE: unknown messages session returns 404")
+	func legacySSEUnknownSessionRejected() async throws {
+		let (transport, baseURL) = try await startTransport()
+		defer { Task { try? await transport.stop() } }
+
+		let session = URLSession(configuration: .ephemeral)
+		let url = baseURL
+			.appendingPathComponent("messages")
+			.appendingPathComponent(UUID().uuidString)
+
+		var request = URLRequest(url: url)
+		request.httpMethod = "POST"
+		request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+		request.httpBody = try encode(JSONRPCMessage.request(id: 1, method: "ping"))
+
+		let (_, response) = try await session.data(for: request)
+		#expect((response as! HTTPURLResponse).statusCode == 404)
+	}
+
 	// MARK: - DELETE /mcp
 
 	@Test("DELETE /mcp: removes session")
@@ -448,6 +571,43 @@ struct HTTPTransportTests {
 
 		let (_, deleteResp) = try await session.data(for: deleteReq)
 		#expect((deleteResp as! HTTPURLResponse).statusCode == 204)
+	}
+
+	@Test("DELETE /mcp: unknown session returns 404")
+	func deleteUnknownSession() async throws {
+		let (transport, baseURL) = try await startTransport()
+		defer { Task { try? await transport.stop() } }
+
+		let session = URLSession(configuration: .ephemeral)
+		var request = URLRequest(url: baseURL.appendingPathComponent("mcp"))
+		request.httpMethod = "DELETE"
+		request.setValue(UUID().uuidString, forHTTPHeaderField: "Mcp-Session-Id")
+
+		let (_, response) = try await session.data(for: request)
+		#expect((response as! HTTPURLResponse).statusCode == 404)
+	}
+
+	// MARK: - Uploads
+
+	@Test("POST /mcp/uploads/:cid: unknown session returns 404")
+	func uploadUnknownSessionRejected() async throws {
+		let (transport, baseURL) = try await startTransport(server: UploadCapableServer())
+		defer { Task { try? await transport.stop() } }
+
+		let session = URLSession(configuration: .ephemeral)
+		let url = baseURL
+			.appendingPathComponent("mcp")
+			.appendingPathComponent("uploads")
+			.appendingPathComponent("cid-123")
+
+		var request = URLRequest(url: url)
+		request.httpMethod = "POST"
+		request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+		request.setValue(UUID().uuidString, forHTTPHeaderField: "Mcp-Session-Id")
+		request.httpBody = Data("hello".utf8)
+
+		let (_, response) = try await session.data(for: request)
+		#expect((response as! HTTPURLResponse).statusCode == 404)
 	}
 
 	// MARK: - CORS
@@ -584,6 +744,20 @@ struct HTTPTransportTests {
 
 		let (_, response) = try await session.data(for: request)
 		#expect((response as! HTTPURLResponse).statusCode == 400)
+	}
+
+	@Test("GET /mcp: unknown session returns 404")
+	func unknownModernSSESession() async throws {
+		let (transport, baseURL) = try await startTransport()
+		defer { Task { try? await transport.stop() } }
+
+		let session = URLSession(configuration: .ephemeral)
+		var request = URLRequest(url: baseURL.appendingPathComponent("mcp"))
+		request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+		request.setValue(UUID().uuidString, forHTTPHeaderField: "Mcp-Session-Id")
+
+		let (_, response) = try await session.data(for: request)
+		#expect((response as! HTTPURLResponse).statusCode == 404)
 	}
 
 	@Test("unknown path returns 404")
