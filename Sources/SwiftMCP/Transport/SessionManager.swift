@@ -35,7 +35,6 @@ actor SessionManager {
 
     internal var sessions: [UUID: Session] = [:]
     internal weak var transport: (any Transport)?
-    internal let pendingUploadStore: PendingUploadStore?
     internal let retentionInterval: TimeInterval
 
     private var streams: [UUID: StreamRecord] = [:]
@@ -45,11 +44,9 @@ actor SessionManager {
 
     init(
         transport: (any Transport)? = nil,
-        pendingUploadStore: PendingUploadStore? = nil,
         retentionInterval: TimeInterval = 5 * 60
     ) {
         self.transport = transport
-        self.pendingUploadStore = pendingUploadStore
         self.retentionInterval = retentionInterval
     }
 
@@ -518,8 +515,6 @@ actor SessionManager {
                 await destroySession(id: sessionID)
             }
         }
-
-        await pendingUploadStore?.expireEarlyArrivals(olderThan: retentionInterval)
     }
 
     private func removeStream(id streamID: UUID) async {
@@ -558,7 +553,6 @@ actor SessionManager {
             await session.cancelAllWaitingTasks()
         }
 
-        await pendingUploadStore?.cancelAll(sessionID: sessionID, error: CancellationError())
         primaryGeneralStreamIDs.removeValue(forKey: sessionID)
         sessionStreams.removeValue(forKey: sessionID)
     }

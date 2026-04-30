@@ -91,7 +91,6 @@ extension HTTPSSETransport {
 			let sid = sessionID.uuidString
 			let session = await sessionManager.session(id: sessionID)
 			await bindBearerTokenIfNeeded(token, to: sessionID)
-			let pending = self.server is MCPFileUploadHandling ? self.pendingUploadStore : nil
 			let containsRequests = batchContainsRequests(messages)
 
 			if containsRequests {
@@ -104,9 +103,7 @@ extension HTTPSSETransport {
 
 				Task {
 					let responses = await session.work(onStream: streamContext) { _ in
-						await PendingUploadResolver.$current.withValue(pending) {
-							await self.server.processBatch(messages, ignoringEmptyResponses: true)
-						}
+						await self.server.processBatch(messages, ignoringEmptyResponses: true)
 					}
 
 					for response in responses {
@@ -127,9 +124,7 @@ extension HTTPSSETransport {
 			}
 
 			_ = await session.work { _ in
-				await PendingUploadResolver.$current.withValue(pending) {
-					await self.server.processBatch(messages, ignoringEmptyResponses: true)
-				}
+				await self.server.processBatch(messages, ignoringEmptyResponses: true)
 			}
 
 			return RouteResponse(status: .accepted, headers: [("Mcp-Session-Id", sid)])

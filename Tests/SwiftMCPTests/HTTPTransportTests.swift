@@ -5,16 +5,6 @@ import FoundationNetworking
 #endif
 @testable import SwiftMCP
 
-@MCPServer(name: "UploadCapableServer")
-private final class UploadCapableServer {
-	@MCPTool(description: "Health check")
-	func ping() -> String {
-		"pong"
-	}
-}
-
-extension UploadCapableServer: MCPFileUploadHandling {}
-
 @MCPServer(name: "ResumableServer")
 private final class ResumableServer {
 	@MCPTool(description: "Emits progress before returning pong")
@@ -744,29 +734,6 @@ struct HTTPTransportTests {
 		let (_, response) = try await session.data(for: generalSSERequest(url: url, sessionID: sessionID, lastEventID: lastEventID))
 		#expect((response as! HTTPURLResponse).statusCode == 404)
 		#endif
-	}
-
-	// MARK: - Uploads
-
-	@Test("POST /mcp/uploads/:cid: unknown session returns 404")
-	func uploadUnknownSessionRejected() async throws {
-		let (transport, baseURL) = try await startTransport(server: UploadCapableServer())
-		defer { Task { try? await transport.stop() } }
-
-		let session = URLSession(configuration: .ephemeral)
-		let url = baseURL
-			.appendingPathComponent("mcp")
-			.appendingPathComponent("uploads")
-			.appendingPathComponent("cid-123")
-
-		var request = URLRequest(url: url)
-		request.httpMethod = "POST"
-		request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
-		request.setValue(UUID().uuidString, forHTTPHeaderField: "Mcp-Session-Id")
-		request.httpBody = Data("hello".utf8)
-
-		let (_, response) = try await session.data(for: request)
-		#expect((response as! HTTPURLResponse).statusCode == 404)
 	}
 
 	// MARK: - CORS / OpenAPI / Error cases

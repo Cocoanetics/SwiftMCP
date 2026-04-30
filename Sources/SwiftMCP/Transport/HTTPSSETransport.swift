@@ -35,11 +35,9 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
 
     internal let group: EventLoopGroup
     internal var channel: Channel?
-    internal let pendingUploadStore = PendingUploadStore()
     public var streamRetentionInterval: TimeInterval = 5 * 60
     internal lazy var sessionManager = SessionManager(
         transport: self,
-        pendingUploadStore: pendingUploadStore,
         retentionInterval: streamRetentionInterval
     )
     internal var keepAliveTimer: DispatchSourceTimer?
@@ -554,7 +552,6 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         router.addRoutes(corsRoutes())
         router.addRoutes(mcpRoutes())
         router.addRoutes(legacySSERoutes())
-        router.addRoutes(uploadRoutes())
         router.addRoutes(openAPIRoutes())
         router.addRoutes(oauthRoutes())
 

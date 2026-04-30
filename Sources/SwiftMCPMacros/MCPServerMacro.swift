@@ -1020,16 +1020,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         guard !parameters.isEmpty else { return [] }
         var lines = ["\(indent)var \(variableName): JSONDictionary = [:]"]
         for parameter in parameters {
-            let isDataType = parameter.typeString == "Data"
-                || parameter.typeString == "Data?"
-                || parameter.typeString == "[Data]"
-                || parameter.typeString == "[Data]?"
-            let encodeCall: String
-            if isDataType {
-                encodeCall = "try await MCPClientArgumentEncoder.encode(\(parameter.name), proxy: proxy)"
-            } else {
-                encodeCall = "try MCPClientArgumentEncoder.encode(\(parameter.name))"
-            }
+            let encodeCall = "try MCPClientArgumentEncoder.encode(\(parameter.name))"
             if parameter.isOptional {
                 lines.append("\(indent)if let \(parameter.name) { \(variableName)[\"\(parameter.name)\"] = \(encodeCall) }")
             } else {
