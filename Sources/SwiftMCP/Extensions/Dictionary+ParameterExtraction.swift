@@ -401,11 +401,6 @@ public extension Dictionary where Key == String, Value == JSONValue {
     }
 
     func extractData(named name: String) throws -> Data {
-        // Check for pre-resolved upload data (file-based uploads bypass base64)
-        if let resolved = ResolvedUploads.current?[name] {
-            return resolved
-        }
-
         guard let jsonValue = self[name] else {
             preconditionFailure("Failed to retrieve value for parameter \(name)")
         }
