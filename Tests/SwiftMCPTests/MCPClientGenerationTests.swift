@@ -95,6 +95,13 @@ actor ClientTestServer {
         ClientResult(total: payload.count, status: payload.label)
     }
 
+    /// Returns opaque bytes.
+    /// - Returns: A data payload.
+    @MCPTool
+    func bytes() -> Data {
+        Data([0x00, 0x01, 0x02, 0x03, 0x2B, 0x2F, 0x3D, 0xFE, 0xFF])
+    }
+
     /// Records a message.
     /// - Parameter message: Message to store.
     @MCPTool
@@ -194,6 +201,19 @@ struct MCPClientGenerationTests {
         let result = try client.wrap(payload: payload)
         #expect(result.total == 5)
         #expect(result.status == "ok")
+    }
+
+    @Test("Round-trips Data tool results")
+    func roundTripsDataToolResults() async throws {
+        let (_, client, proxy) = try await makeClient()
+        defer { Task { await proxy.disconnect() } }
+
+        let expected = Data([0x00, 0x01, 0x02, 0x03, 0x2B, 0x2F, 0x3D, 0xFE, 0xFF])
+        let text = try await proxy.callTool("bytes")
+        #expect(text == expected.base64EncodedString())
+
+        let result = try client.bytes()
+        #expect(result == expected)
     }
 
     @Test("Handles void tool calls", .enabled(if: false))

@@ -92,6 +92,16 @@ public enum MCPJSONCoding {
     }
 
     public init(encoding value: any Encodable, using encoder: JSONEncoder = MCPJSONCoding.makeValueEncoder()) throws {
+        if let data = value as? Data {
+            self = .string(data.base64EncodedString())
+            return
+        }
+
+        if let values = value as? [Data] {
+            self = .array(values.map { .string($0.base64EncodedString()) })
+            return
+        }
+
         let data = try encoder.encode(_JSONValueOpaqueEncodable(value))
         self = try MCPJSONCoding.makeDecoder().decode(JSONValue.self, from: data)
     }

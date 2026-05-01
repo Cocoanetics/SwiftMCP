@@ -412,13 +412,24 @@ public extension MCPServer {
                 return JSONRPCMessage.response(id: request.id, result: resultPayload)
             } else {
                 let jsonValue = try JSONValue(encoding: wrappedResult)
-                let encoder = MCPJSONCoding.makeWireEncoder()
-                let jsonData = try encoder.encode(jsonValue)
-                let responseText = String(data: jsonData, encoding: .utf8) ?? ""
+                let responseText: String
+                if case .string(let value) = jsonValue {
+                    responseText = value
+                } else if case .double(let value) = jsonValue, value == .infinity {
+                    responseText = "Infinity"
+                } else if case .double(let value) = jsonValue, value == -.infinity {
+                    responseText = "-Infinity"
+                } else if case .double(let value) = jsonValue, value.isNaN {
+                    responseText = "NaN"
+                } else {
+                    let encoder = MCPJSONCoding.makeWireEncoder()
+                    let jsonData = try encoder.encode(jsonValue)
+                    responseText = String(data: jsonData, encoding: .utf8) ?? ""
+                }
 
                 content = [
                     "type": .string("text"),
-                    "text": .string(responseText.removingQuotes)
+                    "text": .string(responseText)
                 ]
 
                 if case .object(let structuredObject) = jsonValue {
