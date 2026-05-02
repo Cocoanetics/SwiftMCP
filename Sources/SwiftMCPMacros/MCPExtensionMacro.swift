@@ -114,8 +114,13 @@ public enum \(extensionName) {
 \(toolSection)
 \(resourceSection)
 \(promptSection)
+   /// Installs this extension's contributions on `server`. Idempotent —
+   /// calling more than once with the same server has no effect.
    public static func register(in server: \(extendedType)) {
-      server.__mcpRegisterExtension(MCPExtensionContribution(\(initArgs)))
+      server.__mcpRegisterExtension(
+         MCPExtensionContribution(\(initArgs)),
+         byID: ObjectIdentifier(Self.self)
+      )
    }
 }
 """

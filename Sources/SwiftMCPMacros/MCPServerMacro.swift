@@ -275,21 +275,35 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro, MemberAttributeMacro 
 			DeclSyntax(stringLiteral: descriptionProperty),
 		]
 
-        // Per-instance storage for tools contributed by `@MCPExtension`-annotated
-        // extensions. Each `MyServer.<Name>.register(in: server)` call appends one
-        // entry. Stored properties are legal here because we're in the primary
-        // class declaration.
+        // Per-instance storage for contributions from `@MCPExtension`-annotated
+        // extensions. Each `MyServer.<Name>.register(in: server)` call appends
+        // one entry. Stored properties are legal here because we're in the
+        // primary class declaration.
         let contributionsStorage = """
-/// Tools contributed by `@MCPExtension`-annotated extensions.
+/// Contributions from `@MCPExtension`-annotated extensions.
 /// Populated by `MyServer.<Name>.register(in:)` calls at startup.
 nonisolated(unsafe) private var __mcpExtensionContributions: [MCPExtensionContribution<\(serverTypeName)>] = []
 """
         declarations.append(DeclSyntax(stringLiteral: contributionsStorage))
 
+        // Set of metatype identities (one per `@MCPExtension`-emitted nested
+        // type) that have already been registered on this instance. Used to
+        // make `register(in:)` idempotent — calling it twice for the same
+        // extension is a no-op.
+        let registeredIDsStorage = """
+/// IDs of `@MCPExtension` nested types already registered on this instance.
+nonisolated(unsafe) private var __mcpRegisteredExtensionIDs: Set<ObjectIdentifier> = []
+"""
+        declarations.append(DeclSyntax(stringLiteral: registeredIDsStorage))
+
         let registerExtensionMethod = """
-/// Installs an extension's tool contribution on this server instance.
-/// Called by the `register(in:)` static function emitted by `@MCPExtension`.
-public func __mcpRegisterExtension(_ contribution: MCPExtensionContribution<\(serverTypeName)>) {
+/// Installs an extension's contribution on this server instance.
+/// Called by `register(in:)` emitted by `@MCPExtension`. Idempotent on the
+/// extension's metatype identity — registering the same extension twice
+/// has no effect.
+public func __mcpRegisterExtension(_ contribution: MCPExtensionContribution<\(serverTypeName)>, byID id: ObjectIdentifier) {
+   guard !__mcpRegisteredExtensionIDs.contains(id) else { return }
+   __mcpRegisteredExtensionIDs.insert(id)
    __mcpExtensionContributions.append(contribution)
 }
 """

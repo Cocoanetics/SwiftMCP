@@ -225,7 +225,14 @@ nonisolated private let __mcpMetadata_\(functionName) = MCPToolMetadata(
         // stored metadata `let` (Swift forbids stored properties in
         // extensions). Emit only the wrapper; `@MCPExtension` regenerates
         // the metadata literal at the extension level.
-        if MCPMacroContextDetection.isInsideExtension(context) {
+        if let enclosing = MCPMacroContextDetection.enclosingExtension(in: context) {
+            if !MCPMacroContextDetection.hasMCPExtensionAttribute(enclosing) {
+                let diag = Diagnostic(
+                    node: Syntax(funcDecl.name),
+                    message: MCPToolDiagnostic.missingMCPExtensionAttribute(macroName: "MCPTool")
+                )
+                context.diagnose(diag)
+            }
             return [DeclSyntax(stringLiteral: wrapperFuncString)]
         }
 

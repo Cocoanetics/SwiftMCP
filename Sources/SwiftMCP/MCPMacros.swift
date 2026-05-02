@@ -113,7 +113,7 @@ public macro MCPAppIntentTool(description: String? = nil, isConsequential: Bool 
 ///     }
 /// }
 /// ```
-@attached(member, names: named(callTool), named(mcpToolMetadata), named(__mcpServerName), named(__mcpServerVersion), named(__mcpServerDescription), named(mcpResourceMetadata), named(mcpResources), named(mcpStaticResources), named(mcpResourceTemplates), named(getResource), named(__callResourceFunction), named(callResourceAsFunction), named(mcpPromptMetadata), named(callPrompt), named(Client), named(__mcpExtensionContributions), named(__mcpRegisterExtension))
+@attached(member, names: named(callTool), named(mcpToolMetadata), named(__mcpServerName), named(__mcpServerVersion), named(__mcpServerDescription), named(mcpResourceMetadata), named(mcpResources), named(mcpStaticResources), named(mcpResourceTemplates), named(getResource), named(__callResourceFunction), named(callResourceAsFunction), named(mcpPromptMetadata), named(callPrompt), named(Client), named(__mcpExtensionContributions), named(__mcpRegisterExtension), named(__mcpRegisteredExtensionIDs))
 @attached(memberAttribute)
 @attached(extension, conformances: MCPServer, MCPToolProviding, MCPResourceProviding, MCPPromptProviding)
 public macro MCPServer(

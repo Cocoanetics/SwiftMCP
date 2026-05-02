@@ -19,15 +19,31 @@ import SwiftSyntaxMacros
 enum MCPMacroContextDetection {
     /// Returns true if the macro is expanding inside an `extension` block.
     static func isInsideExtension(_ context: some MacroExpansionContext) -> Bool {
+        return enclosingExtension(in: context) != nil
+    }
+
+    /// Returns the nearest enclosing `ExtensionDeclSyntax`, or `nil` if the
+    /// macro is expanding directly inside a class/actor/struct.
+    static func enclosingExtension(in context: some MacroExpansionContext) -> ExtensionDeclSyntax? {
         for node in context.lexicalContext {
-            if node.is(ExtensionDeclSyntax.self) { return true }
+            if let ext = node.as(ExtensionDeclSyntax.self) { return ext }
             if node.is(ClassDeclSyntax.self) ||
                node.is(StructDeclSyntax.self) ||
                node.is(ActorDeclSyntax.self) ||
                node.is(EnumDeclSyntax.self) ||
                node.is(ProtocolDeclSyntax.self) {
-                return false
+                return nil
             }
+        }
+        return nil
+    }
+
+    /// True when the given extension carries an `@MCPExtension(...)` attribute.
+    static func hasMCPExtensionAttribute(_ ext: ExtensionDeclSyntax) -> Bool {
+        for attr in ext.attributes {
+            guard let attrSyntax = attr.as(AttributeSyntax.self),
+                  let id = attrSyntax.attributeName.as(IdentifierTypeSyntax.self) else { continue }
+            if id.name.text == "MCPExtension" { return true }
         }
         return false
     }

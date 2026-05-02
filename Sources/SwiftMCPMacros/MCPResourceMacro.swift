@@ -223,7 +223,14 @@ nonisolated private let __mcpResourceMetadata_\(functionName) = MCPResourceMetad
 
         // Inside an extension: emit wrapper only. `@MCPExtension` will
         // regenerate metadata at the extension level.
-        if MCPMacroContextDetection.isInsideExtension(context) {
+        if let enclosing = MCPMacroContextDetection.enclosingExtension(in: context) {
+            if !MCPMacroContextDetection.hasMCPExtensionAttribute(enclosing) {
+                let diag = Diagnostic(
+                    node: Syntax(funcDecl.name),
+                    message: MCPToolDiagnostic.missingMCPExtensionAttribute(macroName: "MCPResource")
+                )
+                context.diagnose(diag)
+            }
             return [DeclSyntax(stringLiteral: wrapperMethod)]
         }
 
