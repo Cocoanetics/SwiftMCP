@@ -301,6 +301,35 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro, MemberAttributeMacro 
 }
 """
 
+            // The default case has been adjusted to consult MCPExtensionRegistry
+            // before falling through to AppShortcuts / unknownTool. This is what
+            // makes extension-defined tools dispatchable.
+            let extensionFallback = """
+         if let entry = MCPExtensionRegistry.tools(for: Self.self).first(where: { $0.metadata.name == name }) {
+            return try await entry.call(self, enrichedArguments)
+         }
+"""
+
+            var defaultCaseV2 = """
+      default:
+\(extensionFallback)
+"""
+            if hasAppShortcutsProvider {
+                defaultCaseV2 += """
+         let providerType: MCPAppShortcutsProvider.Type = Self.self
+         if let result = try await MCPAppIntentTools.callTool(named: name, providerType: providerType, arguments: enrichedArguments) {
+            return result
+         }
+         throw MCPToolError.unknownTool(name: name)
+"""
+            } else {
+                defaultCaseV2 += "         throw MCPToolError.unknownTool(name: name)\n"
+            }
+            defaultCaseV2 += """
+   }
+}
+"""
+
             let callToolMethod = """
 /// Calls a tool by name with the provided arguments
 /// - Parameters:
@@ -313,18 +342,19 @@ public func callTool(_ name: String, arguments: JSONDictionary) async throws -> 
    guard let metadata = mcpToolMetadata.first(where: { $0.name == name }) ?? mcpToolMetadata(for: name) else {
       throw MCPToolError.unknownTool(name: name)
    }
-   
+
    // Enrich arguments with default values
    let enrichedArguments = try metadata.enrichArguments(arguments)
-   
+
    // Call the appropriate wrapper method based on the tool name
    switch name {
 \(switchCases)
 
-\(defaultCase)
+\(defaultCaseV2)
 """
 
             declarations.append(DeclSyntax(stringLiteral: callToolMethod))
+            _ = defaultCase  // keep variable usage; intentionally unused
         }
 
         // Add static mcpToolMetadata property
@@ -355,12 +385,16 @@ public func callTool(_ name: String, arguments: JSONDictionary) async throws -> 
             let metadataProperty = """
 /// Returns an array of all available tool metadata
 nonisolated public var mcpToolMetadata: [MCPToolMetadata] {
-   \(metadataDeclaration) metadata: [MCPToolMetadata] = \(metadataSeed)
+   var metadata: [MCPToolMetadata] = \(metadataSeed)
 \(appShortcutsBlock)
+   for entry in MCPExtensionRegistry.tools(for: Self.self) where !metadata.contains(where: { $0.name == entry.metadata.name }) {
+      metadata.append(entry.metadata)
+   }
    return metadata
 }
 """
             declarations.append(DeclSyntax(stringLiteral: metadataProperty))
+            _ = metadataDeclaration  // intentionally unused after refactor
         }
 
         // Add resource-related properties and methods if there are MCPResources defined

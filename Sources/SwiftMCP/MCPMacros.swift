@@ -168,3 +168,29 @@ public macro MCPResource<T>(_ template: T, name: String? = nil, mimeType: String
 
 @attached(peer, names: prefixed(__mcpPromptMetadata_), prefixed(__mcpPromptCall_))
 public macro MCPPrompt(description: String? = nil) = #externalMacro(module: "SwiftMCPMacros", type: "MCPPromptMacro")
+
+/// Marks a function inside an `extension` of an `@MCPServer` type as an MCP tool.
+///
+/// This is a no-op at macro-expansion time — the SwiftMCPAggregator build-tool
+/// plugin scans for this attribute, generates per-target bootstrap code, and
+/// pushes the tool into `MCPExtensionRegistry` when the bootstrap function is
+/// called at app startup.
+///
+/// Why a separate macro: `@MCPTool` emits a stored `let` peer, which Swift
+/// disallows in extensions. `@MCPExtensionTool` deliberately emits no peers,
+/// so it compiles in extension scope. Aggregation is delegated to the build
+/// plugin.
+///
+/// Use:
+/// ```swift
+/// extension MyServer {
+///     @MCPExtensionTool
+///     /// Subtract two numbers
+///     func subtract(a: Int, b: Int) -> Int { a - b }
+/// }
+/// ```
+///
+/// At app startup, call the generated `SwiftMCPBootstrap_<TargetName>.register()`
+/// once before serving requests.
+@attached(peer)
+public macro MCPExtensionTool(name: String? = nil, description: String? = nil) = #externalMacro(module: "SwiftMCPMacros", type: "MCPExtensionToolMacro")
