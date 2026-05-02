@@ -92,9 +92,24 @@ public macro MCPTool(
 ///
 /// Apply this macro to AppIntent types to generate tool metadata and a wrapper
 /// that maps MCP arguments to intent parameters.
+///
+/// Example:
+/// ```swift
+/// @MCPAppIntentTool(description: "Lists recent orders", hints: [.readOnly])
+/// struct ListRecentOrdersIntent: AppIntent { ... }
+/// ```
+///
+/// - Parameters:
+///   - description: Optional override for the intent's description
+///   - hints: OptionSet of tool behavior hints (preferred API)
+///   - isConsequential: Whether the function's actions are consequential (defaults to true, deprecated - use hints instead)
 @attached(member, names: named(mcpToolMetadata), named(mcpPerform))
 @attached(extension, conformances: MCPAppIntentTool)
-public macro MCPAppIntentTool(description: String? = nil, isConsequential: Bool = true) = #externalMacro(module: "SwiftMCPMacros", type: "MCPAppIntentToolMacro")
+public macro MCPAppIntentTool(
+    description: String? = nil,
+    hints: MCPToolHints = [],
+    isConsequential: Bool = true
+) = #externalMacro(module: "SwiftMCPMacros", type: "MCPAppIntentToolMacro")
 
 /// A macro that adds a `mcpTools` property to a class to aggregate function metadata.
 ///
