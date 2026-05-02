@@ -75,4 +75,24 @@ struct PrototypeRunner {
         let summary = messages.map { $0.content.text ?? "?" }.joined(separator: " | ")
         print("  \(name) → \(summary)")
     }
+
+    /// Compile-only check: every extension-contributed method is reachable
+    /// on the generated `PrototypeServer.Client`. The function is never
+    /// invoked; it exists so the type checker proves the surface is real.
+    @inline(never) static func _clientSurfaceSmokeTest(_ client: PrototypeServer.Client) throws {
+        // Primary
+        _ = try client.greet(name: "")
+        // PrototypeServerLib (same-target) extensions
+        _ = try client.add(a: 0, b: 0)
+        _ = try client.multiply(a: 0, b: 0)
+        _ = try client.shout("")
+        _ = try client.greetingResource(name: "")
+        _ = try client.summarizePrompt(text: "")
+        // PrototypeExtensionsLib (cross-target) extensions
+        #if os(macOS) || os(Linux) || os(Windows) || os(iOS)
+        _ = try client.subtract(a: 0, b: 0)
+        _ = try client.todayResource()
+        _ = try client.schedulingPrompt(person: "")
+        #endif
+    }
 }
