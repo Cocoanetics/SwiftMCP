@@ -210,4 +210,4 @@ public macro MCPPrompt(description: String? = nil) = #externalMacro(module: "Swi
 /// MyServer.Calendar.register(in: server)
 /// ```
 @attached(member, names: arbitrary)
-public macro MCPExtension(_ name: String) = #externalMacro(module: "SwiftMCPMacros", type: "MCPExtensionMacro")
+public macro MCPExtension(_ name: String? = nil) = #externalMacro(module: "SwiftMCPMacros", type: "MCPExtensionMacro")

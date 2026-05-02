@@ -55,6 +55,10 @@ final class ExtensionFinder: SyntaxVisitor {
     var extensions: [DiscoveredExtension] = []
     var imports: Set<String> = []
 
+    /// Set per-file before walking; consulted when deriving extension names
+    /// from filenames for `@MCPExtension` attributes that omit one.
+    var currentFilePath: String = ""
+
     override func visit(_ node: ImportDeclSyntax) -> SyntaxVisitorContinueKind {
         let path = node.path.map { $0.name.text }.joined(separator: ".")
         if !path.isEmpty { imports.insert(path) }
@@ -65,19 +69,64 @@ final class ExtensionFinder: SyntaxVisitor {
         for attr in node.attributes {
             guard let attrSyntax = attr.as(AttributeSyntax.self),
                   let id = attrSyntax.attributeName.as(IdentifierTypeSyntax.self),
-                  id.name.text == "MCPExtension",
-                  let argList = attrSyntax.arguments?.as(LabeledExprListSyntax.self),
-                  let firstArg = argList.first,
-                  let lit = firstArg.expression.as(StringLiteralExprSyntax.self) else { continue }
+                  id.name.text == "MCPExtension" else { continue }
+
+            // Try explicit name argument first; fall back to filename derivation.
+            var name: String? = nil
+            if let argList = attrSyntax.arguments?.as(LabeledExprListSyntax.self),
+               let firstArg = argList.first,
+               let lit = firstArg.expression.as(StringLiteralExprSyntax.self) {
+                name = lit.segments.description
+            }
+
+            if name == nil {
+                name = deriveNameFromFilename(currentFilePath)
+            }
+
+            guard let resolvedName = name, !resolvedName.isEmpty else { continue }
 
             extensions.append(DiscoveredExtension(
                 extendedType: node.extendedType.trimmedDescription,
-                name: lit.segments.description
+                name: resolvedName
             ))
             break
         }
         return .visitChildren
     }
+}
+
+/// Mirrors `MCPExtensionNaming.derive(from:)` in the macros target so
+/// macro-derived names and aggregator-derived names always match.
+func deriveNameFromFilename(_ filePath: String) -> String {
+    let basename: String
+    if let slashIdx = filePath.lastIndex(of: "/") {
+        basename = String(filePath[filePath.index(after: slashIdx)...])
+    } else {
+        basename = filePath
+    }
+    var stem = basename
+    if stem.hasSuffix(".swift") {
+        stem = String(stem.dropLast(".swift".count))
+    }
+    if let plusIdx = stem.lastIndex(of: "+") {
+        stem = String(stem[stem.index(after: plusIdx)...])
+    }
+    return sanitizeIdentifier(stem)
+}
+
+func sanitizeIdentifier(_ s: String) -> String {
+    guard !s.isEmpty else { return "Extension" }
+    var out = ""
+    var first = true
+    for ch in s {
+        if first {
+            if ch.isLetter || ch == "_" { out.append(ch) } else { out.append("_") }
+            first = false
+        } else {
+            if ch.isLetter || ch.isNumber || ch == "_" { out.append(ch) } else { out.append("_") }
+        }
+    }
+    return out.isEmpty ? "Extension" : out
 }
 
 func sanitize(_ s: String) -> String {
@@ -141,6 +190,7 @@ for path in args.inputs {
           let source = String(data: data, encoding: .utf8) else {
         continue
     }
+    finder.currentFilePath = path
     let tree = Parser.parse(source: source)
     finder.walk(tree)
 }

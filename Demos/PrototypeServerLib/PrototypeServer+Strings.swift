@@ -8,7 +8,8 @@
 import Foundation
 import SwiftMCP
 
-@MCPExtension("Strings")
+// Name omitted — derived from filename "PrototypeServer+Strings.swift" → "Strings".
+@MCPExtension
 extension PrototypeServer {
     /// Uppercase a string.
     @MCPTool

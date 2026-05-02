@@ -6,7 +6,8 @@
 
 import SwiftMCP
 
-@MCPExtension("Math")
+// Name omitted — derived from filename "PrototypeServer+Math.swift" → "Math".
+@MCPExtension
 extension PrototypeServer {
     /// Add two integers.
     @MCPTool

@@ -31,12 +31,26 @@ public struct MCPExtensionMacro: MemberMacro {
             return []
         }
 
-        guard let arguments = node.arguments?.as(LabeledExprListSyntax.self),
-              let firstArg = arguments.first,
-              let stringLiteral = firstArg.expression.as(StringLiteralExprSyntax.self) else {
+        // Name is optional; if absent, derive from the source file name.
+        // For "MyServer+Calendar.swift" → "Calendar"; for any other file
+        // name, sanitize the basename (without extension) into a valid
+        // Swift identifier.
+        var extensionName: String? = nil
+        if let arguments = node.arguments?.as(LabeledExprListSyntax.self),
+           let firstArg = arguments.first,
+           let stringLiteral = firstArg.expression.as(StringLiteralExprSyntax.self) {
+            extensionName = stringLiteral.segments.description
+        }
+
+        if extensionName == nil {
+            extensionName = derivedExtensionName(from: context, of: extDecl)
+        }
+
+        guard let extensionName else {
+            // No name supplied and source location unavailable — bail out.
             return []
         }
-        let extensionName = stringLiteral.segments.description
+
         let extendedType = extDecl.extendedType.trimmedDescription
 
         // ---------- collect annotated members ----------
@@ -278,6 +292,82 @@ MCPPromptMetadata(
 """
     }
 
+    // MARK: - Source-location-based name derivation
+
+    /// When `@MCPExtension` is used without an explicit name, derive one
+    /// from the source file. `MyServer+Calendar.swift` → `Calendar`. Any
+    /// other file name gets its basename (minus `.swift`) sanitized into a
+    /// valid Swift identifier.
+    private static func derivedExtensionName(
+        from context: some MacroExpansionContext,
+        of decl: ExtensionDeclSyntax
+    ) -> String? {
+        guard let location = context.location(of: decl) else { return nil }
+        guard let stringLit = location.file.as(StringLiteralExprSyntax.self) else { return nil }
+
+        var path = ""
+        for segment in stringLit.segments {
+            if let s = segment.as(StringSegmentSyntax.self) {
+                path.append(s.content.text)
+            }
+        }
+        guard !path.isEmpty else { return nil }
+
+        return MCPExtensionNaming.derive(from: path)
+    }
+}
+
+/// Shared between the macro and (eventually) the build plugin tool so both
+/// derive identical names from the same file paths.
+enum MCPExtensionNaming {
+    static func derive(from filePath: String) -> String {
+        // Take the basename.
+        let basename: String
+        if let slashIdx = filePath.lastIndex(of: "/") {
+            basename = String(filePath[filePath.index(after: slashIdx)...])
+        } else {
+            basename = filePath
+        }
+
+        // Strip a trailing .swift if present.
+        var stem = basename
+        if stem.hasSuffix(".swift") {
+            stem = String(stem.dropLast(".swift".count))
+        }
+
+        // For "Foo+Bar" take only "Bar".
+        if let plusIdx = stem.lastIndex(of: "+") {
+            stem = String(stem[stem.index(after: plusIdx)...])
+        }
+
+        return sanitizeIdentifier(stem)
+    }
+
+    private static func sanitizeIdentifier(_ s: String) -> String {
+        guard !s.isEmpty else { return "Extension" }
+        var out = ""
+        var first = true
+        for ch in s {
+            if first {
+                if ch.isLetter || ch == "_" {
+                    out.append(ch)
+                } else {
+                    out.append("_")
+                }
+                first = false
+            } else {
+                if ch.isLetter || ch.isNumber || ch == "_" {
+                    out.append(ch)
+                } else {
+                    out.append("_")
+                }
+            }
+        }
+        return out.isEmpty ? "Extension" : out
+    }
+}
+
+extension MCPExtensionMacro {
     // MARK: - Argument parsers (shared logic with the per-kind macros)
 
     private struct ToolArgs {

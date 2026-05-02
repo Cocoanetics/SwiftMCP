@@ -9,6 +9,7 @@ import Foundation
 import SwiftMCP
 import PrototypeServerLib
 
+// Explicit name overrides the filename-derived "CrossTarget".
 @MCPExtension("Calendar")
 extension PrototypeServer {
     /// Subtract b from a.
