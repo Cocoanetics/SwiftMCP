@@ -769,7 +769,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         try expansion(of: node, providingMembersOf: declaration, in: context)
     }
 
-    private struct ClientParameter {
+    struct ClientParameter {
         let name: String
         let label: String
         let typeString: String
@@ -777,7 +777,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         let isOptional: Bool
     }
 
-    private struct ClientFunctionMetadata {
+    struct ClientFunctionMetadata {
         let kind: ClientFunctionKind
         let name: String
         let documentation: Documentation
@@ -790,13 +790,13 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         let propagatedAttributes: [String]
     }
 
-    private enum ClientFunctionKind {
+    enum ClientFunctionKind {
         case tool
         case resource(templates: [String])
         case prompt
     }
 
-    private static func makeClientType(
+    static func makeClientType(
         toolFunctions: [FunctionDeclSyntax],
         mcpTools: [(functionName: String, toolName: String)] = [],
         resourceFunctions: [FunctionDeclSyntax],
@@ -861,7 +861,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         return lines.joined(separator: "\n")
     }
 
-    private static func clientFunctionMetadata(
+    static func clientFunctionMetadata(
         from funcDecl: FunctionDeclSyntax,
         kind: ClientFunctionKind,
         generatedName: String? = nil
@@ -907,13 +907,13 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         )
     }
 
-    private static func propagatedAttributes(for funcDecl: FunctionDeclSyntax) -> [String] {
+    static func propagatedAttributes(for funcDecl: FunctionDeclSyntax) -> [String] {
         var attributes: [String] = []
         for attr in funcDecl.attributes {
             guard let attribute = attr.as(AttributeSyntax.self) else { continue }
             let attributeName = attribute.attributeName.description.trimmingCharacters(in: .whitespacesAndNewlines)
             if attributeName.isEmpty { continue }
-            if ["MCPTool", "MCPResource", "MCPPrompt", "MCPServer", "MCPToolProvider", "Schema"].contains(attributeName) {
+            if ["MCPTool", "MCPResource", "MCPPrompt", "MCPServer", "MCPToolProvider", "Schema", "MCPExtension"].contains(attributeName) {
                 continue
             }
             let trimmed = attribute.description.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -924,7 +924,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         return attributes
     }
 
-    private static func makeClientMethodLines(metadata: ClientFunctionMetadata, wireToolName: String? = nil) -> [String] {
+    static func makeClientMethodLines(metadata: ClientFunctionMetadata, wireToolName: String? = nil) -> [String] {
         var lines: [String] = []
         lines.append(contentsOf: docCommentLines(for: metadata))
 
@@ -1060,7 +1060,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         return lines
     }
 
-    private static func docCommentLines(for metadata: ClientFunctionMetadata) -> [String] {
+    static func docCommentLines(for metadata: ClientFunctionMetadata) -> [String] {
         var bodyLines: [String] = []
         if !metadata.documentation.description.isEmpty {
             for line in metadata.documentation.description.split(separator: "\n") {
@@ -1089,13 +1089,13 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         return lines
     }
 
-    private static func clientTypeDocCommentLines(description: String?) -> [String] {
+    static func clientTypeDocCommentLines(description: String?) -> [String] {
         guard let description, !description.isEmpty else { return [] }
         let bodyLines = description.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
         return blockDocCommentLines(bodyLines, indent: "")
     }
 
-    private static func initDocCommentLines() -> [String] {
+    static func initDocCommentLines() -> [String] {
         let bodyLines = [
             "Creates a client using the provided proxy.",
             "- Parameter proxy: The proxy used to call server tools, resources, and prompts."
@@ -1103,7 +1103,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         return blockDocCommentLines(bodyLines, indent: "    ")
     }
 
-    private static func encodedArgumentLines(
+    static func encodedArgumentLines(
         for parameters: [ClientParameter],
         variableName: String,
         indent: String
@@ -1121,7 +1121,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         return lines
     }
 
-    private static func blockDocCommentLines(_ bodyLines: [String], indent: String) -> [String] {
+    static func blockDocCommentLines(_ bodyLines: [String], indent: String) -> [String] {
         guard !bodyLines.isEmpty else { return [] }
         var lines: [String] = []
         lines.append("\(indent)/**")
@@ -1132,7 +1132,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         return lines
     }
 
-    private static func parameterSignature(_ parameter: ClientParameter) -> String {
+    static func parameterSignature(_ parameter: ClientParameter) -> String {
         let label: String
         if parameter.label == "_" {
             label = "_ \(parameter.name)"
@@ -1149,7 +1149,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         return signature
     }
 
-    private static func effectSpecifiersString(isAsync: Bool, throwsKeyword: String?) -> String {
+    static func effectSpecifiersString(isAsync: Bool, throwsKeyword: String?) -> String {
         var parts: [String] = []
         if isAsync {
             parts.append("async")
@@ -1161,7 +1161,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         return " " + parts.joined(separator: " ")
     }
 
-    private static func toolCallExpression(
+    static func toolCallExpression(
         toolName: String,
         hasParameters: Bool,
         argumentsName: String,
@@ -1181,7 +1181,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         return "\(tryPrefix)MCPClientBlocking.call { try await \(call) }"
     }
 
-    private static func resourceReadExpression(
+    static func resourceReadExpression(
         isAsync: Bool,
         isThrowing: Bool
     ) -> String {
@@ -1195,7 +1195,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         return "\(tryPrefix)MCPClientBlocking.call { try await \(call) }"
     }
 
-    private static func promptCallExpression(
+    static func promptCallExpression(
         promptName: String,
         hasParameters: Bool,
         argumentsName: String,
@@ -1215,7 +1215,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         return "\(tryPrefix)MCPClientBlocking.call { try await \(call) }"
     }
 
-    private static func resourceTemplates(from funcDecl: FunctionDeclSyntax) -> [String] {
+    static func resourceTemplates(from funcDecl: FunctionDeclSyntax) -> [String] {
         for attribute in funcDecl.attributes {
             guard let identifierAttr = attribute.as(AttributeSyntax.self),
                   let identifier = identifierAttr.attributeName.as(IdentifierTypeSyntax.self),
@@ -1242,7 +1242,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         return []
     }
 
-    private static func resourceTemplateVariables(in template: String) -> [String] {
+    static func resourceTemplateVariables(in template: String) -> [String] {
         guard let regex = try? NSRegularExpression(pattern: #"\{[^}]+\}"#) else {
             return []
         }

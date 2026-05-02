@@ -11,7 +11,7 @@ import Foundation
 import SwiftMCP
 
 /// A demo server used to validate the extension-aggregation prototype.
-@MCPServer(name: "prototype-server", version: "0.1")
+@MCPServer(name: "prototype-server", version: "0.1", generateClient: true)
 public final class PrototypeServer: @unchecked Sendable {
     public init() {}
 
