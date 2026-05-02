@@ -86,6 +86,9 @@ struct DiscoveredExtension {
     var extendedType: String
     var name: String
     var methods: [DiscoveredMethod]
+    /// `#if` clause text covering this extension, e.g. `os(macOS) && swift(>=5.9)`.
+    /// Empty when the extension is not inside any `#if`.
+    var ifConfigCondition: String
 }
 
 // MARK: - Visitor
@@ -95,10 +98,31 @@ final class ExtensionFinder: SyntaxVisitor {
     var imports: Set<String> = []
     var currentFilePath: String = ""
 
+    /// Stack of `#if` conditions enclosing the node currently being visited.
+    /// Joined with `&&` to form the guard wrapper for emitted code.
+    private var ifConfigStack: [String] = []
+
     override func visit(_ node: ImportDeclSyntax) -> SyntaxVisitorContinueKind {
         let path = node.path.map { $0.name.text }.joined(separator: ".")
         if !path.isEmpty { imports.insert(path) }
         return .skipChildren
+    }
+
+    override func visit(_ node: IfConfigClauseSyntax) -> SyntaxVisitorContinueKind {
+        // Only the `#if` clause carries forward; we ignore `#elseif`/`#else`
+        // bodies for emission purposes (a contribution sitting in `#else` is
+        // unusual and we treat it as unguarded for now).
+        if node.poundKeyword.tokenKind == .poundIf, let condition = node.condition {
+            ifConfigStack.append(condition.trimmedDescription)
+        } else {
+            // For #elseif / #else, push an empty marker so the depth balances.
+            ifConfigStack.append("")
+        }
+        return .visitChildren
+    }
+
+    override func visitPost(_ node: IfConfigClauseSyntax) {
+        _ = ifConfigStack.popLast()
     }
 
     override func visit(_ node: ExtensionDeclSyntax) -> SyntaxVisitorContinueKind {
@@ -172,7 +196,17 @@ final class ExtensionFinder: SyntaxVisitor {
             }
         }
 
-        extensions.append(DiscoveredExtension(extendedType: extendedType, name: resolvedName, methods: methods))
+        let condition = ifConfigStack
+            .filter { !$0.isEmpty }
+            .map { "(\($0))" }
+            .joined(separator: " && ")
+
+        extensions.append(DiscoveredExtension(
+            extendedType: extendedType,
+            name: resolvedName,
+            methods: methods,
+            ifConfigCondition: condition
+        ))
         return .visitChildren
     }
 }
@@ -325,7 +359,13 @@ func generateUmbrella(moduleName: String, extensions: [DiscoveredExtension]) -> 
             out.append("    /// Registers all `@MCPExtension` contributions to `\(type)` from this module.\n")
             out.append("    public static func register(in server: \(type)) {\n")
             for ext in exts.sorted(by: { $0.name < $1.name }) {
-                out.append("        \(type).\(ext.name).register(in: server)\n")
+                if ext.ifConfigCondition.isEmpty {
+                    out.append("        \(type).\(ext.name).register(in: server)\n")
+                } else {
+                    out.append("        #if \(ext.ifConfigCondition)\n")
+                    out.append("        \(type).\(ext.name).register(in: server)\n")
+                    out.append("        #endif\n")
+                }
             }
             out.append("    }\n")
         }
@@ -340,13 +380,24 @@ func generateClientExtensions(extensions: [DiscoveredExtension]) -> String {
     var out = ""
     for type in grouped.keys.sorted() {
         let exts = grouped[type] ?? []
-        let allMethods = exts.flatMap(\.methods)
-        guard !allMethods.isEmpty else { continue }
+        // Skip the entire Client extension if no methods would be added.
+        let totalMethods = exts.reduce(0) { $0 + $1.methods.count }
+        guard totalMethods > 0 else { continue }
 
         out.append("extension \(type).Client {\n")
-        for method in allMethods {
-            out.append("\n")
-            out.append(emitClientMethod(method))
+        for ext in exts {
+            guard !ext.methods.isEmpty else { continue }
+            let guarded = !ext.ifConfigCondition.isEmpty
+            if guarded {
+                out.append("\n    #if \(ext.ifConfigCondition)\n")
+            }
+            for method in ext.methods {
+                out.append("\n")
+                out.append(emitClientMethod(method))
+            }
+            if guarded {
+                out.append("\n    #endif\n")
+            }
         }
         out.append("}\n\n")
     }

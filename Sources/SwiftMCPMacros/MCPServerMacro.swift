@@ -295,8 +295,10 @@ public func __mcpRegisterExtension(_ contribution: MCPExtensionContribution<\(se
 """
         declarations.append(DeclSyntax(stringLiteral: registerExtensionMethod))
 
-        // Only add callTool method if there are MCPTools or AppShortcuts defined
-        if !mcpTools.isEmpty || hasAppShortcutsProvider {
+        // Always emit the tool machinery: even if no `@MCPTool` is declared
+        // in the primary type, `@MCPExtension`-annotated extensions in this
+        // or downstream targets may contribute tools at runtime.
+        do {
             // Create a callTool method that uses a switch statement to call the appropriate wrapper function
             var switchCases = ""
             for (index, tool) in mcpTools.enumerated() {
@@ -386,8 +388,8 @@ public func callTool(_ name: String, arguments: JSONDictionary) async throws -> 
             _ = defaultCase  // keep variable usage; intentionally unused
         }
 
-        // Add static mcpToolMetadata property
-        if !mcpTools.isEmpty || hasAppShortcutsProvider {
+        // Always emit `mcpToolMetadata`: extensions may contribute tools.
+        do {
             let metadataArray = mcpTools.map { tool -> String in
                 // When server-level toolNaming changes the name, use .renamed() to
                 // produce metadata whose .name matches the switch-case strings.
@@ -428,8 +430,9 @@ nonisolated public var mcpToolMetadata: [MCPToolMetadata] {
             _ = metadataDeclaration  // intentionally unused after refactor
         }
 
-        // Add resource-related properties and methods if there are MCPResources defined
-        if !mcpResources.isEmpty {
+        // Always emit resource-related machinery: extensions may contribute
+        // resources even when the primary type declares none.
+        do {
             // Add mcpResourceMetadata property
             let resourceMetadataArray = mcpResources.map { "__mcpResourceMetadata_\($0)" }.joined(separator: ", ")
             let resourceMetadataSeed = mcpResources.isEmpty ? "[]" : "[\(resourceMetadataArray)]"
@@ -577,8 +580,9 @@ public func getResource(uri: URL) async throws -> [MCPResourceContent] {
             declarations.append(DeclSyntax(stringLiteral: getResourceMethod))
         }
 
-        // Add prompt related properties and methods if there are MCPPrompts defined
-        if !mcpPrompts.isEmpty {
+        // Always emit prompt-related machinery: extensions may contribute
+        // prompts even when the primary type declares none.
+        do {
             let promptMetadataArray = mcpPrompts.map { "__mcpPromptMetadata_\($0)" }.joined(separator: ", ")
             let promptMetadataSeed = mcpPrompts.isEmpty ? "[]" : "[\(promptMetadataArray)]"
             let promptMetadataProperty = """
@@ -625,7 +629,11 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
             declarations.append(DeclSyntax(stringLiteral: callPromptMethod))
         }
 
-        if generateClient, !(toolFunctions.isEmpty && resourceFunctions.isEmpty && promptFunctions.isEmpty) {
+        if generateClient {
+            // Emit Client even when the primary type has no
+            // tools/resources/prompts: the build plugin will extend
+            // `<Type>.Client` with extension-contributed methods, and the
+            // Client type itself must exist for those extensions to attach.
             let clientType = makeClientType(
                 toolFunctions: toolFunctions,
                 mcpTools: mcpTools,
@@ -738,15 +746,22 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
             protocolsToAdd.append("MCPServer")
         }
 
-        if (hasMCPTools || hasAppShortcutsProvider) && !alreadyConformsToToolProviding {
+        // Always conform to MCPToolProviding / MCPResourceProviding /
+        // MCPPromptProviding so `@MCPExtension`-contributed tools, resources,
+        // and prompts can surface at runtime even when the primary type
+        // declares none. The macro can't see other files; the safe default
+        // is to assume any kind might come from an extension.
+        _ = hasMCPTools
+        _ = hasMCPResources
+        _ = hasMCPPrompts
+        _ = hasAppShortcutsProvider
+        if !alreadyConformsToToolProviding {
             protocolsToAdd.append("MCPToolProviding")
         }
-
-        if hasMCPResources && !alreadyConformsToResourceProviding {
+        if !alreadyConformsToResourceProviding {
             protocolsToAdd.append("MCPResourceProviding")
         }
-
-        if hasMCPPrompts && !alreadyConformsToPromptProviding {
+        if !alreadyConformsToPromptProviding {
             protocolsToAdd.append("MCPPromptProviding")
         }
 

@@ -46,13 +46,15 @@ struct PrototypeRunner {
         try await invokeTool(server, "shout",     args: ["text": .string("hello")])
         try await invokeTool(server, "subtract",  args: ["a": .integer(10), "b": .integer(4)])
 
+        // All resources and prompts here come exclusively from
+        // @MCPExtension-annotated extensions — the primary type declares
+        // none. Validates that @MCPServer emits the machinery even when
+        // it sees no local @MCPResource / @MCPPrompt.
         print("\n=== Dispatching resources ===")
-        try await invokeResource(server, URL(string: "info://build")!)
         try await invokeResource(server, URL(string: "strings://greet/Alice")!)
         try await invokeResource(server, URL(string: "calendar://today")!)
 
         print("\n=== Dispatching prompts ===")
-        try await invokePrompt(server, "greetingPrompt",  args: ["name": .string("Bob")])
         try await invokePrompt(server, "summarizePrompt", args: ["text": .string("Lorem ipsum dolor sit amet.")])
         try await invokePrompt(server, "schedulingPrompt", args: ["person": .string("Carol")])
     }
