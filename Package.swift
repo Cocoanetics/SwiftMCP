@@ -33,6 +33,22 @@ let package = Package(
 		.executable(
 			name: "ProxyDemoCLI",
 			targets: ["ProxyDemoCLI"]
+		),
+		.executable(
+			name: "PrototypeRunner",
+			targets: ["PrototypeRunner"]
+		),
+		.library(
+			name: "PrototypeServerLib",
+			targets: ["PrototypeServerLib"]
+		),
+		.library(
+			name: "PrototypeExtensionsLib",
+			targets: ["PrototypeExtensionsLib"]
+		),
+		.plugin(
+			name: "SwiftMCPAggregator",
+			targets: ["SwiftMCPAggregator"]
 		)
 	],
 	dependencies: [
@@ -117,6 +133,37 @@ let package = Package(
 				.product(name: "_CryptoExtras", package: "swift-crypto"),
 				.product(name: "X509", package: "swift-certificates")
 			]
+		),
+		// MARK: - Prototype: per-instance @MCPExtension contributions
+		.executableTarget(
+			name: "SwiftMCPAggregatorTool",
+			dependencies: [
+				.product(name: "SwiftSyntax", package: "swift-syntax"),
+				.product(name: "SwiftParser", package: "swift-syntax")
+			]
+		),
+		.plugin(
+			name: "SwiftMCPAggregator",
+			capability: .buildTool(),
+			dependencies: ["SwiftMCPAggregatorTool"],
+			path: "Plugins/SwiftMCPAggregator"
+		),
+		.target(
+			name: "PrototypeServerLib",
+			dependencies: ["SwiftMCP"],
+			path: "Demos/PrototypeServerLib",
+			plugins: ["SwiftMCPAggregator"]
+		),
+		.target(
+			name: "PrototypeExtensionsLib",
+			dependencies: ["SwiftMCP", "PrototypeServerLib"],
+			path: "Demos/PrototypeExtensionsLib",
+			plugins: ["SwiftMCPAggregator"]
+		),
+		.executableTarget(
+			name: "PrototypeRunner",
+			dependencies: ["SwiftMCP", "PrototypeServerLib", "PrototypeExtensionsLib"],
+			path: "Demos/PrototypeRunner"
 		)
 	]
 )
