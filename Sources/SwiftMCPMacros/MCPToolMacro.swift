@@ -221,6 +221,14 @@ nonisolated private let __mcpMetadata_\(functionName) = MCPToolMetadata(
 			"""
         }
 
+        // When the function lives inside an `extension`, we cannot emit the
+        // stored metadata `let` (Swift forbids stored properties in
+        // extensions). Emit only the wrapper; `@MCPExtension` regenerates
+        // the metadata literal at the extension level.
+        if MCPMacroContextDetection.isInsideExtension(context) {
+            return [DeclSyntax(stringLiteral: wrapperFuncString)]
+        }
+
         return [
 			DeclSyntax(stringLiteral: metadataDeclaration),
 			DeclSyntax(stringLiteral: wrapperFuncString)

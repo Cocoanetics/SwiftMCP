@@ -76,7 +76,7 @@ struct FunctionMetadataExtractor {
             let attributeName = attribute.attributeName.description.trimmingCharacters(in: .whitespacesAndNewlines)
             if attributeName.isEmpty { continue }
             // Skip the MCP macros themselves to avoid recursive generation.
-            if ["MCPTool", "MCPResource", "MCPPrompt", "MCPServer", "MCPToolProvider", "Schema", "MCPExtensionTool", "MCPExtension"].contains(attributeName) {
+            if ["MCPTool", "MCPResource", "MCPPrompt", "MCPServer", "MCPToolProvider", "Schema", "MCPExtension"].contains(attributeName) {
                 continue
             }
             let trimmedDescription = attribute.description.trimmingCharacters(in: .whitespacesAndNewlines)

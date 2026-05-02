@@ -82,6 +82,12 @@ nonisolated private let __mcpPromptMetadata_\(functionName) = MCPPromptMetadata(
     }
     """
 
+        // Inside an extension: emit wrapper only. `@MCPExtension` will
+        // regenerate metadata at the extension level.
+        if MCPMacroContextDetection.isInsideExtension(context) {
+            return [DeclSyntax(stringLiteral: wrapperFunc)]
+        }
+
         return [
             DeclSyntax(stringLiteral: metadataDeclaration),
             DeclSyntax(stringLiteral: wrapperFunc)

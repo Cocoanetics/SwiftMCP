@@ -169,52 +169,40 @@ public macro MCPResource<T>(_ template: T, name: String? = nil, mimeType: String
 @attached(peer, names: prefixed(__mcpPromptMetadata_), prefixed(__mcpPromptCall_))
 public macro MCPPrompt(description: String? = nil) = #externalMacro(module: "SwiftMCPMacros", type: "MCPPromptMacro")
 
-/// Marks a function inside an `extension` of an `@MCPServer` type as an MCP tool.
-///
-/// This is a no-op at macro-expansion time — the SwiftMCPAggregator build-tool
-/// plugin scans for this attribute, generates per-target bootstrap code, and
-/// pushes the tool into `MCPExtensionRegistry` when the bootstrap function is
-/// called at app startup.
-///
-/// Why a separate macro: `@MCPTool` emits a stored `let` peer, which Swift
-/// disallows in extensions. `@MCPExtensionTool` deliberately emits no peers,
-/// so it compiles in extension scope. Aggregation is delegated to the build
-/// plugin.
-///
-/// Use:
-/// ```swift
-/// extension MyServer {
-///     @MCPExtensionTool
-///     /// Subtract two numbers
-///     func subtract(a: Int, b: Int) -> Int { a - b }
-/// }
-/// ```
-///
-/// At app startup, call the generated `SwiftMCPBootstrap_<TargetName>.register()`
-/// once before serving requests.
-@attached(peer, names: prefixed(__mcpCall_))
-public macro MCPExtensionTool(name: String? = nil, description: String? = nil) = #externalMacro(module: "SwiftMCPMacros", type: "MCPExtensionToolMacro")
-
-/// Marks an extension as contributing tools to a `@MCPServer` type.
+/// Marks an extension as contributing tools, resources, and/or prompts to a
+/// `@MCPServer` type.
 ///
 /// Generates a nested namespace enum on the extended type with the supplied
-/// name. The enum exposes:
-///  - `static let toolMetadata: [MCPToolMetadata]` — full descriptors for
-///    every `@MCPExtensionTool` in the extension.
-///  - `static func callTool(_:on:arguments:) async throws -> Encodable & Sendable`
-///    — typed dispatcher that switches on tool name and forwards to the
-///    user's function via the per-tool wrapper.
+/// name. The enum exposes (depending on which kinds the extension contains):
+///  - `static let toolMetadata: [MCPToolMetadata]` and a typed
+///    `static func callTool(_:on:arguments:)` dispatcher.
+///  - `static let resourceMetadata: [MCPResourceMetadata]` and a typed
+///    `static func callResource(_:on:arguments:requestedUri:overrideMimeType:)`
+///    dispatcher.
+///  - `static let promptMetadata: [MCPPromptMetadata]` and a typed
+///    `static func callPrompt(_:on:arguments:)` dispatcher.
 ///  - `static func register(in: <ServerType>)` — installs this extension on
-///    a specific server instance. Idempotent on `(metadata-name)` per
-///    instance; users call this once at startup.
+///    a specific server instance.
+///
+/// Inside `@MCPExtension`-annotated extensions, the regular `@MCPTool`,
+/// `@MCPResource`, and `@MCPPrompt` macros automatically detect extension
+/// context and emit only the typed wrapper (no stored metadata `let`,
+/// which Swift disallows in extensions). `@MCPExtension` regenerates the
+/// metadata at the extension level.
 ///
 /// Use:
 /// ```swift
 /// @MCPExtension("Calendar")
 /// extension MyServer {
 ///     /// List all events.
-///     @MCPExtensionTool
+///     @MCPTool
 ///     func listEvents() async -> [Event] { ... }
+///
+///     @MCPResource("calendar://events/{id}")
+///     func event(id: String) -> String { ... }
+///
+///     @MCPPrompt
+///     func summary() -> String { ... }
 /// }
 ///
 /// // At startup:

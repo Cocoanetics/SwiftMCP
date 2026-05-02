@@ -221,6 +221,12 @@ nonisolated private let __mcpResourceMetadata_\(functionName) = MCPResourceMetad
         }
         """
 
+        // Inside an extension: emit wrapper only. `@MCPExtension` will
+        // regenerate metadata at the extension level.
+        if MCPMacroContextDetection.isInsideExtension(context) {
+            return [DeclSyntax(stringLiteral: wrapperMethod)]
+        }
+
         return [
             DeclSyntax(stringLiteral: metadataDeclaration),
             DeclSyntax(stringLiteral: wrapperMethod)

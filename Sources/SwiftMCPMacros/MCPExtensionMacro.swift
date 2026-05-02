@@ -4,10 +4,16 @@
 //
 //  Member macro for `@MCPExtension("Name") extension MyServer { ... }`.
 //
-//  Scans the extension body for `@MCPExtensionTool` functions and emits a
-//  nested namespace enum named after the extension. The enum carries the
-//  metadata literal, the typed dispatcher, and a `register(in:)` entry
-//  point that pushes the contribution onto a server instance.
+//  Scans the extension body for `@MCPTool`, `@MCPResource`, and `@MCPPrompt`
+//  functions, and emits a nested namespace enum named after the extension.
+//  The enum carries metadata literals, typed dispatchers, and a
+//  `register(in:)` entry point that pushes the contribution onto a server
+//  instance.
+//
+//  The peer macros (`@MCPTool`, `@MCPResource`, `@MCPPrompt`) detect
+//  extension context and skip emitting their stored metadata `let` (illegal
+//  in extensions). Their wrapper functions are still emitted, and this
+//  macro stitches them up.
 //
 
 import Foundation
@@ -25,105 +31,125 @@ public struct MCPExtensionMacro: MemberMacro {
             return []
         }
 
-        // Extract the extension's name (the macro's only positional argument).
         guard let arguments = node.arguments?.as(LabeledExprListSyntax.self),
               let firstArg = arguments.first,
               let stringLiteral = firstArg.expression.as(StringLiteralExprSyntax.self) else {
             return []
         }
         let extensionName = stringLiteral.segments.description
-
         let extendedType = extDecl.extendedType.trimmedDescription
 
-        // Collect functions annotated with `@MCPExtensionTool`.
-        var tools: [(funcDecl: FunctionDeclSyntax, wireName: String)] = []
+        // ---------- collect annotated members ----------
+        var toolFns: [(funcDecl: FunctionDeclSyntax, attribute: AttributeSyntax)] = []
+        var resourceFns: [(funcDecl: FunctionDeclSyntax, attribute: AttributeSyntax)] = []
+        var promptFns: [(funcDecl: FunctionDeclSyntax, attribute: AttributeSyntax)] = []
+
         for member in extDecl.memberBlock.members {
             guard let funcDecl = member.decl.as(FunctionDeclSyntax.self) else { continue }
             for attr in funcDecl.attributes {
                 guard let attrSyntax = attr.as(AttributeSyntax.self),
-                      let id = attrSyntax.attributeName.as(IdentifierTypeSyntax.self),
-                      id.name.text == "MCPExtensionTool" else { continue }
-
-                var wireName = funcDecl.name.text
-                if let argList = attrSyntax.arguments?.as(LabeledExprListSyntax.self) {
-                    for a in argList where a.label?.text == "name" {
-                        if let lit = a.expression.as(StringLiteralExprSyntax.self) {
-                            wireName = lit.segments.description
-                        }
-                    }
+                      let id = attrSyntax.attributeName.as(IdentifierTypeSyntax.self) else { continue }
+                switch id.name.text {
+                case "MCPTool":     toolFns.append((funcDecl, attrSyntax))
+                case "MCPResource": resourceFns.append((funcDecl, attrSyntax))
+                case "MCPPrompt":   promptFns.append((funcDecl, attrSyntax))
+                default: continue
                 }
-                tools.append((funcDecl, wireName))
                 break
             }
         }
 
-        // Build metadata literals + switch cases.
-        var metadataLiterals: [String] = []
-        var switchCases: [String] = []
+        // ---------- generate per-kind sections ----------
+        let toolSection = try renderToolSection(
+            toolFns: toolFns,
+            extendedType: extendedType,
+            context: context
+        )
+        let resourceSection = try renderResourceSection(
+            resourceFns: resourceFns,
+            extendedType: extendedType,
+            context: context
+        )
+        let promptSection = try renderPromptSection(
+            promptFns: promptFns,
+            extendedType: extendedType,
+            context: context
+        )
 
-        for (funcDecl, wireName) in tools {
+        // ---------- emit nested enum ----------
+        var contributionInit: [String] = []
+        if !toolFns.isEmpty {
+            contributionInit.append("toolMetadata: toolMetadata")
+            contributionInit.append("toolDispatcher: callTool")
+        }
+        if !resourceFns.isEmpty {
+            contributionInit.append("resourceMetadata: resourceMetadata")
+            contributionInit.append("resourceDispatcher: callResource")
+        }
+        if !promptFns.isEmpty {
+            contributionInit.append("promptMetadata: promptMetadata")
+            contributionInit.append("promptDispatcher: callPrompt")
+        }
+
+        let initArgs = contributionInit.isEmpty
+            ? ""
+            : "\n         " + contributionInit.joined(separator: ",\n         ") + "\n      "
+
+        let nestedEnum = """
+public enum \(extensionName) {
+\(toolSection)
+\(resourceSection)
+\(promptSection)
+   public static func register(in server: \(extendedType)) {
+      server.__mcpRegisterExtension(MCPExtensionContribution(\(initArgs)))
+   }
+}
+"""
+
+        return [DeclSyntax(stringLiteral: nestedEnum)]
+    }
+
+    // MARK: - Tool section
+
+    private static func renderToolSection(
+        toolFns: [(funcDecl: FunctionDeclSyntax, attribute: AttributeSyntax)],
+        extendedType: String,
+        context: some MacroExpansionContext
+    ) throws -> String {
+        guard !toolFns.isEmpty else { return "" }
+
+        var literals: [String] = []
+        var cases: [String] = []
+
+        for (funcDecl, attribute) in toolFns {
             let extractor = FunctionMetadataExtractor(funcDecl: funcDecl, context: context)
             let extracted = try extractor.extract()
+            let toolArgs = parseToolArgs(attribute: attribute, defaults: extracted)
 
-            // Description from doc, plus per-tool override.
-            var descriptionArg = "nil"
-            if !extracted.documentation.description.isEmpty {
-                descriptionArg = "\"\(extracted.documentation.description.escapedForSwiftString)\""
-            }
-            for attr in funcDecl.attributes {
-                guard let attrSyntax = attr.as(AttributeSyntax.self),
-                      let id = attrSyntax.attributeName.as(IdentifierTypeSyntax.self),
-                      id.name.text == "MCPExtensionTool",
-                      let argList = attrSyntax.arguments?.as(LabeledExprListSyntax.self) else { continue }
-                for a in argList where a.label?.text == "description" {
-                    if let lit = a.expression.as(StringLiteralExprSyntax.self) {
-                        descriptionArg = "\"\(lit.segments.description.escapedForSwiftString)\""
-                    }
-                }
-            }
-
-            let parameterInfos = extracted.parameters.map { $0.toMCPParameterInfo() }.joined(separator: ", ")
-            let returnDescription = extracted.returnDescription ?? "nil"
-
-            let literal = """
+            literals.append("""
 MCPToolMetadata(
-   name: "\(wireName)",
-   description: \(descriptionArg),
-   parameters: [\(parameterInfos)],
+   name: "\(toolArgs.wireName)",
+   description: \(toolArgs.descriptionArg),
+   parameters: [\(extracted.parameters.map { $0.toMCPParameterInfo() }.joined(separator: ", "))],
    returnType: \(extracted.returnTypeString).self,
-   returnTypeDescription: \(returnDescription),
+   returnTypeDescription: \(extracted.returnDescription ?? "nil"),
    isAsync: \(extracted.isAsync),
    isThrowing: \(extracted.isThrowing),
-   isConsequential: true,
-   annotations: nil
+   isConsequential: \(toolArgs.isConsequential),
+   annotations: \(toolArgs.annotationsArg)
 )
-"""
-            metadataLiterals.append(literal)
-
-            switchCases.append("""
-      case "\(wireName)":
+""")
+            cases.append("""
+      case "\(toolArgs.wireName)":
          return try await server.__mcpCall_\(extracted.functionName)(arguments)
 """)
         }
 
-        let metadataArrayBody = metadataLiterals.isEmpty
-            ? "[]"
-            : "[\n   " + metadataLiterals.joined(separator: ",\n   ") + "\n]"
+        return """
 
-        let switchBody = switchCases.isEmpty
-            ? "      default: throw MCPToolError.unknownTool(name: name)"
-            : switchCases.joined(separator: "\n") + """
-
-      default:
-         throw MCPToolError.unknownTool(name: name)
-"""
-
-        // Emit the nested enum. Member macros on extensions place this inside
-        // the extension's body, which means it becomes a nested type on the
-        // extended type — `MyServer.<extensionName>`.
-        let nestedEnum = """
-public enum \(extensionName) {
-   public static let toolMetadata: [MCPToolMetadata] = \(metadataArrayBody)
+   public static let toolMetadata: [MCPToolMetadata] = [
+      \(literals.joined(separator: ",\n      "))
+   ]
 
    public static func callTool(
       _ name: String,
@@ -131,19 +157,274 @@ public enum \(extensionName) {
       arguments: JSONDictionary
    ) async throws -> Encodable & Sendable {
       switch name {
-\(switchBody)
+\(cases.joined(separator: "\n"))
+      default:
+         throw MCPToolError.unknownTool(name: name)
       }
    }
-
-   public static func register(in server: \(extendedType)) {
-      server.__mcpRegisterExtension(MCPExtensionContribution(
-         metadata: toolMetadata,
-         dispatcher: callTool
-      ))
-   }
-}
 """
+    }
 
-        return [DeclSyntax(stringLiteral: nestedEnum)]
+    // MARK: - Resource section
+
+    private static func renderResourceSection(
+        resourceFns: [(funcDecl: FunctionDeclSyntax, attribute: AttributeSyntax)],
+        extendedType: String,
+        context: some MacroExpansionContext
+    ) throws -> String {
+        guard !resourceFns.isEmpty else { return "" }
+
+        var literals: [String] = []
+        var cases: [String] = []
+
+        for (funcDecl, attribute) in resourceFns {
+            let extractor = FunctionMetadataExtractor(funcDecl: funcDecl, context: context)
+            let extracted = try extractor.extract()
+            let res = parseResourceArgs(attribute: attribute, defaults: extracted)
+
+            let templatesSet = "[\(res.templates.map { "\"\($0)\"" }.joined(separator: ", "))]"
+
+            literals.append("""
+MCPResourceMetadata(
+   uriTemplates: Set(\(templatesSet)),
+   name: "\(res.resourceName)",
+   functionName: "\(extracted.functionName)",
+   description: \(res.descriptionArg),
+   parameters: [\(extracted.parameters.map { $0.toMCPParameterInfo() }.joined(separator: ", "))],
+   returnType: \(extracted.returnTypeString).self,
+   returnTypeDescription: \(extracted.returnDescription ?? "nil"),
+   isAsync: \(extracted.isAsync),
+   isThrowing: \(extracted.isThrowing),
+   mimeType: \(res.mimeTypeArg)
+)
+""")
+            cases.append("""
+      case "\(extracted.functionName)":
+         return try await server.__mcpResourceCall_\(extracted.functionName)(arguments, requestedUri: requestedUri, overrideMimeType: overrideMimeType)
+""")
+        }
+
+        return """
+
+   public static let resourceMetadata: [MCPResourceMetadata] = [
+      \(literals.joined(separator: ",\n      "))
+   ]
+
+   public static func callResource(
+      _ name: String,
+      on server: \(extendedType),
+      arguments: JSONDictionary,
+      requestedUri: URL,
+      overrideMimeType: String?
+   ) async throws -> [MCPResourceContent] {
+      switch name {
+\(cases.joined(separator: "\n"))
+      default:
+         throw MCPResourceError.notFound(uri: requestedUri.absoluteString)
+      }
+   }
+"""
+    }
+
+    // MARK: - Prompt section
+
+    private static func renderPromptSection(
+        promptFns: [(funcDecl: FunctionDeclSyntax, attribute: AttributeSyntax)],
+        extendedType: String,
+        context: some MacroExpansionContext
+    ) throws -> String {
+        guard !promptFns.isEmpty else { return "" }
+
+        var literals: [String] = []
+        var cases: [String] = []
+
+        for (funcDecl, attribute) in promptFns {
+            let extractor = FunctionMetadataExtractor(funcDecl: funcDecl, context: context)
+            let extracted = try extractor.extract()
+            let descriptionArg = parsePromptDescription(attribute: attribute, defaults: extracted)
+
+            literals.append("""
+MCPPromptMetadata(
+   name: "\(extracted.functionName)",
+   description: \(descriptionArg),
+   parameters: [\(extracted.parameters.map { $0.toMCPParameterInfo() }.joined(separator: ", "))],
+   isAsync: \(extracted.isAsync),
+   isThrowing: \(extracted.isThrowing)
+)
+""")
+            cases.append("""
+      case "\(extracted.functionName)":
+         return try await server.__mcpPromptCall_\(extracted.functionName)(arguments)
+""")
+        }
+
+        return """
+
+   public static let promptMetadata: [MCPPromptMetadata] = [
+      \(literals.joined(separator: ",\n      "))
+   ]
+
+   public static func callPrompt(
+      _ name: String,
+      on server: \(extendedType),
+      arguments: JSONDictionary
+   ) async throws -> [PromptMessage] {
+      switch name {
+\(cases.joined(separator: "\n"))
+      default:
+         throw MCPToolError.unknownTool(name: name)
+      }
+   }
+"""
+    }
+
+    // MARK: - Argument parsers (shared logic with the per-kind macros)
+
+    private struct ToolArgs {
+        var wireName: String
+        var descriptionArg: String
+        var isConsequential: String
+        var annotationsArg: String
+    }
+
+    private static func parseToolArgs(attribute: AttributeSyntax, defaults: ExtractedFunctionMetadata) -> ToolArgs {
+        var wireName = defaults.functionName
+        var descriptionArg = "nil"
+        var isConsequentialArg = "true"
+
+        var hintsFromOptionSet: [String] = []
+        var readOnlyHintArg: String? = nil
+        var destructiveHintArg: String? = nil
+        var idempotentHintArg: String? = nil
+        var openWorldHintArg: String? = nil
+
+        if let argList = attribute.arguments?.as(LabeledExprListSyntax.self) {
+            for arg in argList {
+                guard let label = arg.label?.text else { continue }
+                switch label {
+                case "name":
+                    if let lit = arg.expression.as(StringLiteralExprSyntax.self) {
+                        wireName = lit.segments.description
+                    }
+                case "description":
+                    if let lit = arg.expression.as(StringLiteralExprSyntax.self) {
+                        descriptionArg = "\"\(lit.segments.description.escapedForSwiftString)\""
+                    }
+                case "hints":
+                    if let arr = arg.expression.as(ArrayExprSyntax.self) {
+                        for element in arr.elements {
+                            if let memberAccess = element.expression.as(MemberAccessExprSyntax.self) {
+                                hintsFromOptionSet.append(".\(memberAccess.declName.baseName.text)")
+                            }
+                        }
+                    }
+                case "isConsequential":
+                    if let lit = arg.expression.as(BooleanLiteralExprSyntax.self) {
+                        isConsequentialArg = lit.literal.text
+                    }
+                case "readOnlyHint":
+                    if let lit = arg.expression.as(BooleanLiteralExprSyntax.self) { readOnlyHintArg = lit.literal.text }
+                case "destructiveHint":
+                    if let lit = arg.expression.as(BooleanLiteralExprSyntax.self) { destructiveHintArg = lit.literal.text }
+                case "idempotentHint":
+                    if let lit = arg.expression.as(BooleanLiteralExprSyntax.self) { idempotentHintArg = lit.literal.text }
+                case "openWorldHint":
+                    if let lit = arg.expression.as(BooleanLiteralExprSyntax.self) { openWorldHintArg = lit.literal.text }
+                default: continue
+                }
+            }
+        }
+
+        if descriptionArg == "nil", !defaults.documentation.description.isEmpty {
+            descriptionArg = "\"\(defaults.documentation.description.escapedForSwiftString)\""
+        }
+
+        var allHints = Set(hintsFromOptionSet)
+        if readOnlyHintArg == "true"   { allHints.insert(".readOnly") }
+        if destructiveHintArg == "true" { allHints.insert(".destructive") }
+        if idempotentHintArg == "true"  { allHints.insert(".idempotent") }
+        if openWorldHintArg == "true"   { allHints.insert(".openWorld") }
+
+        let annotationsArg: String
+        if allHints.isEmpty {
+            annotationsArg = "nil"
+        } else {
+            annotationsArg = "MCPToolAnnotations(hints: [\(allHints.sorted().joined(separator: ", "))])"
+        }
+
+        return ToolArgs(
+            wireName: wireName,
+            descriptionArg: descriptionArg,
+            isConsequential: isConsequentialArg,
+            annotationsArg: annotationsArg
+        )
+    }
+
+    private struct ResourceArgs {
+        var templates: [String]
+        var resourceName: String
+        var descriptionArg: String
+        var mimeTypeArg: String
+    }
+
+    private static func parseResourceArgs(attribute: AttributeSyntax, defaults: ExtractedFunctionMetadata) -> ResourceArgs {
+        var templates: [String] = []
+        var resourceName = defaults.functionName
+        var descriptionArg = "nil"
+        var mimeTypeArg = "nil"
+
+        if let argList = attribute.arguments?.as(LabeledExprListSyntax.self) {
+            for arg in argList {
+                if arg.label == nil {
+                    if let lit = arg.expression.as(StringLiteralExprSyntax.self) {
+                        templates.append(lit.segments.description)
+                    } else if let arr = arg.expression.as(ArrayExprSyntax.self) {
+                        for element in arr.elements {
+                            if let lit = element.expression.as(StringLiteralExprSyntax.self) {
+                                templates.append(lit.segments.description)
+                            }
+                        }
+                    }
+                    continue
+                }
+                switch arg.label?.text {
+                case "name":
+                    if let lit = arg.expression.as(StringLiteralExprSyntax.self) {
+                        resourceName = lit.segments.description
+                    }
+                case "mimeType":
+                    if let lit = arg.expression.as(StringLiteralExprSyntax.self) {
+                        mimeTypeArg = "\"\(lit.segments.description.escapedForSwiftString)\""
+                    }
+                default: continue
+                }
+            }
+        }
+
+        if descriptionArg == "nil", !defaults.documentation.description.isEmpty {
+            descriptionArg = "\"\(defaults.documentation.description.escapedForSwiftString)\""
+        }
+
+        return ResourceArgs(
+            templates: templates,
+            resourceName: resourceName,
+            descriptionArg: descriptionArg,
+            mimeTypeArg: mimeTypeArg
+        )
+    }
+
+    private static func parsePromptDescription(attribute: AttributeSyntax, defaults: ExtractedFunctionMetadata) -> String {
+        var descriptionArg = "nil"
+        if let argList = attribute.arguments?.as(LabeledExprListSyntax.self) {
+            for arg in argList where arg.label?.text == "description" {
+                if let lit = arg.expression.as(StringLiteralExprSyntax.self) {
+                    descriptionArg = "\"\(lit.segments.description.escapedForSwiftString)\""
+                }
+            }
+        }
+        if descriptionArg == "nil", !defaults.documentation.description.isEmpty {
+            descriptionArg = "\"\(defaults.documentation.description.escapedForSwiftString)\""
+        }
+        return descriptionArg
     }
 }

@@ -331,8 +331,11 @@ public func __mcpRegisterExtension(_ contribution: MCPExtensionContribution<\(se
             // dispatcher is the corresponding `Type.<Name>.callTool(_:on:arguments:)`
             // — an unbound static function reference, so no retain cycle.
             let extensionFallback = """
-         for contribution in __mcpExtensionContributions where contribution.metadata.contains(where: { $0.name == name }) {
-            return try await contribution.dispatcher(name, self, enrichedArguments)
+         for contribution in __mcpExtensionContributions {
+            if contribution.toolMetadata.contains(where: { $0.name == name }),
+               let dispatcher = contribution.toolDispatcher {
+               return try await dispatcher(name, self, enrichedArguments)
+            }
          }
 """
 
@@ -414,8 +417,8 @@ nonisolated public var mcpToolMetadata: [MCPToolMetadata] {
    var metadata: [MCPToolMetadata] = \(metadataSeed)
 \(appShortcutsBlock)
    for contribution in __mcpExtensionContributions {
-      for toolMetadata in contribution.metadata where !metadata.contains(where: { $0.name == toolMetadata.name }) {
-         metadata.append(toolMetadata)
+      for m in contribution.toolMetadata where !metadata.contains(where: { $0.name == m.name }) {
+         metadata.append(m)
       }
    }
    return metadata
@@ -429,10 +432,17 @@ nonisolated public var mcpToolMetadata: [MCPToolMetadata] {
         if !mcpResources.isEmpty {
             // Add mcpResourceMetadata property
             let resourceMetadataArray = mcpResources.map { "__mcpResourceMetadata_\($0)" }.joined(separator: ", ")
+            let resourceMetadataSeed = mcpResources.isEmpty ? "[]" : "[\(resourceMetadataArray)]"
             let resourceMetadataProperty = """
-/// Returns an array of all available resource metadata
+/// Returns an array of all available resource metadata, including contributions from `@MCPExtension`-annotated extensions.
 nonisolated public var mcpResourceMetadata: [MCPResourceMetadata] {
-   return [\(resourceMetadataArray)]
+   var metadata: [MCPResourceMetadata] = \(resourceMetadataSeed)
+   for contribution in __mcpExtensionContributions {
+      for m in contribution.resourceMetadata where !metadata.contains(where: { $0.name == m.name }) {
+         metadata.append(m)
+      }
+   }
+   return metadata
 }
 """
             declarations.append(DeclSyntax(stringLiteral: resourceMetadataProperty))
@@ -475,6 +485,12 @@ internal func __callResourceFunction(_ name: String, enrichedArguments: JSONDict
    switch name {
 \(resourceFunctionSwitchCases)
       default:
+         for contribution in __mcpExtensionContributions {
+            if contribution.resourceMetadata.contains(where: { $0.functionMetadata.name == name }),
+               let dispatcher = contribution.resourceDispatcher {
+               return try await dispatcher(name, self, enrichedArguments, requestedUri, overrideMimeType)
+            }
+         }
          throw MCPResourceError.notFound(uri: requestedUri.absoluteString)
    }
 }
@@ -564,10 +580,17 @@ public func getResource(uri: URL) async throws -> [MCPResourceContent] {
         // Add prompt related properties and methods if there are MCPPrompts defined
         if !mcpPrompts.isEmpty {
             let promptMetadataArray = mcpPrompts.map { "__mcpPromptMetadata_\($0)" }.joined(separator: ", ")
+            let promptMetadataSeed = mcpPrompts.isEmpty ? "[]" : "[\(promptMetadataArray)]"
             let promptMetadataProperty = """
-/// Returns an array of all available prompt metadata
+/// Returns an array of all available prompt metadata, including contributions from `@MCPExtension`-annotated extensions.
 nonisolated public var mcpPromptMetadata: [MCPPromptMetadata] {
-   return [\(promptMetadataArray)]
+   var metadata: [MCPPromptMetadata] = \(promptMetadataSeed)
+   for contribution in __mcpExtensionContributions {
+      for m in contribution.promptMetadata where !metadata.contains(where: { $0.name == m.name }) {
+         metadata.append(m)
+      }
+   }
+   return metadata
 }
 """
             declarations.append(DeclSyntax(stringLiteral: promptMetadataProperty))
@@ -589,6 +612,12 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
    switch name {
 \(promptSwitchCases)
       default:
+         for contribution in __mcpExtensionContributions {
+            if contribution.promptMetadata.contains(where: { $0.name == name }),
+               let dispatcher = contribution.promptDispatcher {
+               return try await dispatcher(name, self, enrichedArguments)
+            }
+         }
          throw MCPToolError.unknownTool(name: name)
    }
 }

@@ -27,7 +27,6 @@ public struct SwiftMCPPlugin: CompilerPlugin {
         SchemaMacro.self,
         MCPResourceMacro.self,
         MCPPromptMacro.self,
-        MCPExtensionToolMacro.self,
         MCPExtensionMacro.self
     ]
 }
