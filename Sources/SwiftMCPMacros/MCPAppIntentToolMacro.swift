@@ -38,14 +38,8 @@ public struct MCPAppIntentToolMacro: MemberMacro, ExtensionMacro {
                    let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
                     let stringValue = stringLiteral.segments.description
                     descriptionOverrideArg = "\"\(stringValue.escapedForSwiftString)\""
-                } else if argument.label?.text == "hints",
-                          let arrayExpr = argument.expression.as(ArrayExprSyntax.self) {
-                    for element in arrayExpr.elements {
-                        if let memberAccess = element.expression.as(MemberAccessExprSyntax.self) {
-                            let hintName = memberAccess.declName.baseName.text
-                            hintsFromOptionSet.append(".\(hintName)")
-                        }
-                    }
+                } else if argument.label?.text == "hints" {
+                    hintsFromOptionSet.append(contentsOf: parseHintsExpression(argument.expression))
                 } else if argument.label?.text == "isConsequential",
                           let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
                     isConsequentialArg = boolLiteral.literal.text

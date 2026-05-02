@@ -103,14 +103,10 @@ public struct MCPToolMacro: PeerMacro {
                 } else if argument.label?.text == "description", let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
                     let stringValue = stringLiteral.segments.description
                     descriptionArg = "\"\(stringValue.escapedForSwiftString)\"" // Ensure proper escaping
-                } else if argument.label?.text == "hints", let arrayExpr = argument.expression.as(ArrayExprSyntax.self) {
-                    // Parse hints array: [.readOnly, .destructive]
-                    for element in arrayExpr.elements {
-                        if let memberAccess = element.expression.as(MemberAccessExprSyntax.self) {
-                            let hintName = memberAccess.declName.baseName.text
-                            hintsFromOptionSet.append(".\(hintName)")
-                        }
-                    }
+                } else if argument.label?.text == "hints" {
+                    // Parse hints: accept array literal ([.readOnly, .destructive])
+                    // or a single OptionSet member access (.readOnly).
+                    hintsFromOptionSet.append(contentsOf: parseHintsExpression(argument.expression))
                 } else if argument.label?.text == "isConsequential", let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
                     isConsequentialArg = boolLiteral.literal.text
                 } else if argument.label?.text == "readOnlyHint", let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
