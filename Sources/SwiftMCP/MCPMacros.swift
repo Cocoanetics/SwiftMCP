@@ -113,7 +113,7 @@ public macro MCPAppIntentTool(description: String? = nil, isConsequential: Bool 
 ///     }
 /// }
 /// ```
-@attached(member, names: named(callTool), named(mcpToolMetadata), named(__mcpServerName), named(__mcpServerVersion), named(__mcpServerDescription), named(mcpResourceMetadata), named(mcpResources), named(mcpStaticResources), named(mcpResourceTemplates), named(getResource), named(__callResourceFunction), named(callResourceAsFunction), named(mcpPromptMetadata), named(callPrompt), named(Client))
+@attached(member, names: named(callTool), named(mcpToolMetadata), named(__mcpServerName), named(__mcpServerVersion), named(__mcpServerDescription), named(mcpResourceMetadata), named(mcpResources), named(mcpStaticResources), named(mcpResourceTemplates), named(getResource), named(__callResourceFunction), named(callResourceAsFunction), named(mcpPromptMetadata), named(callPrompt), named(Client), named(__mcpExtensionContributions), named(__mcpRegisterExtension))
 @attached(memberAttribute)
 @attached(extension, conformances: MCPServer, MCPToolProviding, MCPResourceProviding, MCPPromptProviding)
 public macro MCPServer(
@@ -192,5 +192,34 @@ public macro MCPPrompt(description: String? = nil) = #externalMacro(module: "Swi
 ///
 /// At app startup, call the generated `SwiftMCPBootstrap_<TargetName>.register()`
 /// once before serving requests.
-@attached(peer)
+@attached(peer, names: prefixed(__mcpCall_))
 public macro MCPExtensionTool(name: String? = nil, description: String? = nil) = #externalMacro(module: "SwiftMCPMacros", type: "MCPExtensionToolMacro")
+
+/// Marks an extension as contributing tools to a `@MCPServer` type.
+///
+/// Generates a nested namespace enum on the extended type with the supplied
+/// name. The enum exposes:
+///  - `static let toolMetadata: [MCPToolMetadata]` — full descriptors for
+///    every `@MCPExtensionTool` in the extension.
+///  - `static func callTool(_:on:arguments:) async throws -> Encodable & Sendable`
+///    — typed dispatcher that switches on tool name and forwards to the
+///    user's function via the per-tool wrapper.
+///  - `static func register(in: <ServerType>)` — installs this extension on
+///    a specific server instance. Idempotent on `(metadata-name)` per
+///    instance; users call this once at startup.
+///
+/// Use:
+/// ```swift
+/// @MCPExtension("Calendar")
+/// extension MyServer {
+///     /// List all events.
+///     @MCPExtensionTool
+///     func listEvents() async -> [Event] { ... }
+/// }
+///
+/// // At startup:
+/// let server = MyServer()
+/// MyServer.Calendar.register(in: server)
+/// ```
+@attached(member, names: arbitrary)
+public macro MCPExtension(_ name: String) = #externalMacro(module: "SwiftMCPMacros", type: "MCPExtensionMacro")

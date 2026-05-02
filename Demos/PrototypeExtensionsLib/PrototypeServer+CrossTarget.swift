@@ -9,6 +9,7 @@
 import SwiftMCP
 import PrototypeServerLib
 
+@MCPExtension("Calendar")
 extension PrototypeServer {
     /// Subtract b from a.
     @MCPExtensionTool

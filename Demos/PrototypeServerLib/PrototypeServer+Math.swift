@@ -4,6 +4,7 @@
 
 import SwiftMCP
 
+@MCPExtension("Math")
 extension PrototypeServer {
     /// Add two integers.
     @MCPExtensionTool

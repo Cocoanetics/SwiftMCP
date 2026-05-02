@@ -1,9 +1,13 @@
 //
-//  PrototypeRunner — exercises the extension-aggregation prototype.
+//  PrototypeRunner — exercises the per-instance extension prototype.
 //
-//  Calls both per-target bootstrap functions, then lists and dispatches
-//  every tool on PrototypeServer to verify primary + same-target +
-//  cross-target tools all surface and execute.
+//  Demonstrates:
+//   - Direct extension registration: `MyServer.<Name>.register(in: server)`
+//     is what the aggregator's umbrella calls under the hood, and what users
+//     can write themselves with no plugin at all.
+//   - Optional umbrella registration: `SwiftMCPBootstrap_<Target>.register(in:)`
+//     emitted by the build plugin, which collapses N register calls per
+//     target to one.
 //
 
 import Foundation
@@ -14,13 +18,17 @@ import PrototypeExtensionsLib
 @main
 struct PrototypeRunner {
     static func main() async throws {
-        // Register extension tools from each contributing target.
-        // (Per-target bootstrap is the v1 UX; an "umbrella" plugin can
-        // collapse this to a single call later.)
-        SwiftMCPBootstrap_PrototypeServerLib.register()
-        SwiftMCPBootstrap_PrototypeExtensionsLib.register()
-
         let server = PrototypeServer()
+
+        // Same-target extensions registered explicitly — this works without
+        // the build plugin.
+        PrototypeServer.Math.register(in: server)
+        PrototypeServer.Strings.register(in: server)
+
+        // Cross-target registration via the umbrella emitted by the plugin.
+        // Equivalent to writing `PrototypeServer.Calendar.register(in: server)`
+        // by hand for every contribution from PrototypeExtensionsLib.
+        SwiftMCPBootstrap_PrototypeExtensionsLib.register(in: server)
 
         print("=== Tools registered on \(server.serverName) ===")
         for tool in server.mcpToolMetadata.sorted(by: { $0.name < $1.name }) {

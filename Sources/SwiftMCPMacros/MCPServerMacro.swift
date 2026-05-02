@@ -264,11 +264,36 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro, MemberAttributeMacro 
             }
         }
 
+        // Extract the class/actor name for typing the per-instance contributions storage.
+        let serverTypeName = declaration.as(ClassDeclSyntax.self)?.name.text
+            ?? declaration.as(ActorDeclSyntax.self)?.name.text
+            ?? "Self"
+
         var declarations: [DeclSyntax] = [
 			DeclSyntax(stringLiteral: nameProperty),
 			DeclSyntax(stringLiteral: versionProperty),
 			DeclSyntax(stringLiteral: descriptionProperty),
 		]
+
+        // Per-instance storage for tools contributed by `@MCPExtension`-annotated
+        // extensions. Each `MyServer.<Name>.register(in: server)` call appends one
+        // entry. Stored properties are legal here because we're in the primary
+        // class declaration.
+        let contributionsStorage = """
+/// Tools contributed by `@MCPExtension`-annotated extensions.
+/// Populated by `MyServer.<Name>.register(in:)` calls at startup.
+nonisolated(unsafe) private var __mcpExtensionContributions: [MCPExtensionContribution<\(serverTypeName)>] = []
+"""
+        declarations.append(DeclSyntax(stringLiteral: contributionsStorage))
+
+        let registerExtensionMethod = """
+/// Installs an extension's tool contribution on this server instance.
+/// Called by the `register(in:)` static function emitted by `@MCPExtension`.
+public func __mcpRegisterExtension(_ contribution: MCPExtensionContribution<\(serverTypeName)>) {
+   __mcpExtensionContributions.append(contribution)
+}
+"""
+        declarations.append(DeclSyntax(stringLiteral: registerExtensionMethod))
 
         // Only add callTool method if there are MCPTools or AppShortcuts defined
         if !mcpTools.isEmpty || hasAppShortcutsProvider {
@@ -301,12 +326,13 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro, MemberAttributeMacro 
 }
 """
 
-            // The default case has been adjusted to consult MCPExtensionRegistry
-            // before falling through to AppShortcuts / unknownTool. This is what
-            // makes extension-defined tools dispatchable.
+            // The default case consults this instance's __mcpExtensionContributions
+            // before falling through to AppShortcuts / unknownTool. Each contribution's
+            // dispatcher is the corresponding `Type.<Name>.callTool(_:on:arguments:)`
+            // — an unbound static function reference, so no retain cycle.
             let extensionFallback = """
-         if let entry = MCPExtensionRegistry.tools(for: Self.self).first(where: { $0.metadata.name == name }) {
-            return try await entry.call(self, enrichedArguments)
+         for contribution in __mcpExtensionContributions where contribution.metadata.contains(where: { $0.name == name }) {
+            return try await contribution.dispatcher(name, self, enrichedArguments)
          }
 """
 
@@ -387,8 +413,10 @@ public func callTool(_ name: String, arguments: JSONDictionary) async throws -> 
 nonisolated public var mcpToolMetadata: [MCPToolMetadata] {
    var metadata: [MCPToolMetadata] = \(metadataSeed)
 \(appShortcutsBlock)
-   for entry in MCPExtensionRegistry.tools(for: Self.self) where !metadata.contains(where: { $0.name == entry.metadata.name }) {
-      metadata.append(entry.metadata)
+   for contribution in __mcpExtensionContributions {
+      for toolMetadata in contribution.metadata where !metadata.contains(where: { $0.name == toolMetadata.name }) {
+         metadata.append(toolMetadata)
+      }
    }
    return metadata
 }

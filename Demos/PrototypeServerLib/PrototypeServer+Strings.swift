@@ -4,6 +4,7 @@
 
 import SwiftMCP
 
+@MCPExtension("Strings")
 extension PrototypeServer {
     /// Uppercase a string.
     @MCPExtensionTool
