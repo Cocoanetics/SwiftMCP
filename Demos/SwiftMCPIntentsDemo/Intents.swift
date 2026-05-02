@@ -151,7 +151,7 @@ actor IntentsDemoServer: AppShortcutsProvider {
         )
     }
 
-    @MCPTool(description: "Simple ping for the demo server.")
+    @MCPTool(description: "Simple ping for the demo server.", hints: [.readOnly, .idempotent])
     func ping() -> String {
         "pong"
     }

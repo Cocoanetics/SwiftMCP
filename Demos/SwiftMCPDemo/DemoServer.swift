@@ -28,7 +28,7 @@ actor DemoServer {
 	 Gets the current date/time on the server
 	 - Returns: The current time
 	 */
-	@MCPTool
+	@MCPTool(hints: [.readOnly])
 	func getCurrentDateTime() async -> Date {
 		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
 			"function": "getCurrentDateTime",
@@ -42,7 +42,7 @@ actor DemoServer {
 	 - Parameter location: City name or zip code
 	 - Returns: A weather report
 	 */
-	@MCPTool
+	@MCPTool(hints: [.readOnly, .openWorld])
 	func getWeatherReport(location: String) async -> WeatherReport {
 		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
 			"function": "getWeatherReport",
@@ -61,7 +61,7 @@ actor DemoServer {
 	 - Parameter date: The Date to format
 	 - Returns: A string with the date formatted
 	 */
-	@MCPTool(isConsequential: false)
+	@MCPTool(hints: [.readOnly, .idempotent])
 	func formatDateAsString(date: Date) async -> String {
 		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
 			"function": "formatDateAsString",
@@ -81,7 +81,7 @@ actor DemoServer {
 	 - Parameter hours: Hours to add
 	 - Returns: The adjusted date
 	 */
-	@MCPTool
+	@MCPTool(hints: [.readOnly, .idempotent])
 	func addHours(date: Date, hours: Int) async -> Date {
 		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
 			"function": "addHours",
@@ -96,7 +96,7 @@ actor DemoServer {
 	 - Parameter url: The URL to normalize
 	 - Returns: The normalized URL
 	 */
-	@MCPTool
+	@MCPTool(hints: [.readOnly, .idempotent])
 	func normalizeURL(url: URL) async -> URL {
 		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
 			"function": "normalizeURL",
@@ -112,7 +112,7 @@ actor DemoServer {
 	 - Parameter uuid: The UUID to round-trip
 	 - Returns: The same UUID
 	 */
-	@MCPTool
+	@MCPTool(hints: [.readOnly, .idempotent])
 	func roundTripUUID(uuid: UUID) async -> UUID {
 		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
 			"function": "roundTripUUID",
@@ -126,7 +126,7 @@ actor DemoServer {
 	 - Parameter data: The data to round-trip
 	 - Returns: The same data
 	 */
-	@MCPTool
+	@MCPTool(hints: [.readOnly, .idempotent])
 	func roundTripData(data: Data) async -> Data {
 		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
 			"function": "roundTripData",
@@ -139,7 +139,7 @@ actor DemoServer {
 	/// - Parameter a: First number to add
 	/// - Parameter b: Second number to add
 	/// - Returns: The sum of a and b
-	@MCPTool(description: "Custom description: Performs addition of two numbers")
+	@MCPTool(description: "Custom description: Performs addition of two numbers", hints: [.readOnly, .idempotent])
 	func add(a: Int, b: Int) async -> Int {
 		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
 			"function": "add",
@@ -153,7 +153,7 @@ actor DemoServer {
 	/// - Parameter a: Number to subtract from
 	/// - Parameter b: Number to subtract
 	/// - Returns: The difference between a and b
-	@MCPTool
+	@MCPTool(hints: [.readOnly, .idempotent])
 	func subtract(a: Int = 5, b: Int = 3) async -> Int {
 		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
 			"function": "subtract",
@@ -168,7 +168,7 @@ actor DemoServer {
 	 - Parameter a: Array of integers to process
 	 - Returns: A string representation of the array
 	 */
-	@MCPTool(description: "Custom description: Tests array processing")
+	@MCPTool(description: "Custom description: Tests array processing", hints: [.readOnly, .idempotent])
 	func testArray(a: [Int] = [1,2,3]) async -> String {
 		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
 			"function": "testArray",
@@ -184,7 +184,7 @@ actor DemoServer {
 	 - Parameter b: Second factor
 	 - Returns: The product of a and b
 	 */
-	@MCPTool
+	@MCPTool(hints: [.readOnly, .idempotent])
 	func multiply(a: Int, b: Int) async -> Int {
 		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
 			"function": "multiply",
@@ -198,7 +198,7 @@ actor DemoServer {
 	/// - Parameter numerator: Number to be divided
 	/// - Parameter denominator: Number to divide by (defaults to 1.0)
 	/// - Returns: The quotient of numerator divided by denominator
-	@MCPTool
+	@MCPTool(hints: [.readOnly, .idempotent])
 	func divide(numerator: Double, denominator: Double = 1.0) async -> Double {
 		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
 			"function": "divide",
@@ -211,7 +211,7 @@ actor DemoServer {
 	/// Returns a greeting message with the provided name
 	/// - Parameter name: Name of the person to greet
 	/// - Returns: The greeting message
-	@MCPTool(description: "Shows a greeting message")
+	@MCPTool(description: "Shows a greeting message", hints: [.readOnly, .idempotent])
 	func greet(name: String) async throws -> String {
 		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
 			"function": "greet",
@@ -233,7 +233,7 @@ actor DemoServer {
 	
 	
 	/** A simple ping function that returns 'pong' */
-	@MCPTool
+	@MCPTool(hints: [.readOnly, .idempotent])
 	func ping() async -> String {
 		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
 			"function": "ping",
@@ -243,7 +243,7 @@ actor DemoServer {
 	}
 	
 	/** A function to test doing nothing, not returning anything*/
-	@MCPTool
+	@MCPTool(hints: [.readOnly, .idempotent])
 	func noop() async {
 		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
 			"function": "noop",
@@ -259,7 +259,7 @@ actor DemoServer {
 	 
 	 - Returns: A completion message
 	 */
-	@MCPTool(description: "Performs a 30-second countdown with progress updates")
+	@MCPTool(description: "Performs a 30-second countdown with progress updates", hints: [.readOnly, .idempotent])
 	func countdown() async -> String {
 		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
 			"function": "countdown",
@@ -289,7 +289,7 @@ actor DemoServer {
 	
 	/** A function returning a random image
 	 - returns: A small PNG file */
-	@MCPTool
+	@MCPTool(hints: [.readOnly])
 	func randomImage() async -> MCPImage
 	{
 		await Session.current?.sendLogNotification(LogMessage(level: .info, message: "randomImage called"))
@@ -417,7 +417,7 @@ actor DemoServer {
      - Parameter modelPreferences: Optional model preferences for the request
      - Returns: The generated text from the client, or nil if no context is available
      */
-    @MCPTool(description: "Requests sampling from the client LLM")
+    @MCPTool(description: "Requests sampling from the client LLM", hints: [.readOnly, .openWorld])
     func sampleFromClient(prompt: String, modelPreferences: ModelPreferences? = nil) async throws -> String {
         await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
             "function": "sampleFromClient",
@@ -434,7 +434,7 @@ actor DemoServer {
      Requests basic contact information from the user using the MCP Elicitation feature.
      - Returns: A string describing the user's response or the action they took
      */
-    @MCPTool(description: "Requests contact information from the user")
+    @MCPTool(description: "Requests contact information from the user", hints: [.readOnly, .openWorld])
     func requestContactInfo() async throws -> String {
         await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
             "function": "requestContactInfo",
@@ -483,7 +483,7 @@ actor DemoServer {
      Requests project preferences from the user using predefined options.
      - Returns: A string describing the user's project preferences or their action
      */
-    @MCPTool(description: "Requests project preferences from the user")
+    @MCPTool(description: "Requests project preferences from the user", hints: [.readOnly, .openWorld])
     func requestProjectPreferences() async throws -> String {
         await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
             "function": "requestProjectPreferences",
@@ -535,7 +535,7 @@ actor DemoServer {
      Requests user credentials with validation constraints.
      - Returns: A string describing the user's response or the action they took
      */
-    @MCPTool(description: "Requests user credentials with validation")
+    @MCPTool(description: "Requests user credentials with validation", hints: [.readOnly, .openWorld])
     func requestUserCredentials() async throws -> String {
         await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
             "function": "requestUserCredentials",
@@ -594,7 +594,7 @@ actor DemoServer {
      Requests user preferences with enum options and display names.
      - Returns: A string describing the user's response or the action they took
      */
-    @MCPTool(description: "Requests user preferences with enum options")
+    @MCPTool(description: "Requests user preferences with enum options", hints: [.readOnly, .openWorld])
     func requestUserPreferences() async throws -> String {
         await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
             "function": "requestUserPreferences",
