@@ -51,7 +51,7 @@ struct SoupOrderQuery: EntityQuery {
 }
 
 @available(iOS 16.0, macOS 13.0, tvOS 16.0, watchOS 9.0, *)
-@MCPAppIntentTool(description: "Orders a soup for delivery.")
+@MCPAppIntentTool(description: "Orders a soup for delivery.", hints: [.openWorld])
 struct OrderSoupIntent: AppIntent {
     static let title: LocalizedStringResource = "Order Soup"
 
@@ -74,7 +74,7 @@ struct OrderSoupIntent: AppIntent {
 }
 
 @available(iOS 16.0, macOS 13.0, tvOS 16.0, watchOS 9.0, *)
-@MCPAppIntentTool(description: "Turns the kitchen light on or off.")
+@MCPAppIntentTool(description: "Turns the kitchen light on or off.", hints: [.idempotent, .openWorld])
 struct ToggleKitchenLightIntent: AppIntent {
     static let title: LocalizedStringResource = "Toggle Kitchen Light"
 
@@ -91,7 +91,7 @@ struct ToggleKitchenLightIntent: AppIntent {
 }
 
 @available(iOS 16.0, macOS 13.0, tvOS 16.0, watchOS 9.0, *)
-@MCPAppIntentTool(description: "Adds a delivery note for the order.")
+@MCPAppIntentTool(description: "Adds a delivery note for the order.", hints: [.idempotent])
 struct SetDeliveryNoteIntent: AppIntent {
     static let title: LocalizedStringResource = "Set Delivery Note"
 
@@ -110,7 +110,7 @@ struct SetDeliveryNoteIntent: AppIntent {
 }
 
 @available(iOS 16.0, macOS 13.0, tvOS 16.0, watchOS 9.0, *)
-@MCPAppIntentTool
+@MCPAppIntentTool(hints: [.readOnly, .idempotent])
 struct ListRecentSoupOrdersIntent: AppIntent {
     static let title: LocalizedStringResource = "List Recent Soup Orders"
     static let description: IntentDescription? = IntentDescription("Lists recent soup orders.")
