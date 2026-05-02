@@ -85,4 +85,24 @@ struct PrototypeRunner {
         let summary = messages.map { $0.content.text ?? "?" }.joined(separator: " | ")
         print("  \(name) → \(summary)")
     }
+
+    /// Compile-only check: every extension-contributed method is reachable
+    /// on the typed `PrototypeServer.Client` thanks to the aggregator plugin's
+    /// emitted Client extensions. Never invoked at runtime.
+    @inline(never) static func _clientSurfaceSmokeTest(_ client: PrototypeServer.Client) throws {
+        // Primary
+        _ = try client.greet(name: "")
+        // Same-target Math/Strings extensions
+        _ = try client.add(a: 0, b: 0)
+        _ = try client.multiply(a: 0, b: 0)
+        _ = try client.shout("")
+        _ = try client.greetingResource(name: "")
+        _ = try client.summarizePrompt(text: "")
+        // Cross-target Calendar extension
+        #if os(macOS) || os(Linux) || os(Windows) || os(iOS)
+        _ = try client.subtract(a: 0, b: 0)
+        _ = try client.todayResource()
+        _ = try client.schedulingPrompt(person: "")
+        #endif
+    }
 }

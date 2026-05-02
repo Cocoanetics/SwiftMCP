@@ -643,20 +643,20 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
             declarations.append(DeclSyntax(stringLiteral: callPromptMethod))
         }
 
-        if generateClient {
-            // Emit Client even when the primary type has no
-            // tools/resources/prompts: the build plugin will extend
-            // `<Type>.Client` with extension-contributed methods, and the
-            // Client type itself must exist for those extensions to attach.
-            let clientType = makeClientType(
-                toolFunctions: toolFunctions,
-                mcpTools: mcpTools,
-                resourceFunctions: resourceFunctions,
-                promptFunctions: promptFunctions,
-                serverDescription: serverDescriptionText
-            )
-            declarations.append(DeclSyntax(stringLiteral: clientType))
-        }
+        // Always emit the nested `Client` type. `@MCPExtension` peer
+        // expansions extend `<Type>.Client` with extension-contributed
+        // methods, so Client must exist for any `@MCPServer` type.
+        // The `generateClient:` parameter is retained on the public API
+        // for source-compat with earlier code but is now a no-op.
+        _ = generateClient
+        let clientType = makeClientType(
+            toolFunctions: toolFunctions,
+            mcpTools: mcpTools,
+            resourceFunctions: resourceFunctions,
+            promptFunctions: promptFunctions,
+            serverDescription: serverDescriptionText
+        )
+        declarations.append(DeclSyntax(stringLiteral: clientType))
 
         return declarations
     }

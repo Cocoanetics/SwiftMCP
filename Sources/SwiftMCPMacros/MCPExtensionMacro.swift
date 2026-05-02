@@ -22,6 +22,7 @@ import SwiftSyntaxMacros
 import SwiftDiagnostics
 
 public struct MCPExtensionMacro: MemberMacro {
+
     public static func expansion(
         of node: AttributeSyntax,
         providingMembersOf declaration: some DeclGroupSyntax,

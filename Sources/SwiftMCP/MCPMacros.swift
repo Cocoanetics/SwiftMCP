@@ -121,7 +121,7 @@ public macro MCPServer(
     version: String? = nil,
     description: String? = nil,
     toolNaming: MCPToolNaming = .functionName,
-    generateClient: Bool = false
+    generateClient: Bool = true
 ) = #externalMacro(module: "SwiftMCPMacros", type: "MCPServerMacro")
 
 /// A macro that generates schema metadata for a struct.

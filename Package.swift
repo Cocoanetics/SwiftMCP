@@ -45,6 +45,10 @@ let package = Package(
 		.library(
 			name: "PrototypeExtensionsLib",
 			targets: ["PrototypeExtensionsLib"]
+		),
+		.plugin(
+			name: "SwiftMCPAggregator",
+			targets: ["SwiftMCPAggregator"]
 		)
 	],
 	dependencies: [
@@ -131,15 +135,30 @@ let package = Package(
 			]
 		),
 		// MARK: - Prototype: per-instance @MCPExtension contributions
+		.executableTarget(
+			name: "SwiftMCPAggregatorTool",
+			dependencies: [
+				.product(name: "SwiftSyntax", package: "swift-syntax"),
+				.product(name: "SwiftParser", package: "swift-syntax")
+			]
+		),
+		.plugin(
+			name: "SwiftMCPAggregator",
+			capability: .buildTool(),
+			dependencies: ["SwiftMCPAggregatorTool"],
+			path: "Plugins/SwiftMCPAggregator"
+		),
 		.target(
 			name: "PrototypeServerLib",
 			dependencies: ["SwiftMCP"],
-			path: "Demos/PrototypeServerLib"
+			path: "Demos/PrototypeServerLib",
+			plugins: ["SwiftMCPAggregator"]
 		),
 		.target(
 			name: "PrototypeExtensionsLib",
 			dependencies: ["SwiftMCP", "PrototypeServerLib"],
-			path: "Demos/PrototypeExtensionsLib"
+			path: "Demos/PrototypeExtensionsLib",
+			plugins: ["SwiftMCPAggregator"]
 		),
 		.executableTarget(
 			name: "PrototypeRunner",
