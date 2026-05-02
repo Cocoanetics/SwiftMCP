@@ -1,3 +1,10 @@
+// Re-export Foundation.URL so any file that imports SwiftMCP can refer to
+// `URL` without explicitly importing Foundation. The `@MCPServer` macro
+// emits `URL`-typed parameters in the resource-handling code it adds to
+// the user's class, and we don't want to require every `@MCPServer`'d
+// type's source file to `import Foundation`.
+@_exported import struct Foundation.URL
+
 /// SwiftMCP is a framework for building Model-Controller-Protocol (MCP) servers.
 ///
 /// The framework provides:

@@ -233,7 +233,7 @@ MCPResourceMetadata(
       _ name: String,
       on server: \(extendedType),
       arguments: JSONDictionary,
-      requestedUri: Foundation.URL,
+      requestedUri: URL,
       overrideMimeType: String?
    ) async throws -> [MCPResourceContent] {
       switch name {

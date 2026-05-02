@@ -497,7 +497,7 @@ public var mcpResourceTemplates: [MCPResourceTemplate] {
 ///   - overrideMimeType: Optional MIME type override
 /// - Returns: The resource content from the function call
 /// - Throws: MCPResourceError if the resource function doesn't exist or cannot be called
-internal func __callResourceFunction(_ name: String, enrichedArguments: JSONDictionary, requestedUri: Foundation.URL, overrideMimeType: String?) async throws -> [MCPResourceContent] {
+internal func __callResourceFunction(_ name: String, enrichedArguments: JSONDictionary, requestedUri: URL, overrideMimeType: String?) async throws -> [MCPResourceContent] {
    // Call the appropriate wrapper method based on the resource name
    switch name {
 \(resourceFunctionSwitchCases)
@@ -552,7 +552,7 @@ public func callResourceAsFunction(_ name: String, arguments: JSONDictionary) as
 /// - Parameter uri: The URI of the resource to retrieve
 /// - Returns: The resource content if found
 /// - Throws: An error if the resource cannot be accessed or is not found
-public func getResource(uri: Foundation.URL) async throws -> [MCPResourceContent] {
+public func getResource(uri: URL) async throws -> [MCPResourceContent] {
    // Find the best matching template across all resources
    var bestMatch: (metadata: MCPResourceMetadata, template: String, paramCount: Int)?
    
@@ -868,7 +868,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
             lines.append("        try await proxy.listResourceTemplates()")
             lines.append("    }")
             lines.append("")
-            lines.append("    public func readResource(uri: Foundation.URL) async throws -> [GenericResourceContent] {")
+            lines.append("    public func readResource(uri: URL) async throws -> [GenericResourceContent] {")
             lines.append("        try await proxy.readResource(uri: uri)")
             lines.append("    }")
         }
@@ -1021,7 +1021,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
             if orderedTemplates.count == 1, let template = orderedTemplates.first {
                 lines.append("        let uri = try \"\(template.escapedForSwiftString)\".constructURI(with: \(argumentsName))")
             } else {
-                lines.append("        let uri: Foundation.URL")
+                lines.append("        let uri: URL")
                 for (index, template) in orderedTemplates.enumerated() {
                     let variables = resourceTemplateVariables(in: template)
                     let condition = variables.isEmpty
