@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# SwiftLint auto-fix + strict lint on staged .swift files.
+set -euo pipefail
+
+[ -n "${CI:-}" ] && exit 0   # CI lints separately; this is for local enforcement.
+
+if ! command -v swiftlint >/dev/null 2>&1; then
+  echo "swiftlint not found — install via 'brew install swiftlint' (or skip with --no-verify)" >&2
+  exit 1
+fi
+
+staged=()
+while IFS= read -r -d '' file; do
+  case "$file" in
+    *.swift) staged+=("$file") ;;
+  esac
+done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+
+[ ${#staged[@]} -eq 0 ] && exit 0
+
+# Refuse if any staged Swift file also has unstaged edits — otherwise
+# `swiftlint --fix` + `git add` would silently sweep working-tree
+# changes into the commit. This is the single most important safety rail.
+dirty=$(git diff --name-only -- "${staged[@]}")
+if [ -n "$dirty" ]; then
+  echo "pre-commit: staged Swift files have unstaged changes — stage or stash first:" >&2
+  printf '  %s\n' $dirty >&2
+  exit 1
+fi
+
+swiftlint lint --fix --quiet --force-exclude "${staged[@]}"
+git add -- "${staged[@]}"
+swiftlint lint --strict --quiet --force-exclude "${staged[@]}"
