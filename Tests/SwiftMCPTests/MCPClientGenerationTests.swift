@@ -264,7 +264,10 @@ struct MCPClientGenerationTests {
 
         let templates = try await client.listResourceTemplates()
         #expect(templates.contains { $0.name == "userProfile" && $0.uriTemplate == "users://{user_id}/profile" })
-        #expect(templates.contains { $0.name == "versionedUserProfile" && $0.uriTemplate == "users://{user_id}/profile/localized?lang={lang}" })
+        #expect(templates.contains {
+            $0.name == "versionedUserProfile"
+                && $0.uriTemplate == "users://{user_id}/profile/localized?lang={lang}"
+        })
     }
 
     @Test("Generated client exposes standard prompt APIs")

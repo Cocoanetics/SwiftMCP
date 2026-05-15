@@ -26,7 +26,8 @@ func testFlatStruct() throws {
 
 @Test("JSONDictionary encodes nested struct")
 func testNestedStruct() throws {
-    let value = NestedStruct(name: "outer", inner: TestStruct(intValue: 1, stringValue: "inner", boolValue: false, doubleValue: 2.71))
+    let innerStruct = TestStruct(intValue: 1, stringValue: "inner", boolValue: false, doubleValue: 2.71)
+    let value = NestedStruct(name: "outer", inner: innerStruct)
     let dict = try JSONDictionary(encoding: value)
     #expect(dict["name"]?.value as? String == "outer")
     let inner = dict["inner"]?.value as? [String: Any]

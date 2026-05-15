@@ -6,17 +6,28 @@ import SwiftMCPUtilityCore
 struct ProxyGeneratorOpenAPITests {
     @Test("OpenAPI object responses generate Codable structs")
     func openAPIObjectResponseGeneratesStruct() throws {
-        let tool = MCPTool(name: "currentWeather", description: nil, inputSchema: .object(.init(properties: [:], required: [])))
+        let emptyInput: JSONSchema = .object(.init(properties: [:], required: []))
+        let tool = MCPTool(name: "currentWeather", description: nil, inputSchema: emptyInput)
         let responseSchema = JSONSchema.object(.init(
             properties: [
                 "temperature": .number(title: nil, description: "Current temperature", minimum: nil, maximum: nil),
-                "condition": .string(title: nil, description: "Weather condition", format: nil, minLength: nil, maxLength: nil)
+                "condition": .string(
+                    title: nil,
+                    description: "Weather condition",
+                    format: nil,
+                    minLength: nil,
+                    maxLength: nil
+                )
             ],
             required: ["temperature"],
             description: "Weather response"
         ))
 
-        let returnInfo = OpenAPIReturnInfo(typeName: "String", schema: responseSchema, description: "A structured response")
+        let returnInfo = OpenAPIReturnInfo(
+            typeName: "String",
+            schema: responseSchema,
+            description: "A structured response"
+        )
         let source = ProxyGenerator.generate(
             typeName: "WeatherProxy",
             tools: [tool],
@@ -35,7 +46,13 @@ struct ProxyGeneratorOpenAPITests {
         let outputSchema = JSONSchema.object(.init(
             properties: [
                 "temperature": .number(title: nil, description: "Current temperature", minimum: nil, maximum: nil),
-                "condition": .string(title: nil, description: "Weather condition", format: nil, minLength: nil, maxLength: nil)
+                "condition": .string(
+                    title: nil,
+                    description: "Weather condition",
+                    format: nil,
+                    minLength: nil,
+                    maxLength: nil
+                )
             ],
             required: [],
             description: "Weather response"
@@ -60,10 +77,20 @@ struct ProxyGeneratorOpenAPITests {
 
     @Test("OpenAPI enum responses generate string enums")
     func openAPIEnumResponseGeneratesEnum() throws {
-        let tool = MCPTool(name: "createEvent", description: nil, inputSchema: .object(.init(properties: [:], required: [])))
-        let responseSchema = JSONSchema.enum(values: ["busy", "free", "tentative"], title: nil, description: "Availability", enumNames: nil)
+        let emptyInput: JSONSchema = .object(.init(properties: [:], required: []))
+        let tool = MCPTool(name: "createEvent", description: nil, inputSchema: emptyInput)
+        let responseSchema = JSONSchema.enum(
+            values: ["busy", "free", "tentative"],
+            title: nil,
+            description: "Availability",
+            enumNames: nil
+        )
 
-        let returnInfo = OpenAPIReturnInfo(typeName: "String", schema: responseSchema, description: "Availability result")
+        let returnInfo = OpenAPIReturnInfo(
+            typeName: "String",
+            schema: responseSchema,
+            description: "Availability result"
+        )
         let source = ProxyGenerator.generate(
             typeName: "EventProxy",
             tools: [tool],
@@ -79,8 +106,15 @@ struct ProxyGeneratorOpenAPITests {
 
     @Test("OpenAPI date-time returns map to Date")
     func openAPIDateReturnMapsToDate() throws {
-        let tool = MCPTool(name: "getUserContext", description: nil, inputSchema: .object(.init(properties: [:], required: [])))
-        let responseSchema = JSONSchema.string(title: nil, description: "User time", format: "date-time", minLength: nil, maxLength: nil)
+        let emptyInput: JSONSchema = .object(.init(properties: [:], required: []))
+        let tool = MCPTool(name: "getUserContext", description: nil, inputSchema: emptyInput)
+        let responseSchema = JSONSchema.string(
+            title: nil,
+            description: "User time",
+            format: "date-time",
+            minLength: nil,
+            maxLength: nil
+        )
 
         let returnInfo = OpenAPIReturnInfo(typeName: "String", schema: responseSchema, description: "User time")
         let source = ProxyGenerator.generate(
@@ -95,7 +129,8 @@ struct ProxyGeneratorOpenAPITests {
 
     @Test("Object with single array key returns array type directly")
     func objectWithSingleArrayKeyReturnsArrayType() throws {
-        let tool = MCPTool(name: "getItems", description: nil, inputSchema: .object(.init(properties: [:], required: [])))
+        let emptyInput: JSONSchema = .object(.init(properties: [:], required: []))
+        let tool = MCPTool(name: "getItems", description: nil, inputSchema: emptyInput)
         let responseSchema = JSONSchema.object(.init(
             properties: [
                 "items": .array(

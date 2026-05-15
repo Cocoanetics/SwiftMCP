@@ -103,7 +103,9 @@ struct MCPResourceDemoTests {
         // Verify each resource is properly registered
         #expect(metadata.first { $0.uriTemplates.contains("server://info") } != nil)
         #expect(metadata.first { $0.uriTemplates.contains("users://profile/{user_id}") } != nil)
-        #expect(metadata.first { $0.uriTemplates.contains("users://search?q={query}&page={page}&limit={limit}") } != nil)
+        #expect(metadata.first {
+            $0.uriTemplates.contains("users://search?q={query}&page={page}&limit={limit}")
+        } != nil)
         #expect(metadata.first { $0.uriTemplates.contains("metrics://system") } != nil)
         #expect(metadata.first { $0.uriTemplates.contains("features://{feature_name}/enabled") } != nil)
         #expect(metadata.first { $0.uriTemplates.contains("config://{env}") } != nil)

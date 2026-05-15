@@ -50,10 +50,16 @@ struct ProxyGeneratorResourcePromptTests {
         #expect(source.contains("public func listResourceTemplates() async throws -> [SimpleResourceTemplate]"))
         #expect(source.contains("public func readResource(uri: URL) async throws -> [GenericResourceContent]"))
         #expect(source.contains("public func listPrompts() async throws -> [Prompt]"))
-        #expect(source.contains("public func getPrompt(name: String, arguments: JSONDictionary = [:]) async throws -> PromptResult"))
+        let getPromptSignature = "public func getPrompt(name: String, arguments: JSONDictionary = [:])"
+            + " async throws -> PromptResult"
+        #expect(source.contains(getPromptSignature))
         #expect(!source.contains("public func config() async throws -> [GenericResourceContent]"))
-        #expect(!source.contains("public func userProfile(user_id: String, lang: String? = nil) async throws -> [GenericResourceContent]"))
-        #expect(!source.contains("public func helloPrompt(name: String, excited: Bool? = nil) async throws -> PromptResult"))
+        let userProfileSignature = "public func userProfile(user_id: String, lang: String? = nil)"
+            + " async throws -> [GenericResourceContent]"
+        #expect(!source.contains(userProfileSignature))
+        let helloPromptSignature = "public func helloPrompt(name: String, excited: Bool? = nil)"
+            + " async throws -> PromptResult"
+        #expect(!source.contains(helloPromptSignature))
     }
 
     @Test("Generator emits generic resource and prompt helpers from capability flags")
@@ -70,6 +76,8 @@ struct ProxyGeneratorResourcePromptTests {
         #expect(source.contains("public func readResource(uri: URL) async throws -> [GenericResourceContent]"))
         #expect(source.contains("// MARK: - Prompts"))
         #expect(source.contains("public func listPrompts() async throws -> [Prompt]"))
-        #expect(source.contains("public func getPrompt(name: String, arguments: JSONDictionary = [:]) async throws -> PromptResult"))
+        let getPromptSignature2 = "public func getPrompt(name: String, arguments: JSONDictionary = [:])"
+            + " async throws -> PromptResult"
+        #expect(source.contains(getPromptSignature2))
     }
 }

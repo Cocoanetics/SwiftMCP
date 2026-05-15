@@ -33,16 +33,28 @@ class CustomCompletionServer: MCPCompletionProviding {
         }
     }
 
-    func completion(for parameter: MCPParameterInfo, in context: MCPCompletionContext, prefix: String) async -> CompleteResult.Completion {
+    func completion(
+        for parameter: MCPParameterInfo,
+        in context: MCPCompletionContext,
+        prefix: String
+    ) async -> CompleteResult.Completion {
         if parameter.name == "color" {
 
             let completions = parameter.defaultCompletions + ["ruby", "rose"]
 
-            return CompleteResult.Completion(values: completions.sortedByBestCompletion(prefix: prefix), total: completions.count, hasMore: false)
+            return CompleteResult.Completion(
+                values: completions.sortedByBestCompletion(prefix: prefix),
+                total: completions.count,
+                hasMore: false
+            )
         }
 
         let completions = parameter.defaultCompletions
-        return CompleteResult.Completion(values: completions.sortedByBestCompletion(prefix: prefix), total: completions.count, hasMore: false)
+        return CompleteResult.Completion(
+            values: completions.sortedByBestCompletion(prefix: prefix),
+            total: completions.count,
+            hasMore: false
+        )
     }
 }
 

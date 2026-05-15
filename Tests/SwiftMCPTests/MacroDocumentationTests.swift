@@ -97,7 +97,10 @@ func testMultiLineParameterDescriptions() {
     """
     let doc = Documentation(from: docText)
     #expect(doc.description == "Function with parameters that have multi-line descriptions")
-    #expect(doc.parameters["param1"] == "This is a parameter description that spans multiple lines with consistent indentation.")
+    #expect(
+        doc.parameters["param1"]
+            == "This is a parameter description that spans multiple lines with consistent indentation."
+    )
     #expect(doc.parameters["param2"] == "Another parameter with slightly different indentation pattern.")
     #expect(doc.returns == nil)
 }
@@ -237,11 +240,14 @@ func testParagraphBreaksAndQuotes() {
      */
     """
     let doc = Documentation(from: docText)
-	#expect(doc.description.escapedForSwiftString == "A Calculator for simple math doing additionals, subtractions etc.\\n\\nTesting \\\"quoted\\\" stuff. And on multiple lines. \\'single quotes\\'")
+    let expectedEscaped = "A Calculator for simple math doing additionals, subtractions etc."
+        + "\\n\\nTesting \\\"quoted\\\" stuff. And on multiple lines. \\'single quotes\\'"
+	#expect(doc.description.escapedForSwiftString == expectedEscaped)
 }
 
 @Test("Handles parameter descriptions with commas and newlines")
 func testParameterDescriptionsWithCommasAndNewlines() {
+    // swiftlint:disable line_length
     let docText = """
     /**
      Get reminders from the reminders app with flexible filtering options.
@@ -263,10 +269,12 @@ func testParameterDescriptionsWithCommasAndNewlines() {
     #expect(doc.parameters["listNames"] == "Names of reminder lists to fetch from. If empty or not specified, fetches from all lists.")
     #expect(doc.parameters["searchText"] == "Text to search for in reminder titles")
     #expect(doc.returns == nil)
+    // swiftlint:enable line_length
 }
 
 @Test("Ignores MARK comments and correctly parses documentation blocks")
 func testMarkAndDocumentationBlocks() {
+    // swiftlint:disable line_length
     let docText = """
     // MARK: - Utilities
 
@@ -278,6 +286,7 @@ func testMarkAndDocumentationBlocks() {
     #expect(doc.description == "Determines the current user's date/time, language/region and time zone. Use this if that helps clarify this information for subsequent tool calls.")
     #expect(doc.parameters.isEmpty)
     #expect(doc.returns == nil)
+    // swiftlint:enable line_length
 }
 
 @Test("Handles single-line documentation blocks")

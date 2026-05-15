@@ -20,7 +20,11 @@ class TestAPIServer {
     @MCPTool
     func throwingFunction(name: String, count: Int) throws -> String {
         if count < 0 {
-            throw MCPToolError.invalidArgumentType(parameterName: "count", expectedType: "positive Int", actualType: "foo")
+            throw MCPToolError.invalidArgumentType(
+                parameterName: "count",
+                expectedType: "positive Int",
+                actualType: "foo"
+            )
         }
         return String(repeating: "Hello \(name)! ", count: count)
     }
@@ -50,7 +54,11 @@ class TestAPIServer {
     @MCPTool
     func complexFunction(input: String, count: Int, flag: Bool = false) async throws -> String {
         if count < 0 {
-            throw MCPToolError.invalidArgumentType(parameterName: "count", expectedType: "positive Int", actualType: "foo")
+            throw MCPToolError.invalidArgumentType(
+                parameterName: "count",
+                expectedType: "positive Int",
+                actualType: "foo"
+            )
         }
         return "Processed"
     }
@@ -122,14 +130,27 @@ func testThrowingFunctionSpec() {
 		#expect(object.required.contains("count"))
 
         // Check name parameter
-        guard case let .string(title: _, description: nameDesc, format: _, minLength: _, maxLength: _, defaultValue: _) = object.properties["name"] else {
+        guard case let .string(
+            title: _,
+            description: nameDesc,
+            format: _,
+            minLength: _,
+            maxLength: _,
+            defaultValue: _
+        ) = object.properties["name"] else {
             #expect(Bool(false), "name parameter should be a string")
             return
         }
         #expect(nameDesc == "The name to greet")
 
         // Check count parameter
-        guard case let .number(title: _, description: countDesc, minimum: _, maximum: _, defaultValue: _) = object.properties["count"] else {
+        guard case let .number(
+            title: _,
+            description: countDesc,
+            minimum: _,
+            maximum: _,
+            defaultValue: _
+        ) = object.properties["count"] else {
             #expect(Bool(false), "count parameter should be a number")
             return
         }
@@ -170,7 +191,14 @@ func testVoidFunctionSpec() {
     // Check parameter schema
     if case .object(let object, _) = content.schema {
 		#expect(object.properties["message"] != nil)
-        if case let .string(title: _, description: description, format: _, minLength: _, maxLength: _, defaultValue: _) = object.properties["message"] {
+        if case let .string(
+            title: _,
+            description: description,
+            format: _,
+            minLength: _,
+            maxLength: _,
+            defaultValue: _
+        ) = object.properties["message"] {
             #expect(description == "Message to process")
         } else {
             #expect(Bool(false), "Message parameter should be a string")
@@ -187,7 +215,8 @@ func testVoidFunctionSpec() {
     // Check response schema
     let schema = response?.content?["application/json"]?.schema
     #expect(schema != nil)
-    if case let .string(title: _, description: description, format: _, minLength: _, maxLength: _, defaultValue: _) = schema {
+    if case let .string(title: _, description: description, format: _, minLength: _, maxLength: _, defaultValue: _) =
+        schema {
         #expect(description == "Empty string (void function)")
     } else {
         #expect(Bool(false), "Response schema should be a string")
@@ -301,7 +330,8 @@ func testOpenAPISpecGeneration() throws {
 
     // Test array of SchemaRepresentable response
     guard let multipleForecastsOp = spec.paths["/testserver/getMultipleForecasts"]?.post,
-          let multipleForecastsSchema = multipleForecastsOp.responses["200"]?.content?["application/json"]?.schema else {
+          let multipleForecastsSchema =
+            multipleForecastsOp.responses["200"]?.content?["application/json"]?.schema else {
         #expect(Bool(false), "Failed to get schema for getMultipleForecasts")
         return
     }
@@ -329,7 +359,8 @@ func testOpenAPISpecGeneration() throws {
 
     // Test array of CaseIterable response
     guard let multipleConditionsOp = spec.paths["/testserver/getMultipleConditions"]?.post,
-          let multipleConditionsSchema = multipleConditionsOp.responses["200"]?.content?["application/json"]?.schema else {
+          let multipleConditionsSchema =
+            multipleConditionsOp.responses["200"]?.content?["application/json"]?.schema else {
         #expect(Bool(false), "Failed to get schema for getMultipleConditions")
         return
     }

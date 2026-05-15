@@ -12,7 +12,13 @@ struct ElicitationTests {
         func elicitationCreateRequestCodableTest() throws {
             let schema = JSONSchema.object(JSONSchema.Object(
                 properties: [
-                    "name": .string(title: nil, description: "User's name", format: nil, minLength: nil, maxLength: nil),
+                    "name": .string(
+                        title: nil,
+                        description: "User's name",
+                        format: nil,
+                        minLength: nil,
+                        maxLength: nil
+                    ),
                     "age": .number(title: nil, description: "User's age", minimum: nil, maximum: nil)
                 ],
                 required: ["name"]
@@ -227,7 +233,13 @@ struct ElicitationTests {
         func complexSchemaTest() throws {
             let schema = JSONSchema.object(JSONSchema.Object(
                 properties: [
-                    "name": .string(title: nil, description: "User's name", format: nil, minLength: nil, maxLength: nil),
+                    "name": .string(
+                        title: nil,
+                        description: "User's name",
+                        format: nil,
+                        minLength: nil,
+                        maxLength: nil
+                    ),
                     "age": .number(title: nil, description: "User's age", minimum: nil, maximum: nil),
                     "isActive": .boolean(title: nil, description: "Whether user is active", defaultValue: nil),
                     "category": .enum(values: ["premium", "standard", "basic"], description: "User category")
@@ -257,7 +269,13 @@ struct ElicitationTests {
         func emailFormatSchemaTest() throws {
             let schema = JSONSchema.object(JSONSchema.Object(
                 properties: [
-                    "email": .string(title: nil, description: "Email address", format: "email", minLength: nil, maxLength: nil)
+                    "email": .string(
+                        title: nil,
+                        description: "Email address",
+                        format: "email",
+                        minLength: nil,
+                        maxLength: nil
+                    )
                 ],
                 required: ["email"]
             ))
@@ -270,7 +288,8 @@ struct ElicitationTests {
             let decodedSchema = try decoder.decode(JSONSchema.self, from: data)
 
             if case .object(let obj, _) = decodedSchema {
-                if case .string(_, let description, let format, let minLength, let maxLength, _) = obj.properties["email"] {
+                if case .string(_, let description, let format, let minLength, let maxLength, _) =
+                    obj.properties["email"] {
                     #expect(description == "Email address")
                     #expect(format == "email")
                     #expect(minLength == nil)
@@ -300,7 +319,8 @@ struct ElicitationTests {
             let decodedSchema = try decoder.decode(JSONSchema.self, from: data)
 
             if case .object(let obj, _) = decodedSchema {
-                if case .string(_, let description, let format, let minLength, let maxLength, _) = obj.properties["username"] {
+                if case .string(_, let description, let format, let minLength, let maxLength, _) =
+                    obj.properties["username"] {
                     #expect(description == "Username")
                     #expect(format == nil)
                     #expect(minLength == 3)
@@ -323,8 +343,15 @@ struct ElicitationTests {
             // In a real test environment, we would need to set up Session.current properly
 
             // Create a simple schema for testing
+            let nameProperty: JSONSchema = .string(
+                title: nil,
+                description: "Name",
+                format: nil,
+                minLength: nil,
+                maxLength: nil
+            )
             let schema = JSONSchema.object(JSONSchema.Object(
-                properties: ["name": .string(title: nil, description: "Name", format: nil, minLength: nil, maxLength: nil)],
+                properties: ["name": nameProperty],
                 required: ["name"]
             ))
 

@@ -223,13 +223,21 @@ func testBasicFunctionality() {
 			#expect(object.properties.count == 3)
 
             // Check parameter descriptions
-			if case .number(title: _, description: let description, minimum: _, maximum: _, defaultValue: _) = object.properties["a"] {
+			if case .number(title: _, description: let description, minimum: _, maximum: _, defaultValue: _) =
+                object.properties["a"] {
                 #expect(description == "An integer parameter")
             } else {
                 #expect(Bool(false), "Expected number schema for parameter 'a'")
             }
 
-			                  if case .string(title: _, description: let description, format: _, minLength: _, maxLength: _, defaultValue: _) = object.properties["b"] {
+			if case .string(
+                title: _,
+                description: let description,
+                format: _,
+                minLength: _,
+                maxLength: _,
+                defaultValue: _
+            ) = object.properties["b"] {
                 #expect(description == "A string parameter")
             } else {
                 #expect(Bool(false), "Expected string schema for parameter 'b'")
@@ -253,7 +261,8 @@ func testBasicFunctionality() {
 
         // Extract properties from the object schema
         if case .object(let object, _) = explicitDescTool.inputSchema {
-			if case .number(title: _, description: let description, minimum: _, maximum: _, defaultValue: _) = object.properties["value"] {
+			if case .number(title: _, description: let description, minimum: _, maximum: _, defaultValue: _) =
+                object.properties["value"] {
                 #expect(description == "A value with description")
             } else {
                 #expect(Bool(false), "Expected number schema for parameter 'value'")
@@ -271,14 +280,16 @@ func testBasicFunctionality() {
 
         // Extract properties from the object schema
         if case .object(let object, _) = optionalParamTool.inputSchema {
-			if case .string(title: _, description: let description, format: _, minLength: _, maxLength: _, defaultValue: _) = object.properties["required"] {
+			if case .string(title: _, description: let description, format: _, minLength: _, maxLength: _, defaultValue: _) =
+                object.properties["required"] {
                 #expect(description == "A required parameter")
             } else {
                 #expect(Bool(false), "Expected string schema for parameter 'required'")
             }
 
             // Optional parameters are represented as strings in the schema
-			if case .number(title: _, description: let description, minimum: _, maximum: _, defaultValue: _) = object.properties["optional"] {
+			if case .number(title: _, description: let description, minimum: _, maximum: _, defaultValue: _) =
+                object.properties["optional"] {
                 #expect(description == "An optional parameter")
             } else {
                 #expect(Bool(false), "Expected string schema for parameter 'optional'")
@@ -303,14 +314,21 @@ func testMultiLineDoc() throws {
         // Check that the description was extracted correctly
         let longDescription = try #require(longDescTool.description)
 
-        #expect(longDescription.hasPrefix("This function has a very long description that spans"), "Description should mention it's a long description")
+        #expect(
+            longDescription.hasPrefix("This function has a very long description that spans"),
+            "Description should mention it's a long description"
+        )
         // The actual output doesn't contain "multiple lines" so we'll check for "spans" instead
         #expect(longDescription.contains("spans"), "Description should mention it spans")
 
         // Extract properties from the object schema
         if case .object(let object, _) = longDescTool.inputSchema {
-			if case .string(title: _, description: let description, format: _, minLength: _, maxLength: _, defaultValue: _) = object.properties["text"] {
-                #expect(description?.contains("A text parameter with a long description") == true, "Parameter description should mention it's a long description")
+			if case .string(title: _, description: let description, format: _, minLength: _, maxLength: _, defaultValue: _) =
+                object.properties["text"] {
+                #expect(
+                    description?.contains("A text parameter with a long description") == true,
+                    "Parameter description should mention it's a long description"
+                )
                 // The actual output doesn't contain "spans multiple lines" so we'll check for "spans" instead
                 #expect(description?.contains("spans") == true, "Parameter description should mention it spans")
             } else {
@@ -362,7 +380,8 @@ func testURLParameters() async throws {
     // Test that the URL parameter is represented as a string in the schema
     if let urlTool = tools.first(where: { $0.name == "processURL" }) {
         if case .object(let object, _) = urlTool.inputSchema {
-			if case .string(title: _, description: let description, format: _, minLength: _, maxLength: _, defaultValue: _) = object.properties["url"] {
+			if case .string(title: _, description: let description, format: _, minLength: _, maxLength: _, defaultValue: _) =
+                object.properties["url"] {
                 #expect(description == "The URL to process")
             } else {
                 #expect(Bool(false), "URL parameter should be represented as string in schema")

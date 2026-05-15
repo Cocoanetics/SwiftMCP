@@ -608,7 +608,8 @@ struct HTTPTransportTests {
 		}())
 
 		let hasEndpoint = await waitForCondition {
-			notificationEvent(capture.events.value, method: "endpoint") != nil || capture.events.value.contains { $0.event == "endpoint" }
+			notificationEvent(capture.events.value, method: "endpoint") != nil
+				|| capture.events.value.contains { $0.event == "endpoint" }
 		}
 
 		let endpointEvent = try #require(capture.events.value.first(where: { $0.event == "endpoint" }))
@@ -735,7 +736,8 @@ struct HTTPTransportTests {
 		try? await Task.sleep(nanoseconds: 700_000_000)
 
 		let session = URLSession(configuration: .ephemeral)
-		let (_, response) = try await session.data(for: generalSSERequest(url: url, sessionID: sessionID, lastEventID: lastEventID))
+		let resumeRequest = generalSSERequest(url: url, sessionID: sessionID, lastEventID: lastEventID)
+		let (_, response) = try await session.data(for: resumeRequest)
 		#expect((response as! HTTPURLResponse).statusCode == 404)
 		#endif
 	}

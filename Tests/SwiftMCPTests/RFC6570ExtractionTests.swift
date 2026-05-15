@@ -205,7 +205,10 @@ struct RFC6570ExtractionTests {
     @Test("GitHub API style template")
     func testGitHubAPIStyle() {
         let template = "https://api.github.com/repos/{owner}/{repo}/issues{?state,labels,sort,direction}"
-        let url = URL(string: "https://api.github.com/repos/octocat/Hello-World/issues?state=open&labels=bug&sort=created&direction=desc")!
+        let url = URL(
+            string: "https://api.github.com/repos/octocat/Hello-World/issues"
+                + "?state=open&labels=bug&sort=created&direction=desc"
+        )!
 
         let variables = url.extractTemplateVariables(from: template)
         #expect(variables != nil)

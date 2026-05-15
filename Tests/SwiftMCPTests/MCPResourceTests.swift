@@ -75,7 +75,8 @@ struct MCPResourceTests {
         let server = ResourceTestServer()
         let metadata = server.mcpResourceMetadata
 
-        // Should have 6 resources: getConfig, getUserProfile, getLocalizedProfile, getFileList, getTemperatureStatus, getMultiVersionUser
+        // Should have 6 resources: getConfig, getUserProfile, getLocalizedProfile, getFileList,
+        // getTemperatureStatus, getMultiVersionUser
         #expect(metadata.count == 6)
 
         // Test static resource metadata

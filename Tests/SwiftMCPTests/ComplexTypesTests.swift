@@ -142,7 +142,13 @@ class ComplexTypesServer {
     ///   - isActive: Whether the person is active
     /// - Returns: A new contact info object
     @MCPTool
-    func createContact(name: String, email: String, phone: String, age: Int = 30, isActive: Bool = true) -> ContactInfo {
+    func createContact(
+        name: String,
+        email: String,
+        phone: String,
+        age: Int = 30,
+        isActive: Bool = true
+    ) -> ContactInfo {
         return ContactInfo(name: name, email: email, phone: phone, age: age, isActive: isActive)
     }
 
@@ -200,8 +206,22 @@ class ComplexTypesServer {
     ///   - activeStatuses: Array of active statuses
     /// - Returns: A new profile object
     @MCPTool
-    func createProfile(contact: ContactInfo, address: Address, interests: [String] = [], scores: [Int] = [], ratings: [Double] = [], activeStatuses: [Bool] = []) -> Profile {
-        return Profile(contact: contact, address: address, interests: interests, scores: scores, ratings: ratings, activeStatuses: activeStatuses)
+    func createProfile(
+        contact: ContactInfo,
+        address: Address,
+        interests: [String] = [],
+        scores: [Int] = [],
+        ratings: [Double] = [],
+        activeStatuses: [Bool] = []
+    ) -> Profile {
+        return Profile(
+            contact: contact,
+            address: address,
+            interests: interests,
+            scores: scores,
+            ratings: ratings,
+            activeStatuses: activeStatuses
+        )
     }
 }
 
