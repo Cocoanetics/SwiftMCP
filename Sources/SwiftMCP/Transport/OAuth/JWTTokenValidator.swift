@@ -10,10 +10,10 @@ import Foundation
 public struct JWTTokenValidator: Sendable {
     /// The validation options to apply to JWT tokens
     internal let options: JWTValidationOptions
-    
+
     /// The JWKS cache used for signature verification
     internal let jwksCache: JWKSCache
-    
+
     /// Initialize a JWT token validator
     /// 
     /// This initializer creates a validator with the specified validation criteria.
@@ -35,7 +35,7 @@ public struct JWTTokenValidator: Sendable {
         )
         self.jwksCache = JWKSCache(cacheValidityDuration: cacheValidityDuration)
     }
-    
+
     /// Validate a JWT token string (for use with OAuthConfiguration)
     /// 
     /// This method performs comprehensive JWT validation including:
@@ -50,17 +50,17 @@ public struct JWTTokenValidator: Sendable {
         guard let token = token else { return false }
         do {
             let jwt = try JSONWebToken(token: token)
-            
+
             // First validate claims
             try jwt.validateClaims(options: options)
-            
+
             // Then verify signature if we have an expected issuer
             if let expectedIssuer = options.expectedIssuer,
                let issuerURL = URL(string: expectedIssuer) {
                 let jwks = try await jwksCache.getJWKS(for: issuerURL)
                 return try jwt.verifySignature(using: jwks)
             }
-            
+
             // If no issuer expected, just claims validation is sufficient
             return true
         } catch {

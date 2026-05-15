@@ -20,4 +20,4 @@
 public enum SwiftMCP {
     /// The current version of the SwiftMCP framework
     public static let version = "1.0.0"
-} 
+}

@@ -50,7 +50,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
 
     /// Flag to determine whether to serve OpenAPI endpoints.
     public var serveOpenAPI: Bool = false
-    
+
     /// Maximum allowed HTTP message size in bytes (defaults to 4 MB).
     public var maxMessageSize: Int = 4 * 1024 * 1024
 
@@ -90,7 +90,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
                 }
             }
         }
-        
+
         // 1. If we have a session ID, check token against session-stored value
         if let id = sessionID, let session = await sessionManager.existingSession(id: id) {
             if let stored = await session.accessToken {
@@ -99,19 +99,19 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
                 } else {
                     return .unauthorized("Invalid or expired token")
                 }
-            } else if let token { 
+            } else if let token {
                 // First time we see a token for this session - validate it before accepting
                 let isValid = await validateNewToken(token)
                 if isValid {
                     await session.setAccessToken(token)
                     // Without expires_in we can't know exact lifetime; fall back to 24 h.
                     await session.setAccessTokenExpiry(Date().addingTimeInterval(24 * 60 * 60))
-                    
+
                     // Fetch and store user info if we have OAuth configuration
                     if let oauthConfiguration = oauthConfiguration {
                         await sessionManager.fetchAndStoreUserInfo(for: id, oauthConfiguration: oauthConfiguration)
                     }
-                    
+
                     return .authorized
                 } else {
                     return .unauthorized("Invalid token - token exchange required")
@@ -147,11 +147,11 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
             }
             return .unauthorized("Invalid token - token exchange required")
         }
-        
+
         // 5. Otherwise use legacy handler (for unauthenticated mode)
         return authorizationHandler(token)
     }
-    
+
     /// Validate a new token using OAuth configuration or authorization handler
     internal func validateNewToken(_ token: String) async -> Bool {
         // If we have OAuth configuration, use its validation
@@ -164,16 +164,16 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
                     return true
                 }
             }
-            
+
             // Try OAuth validation for non-proxy mode
             let oauthValid = await oauthConfiguration.validate(token: token)
             if oauthValid {
                 return true
             }
-            
+
             return false
         }
-        
+
         // Fallback to authorization handler
         switch authorizationHandler(token) {
         case .authorized:
@@ -216,9 +216,8 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     internal static let supportedProtocolVersions: Set<String> = [
         latestProtocolVersion,
         intermediateHTTPProtocolVersion,
-        fallbackHTTPProtocolVersion,
+        fallbackHTTPProtocolVersion
     ]
-
 
     // MARK: - Initialization
 
@@ -237,18 +236,18 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
 
     public func start() async throws {
         let bootstrap = ServerBootstrap(group: group)
-			.serverChannelOption(ChannelOptions.backlog, value: 256)
-			.serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
-			.childChannelInitializer {  channel in
-            return channel.pipeline.configureHTTPServerPipeline().flatMap {
-                channel.pipeline.addHandler(HTTPLogger())
-            }.flatMap {
-                channel.pipeline.addHandler(HTTPHandler(transport: self))
+            .serverChannelOption(ChannelOptions.backlog, value: 256)
+            .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
+            .childChannelInitializer {  channel in
+                return channel.pipeline.configureHTTPServerPipeline().flatMap {
+                    channel.pipeline.addHandler(HTTPLogger())
+                }.flatMap {
+                    channel.pipeline.addHandler(HTTPHandler(transport: self))
+                }
             }
-        }
-			.childChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
-			.childChannelOption(ChannelOptions.maxMessagesPerRead, value: 16)
-			.childChannelOption(ChannelOptions.allowRemoteHalfClosure, value: true)
+            .childChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
+            .childChannelOption(ChannelOptions.maxMessagesPerRead, value: 16)
+            .childChannelOption(ChannelOptions.allowRemoteHalfClosure, value: true)
 
         do {
             self.channel = try await bootstrap.bind(host: host, port: self.port).get()
@@ -260,23 +259,23 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
 
             self.channel?.closeFuture.whenComplete { [logger] result in
                 switch result {
-                    case .success:
-                        logger.info("Server channel closed normally")
-                    case .failure(let error):
-                        logger.error("Server channel closed with error: \(error)")
+                case .success:
+                    logger.info("Server channel closed normally")
+                case .failure(let error):
+                    logger.error("Server channel closed with error: \(error)")
                 }
             }
         } catch let error as IOError {
             let errorMessage: String
             switch error.errnoCode {
-                case EADDRINUSE:
-                    errorMessage = "Port \(port) is already in use. Please choose a different port or ensure no other service is using this port."
-                case EACCES:
-                    errorMessage = "Permission denied to bind to port \(port). This port may require elevated privileges."
-                case EADDRNOTAVAIL:
-                    errorMessage = "The address \(host) is not available for binding."
-                default:
-                    errorMessage = "Failed to bind to \(host):\(port). Error: \(error.localizedDescription)"
+            case EADDRINUSE:
+                errorMessage = "Port \(port) is already in use. Please choose a different port or ensure no other service is using this port."
+            case EACCES:
+                errorMessage = "Permission denied to bind to port \(port). This port may require elevated privileges."
+            case EADDRNOTAVAIL:
+                errorMessage = "The address \(host) is not available for binding."
+            default:
+                errorMessage = "Failed to bind to \(host):\(port). Error: \(error.localizedDescription)"
             }
             logger.error("\(errorMessage)")
             throw TransportError.bindingFailed(errorMessage)
@@ -334,28 +333,28 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
             guard let self = self else { return }
 
             switch self.keepAliveMode {
-                case .none:
-                    return
-                case .sse:
-                    let activeStreamIDs = await self.sessionManager.activeStreamIDs()
-                    for streamID in activeStreamIDs {
-                        _ = await self.sessionManager.sendComment("keep-alive", to: streamID)
+            case .none:
+                return
+            case .sse:
+                let activeStreamIDs = await self.sessionManager.activeStreamIDs()
+                for streamID in activeStreamIDs {
+                    _ = await self.sessionManager.sendComment("keep-alive", to: streamID)
+                }
+            case .ping:
+                await self.sessionManager.forEachSession { session in
+                    guard await self.sessionManager.hasActivePrimaryGeneralConnection(for: session.id) else {
+                        return
                     }
-                case .ping:
-                    await self.sessionManager.forEachSession { session in
-                        guard await self.sessionManager.hasActivePrimaryGeneralConnection(for: session.id) else {
-                            return
-                        }
 
-                        Task {
-                            let ping = JSONRPCMessage.request(id: .string(UUID().uuidString), method: "ping")
-                            do {
-                                try await session.send(ping)
-                            } catch {
-                                print("Failed to send ping to session \(session.id): \(error)")
-                            }
+                    Task {
+                        let ping = JSONRPCMessage.request(id: .string(UUID().uuidString), method: "ping")
+                        do {
+                            try await session.send(ping)
+                        } catch {
+                            print("Failed to send ping to session \(session.id): \(error)")
                         }
                     }
+                }
             }
         }
     }
@@ -439,7 +438,6 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     public func broadcastResourceUpdated(uri: URL) async {
         await sessionManager.broadcastResourceUpdated(uri: uri)
     }
-
 
     // MARK: - Transport
 

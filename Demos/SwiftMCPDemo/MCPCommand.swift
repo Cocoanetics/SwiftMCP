@@ -42,15 +42,15 @@ struct MCPCommand: AsyncParsableCommand {
         abstract: "A utility for testing SwiftMCP functions",
         discussion: """
   Process JSON-RPC requests for SwiftMCP functions.
-  
+
   The command can operate in two modes:
-  
+
   1. stdio:
      - Reads JSON-RPC requests from stdin
      - Writes responses to stdout
      - Perfect for integration with other tools via pipes
      - Example: echo '{"jsonrpc": "2.0", "method": "add", "params": [1, 2]}' | SwiftMCPDemo stdio
-  
+
   2. httpsse:
      - Starts an HTTP server with Server-Sent Events (SSE) support
      - Supports bearer token authentication and OpenAPI endpoints
@@ -70,15 +70,15 @@ struct MCPCommand: AsyncParsableCommand {
         abstract: "A utility for testing SwiftMCP functions",
         discussion: """
   Process JSON-RPC requests for SwiftMCP functions.
-  
+
   The command can operate in two modes:
-  
+
   1. stdio:
      - Reads JSON-RPC requests from stdin
      - Writes responses to stdout
      - Perfect for integration with other tools via pipes
      - Example: echo '{"jsonrpc": "2.0", "method": "add", "params": [1, 2]}' | SwiftMCPDemo stdio
-  
+
   2. httpsse:
      - Starts an HTTP server with Server-Sent Events (SSE) support
      - Supports bearer token authentication and OpenAPI endpoints

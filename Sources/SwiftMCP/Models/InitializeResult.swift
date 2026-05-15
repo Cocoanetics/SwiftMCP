@@ -41,4 +41,4 @@ public struct InitializeResult: Codable, Sendable {
         self.capabilities = capabilities
         self.serverInfo = serverInfo
     }
-} 
+}

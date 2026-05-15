@@ -21,17 +21,17 @@ public enum MCPToolError: Error {
 extension MCPToolError: LocalizedError {
     public var errorDescription: String? {
         switch self {
-            case .unknownTool(let name):
-                return "The tool '\(name)' was not found on the server"
-            case .invalidArgumentType(let parameterName, let expectedType, let actualType):
-                return "Parameter '\(parameterName)' expected type \(expectedType) but received type \(actualType)"
-            case .invalidEnumValue(let parameterName, let expectedValues, let actualValue):
-                let string = expectedValues.joined(separator: ", ")
-                return "Parameter '\(parameterName)' expected one of [\(string)] but received \(actualValue)"
-            case .invalidJSONDictionary:
-                return "The input could not be parsed as a valid JSON dictionary"
-            case .missingRequiredParameter(let parameterName):
-                return "Missing required parameter '\(parameterName)'"
+        case .unknownTool(let name):
+            return "The tool '\(name)' was not found on the server"
+        case .invalidArgumentType(let parameterName, let expectedType, let actualType):
+            return "Parameter '\(parameterName)' expected type \(expectedType) but received type \(actualType)"
+        case .invalidEnumValue(let parameterName, let expectedValues, let actualValue):
+            let string = expectedValues.joined(separator: ", ")
+            return "Parameter '\(parameterName)' expected one of [\(string)] but received \(actualValue)"
+        case .invalidJSONDictionary:
+            return "The input could not be parsed as a valid JSON dictionary"
+        case .missingRequiredParameter(let parameterName):
+            return "Missing required parameter '\(parameterName)'"
         }
     }
 }

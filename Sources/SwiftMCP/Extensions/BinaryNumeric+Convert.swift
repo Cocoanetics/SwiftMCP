@@ -97,4 +97,4 @@ public extension BinaryFloatingPoint {
         }
         return nil
     }
-} 
+}

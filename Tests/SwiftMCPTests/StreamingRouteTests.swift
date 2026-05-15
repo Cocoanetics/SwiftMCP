@@ -2,13 +2,11 @@ import Testing
 import Foundation
 @testable import SwiftMCP
 
-
 /// Thread-safe box for capturing values from @Sendable closures.
 private final class Box<T: Sendable>: @unchecked Sendable {
 	var value: T
 	init(_ value: T) { self.value = value }
 }
-
 
 @Suite("Streaming Route Handler")
 struct StreamingRouteTests {
@@ -57,7 +55,7 @@ struct StreamingRouteTests {
 		let request = makeStreamingRequest(path: "/test", chunks: [
 			Data("chunk1-".utf8),
 			Data("chunk2-".utf8),
-			Data("chunk3".utf8),
+			Data("chunk3".utf8)
 		])
 
 		let response = try await route.handler(makeTransport(), request)
@@ -85,7 +83,7 @@ struct StreamingRouteTests {
 		let request = makeStreamingRequest(path: "/upload", chunks: [
 			Data("aaa".utf8),
 			Data("bbb".utf8),
-			Data("ccc".utf8),
+			Data("ccc".utf8)
 		])
 
 		let response = try await route.handler(makeTransport(), request)

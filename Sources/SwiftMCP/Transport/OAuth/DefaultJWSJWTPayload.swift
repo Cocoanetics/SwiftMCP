@@ -16,7 +16,7 @@ public extension OAuthConfiguration {
             guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
                 return nil
             }
-            
+
             let config = try JSONDecoder().decode(OIDCWellKnownConfiguration.self, from: data)
 
             self.init(

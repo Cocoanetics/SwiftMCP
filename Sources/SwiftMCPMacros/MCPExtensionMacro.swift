@@ -36,7 +36,7 @@ public struct MCPExtensionMacro: MemberMacro {
         // For "MyServer+Calendar.swift" → "Calendar"; for any other file
         // name, sanitize the basename (without extension) into a valid
         // Swift identifier.
-        var extensionName: String? = nil
+        var extensionName: String?
         if let arguments = node.arguments?.as(LabeledExprListSyntax.self),
            let firstArg = arguments.first,
            let stringLiteral = firstArg.expression.as(StringLiteralExprSyntax.self) {
@@ -389,10 +389,10 @@ extension MCPExtensionMacro {
         var isConsequentialArg = "true"
 
         var hintsFromOptionSet: [String] = []
-        var readOnlyHintArg: String? = nil
-        var destructiveHintArg: String? = nil
-        var idempotentHintArg: String? = nil
-        var openWorldHintArg: String? = nil
+        var readOnlyHintArg: String?
+        var destructiveHintArg: String?
+        var idempotentHintArg: String?
+        var openWorldHintArg: String?
 
         if let argList = attribute.arguments?.as(LabeledExprListSyntax.self) {
             for arg in argList {
@@ -436,10 +436,10 @@ extension MCPExtensionMacro {
         }
 
         var allHints = Set(hintsFromOptionSet)
-        if readOnlyHintArg == "true"   { allHints.insert(".readOnly") }
+        if readOnlyHintArg == "true" { allHints.insert(".readOnly") }
         if destructiveHintArg == "true" { allHints.insert(".destructive") }
-        if idempotentHintArg == "true"  { allHints.insert(".idempotent") }
-        if openWorldHintArg == "true"   { allHints.insert(".openWorld") }
+        if idempotentHintArg == "true" { allHints.insert(".idempotent") }
+        if openWorldHintArg == "true" { allHints.insert(".openWorld") }
 
         let annotationsArg: String
         if allHints.isEmpty {

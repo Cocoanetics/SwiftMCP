@@ -80,4 +80,4 @@ struct AIPluginManifest: Codable {
         /// The URL of the API specification
         let url: String
     }
-} 
+}

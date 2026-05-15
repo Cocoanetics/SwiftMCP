@@ -18,10 +18,10 @@ class AutoConformingCalculator {
 func testAutoProtocolConformance() async {
     // Create an instance of the class
     let calculator = AutoConformingCalculator()
-    
+
     // Verify that it conforms to MCPServer by checking if mcpTools is available
     #expect(!calculator.mcpToolMetadata.isEmpty)
-    
+
     // Verify that we can call a tool through the MCPServer protocol method
     do {
         let result = try await calculator.callTool("add", arguments: ["a": 2, "b": 3])
@@ -29,4 +29,4 @@ func testAutoProtocolConformance() async {
     } catch {
         #expect(Bool(false), "Should not throw an error: \(error)")
     }
-} 
+}

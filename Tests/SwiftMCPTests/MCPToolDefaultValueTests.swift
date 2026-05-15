@@ -28,35 +28,35 @@ final class DefaultValueFunctions {
     func intDefault(a: Int, b: Int = 42) -> Int {
         return a + b
     }
-    
+
     /// Function with string default value
     /// - Parameter name: Name with default value
     @MCPTool
     func stringDefault(name: String = "John Doe") -> String {
         return "Hello, \(name)!"
     }
-    
+
     /// Function with boolean default value
     /// - Parameter flag: Boolean flag with default value
     @MCPTool
     func boolDefault(flag: Bool = true) -> Bool {
         return !flag
     }
-    
+
     /// Function with double default value
     /// - Parameter value: Double value with default value
     @MCPTool
     func doubleDefault(value: Double = 3.14) -> Double {
         return value * 2
     }
-    
+
     /// Function with array default value
     /// - Parameter values: Array with default value
     @MCPTool
     func arrayDefault(values: [Int] = [1, 2, 3]) -> Int {
         return values.reduce(0, +)
     }
-    
+
     /// Function with multiple parameters with default values
     /// - Parameter a: First parameter
     /// - Parameter b: Second parameter with default value
@@ -80,11 +80,11 @@ final class DefaultValueFunctions {
 func testIntDefaultValue() throws {
     let instance = DefaultValueFunctions()
     let tools = instance.mcpToolMetadata.convertedToTools()
-    
+
     guard let intDefaultTool = tools.first(where: { $0.name == "intDefault" }) else {
         throw TestError("Could not find intDefault function")
     }
-    
+
     if case .object(let object, _) = intDefaultTool.inputSchema {
         // Check default values
 		if case .number = object.properties["a"] {
@@ -92,13 +92,13 @@ func testIntDefaultValue() throws {
         } else {
             #expect(Bool(false), "Expected number schema for parameter 'a'")
         }
-        
+
 		if case .number(title: _, description: _, minimum: _, maximum: _, defaultValue: let defaultValue) = object.properties["b"] {
             #expect(defaultValue?.value as? Int == 42)
         } else {
             #expect(Bool(false), "Expected number schema for parameter 'b'")
         }
-        
+
         // Check that only 'a' is required since 'b' has a default value
 		#expect(object.required.contains("a"))
 		#expect(!object.required.contains("b"))
@@ -111,18 +111,18 @@ func testIntDefaultValue() throws {
 func testStringDefaultValue() throws {
     let instance = DefaultValueFunctions()
     let tools = instance.mcpToolMetadata.convertedToTools()
-    
+
     guard let stringDefaultTool = tools.first(where: { $0.name == "stringDefault" }) else {
         throw TestError("Could not find stringDefault function")
     }
-    
+
     if case .object(let object, _) = stringDefaultTool.inputSchema {
 		if case .string(title: _, description: _, format: _, minLength: _, maxLength: _, defaultValue: let defaultValue) = object.properties["name"] {
             #expect(defaultValue?.value as? String == "John Doe")
         } else {
             #expect(Bool(false), "Expected string schema for parameter 'name'")
         }
-        
+
         // Check that 'name' is not required since it has a default value
 		#expect(!object.required.contains("name"))
     } else {
@@ -134,18 +134,18 @@ func testStringDefaultValue() throws {
 func testBoolDefaultValue() throws {
     let instance = DefaultValueFunctions()
     let tools = instance.mcpToolMetadata.convertedToTools()
-    
+
     guard let boolDefaultTool = tools.first(where: { $0.name == "boolDefault" }) else {
         throw TestError("Could not find boolDefault function")
     }
-    
+
     if case .object(let object, _) = boolDefaultTool.inputSchema {
 		if case .boolean(title: _, description: _, defaultValue: let defaultValue) = object.properties["flag"] {
             #expect(defaultValue?.value as? Bool == true)
         } else {
             #expect(Bool(false), "Expected boolean schema for parameter 'flag'")
         }
-        
+
         // Check that 'flag' is not required since it has a default value
 		#expect(!object.required.contains("flag"))
     } else {
@@ -157,18 +157,18 @@ func testBoolDefaultValue() throws {
 func testDoubleDefaultValue() throws {
     let instance = DefaultValueFunctions()
     let tools = instance.mcpToolMetadata.convertedToTools()
-    
+
     guard let doubleDefaultTool = tools.first(where: { $0.name == "doubleDefault" }) else {
         throw TestError("Could not find doubleDefault function")
     }
-    
+
     if case .object(let object, _) = doubleDefaultTool.inputSchema {
 		if case .number(title: _, description: _, minimum: _, maximum: _, defaultValue: let defaultValue) = object.properties["value"] {
             #expect(defaultValue?.value as? Double == 3.14)
         } else {
             #expect(Bool(false), "Expected number schema for parameter 'value'")
         }
-        
+
         // Check that 'value' is not required since it has a default value
 		#expect(!object.required.contains("value"))
     } else {
@@ -180,11 +180,11 @@ func testDoubleDefaultValue() throws {
 func testArrayDefaultValue() throws {
     let instance = DefaultValueFunctions()
     let tools = instance.mcpToolMetadata.convertedToTools()
-    
+
     guard let arrayDefaultTool = tools.first(where: { $0.name == "arrayDefault" }) else {
         throw TestError("Could not find arrayDefault function")
     }
-    
+
     if case .object(let object, _) = arrayDefaultTool.inputSchema {
 		if case .array(items: _, title: _, description: _, defaultValue: let defaultValue) = object.properties["values"] {
             let values = intArray(from: defaultValue)
@@ -192,7 +192,7 @@ func testArrayDefaultValue() throws {
         } else {
             #expect(Bool(false), "Expected array schema for parameter 'values'")
         }
-        
+
         // Check that 'values' is not required since it has a default value
 		#expect(!object.required.contains("values"))
     } else {
@@ -204,30 +204,30 @@ func testArrayDefaultValue() throws {
 func testMultipleDefaultValues() throws {
     let instance = DefaultValueFunctions()
     let tools = instance.mcpToolMetadata.convertedToTools()
-    
+
     guard let multipleDefaultsTool = tools.first(where: { $0.name == "multipleDefaults" }) else {
         throw TestError("Could not find multipleDefaults function")
     }
-    
+
     if case .object(let object, _) = multipleDefaultsTool.inputSchema {
 		if case .string = object.properties["a"] {
             // Parameter 'a' should not have a default value
         } else {
             #expect(Bool(false), "Expected string schema for parameter 'a'")
         }
-        
+
 		if case .number(title: _, description: _, minimum: _, maximum: _, defaultValue: let defaultValue) = object.properties["b"] {
             #expect(defaultValue?.value as? Int == 10)
         } else {
             #expect(Bool(false), "Expected number schema for parameter 'b'")
         }
-        
+
 		if case .boolean(title: _, description: _, defaultValue: let defaultValue) = object.properties["c"] {
             #expect(defaultValue?.value as? Bool == false)
         } else {
             #expect(Bool(false), "Expected boolean schema for parameter 'c'")
         }
-        
+
         // Check that only 'a' is required since 'b' and 'c' have default values
 		#expect(object.required.contains("a"))
 		#expect(!object.required.contains("b"))

@@ -67,4 +67,4 @@ public struct MCPFunctionMetadata: Sendable {
         }
         return enrichedArguments
     }
-} 
+}

@@ -2,7 +2,7 @@ import Foundation
 
 /// Decodes MCP tool call results into native Swift types.
 public enum MCPClientResultDecoder {
-    public static func decode(_ type: Void.Type, from text: String) throws -> Void {
+    public static func decode(_ type: Void.Type, from text: String) throws {
         ()
     }
 

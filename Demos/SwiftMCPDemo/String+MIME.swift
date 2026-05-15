@@ -5,7 +5,6 @@
 //  Created by Oliver Drobnik on 10.03.25.
 //
 
-
 // String+MIME.swift
 // MIME-related extensions for String
 
@@ -43,11 +42,11 @@ extension String {
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
             "application/zip": "zip"
         ]
-        
+
         return mimeToExtension[mimeType]
         #endif
     }
-    
+
     /// Get MIME type for a file extension
     /// - Parameter fileExtension: The file extension (without dot)
     /// - Returns: The corresponding MIME type, or application/octet-stream if unknown
@@ -77,8 +76,8 @@ extension String {
             "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             "zip": "application/zip"
         ]
-        
+
         return extensionToMime[fileExtension.lowercased()] ?? "application/octet-stream"
         #endif
     }
-} 
+}

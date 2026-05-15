@@ -14,8 +14,7 @@ import Foundation
  - text: Plain text content
  - data: Binary data content
  */
-public enum MCPResourceKind
-{
+public enum MCPResourceKind {
     case text(String)
 
     case data(Data)

@@ -1,6 +1,5 @@
 import Foundation
 
-
 /// New streamable HTTP MCP protocol routes (`/mcp`).
 extension HTTPSSETransport {
 
@@ -14,7 +13,7 @@ extension HTTPSSETransport {
 			HTTPRoute(.GET, "/mcp", calling: HTTPSSETransport.handleSSE),
 
 			// DELETE /mcp — session removal
-			HTTPRoute(.DELETE, "/mcp", calling: HTTPSSETransport.handleDeleteSession),
+			HTTPRoute(.DELETE, "/mcp", calling: HTTPSSETransport.handleDeleteSession)
 		]
 	}
 
@@ -117,7 +116,7 @@ extension HTTPSSETransport {
 					("Content-Type", "text/event-stream"),
 					("Cache-Control", "no-cache"),
 					("Connection", "keep-alive"),
-					("Mcp-Session-Id", sid),
+					("Mcp-Session-Id", sid)
 				]
 
 				return RouteResponse(status: .ok, headers: headers, bodyStream: stream, streamInfo: streamInfo)
@@ -248,7 +247,7 @@ extension HTTPSSETransport {
 			("Cache-Control", "no-cache"),
 			("Connection", "keep-alive"),
 			("Access-Control-Allow-Methods", "GET"),
-			("Access-Control-Allow-Headers", "Content-Type, Authorization, MCP-Protocol-Version"),
+			("Access-Control-Allow-Headers", "Content-Type, Authorization, MCP-Protocol-Version")
 		]
 
 		if !isLegacy {

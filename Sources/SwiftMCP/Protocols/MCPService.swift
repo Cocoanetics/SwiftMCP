@@ -22,7 +22,6 @@
  - Ability to implement only the services needed by a particular server
  - Hierarchical aggregation of services from multiple servers
  */
-public protocol MCPService
-{
+public protocol MCPService {
 
 }

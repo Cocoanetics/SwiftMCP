@@ -506,7 +506,7 @@ actor SessionManager {
             await removeStream(id: streamID)
         }
 
-        let expiredSessionIDs = sessions.compactMap { sessionID, session in
+        let expiredSessionIDs = sessions.compactMap { sessionID, _ in
             sessionID
         }
         for sessionID in expiredSessionIDs {

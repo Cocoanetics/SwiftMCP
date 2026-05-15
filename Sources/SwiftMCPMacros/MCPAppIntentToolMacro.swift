@@ -225,7 +225,7 @@ public static func mcpPerform(arguments: JSONDictionary) async throws -> (Encoda
                 }
 
                 let propertyDoc = Documentation(from: varDecl.leadingTrivia.description)
-                var description: String? = nil
+                var description: String?
                 if !propertyDoc.description.isEmpty {
                     description = "\"\(propertyDoc.description.escapedForSwiftString)\""
                 } else if let title = parameterTitle(from: parameterAttribute) {

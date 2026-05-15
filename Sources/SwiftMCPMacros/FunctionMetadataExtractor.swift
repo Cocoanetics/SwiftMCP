@@ -108,16 +108,14 @@ struct FunctionMetadataExtractor {
                     baseTypeString = optType.wrappedType.description.trimmingCharacters(in: .whitespacesAndNewlines)
                 } else if let iuoType = paramTypeSyntax.as(ImplicitlyUnwrappedOptionalTypeSyntax.self) {
                     baseTypeString = iuoType.wrappedType.description.trimmingCharacters(in: .whitespacesAndNewlines)
-                }
-                else {
+                } else {
                     baseTypeString = paramTypeString // Should not happen if isOptional is true
                 }
             } else {
                 baseTypeString = paramTypeString
             }
 
-
-            var paramDocDescription: String? = nil
+            var paramDocDescription: String?
             if let doc = documentation.parameters[paramName], !doc.isEmpty {
                 paramDocDescription = "\"\(doc.escapedForSwiftString)\""
             }
@@ -126,7 +124,7 @@ struct FunctionMetadataExtractor {
             let defaultValueForMetadata = try processDefaultValue(
                 defaultValueClause?.value,
                 paramTypeString: baseTypeString, // Pass base type for enum cases like .value
-                isArray: paramTypeSyntax.is(ArrayTypeSyntax.self) || paramTypeString.hasPrefix("[") 
+                isArray: paramTypeSyntax.is(ArrayTypeSyntax.self) || paramTypeString.hasPrefix("[")
             )
 
             // Common diagnostic for optional parameters needing default values
@@ -134,7 +132,7 @@ struct FunctionMetadataExtractor {
                 let diagnostic = Diagnostic(
                     node: Syntax(paramTypeSyntax),
                     // Using a generic diagnostic message here, specific macros might want to customize
-                    message: MCPToolDiagnostic.optionalParameterNeedsDefault(paramName: paramName, typeName: paramTypeString), 
+                    message: MCPToolDiagnostic.optionalParameterNeedsDefault(paramName: paramName, typeName: paramTypeString),
                     fixIts: [
                         FixIt(message: MCPToolFixItMessage.addDefaultValue(paramName: paramName),
                               changes: [
@@ -165,7 +163,7 @@ struct FunctionMetadataExtractor {
 
         let returnTypeSyntax = funcDecl.signature.returnClause?.type
         let returnTypeString = returnTypeSyntax?.description.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Void"
-        var returnDocDescription: String? = nil
+        var returnDocDescription: String?
         if let doc = documentation.returns, !doc.isEmpty {
             returnDocDescription = "\"\(doc.escapedForSwiftString)\""
         }
@@ -218,4 +216,4 @@ struct FunctionMetadataExtractor {
         // This includes cases like `MyEnum.value`, `[1, 2]`, `["a": 1]`.
         return rawValue
     }
-} 
+}

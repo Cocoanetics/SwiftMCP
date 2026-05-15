@@ -3,7 +3,6 @@ import Foundation
 import FoundationNetworking
 #endif
 
-
 /// OAuth route handlers: authorization server metadata, protected resource metadata,
 /// and transparent proxy to Auth0 endpoints.
 extension HTTPSSETransport {
@@ -52,7 +51,7 @@ extension HTTPSSETransport {
 			// ANY /u/* — Auth0 login UI
 			HTTPRoute(method: nil, pathPattern: "/u/*", handler: { transport, request in
 				try await transport.handleOAuthProxy(request: request)
-			}),
+			})
 		]
 	}
 

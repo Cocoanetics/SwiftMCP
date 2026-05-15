@@ -21,4 +21,4 @@ extension Data {
         }
         self = d
     }
-} 
+}

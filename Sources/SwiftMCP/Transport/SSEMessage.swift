@@ -61,10 +61,10 @@ struct SSEMessage: LosslessStringConvertible {
     /// data: content\n\n
     init?(_ description: String) {
         let lines = description.split(separator: "\n", omittingEmptySubsequences: false)
-        var eventName: String? = nil
+        var eventName: String?
         var dataLines: [String] = []
-        var eventID: String? = nil
-        var retry: Int? = nil
+        var eventID: String?
+        var retry: Int?
 
         for line in lines {
             if line.starts(with: "id:") {

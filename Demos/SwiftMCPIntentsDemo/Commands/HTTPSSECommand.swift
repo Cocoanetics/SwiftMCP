@@ -15,28 +15,28 @@ final class HTTPSSECommand: AsyncParsableCommand {
         abstract: "Start an HTTP server with Server-Sent Events (SSE) support",
         discussion: """
   Start an HTTP server that supports Server-Sent Events (SSE) and JSON-RPC.
-  
+
   Examples:
     # Basic usage
     SwiftMCPIntentsDemo httpsse --port 8080
-    
+
     # With simple token authentication
     SwiftMCPIntentsDemo httpsse --port 8080 --token my-secret-token
-    
+
     # With OAuth configuration from JSON file
     SwiftMCPIntentsDemo httpsse --port 8080 --oauth oauth-config.json
-    
+
     # With OpenAPI support
     SwiftMCPIntentsDemo httpsse --port 8080 --openapi
 """
     )
-    
+
     @Option(name: .long, help: "The port to listen on")
     var port: Int
-    
+
     @Option(name: .long, help: "Bearer token for authorization")
     var token: String?
-    
+
     @Flag(name: .long, help: "Enable OpenAPI endpoints")
     var openapi: Bool = false
 
@@ -45,11 +45,11 @@ final class HTTPSSECommand: AsyncParsableCommand {
 
     @Option(name: .long, help: "Path to OAuth configuration JSON file")
     var oauth: String?
-    
-    private var signalHandler: SignalHandler? = nil
-    
+
+    private var signalHandler: SignalHandler?
+
     required init() {}
-    
+
     required init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.port = try container.decode(Int.self, forKey: .port)
@@ -66,7 +66,7 @@ final class HTTPSSECommand: AsyncParsableCommand {
         case oauth
         case tcp
     }
-    
+
     func run() async throws {
 #if canImport(OSLog)
         LoggingSystem.bootstrapWithOSLog()
@@ -75,18 +75,18 @@ final class HTTPSSECommand: AsyncParsableCommand {
             logToStderr(IntentsDemoServerFactory.unavailableReason)
             throw ExitCode.failure
         }
-        
+
         let host = String.localHostname
         print("MCP Server \(server.serverName) (\(server.serverVersion)) started with HTTP+SSE transport on http://\(host):\(port)/sse")
-        
+
         let transport = HTTPSSETransport(server: server, port: port)
-        
+
         if let oauthConfigPath = oauth {
             do {
                 let jsonConfig = try JSONOAuthConfiguration.load(from: oauthConfigPath)
                 let oauthConfig = try jsonConfig.toOAuthConfiguration()
                 transport.oauthConfiguration = oauthConfig
-                
+
                 print("OAuth validation enabled with issuer: \(jsonConfig.issuer)")
                 if jsonConfig.transparentProxy == true {
                     print("  Transparent proxy mode: enabled (server acts as OAuth provider)")
@@ -111,11 +111,11 @@ final class HTTPSSECommand: AsyncParsableCommand {
                 guard let token else {
                     return .unauthorized("Missing bearer token")
                 }
-                
+
                 guard token == requiredToken else {
                     return .unauthorized("Invalid bearer token")
                 }
-                
+
                 return .authorized
             }
             print("Simple token validation enabled")
@@ -127,7 +127,7 @@ final class HTTPSSECommand: AsyncParsableCommand {
         }
 
         transport.serveOpenAPI = openapi
-        
+
         var tcpTransport: TCPBonjourTransport?
         if tcp {
             let transport = TCPBonjourTransport(server: server)
@@ -142,7 +142,7 @@ final class HTTPSSECommand: AsyncParsableCommand {
             signalHandler = SignalHandler(transport: transport)
         }
         await signalHandler?.setup()
-        
+
         do {
             try await transport.run()
         } catch {
@@ -153,4 +153,3 @@ final class HTTPSSECommand: AsyncParsableCommand {
         }
     }
 }
-

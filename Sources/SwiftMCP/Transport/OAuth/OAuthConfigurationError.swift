@@ -22,7 +22,7 @@ public struct JSONOAuthConfiguration: Codable, Sendable {
     public let registrationEndpoint: String?
     /// Whether to enable transparent proxy mode (server acts as OAuth provider)
     public let transparentProxy: Bool?
-    
+
     internal enum CodingKeys: String, CodingKey {
         case issuer
         case authorizationEndpoint = "authorization_endpoint"
@@ -35,7 +35,7 @@ public struct JSONOAuthConfiguration: Codable, Sendable {
         case registrationEndpoint = "registration_endpoint"
         case transparentProxy = "transparent_proxy"
     }
-    
+
     /// Convert to OAuthConfiguration
     public func toOAuthConfiguration() throws -> OAuthConfiguration {
         guard let issuerURL = URL(string: issuer) else {
@@ -47,7 +47,7 @@ public struct JSONOAuthConfiguration: Codable, Sendable {
         guard let tokenURL = URL(string: tokenEndpoint) else {
             throw OAuthConfigurationError.invalidURL("token_endpoint: \(tokenEndpoint)")
         }
-        
+
         var introspectionURL: URL?
         if let introspectionEndpoint = introspectionEndpoint {
             guard let url = URL(string: introspectionEndpoint) else {
@@ -55,7 +55,7 @@ public struct JSONOAuthConfiguration: Codable, Sendable {
             }
             introspectionURL = url
         }
-        
+
         var jwksURL: URL?
         if let jwksEndpoint = jwksEndpoint {
             guard let url = URL(string: jwksEndpoint) else {
@@ -63,7 +63,7 @@ public struct JSONOAuthConfiguration: Codable, Sendable {
             }
             jwksURL = url
         }
-        
+
         var registrationURL: URL?
         if let registrationEndpoint = registrationEndpoint {
             guard let url = URL(string: registrationEndpoint) else {
@@ -71,7 +71,7 @@ public struct JSONOAuthConfiguration: Codable, Sendable {
             }
             registrationURL = url
         }
-        
+
         // Use JWT validation if no introspection endpoint is provided
         let tokenValidator: (@Sendable (String?) async -> Bool)? = if introspectionURL == nil {
             JWTTokenValidator(
@@ -82,7 +82,7 @@ public struct JSONOAuthConfiguration: Codable, Sendable {
         } else {
             nil
         }
-        
+
         return OAuthConfiguration(
             issuer: issuerURL,
             authorizationEndpoint: authURL,
@@ -97,7 +97,7 @@ public struct JSONOAuthConfiguration: Codable, Sendable {
             tokenValidator: tokenValidator
         )
     }
-    
+
     /// Load configuration from a JSON file
     public static func load(from filePath: String) throws -> JSONOAuthConfiguration {
         let url = URL(fileURLWithPath: filePath)

@@ -24,7 +24,7 @@ class TripleSlashDocumentation {
     func noParameters() -> String {
         return "No parameters"
     }
-    
+
     /// Function with basic parameter types
     /// - Parameter a: An integer parameter
     /// - Parameter b: A string parameter
@@ -34,14 +34,14 @@ class TripleSlashDocumentation {
     func basicTypes(a: Int, b: String, c: Bool) -> String {
         return "Basic types: \(a), \(b), \(c)"
     }
-    
+
     /// Function with explicit description override
     /// - Parameter value: A value with description
     @MCPTool(description: "This description overrides the documentation comment")
     func explicitDescription(value: Double) -> Double {
         return value * 2
     }
-    
+
     /// Function with optional parameters
     /// - Parameter required: A required parameter
     /// - Parameter optional: An optional parameter
@@ -63,7 +63,7 @@ class MultiLineDocumentation {
     func multiLineDoc(a: Int, b: Int) -> Int {
         return a + b
     }
-    
+
     /**
      This function has a very long description that spans
      multiple lines to test how the macro handles multi-line
@@ -84,11 +84,11 @@ class MixedDocumentationStyles {
     /// Triple-slash documentation
     @MCPTool
     func tripleSlash() {}
-    
+
     /** Multi-line documentation */
     @MCPTool
     func multiLine() {}
-    
+
     // Regular comment (should not be extracted)
     @MCPTool(description: "Explicit description needed")
     func regularComment() {}
@@ -114,34 +114,28 @@ class SchemaRepresentableTests {
     struct ContactInfo {
         /// The person's full name
         let name: String
-        
+
         /// The person's email address
         let email: String
-        
+
         /// The person's phone number (optional)
         let phone: String?
-        
+
         /// The person's age
         var age: Int = 0
-        
+
         /// The person's address
         let address: Address
     }
-    
+
     /// A person's address
     @Schema
     struct Address: Codable {
         let street: String
         let city: String
         let zip: String
-        
-        init(street: String, city: String, zip: String) {
-            self.street = street
-            self.city = city
-            self.zip = zip
-        }
     }
-    
+
     /**
      Get reminders from the reminders app with flexible filtering options.
      
@@ -165,7 +159,7 @@ class EnumArrayTest {
     func processWeekdays(days: [Weekday]) {
         // Implementation not important for the test
     }
-    
+
     /// Function that takes an optional array of weekdays
     /// - Parameter days: Optional array of weekdays
     @MCPTool
@@ -202,14 +196,14 @@ enum Weekday: String, CaseIterable {
 func testBasicFunctionality() {
     // Create an instance of the test class
     let instance = TripleSlashDocumentation()
-    
+
     // Get the tools array
     let tools = instance.mcpToolMetadata.convertedToTools()
-    
+
     // Test that the tools array contains the expected functions
     if let noParamsTool = tools.first(where: { $0.name == "noParameters" }) {
         #expect(noParamsTool.description == "Simple function with no parameters")
-        
+
         // Extract properties from the object schema
         if case .object(let object, _) = noParamsTool.inputSchema {
 			#expect(object.properties.isEmpty)
@@ -219,28 +213,28 @@ func testBasicFunctionality() {
     } else {
         #expect(Bool(false), "Could not find noParameters function")
     }
-    
+
     // Test basic parameter types
     if let basicTypesTool = tools.first(where: { $0.name == "basicTypes" }) {
         #expect(basicTypesTool.description == "Function with basic parameter types")
-        
+
         // Extract properties from the object schema
         if case .object(let object, _) = basicTypesTool.inputSchema {
 			#expect(object.properties.count == 3)
-            
+
             // Check parameter descriptions
 			if case .number(title: _, description: let description, minimum: _, maximum: _, defaultValue: _) = object.properties["a"] {
                 #expect(description == "An integer parameter")
             } else {
                 #expect(Bool(false), "Expected number schema for parameter 'a'")
             }
-            
+
 			                  if case .string(title: _, description: let description, format: _, minLength: _, maxLength: _, defaultValue: _) = object.properties["b"] {
                 #expect(description == "A string parameter")
             } else {
                 #expect(Bool(false), "Expected string schema for parameter 'b'")
             }
-            
+
 			if case .boolean(title: _, description: let description, defaultValue: _) = object.properties["c"] {
                 #expect(description == "A boolean parameter")
             } else {
@@ -252,11 +246,11 @@ func testBasicFunctionality() {
     } else {
         #expect(Bool(false), "Could not find basicTypes function")
     }
-    
+
     // Test explicit description override
     if let explicitDescTool = tools.first(where: { $0.name == "explicitDescription" }) {
         #expect(explicitDescTool.description == "This description overrides the documentation comment")
-        
+
         // Extract properties from the object schema
         if case .object(let object, _) = explicitDescTool.inputSchema {
 			if case .number(title: _, description: let description, minimum: _, maximum: _, defaultValue: _) = object.properties["value"] {
@@ -270,11 +264,11 @@ func testBasicFunctionality() {
     } else {
         #expect(Bool(false), "Could not find explicitDescription function")
     }
-    
+
     // Test optional parameters
     if let optionalParamTool = tools.first(where: { $0.name == "optionalParameter" }) {
         #expect(optionalParamTool.description == "Function with optional parameters")
-        
+
         // Extract properties from the object schema
         if case .object(let object, _) = optionalParamTool.inputSchema {
 			if case .string(title: _, description: let description, format: _, minLength: _, maxLength: _, defaultValue: _) = object.properties["required"] {
@@ -282,7 +276,7 @@ func testBasicFunctionality() {
             } else {
                 #expect(Bool(false), "Expected string schema for parameter 'required'")
             }
-            
+
             // Optional parameters are represented as strings in the schema
 			if case .number(title: _, description: let description, minimum: _, maximum: _, defaultValue: _) = object.properties["optional"] {
                 #expect(description == "An optional parameter")
@@ -300,19 +294,19 @@ func testBasicFunctionality() {
 @Test
 func testMultiLineDoc() throws {
     let calculator = MultiLineDocumentation()
-    
+
     // Get all tools from the calculator
     let tools = calculator.mcpToolMetadata.convertedToTools()
-    
+
     // Test function with multi-line documentation
     if let longDescTool = tools.first(where: { $0.name == "longDescription" }) {
         // Check that the description was extracted correctly
         let longDescription = try #require(longDescTool.description)
-        
+
         #expect(longDescription.hasPrefix("This function has a very long description that spans"), "Description should mention it's a long description")
         // The actual output doesn't contain "multiple lines" so we'll check for "spans" instead
         #expect(longDescription.contains("spans"), "Description should mention it spans")
-        
+
         // Extract properties from the object schema
         if case .object(let object, _) = longDescTool.inputSchema {
 			if case .string(title: _, description: let description, format: _, minLength: _, maxLength: _, defaultValue: _) = object.properties["text"] {
@@ -334,24 +328,24 @@ func testMultiLineDoc() throws {
 func testMixedDocumentationStyles() {
     // Create an instance of the test class
     let instance = MixedDocumentationStyles()
-    
+
     // Get the tools array
     let tools = instance.mcpToolMetadata.convertedToTools()
-    
+
     // Test triple-slash documentation
     if let tripleSlashTool = tools.first(where: { $0.name == "tripleSlash" }) {
         #expect(tripleSlashTool.description == "Triple-slash documentation")
     } else {
         #expect(Bool(false), "Could not find tripleSlash function")
     }
-    
+
     // Test multi-line documentation
     if let multiLineTool = tools.first(where: { $0.name == "multiLine" }) {
         #expect(multiLineTool.description == "Multi-line documentation")
     } else {
         #expect(Bool(false), "Could not find multiLine function")
     }
-    
+
     // Test regular comment (should use explicit description)
     if let regularCommentTool = tools.first(where: { $0.name == "regularComment" }) {
         #expect(regularCommentTool.description == "Explicit description needed")
@@ -364,7 +358,7 @@ func testMixedDocumentationStyles() {
 func testURLParameters() async throws {
     let instance = URLParameterHandling()
     let tools = instance.mcpToolMetadata.convertedToTools()
-    
+
     // Test that the URL parameter is represented as a string in the schema
     if let urlTool = tools.first(where: { $0.name == "processURL" }) {
         if case .object(let object, _) = urlTool.inputSchema {
@@ -376,12 +370,12 @@ func testURLParameters() async throws {
         } else {
             #expect(Bool(false), "Expected object schema")
         }
-        
+
         // Test with valid URL string
         let validArgs: JSONDictionary = ["url": "https://example.com"]
         let validResult = try await instance.callTool("processURL", arguments: validArgs)
         #expect(validResult as? String == "example.com")
-        
+
         // Test with invalid URL string
         let invalidArgs: JSONDictionary = ["url": "https://example.com:xyz"]
         do {
@@ -404,47 +398,47 @@ func testURLParameters() async throws {
 func testSchemaRepresentableParameter() async throws {
     let instance = SchemaRepresentableTests()
     let tools = instance.mcpToolMetadata.convertedToTools()
-    
+
     // Create test data
     let address = SchemaRepresentableTests.Address(street: "123 Main St", city: "New York", zip: "10001")
-    
+
     // Create parameters dictionary
     let params: JSONDictionary = [
         "contact": try JSONValue(encoding: address)
     ]
-    
+
     // Call the function
     let result = try await instance.callTool("fetchReminders", arguments: params)
-    
+
     // Verify the result
     #expect(result as? String == "Address(street: \"123 Main St\", city: \"New York\", zip: \"10001\")")
-    
+
     // Verify the schema
     if let tool = tools.first(where: { $0.name == "fetchReminders" }) {
         // Verify the schema matches the expected JSON schema
         if case .object(let object, _) = tool.inputSchema {
 			#expect(object.properties.count == 1)
 			#expect(object.required == ["contact"])
-            
+
             // Verify the contact property
 			if case .object(let object, _) = object.properties["contact"] {
 				#expect(object.properties.count == 3)
 				#expect(object.required == ["street", "city", "zip"])
-                
+
                 // Verify property types
-				if case .string(title: _, description: _, format: _, minLength: _, maxLength: _, defaultValue: _) = object.properties["street"] {
+				if case .string = object.properties["street"] {
                     // street property is correct
                 } else {
                     #expect(Bool(false), "Expected string schema for street property")
                 }
-                
-				if case .string(title: _, description: _, format: _, minLength: _, maxLength: _, defaultValue: _) = object.properties["city"] {
+
+				if case .string = object.properties["city"] {
                     // city property is correct
                 } else {
                     #expect(Bool(false), "Expected string schema for city property")
                 }
-                
-				if case .string(title: _, description: _, format: _, minLength: _, maxLength: _, defaultValue: _) = object.properties["zip"] {
+
+				if case .string = object.properties["zip"] {
                     // zip property is correct
                 } else {
                     #expect(Bool(false), "Expected string schema for zip property")
@@ -464,25 +458,25 @@ func testSchemaRepresentableParameter() async throws {
 func testEnumArraySchema() throws {
     let server = EnumArrayTest()
     let tools = server.mcpToolMetadata.convertedToTools()
-    
+
     // Find the processWeekdays tool
     guard let tool = tools.first(where: { $0.name == "processWeekdays" }) else {
         #expect(Bool(false), "Could not find processWeekdays tool")
         return
     }
-    
+
     // Get the schema for the days parameter
     if case .object(let object, _) = tool.inputSchema {
 		guard let daysSchema = object.properties["days"] else {
             #expect(Bool(false), "Could not find days parameter in schema")
             return
         }
-        
+
         // Verify it's an array
         if case .array(let itemsSchema, title: _, description: _, defaultValue: _) = daysSchema {
             // Verify the items are strings with enum values
             if case .enum(let enumValues, title: _, description: _, enumNames: _, defaultValue: _) = itemsSchema {
-                
+
                 // Verify the enum values are the Weekday cases
                 let expectedValues = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
                 #expect(enumValues.sorted() == expectedValues.sorted())
@@ -501,28 +495,28 @@ func testEnumArraySchema() throws {
 func testOptionalEnumArraySchema() throws {
     let server = EnumArrayTest()
     let tools = server.mcpToolMetadata.convertedToTools()
-    
+
     // Find the processOptionalWeekdays tool
     guard let tool = tools.first(where: { $0.name == "processOptionalWeekdays" }) else {
         #expect(Bool(false), "Could not find processOptionalWeekdays tool")
         return
     }
-    
+
     // Get the schema for the days parameter
     if case .object(let object, _) = tool.inputSchema {
 		guard let daysSchema = object.properties["days"] else {
             #expect(Bool(false), "Could not find days parameter in schema")
             return
         }
-        
+
         // Verify it's not in the required array
 		#expect(!object.required.contains("days"), "Optional parameter should not be required")
-        
+
         // Verify it's an array
         if case .array(let itemsSchema, title: _, description: _, defaultValue: _) = daysSchema {
             // Verify the items are strings with enum values
             if case .enum(let enumValues, title: _, description: _, enumNames: _, defaultValue: _) = itemsSchema {
-                
+
                 // Verify the enum values are the Weekday cases
                 let expectedValues = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
                 #expect(enumValues.sorted() == expectedValues.sorted())
@@ -541,44 +535,44 @@ func testOptionalEnumArraySchema() throws {
 func testSchemaRepresentableArraySchema() throws {
     let server = SchemaRepresentableArrayTest()
     let tools = server.mcpToolMetadata.convertedToTools()
-    
+
     // Find the processAddresses tool
     guard let tool = tools.first(where: { $0.name == "processAddresses" }) else {
         #expect(Bool(false), "Could not find processAddresses tool")
         return
     }
-    
+
     // Get the schema for the addresses parameter
     if case .object(let object, _) = tool.inputSchema {
 		guard let addressesSchema = object.properties["addresses"] else {
             #expect(Bool(false), "Could not find addresses parameter in schema")
             return
         }
-        
+
         // Verify it's required
 		#expect(object.required.contains("addresses"), "Required parameter should be in required array")
-        
+
         // Verify it's an array
         if case .array(let itemsSchema, title: _, description: _, defaultValue: _) = addressesSchema {
             // Verify the items are objects with street and city properties
             if case .object(let object, _) = itemsSchema {
 				#expect(object.properties.count == 3)
 				#expect(object.required == ["street", "city", "zip"])
-                
+
                 // Verify property types
-				if case .string(title: _, description: _, format: _, minLength: _, maxLength: _, defaultValue: _) = object.properties["street"] {
+				if case .string = object.properties["street"] {
                     // street property is correct
                 } else {
                     #expect(Bool(false), "Expected string schema for street property")
                 }
-                
-				if case .string(title: _, description: _, format: _, minLength: _, maxLength: _, defaultValue: _) = object.properties["city"] {
+
+				if case .string = object.properties["city"] {
                     // city property is correct
                 } else {
                     #expect(Bool(false), "Expected string schema for city property")
                 }
-                
-				if case .string(title: _, description: _, format: _, minLength: _, maxLength: _, defaultValue: _) = object.properties["zip"] {
+
+				if case .string = object.properties["zip"] {
                     // zip property is correct
                 } else {
                     #expect(Bool(false), "Expected string schema for zip property")
@@ -602,13 +596,13 @@ func testAddressDecoding() throws {
         "city": "New York",
         "zip": "10001"
     ]
-    
+
     // Encode the dictionary to JSON data
     let jsonData = try JSONSerialization.data(withJSONObject: addressDict)
-    
+
     // Decode the JSON data into an Address struct
     let address = try JSONDecoder().decode(SchemaRepresentableTests.Address.self, from: jsonData)
-    
+
     // Verify the decoded values
     #expect(address.street == "123 Main St")
     #expect(address.city == "New York")
@@ -635,25 +629,25 @@ func testAddressArrayDecoding() throws {
             "zip": "60601"
         ]
     ]
-    
+
     // Encode the array to JSON data
     let jsonData = try JSONSerialization.data(withJSONObject: addressDicts)
-    
+
     // Decode the JSON data into an array of Address structs
     let addresses = try JSONDecoder().decode([SchemaRepresentableTests.Address].self, from: jsonData)
-    
+
     // Verify the number of addresses
     #expect(addresses.count == 3)
-    
+
     // Verify each address
     #expect(addresses[0].street == "123 Main St")
     #expect(addresses[0].city == "New York")
     #expect(addresses[0].zip == "10001")
-    
+
     #expect(addresses[1].street == "456 Oak Ave")
     #expect(addresses[1].city == "San Francisco")
     #expect(addresses[1].zip == "94102")
-    
+
     #expect(addresses[2].street == "789 Pine Rd")
     #expect(addresses[2].city == "Chicago")
     #expect(addresses[2].zip == "60601")
@@ -665,13 +659,13 @@ func testExtractAddressArray() throws {
         SchemaRepresentableTests.Address(street: "123 Main St", city: "New York", zip: "10001"),
         SchemaRepresentableTests.Address(street: "456 Oak Ave", city: "San Francisco", zip: "94102")
     ]
-    
+
     let params: JSONDictionary = [
         "addresses": try JSONValue(encoding: addresses)
     ]
-    
+
     let extractedAddresses: [SchemaRepresentableTests.Address] = try params.extractParameter(named: "addresses")
-    
+
     #expect(extractedAddresses.count == 2)
     #expect(extractedAddresses[0].street == "123 Main St")
     #expect(extractedAddresses[0].city == "New York")
@@ -679,4 +673,4 @@ func testExtractAddressArray() throws {
     #expect(extractedAddresses[1].street == "456 Oak Ave")
     #expect(extractedAddresses[1].city == "San Francisco")
     #expect(extractedAddresses[1].zip == "94102")
-} 
+}

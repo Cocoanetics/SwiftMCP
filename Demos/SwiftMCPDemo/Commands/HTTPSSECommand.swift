@@ -6,7 +6,6 @@ import Logging
 import OSLog
 #endif
 
-
 /**
  A command that starts an HTTP server with Server-Sent Events (SSE) support for SwiftMCP.
  
@@ -46,13 +45,13 @@ final class HTTPSSECommand: AsyncParsableCommand {
         abstract: "Start an HTTP server with Server-Sent Events (SSE) support",
         discussion: """
   Start an HTTP server that supports Server-Sent Events (SSE) and JSON-RPC.
-  
+
   Features:
   - Server-Sent Events endpoint at /sse
   - JSON-RPC endpoints at /<serverName>/<toolName>
   - Optional bearer token authentication or OAuth validation
   - Optional OpenAPI endpoints for AI plugin integration
-  
+
   OAuth Configuration JSON Format:
   {
     "issuer": "https://example.com",
@@ -66,30 +65,30 @@ final class HTTPSSECommand: AsyncParsableCommand {
     "registration_endpoint": "https://example.com/oauth/register", // optional
     "transparent_proxy": true // optional, defaults to false
   }
-  
+
   Note: If no introspection_endpoint is provided, JWT validation will be automatically enabled.
-  
+
   Examples:
     # Basic usage
     SwiftMCPDemo httpsse --port 8080
-    
+
     # With simple token authentication
     SwiftMCPDemo httpsse --port 8080 --token my-secret-token
-    
+
     # With OAuth configuration from JSON file
     SwiftMCPDemo httpsse --port 8080 --oauth oauth-config.json
-    
+
     # With OpenAPI support
     SwiftMCPDemo httpsse --port 8080 --openapi
 """
     )
-    
+
     @Option(name: .long, help: "The port to listen on")
     var port: Int
-    
+
     @Option(name: .long, help: "Bearer token for authorization")
     var token: String?
-    
+
     @Flag(name: .long, help: "Enable OpenAPI endpoints")
     var openapi: Bool = false
 
@@ -98,12 +97,12 @@ final class HTTPSSECommand: AsyncParsableCommand {
 
     @Option(name: .long, help: "Path to OAuth configuration JSON file")
     var oauth: String?
-    
+
     // Make this a computed property instead of stored property
-    private var signalHandler: SignalHandler? = nil
-    
+    private var signalHandler: SignalHandler?
+
     required init() {}
-    
+
     // Add manual Decodable conformance
     required init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -121,26 +120,26 @@ final class HTTPSSECommand: AsyncParsableCommand {
         case oauth
         case tcp
     }
-    
+
     func run() async throws {
 #if canImport(OSLog)
         LoggingSystem.bootstrapWithOSLog()
 #endif
-        
+
         let calculator = DemoServer()
-		
+
         let host = String.localHostname
         print("MCP Server \(calculator.serverName) (\(calculator.serverVersion)) started with HTTP+SSE transport on http://\(host):\(port)/sse")
-        
+
         let transport = HTTPSSETransport(server: calculator, port: port)
-        
+
         // Set up authentication (priority: OAuth config > simple token > none)
         if let oauthConfigPath = oauth {
             do {
                 let jsonConfig = try JSONOAuthConfiguration.load(from: oauthConfigPath)
                 let oauthConfig = try jsonConfig.toOAuthConfiguration()
                 transport.oauthConfiguration = oauthConfig
-                
+
                 print("OAuth validation enabled with issuer: \(jsonConfig.issuer)")
                 if jsonConfig.transparentProxy == true {
                     print("  Transparent proxy mode: enabled (server acts as OAuth provider)")
@@ -166,11 +165,11 @@ final class HTTPSSECommand: AsyncParsableCommand {
                 guard let token else {
                     return .unauthorized("Missing bearer token")
                 }
-                
+
                 guard token == requiredToken else {
                     return .unauthorized("Invalid bearer token")
                 }
-                
+
                 return .authorized
             }
             print("Simple token validation enabled")
@@ -184,7 +183,7 @@ final class HTTPSSECommand: AsyncParsableCommand {
 
         // Enable OpenAPI endpoints if requested
         transport.serveOpenAPI = openapi
-        
+
         var tcpTransport: TCPBonjourTransport?
         if tcp {
             let transport = TCPBonjourTransport(server: calculator)
@@ -200,7 +199,7 @@ final class HTTPSSECommand: AsyncParsableCommand {
             signalHandler = SignalHandler(transport: transport)
         }
         await signalHandler?.setup()
-        
+
         // Run the server (blocking)
         do {
             try await transport.run()
@@ -211,4 +210,4 @@ final class HTTPSSECommand: AsyncParsableCommand {
             throw error
         }
     }
-} 
+}

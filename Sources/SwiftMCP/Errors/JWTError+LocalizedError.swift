@@ -31,4 +31,4 @@ extension JWTError: LocalizedError {
             return "Encrypted (JWE) tokens are not supported. Use a signed JWT (JWS)"
         }
     }
-} 
+}

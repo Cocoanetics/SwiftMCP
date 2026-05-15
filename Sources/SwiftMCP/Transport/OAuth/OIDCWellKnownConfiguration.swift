@@ -92,28 +92,28 @@ public struct OAuthConfiguration: Sendable {
     public func fetchUserInfo(token: String) async -> UserInfo? {
         // Construct the userinfo endpoint URL (standard OIDC endpoint)
         let userinfoURL = issuer.appendingPathComponent("userinfo")
-        
+
         var request = URLRequest(url: userinfoURL)
         request.httpMethod = "GET"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        
+
         // print("[OAuthConfiguration] Fetching user info from: \(userinfoURL.absoluteString)")
-        
+
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse else {
                 // print("[OAuthConfiguration] Invalid response type for userinfo request")
                 return nil
             }
-            
+
             // print("[OAuthConfiguration] Userinfo response status: \(http.statusCode)")
-            
+
             if http.statusCode != 200 {
                 // Could log error response here if needed
                 return nil
             }
-            
+
             // Decode the JSON response into UserInfo struct
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
@@ -188,7 +188,7 @@ public struct OAuthConfiguration: Sendable {
     }
 
     // MARK: - Transparent Proxy Metadata
-    
+
     /// Generate metadata for transparent proxy mode where the server acts as the OAuth provider
     public func proxyAuthorizationServerMetadata(serverBaseURL: String) -> AuthorizationServerMetadata {
         AuthorizationServerMetadata(
@@ -204,7 +204,7 @@ public struct OAuthConfiguration: Sendable {
             code_challenge_methods_supported: ["S256"]
         )
     }
-    
+
     /// Generate metadata for transparent proxy mode where the server acts as the OAuth provider
     public func proxyProtectedResourceMetadata(serverBaseURL: String) -> ProtectedResourceMetadata {
         ProtectedResourceMetadata(

@@ -22,7 +22,7 @@ public struct ClientCapabilities: Codable, Sendable {
 
     /// Present if the client supports sampling functionality.
     public var sampling: SamplingCapabilities?
-    
+
     /// Present if the client supports elicitation functionality.
     public var elicitation: ElicitationCapabilities?
 
@@ -40,7 +40,7 @@ public struct ClientCapabilities: Codable, Sendable {
     public struct SamplingCapabilities: Codable, Sendable {
         public init() {}
     }
-    
+
     /// Capabilities related to elicitation.
     public struct ElicitationCapabilities: Codable, Sendable {
         public init() {}
@@ -52,4 +52,4 @@ public struct ClientCapabilities: Codable, Sendable {
         self.sampling = sampling
         self.elicitation = elicitation
     }
-} 
+}

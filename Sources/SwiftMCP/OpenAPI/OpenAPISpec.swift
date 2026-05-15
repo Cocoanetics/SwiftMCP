@@ -226,4 +226,4 @@ struct OpenAPISpec: Codable {
 
         self.paths = paths
     }
-} 
+}

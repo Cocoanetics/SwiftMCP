@@ -97,7 +97,7 @@ public struct MCPResourceMacro: PeerMacro {
                 if argument.label?.text == "name",
                    let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
                     resourceName = stringLiteral.segments.description
-                } else if argument.label?.text == "mimeType", 
+                } else if argument.label?.text == "mimeType",
                    let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
                     let stringValue = stringLiteral.segments.description
                     mimeTypeArg = "\"\(stringValue.escapedForSwiftString)\""

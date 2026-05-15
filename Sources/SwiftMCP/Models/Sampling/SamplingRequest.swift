@@ -4,16 +4,16 @@ import Foundation
 public struct SamplingCreateMessageRequest: Codable, Sendable {
     /// The messages in the conversation.
     public let messages: [SamplingMessage]
-    
+
     /// Optional model preferences for the request.
     public let modelPreferences: ModelPreferences?
-    
+
     /// Optional system prompt to guide the model.
     public let systemPrompt: String?
-    
+
     /// Maximum number of tokens to generate.
     public let maxTokens: Int?
-    
+
     public init(
         messages: [SamplingMessage],
         modelPreferences: ModelPreferences? = nil,
@@ -25,4 +25,4 @@ public struct SamplingCreateMessageRequest: Codable, Sendable {
         self.systemPrompt = systemPrompt
         self.maxTokens = maxTokens
     }
-} 
+}

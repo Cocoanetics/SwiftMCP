@@ -2,7 +2,6 @@ import Testing
 import Foundation
 @testable import SwiftMCP
 
-
 @Suite("Router Path Matching")
 struct RouterTests {
 

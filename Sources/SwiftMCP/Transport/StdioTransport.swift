@@ -14,38 +14,38 @@ public final class StdioTransport: Transport, @unchecked Sendable {
     ///
     /// This server handles the actual business logic while the transport handles I/O.
     public let server: MCPServer
-    
+
     /// Logger instance for logging transport activity.
     ///
     /// Used to track input/output operations and error conditions during transport operation.
     public let logger = Logger(label: "com.cocoanetics.SwiftMCP.StdioTransport")
-    
+
     /// Actor to handle running state in a thread-safe manner.
     private actor TransportState {
         var isRunning: Bool = false
-        
+
         func start() {
             isRunning = true
         }
-        
+
         func stop() {
             isRunning = false
         }
-        
+
         func isCurrentlyRunning() -> Bool {
             return isRunning
         }
     }
-    
+
     private let state = TransportState()
-    
+
     /// Initializes a new StdioTransport with the given MCP server.
     ///
     /// - Parameter server: The MCP server to expose over standard input/output.
     public init(server: MCPServer) {
         self.server = server
     }
-    
+
     /// Starts reading from stdin asynchronously in a non-blocking manner.
     ///
     /// This method initiates a background task that processes input continuously until stopped.
@@ -81,7 +81,7 @@ public final class StdioTransport: Transport, @unchecked Sendable {
             }
         }
     }
-    
+
     /// Runs the transport synchronously and blocks until the transport is stopped.
     ///
     /// This method processes input directly on the calling task and will not return until
@@ -110,7 +110,7 @@ public final class StdioTransport: Transport, @unchecked Sendable {
             }
         }
     }
-    
+
     /// Stops the transport.
     ///
     /// This method stops processing input from stdin. Any pending input will be discarded.
@@ -119,12 +119,11 @@ public final class StdioTransport: Transport, @unchecked Sendable {
     public func stop() async throws {
         await state.stop()
     }
-    
+
     // MARK: - Receiving
-    
+
     /// handle received data
-    func handleReceived(_ data: Data) async throws
-    {
+    func handleReceived(_ data: Data) async throws {
         do {
             guard let session = Session.current else {
                 logger.error("Received stdio data without an active session")
@@ -151,12 +150,11 @@ public final class StdioTransport: Transport, @unchecked Sendable {
             logger.error("Error decoding message: \(error)")
         }
     }
-    
+
     // MARK: - Sending
-    
+
     /// send data to the client, specific to JSON
-    public func send(_ data: Data) async throws
-    {
+    public func send(_ data: Data) async throws {
         precondition(Session.current != nil)
         let currentSession = Session.current!
         let sameTransport: Bool

@@ -15,9 +15,7 @@ struct Documentation {
     /// The returns section of the documentation, if present.
     let returns: String?
 
-
-    init(from text: String)
-	{
+    init(from text: String) {
         // First, split the input into individual lines.
         let lines = text.components(separatedBy: .newlines)
 
@@ -114,7 +112,7 @@ struct Documentation {
         var returnsLines = [String]()
 
         // Variables to hold state while processing a parameter that spans multiple lines.
-        var currentParameterName: String? = nil
+        var currentParameterName: String?
         var currentParameterLines = [String]()
         var inReturnsSection = false
         var inParametersSection = false
@@ -171,7 +169,7 @@ struct Documentation {
                     inOtherSection = false
                     continue
                 }
-				
+
 				// Check for Returns section
 				else if line.lowercased().hasPrefix("- returns:") {
                     // Flush any parameter being processed
@@ -185,7 +183,7 @@ struct Documentation {
                     inReturnsSection = true
                     continue
                 }
-				
+
 				// Check for Parameter line (singular)
 				else if let param = parseParameterLine(from: line) {
                     // Start of a new parameter: flush any previous parameter data.
@@ -197,7 +195,7 @@ struct Documentation {
                     currentParameterLines = [param.description]  // Start fresh with just this description
                     continue
                 }
-				
+
 				// Check for parameter in Parameters section
 				else if inParametersSection {
                     // This could be a parameter under the Parameters section
@@ -211,7 +209,7 @@ struct Documentation {
                         continue
                     }
                 }
-				
+
 				// Any other dash-prefixed line is some other section we don't specifically handle
 				else {
                     // Flush any parameter being processed
@@ -313,7 +311,7 @@ struct Documentation {
 
 /// Helper that checks if a line defines a parameter and, if so, extracts its name and description.
 /// Expected format: "- Parameter <name>: <description>"
-fileprivate func parseParameterLine(from line: String) -> (name: String, description: String)? {
+private func parseParameterLine(from line: String) -> (name: String, description: String)? {
     // Check case-insensitively if the line starts with "- Parameter"
     if line.lowercased().hasPrefix("- parameter") {
         // Remove the prefix.

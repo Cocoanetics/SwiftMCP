@@ -33,11 +33,6 @@ private struct RFC6570TemplateConstructor {
     let template: String
     let parameters: JSONDictionary
 
-    init(template: String, parameters: JSONDictionary) {
-        self.template = template
-        self.parameters = parameters
-    }
-
     func construct() throws -> URL {
         var result = template
 
@@ -79,29 +74,29 @@ private struct RFC6570TemplateConstructor {
         // Check for operator prefix
         if let firstChar = expr.first {
             switch firstChar {
-                case "+":
-                    operatorType = .reserved
-                    expr = String(expr.dropFirst())
-                case "#":
-                    operatorType = .fragment
-                    expr = String(expr.dropFirst())
-                case ".":
-                    operatorType = .label
-                    expr = String(expr.dropFirst())
-                case "/":
-                    operatorType = .pathSegment
-                    expr = String(expr.dropFirst())
-                case ";":
-                    operatorType = .pathStyle
-                    expr = String(expr.dropFirst())
-                case "?":
-                    operatorType = .query
-                    expr = String(expr.dropFirst())
-                case "&":
-                    operatorType = .queryContinuation
-                    expr = String(expr.dropFirst())
-                default:
-                    break
+            case "+":
+                operatorType = .reserved
+                expr = String(expr.dropFirst())
+            case "#":
+                operatorType = .fragment
+                expr = String(expr.dropFirst())
+            case ".":
+                operatorType = .label
+                expr = String(expr.dropFirst())
+            case "/":
+                operatorType = .pathSegment
+                expr = String(expr.dropFirst())
+            case ";":
+                operatorType = .pathStyle
+                expr = String(expr.dropFirst())
+            case "?":
+                operatorType = .query
+                expr = String(expr.dropFirst())
+            case "&":
+                operatorType = .queryContinuation
+                expr = String(expr.dropFirst())
+            default:
+                break
             }
         }
 
@@ -138,22 +133,22 @@ private struct RFC6570TemplateConstructor {
 
     private func constructForOperator(_ operatorType: ExpressionOperator, variables: [VariableSpec]) throws -> String {
         switch operatorType {
-            case .simple:
-                return try constructSimple(variables: variables)
-            case .reserved:
-                return try constructReserved(variables: variables)
-            case .fragment:
-                return try constructFragment(variables: variables)
-            case .label:
-                return try constructLabel(variables: variables)
-            case .pathSegment:
-                return try constructPathSegment(variables: variables)
-            case .pathStyle:
-                return try constructPathStyle(variables: variables)
-            case .query:
-                return try constructQuery(variables: variables)
-            case .queryContinuation:
-                return try constructQueryContinuation(variables: variables)
+        case .simple:
+            return try constructSimple(variables: variables)
+        case .reserved:
+            return try constructReserved(variables: variables)
+        case .fragment:
+            return try constructFragment(variables: variables)
+        case .label:
+            return try constructLabel(variables: variables)
+        case .pathSegment:
+            return try constructPathSegment(variables: variables)
+        case .pathStyle:
+            return try constructPathStyle(variables: variables)
+        case .query:
+            return try constructQuery(variables: variables)
+        case .queryContinuation:
+            return try constructQueryContinuation(variables: variables)
         }
     }
 
@@ -328,11 +323,6 @@ private struct RFC6570TemplateExtractor {
     let template: String
     let url: URL
 
-    init(template: String, url: URL) {
-        self.template = template
-        self.url = url
-    }
-
     func extract() -> [String: String]? {
         // Split URL and template into components for easier matching
         let urlString = url.absoluteString
@@ -412,11 +402,11 @@ private struct RFC6570TemplateExtractor {
 
                 // Parse the expression and extract values for all variables
                 guard let extractedVariables = extractAllVariablesFromExpression(
-					expression: expressionContent,
-					fromURL: urlBase,
-					startingAt: urlIndex,
-					followingLiteral: followingLiteral
-				) else {
+                    expression: expressionContent,
+                    fromURL: urlBase,
+                    startingAt: urlIndex,
+                    followingLiteral: followingLiteral
+                ) else {
                     return false
                 }
 
@@ -459,11 +449,11 @@ private struct RFC6570TemplateExtractor {
     }
 
     private func extractAllVariablesFromExpression(
-		expression: String,
-		fromURL url: String,
-		startingAt startIndex: String.Index,
-		followingLiteral: String
-	) -> (variables: [String: String], consumedLength: Int)? {
+        expression: String,
+        fromURL url: String,
+        startingAt startIndex: String.Index,
+        followingLiteral: String
+    ) -> (variables: [String: String], consumedLength: Int)? {
 
         // Parse the expression
         let (operatorType, variableSpecs) = parseExpression(expression)
@@ -471,32 +461,32 @@ private struct RFC6570TemplateExtractor {
         guard !variableSpecs.isEmpty else { return nil }
 
         switch operatorType {
-            case .simple:
-                return extractAllSimpleVariables(variables: variableSpecs, fromURL: url, startingAt: startIndex)
-            case .reserved:
-                return extractAllReservedVariables(variables: variableSpecs, fromURL: url, startingAt: startIndex, followingLiteral: followingLiteral)
-            case .label:
-                return extractAllLabelVariables(variables: variableSpecs, fromURL: url, startingAt: startIndex)
-            case .pathSegment:
-                return extractAllPathSegmentVariables(variables: variableSpecs, fromURL: url, startingAt: startIndex)
-            case .pathStyle:
-                return extractAllPathStyleVariables(variables: variableSpecs, fromURL: url, startingAt: startIndex)
-            case .query, .queryContinuation:
-                if let result = extractQueryVariable(variables: variableSpecs, fromURL: url, startingAt: startIndex) {
-                    return ([result.variableName: result.value], result.consumedLength)
-                }
-                return nil
-            case .fragment:
-                // Fragments are handled separately in extractFragmentExpression
-                return nil
+        case .simple:
+            return extractAllSimpleVariables(variables: variableSpecs, fromURL: url, startingAt: startIndex)
+        case .reserved:
+            return extractAllReservedVariables(variables: variableSpecs, fromURL: url, startingAt: startIndex, followingLiteral: followingLiteral)
+        case .label:
+            return extractAllLabelVariables(variables: variableSpecs, fromURL: url, startingAt: startIndex)
+        case .pathSegment:
+            return extractAllPathSegmentVariables(variables: variableSpecs, fromURL: url, startingAt: startIndex)
+        case .pathStyle:
+            return extractAllPathStyleVariables(variables: variableSpecs, fromURL: url, startingAt: startIndex)
+        case .query, .queryContinuation:
+            if let result = extractQueryVariable(variables: variableSpecs, fromURL: url, startingAt: startIndex) {
+                return ([result.variableName: result.value], result.consumedLength)
+            }
+            return nil
+        case .fragment:
+            // Fragments are handled separately in extractFragmentExpression
+            return nil
         }
     }
 
     private func extractAllSimpleVariables(
-		variables: [VariableSpec],
-		fromURL url: String,
-		startingAt startIndex: String.Index
-	) -> (variables: [String: String], consumedLength: Int)? {
+        variables: [VariableSpec],
+        fromURL url: String,
+        startingAt startIndex: String.Index
+    ) -> (variables: [String: String], consumedLength: Int)? {
 
         let allowedChars = CharacterSet(charactersIn: "/?#").inverted
         var currentIndex = startIndex
@@ -531,11 +521,11 @@ private struct RFC6570TemplateExtractor {
     }
 
     private func extractAllReservedVariables(
-		variables: [VariableSpec],
-		fromURL url: String,
-		startingAt startIndex: String.Index,
-		followingLiteral: String
-	) -> (variables: [String: String], consumedLength: Int)? {
+        variables: [VariableSpec],
+        fromURL url: String,
+        startingAt startIndex: String.Index,
+        followingLiteral: String
+    ) -> (variables: [String: String], consumedLength: Int)? {
 
         // Allow "/"; stop only at query or fragment delimiters
         let allowedChars = CharacterSet(charactersIn: "#?").inverted
@@ -595,10 +585,10 @@ private struct RFC6570TemplateExtractor {
     }
 
     private func extractAllLabelVariables(
-		variables: [VariableSpec],
-		fromURL url: String,
-		startingAt startIndex: String.Index
-	) -> (variables: [String: String], consumedLength: Int)? {
+        variables: [VariableSpec],
+        fromURL url: String,
+        startingAt startIndex: String.Index
+    ) -> (variables: [String: String], consumedLength: Int)? {
 
         // Label expansion starts with a dot
         guard startIndex < url.endIndex && url[startIndex] == "." else {
@@ -645,10 +635,10 @@ private struct RFC6570TemplateExtractor {
     }
 
     private func extractAllPathSegmentVariables(
-		variables: [VariableSpec],
-		fromURL url: String,
-		startingAt startIndex: String.Index
-	) -> (variables: [String: String], consumedLength: Int)? {
+        variables: [VariableSpec],
+        fromURL url: String,
+        startingAt startIndex: String.Index
+    ) -> (variables: [String: String], consumedLength: Int)? {
 
         // Path segment expansion starts with a slash
         guard startIndex < url.endIndex && url[startIndex] == "/" else {
@@ -721,10 +711,10 @@ private struct RFC6570TemplateExtractor {
     }
 
     private func extractAllPathStyleVariables(
-		variables: [VariableSpec],
-		fromURL url: String,
-		startingAt startIndex: String.Index
-	) -> (variables: [String: String], consumedLength: Int)? {
+        variables: [VariableSpec],
+        fromURL url: String,
+        startingAt startIndex: String.Index
+    ) -> (variables: [String: String], consumedLength: Int)? {
 
         var currentIndex = startIndex
         var consumedLength = 0
@@ -783,10 +773,10 @@ private struct RFC6570TemplateExtractor {
     }
 
     private func extractVariableValue(
-		expression: String,
-		fromURL url: String,
-		startingAt startIndex: String.Index
-	) -> (variableName: String, value: String, consumedLength: Int)? {
+        expression: String,
+        fromURL url: String,
+        startingAt startIndex: String.Index
+    ) -> (variableName: String, value: String, consumedLength: Int)? {
 
         // Parse the expression
         let (operatorType, variables) = parseExpression(expression)
@@ -794,29 +784,29 @@ private struct RFC6570TemplateExtractor {
         guard !variables.isEmpty else { return nil }
 
         switch operatorType {
-            case .simple:
-                return extractSimpleVariable(variables: variables, fromURL: url, startingAt: startIndex)
-            case .reserved:
-                return extractReservedVariable(variables: variables, fromURL: url, startingAt: startIndex)
-            case .label:
-                return extractLabelVariable(variables: variables, fromURL: url, startingAt: startIndex)
-            case .pathSegment:
-                return extractPathSegmentVariable(variables: variables, fromURL: url, startingAt: startIndex)
-            case .pathStyle:
-                return extractPathStyleVariable(variables: variables, fromURL: url, startingAt: startIndex)
-            case .query, .queryContinuation:
-                return extractQueryVariable(variables: variables, fromURL: url, startingAt: startIndex)
-            case .fragment:
-                // Fragments are handled separately in extractFragmentExpression
-                return nil
+        case .simple:
+            return extractSimpleVariable(variables: variables, fromURL: url, startingAt: startIndex)
+        case .reserved:
+            return extractReservedVariable(variables: variables, fromURL: url, startingAt: startIndex)
+        case .label:
+            return extractLabelVariable(variables: variables, fromURL: url, startingAt: startIndex)
+        case .pathSegment:
+            return extractPathSegmentVariable(variables: variables, fromURL: url, startingAt: startIndex)
+        case .pathStyle:
+            return extractPathStyleVariable(variables: variables, fromURL: url, startingAt: startIndex)
+        case .query, .queryContinuation:
+            return extractQueryVariable(variables: variables, fromURL: url, startingAt: startIndex)
+        case .fragment:
+            // Fragments are handled separately in extractFragmentExpression
+            return nil
         }
     }
 
     private func extractSimpleVariable(
-		variables: [VariableSpec],
-		fromURL url: String,
-		startingAt startIndex: String.Index
-	) -> (variableName: String, value: String, consumedLength: Int)? {
+        variables: [VariableSpec],
+        fromURL url: String,
+        startingAt startIndex: String.Index
+    ) -> (variableName: String, value: String, consumedLength: Int)? {
 
         let allowedChars = CharacterSet(charactersIn: "/?#").inverted
         var currentIndex = startIndex
@@ -847,10 +837,10 @@ private struct RFC6570TemplateExtractor {
     }
 
     private func extractReservedVariable(
-		variables: [VariableSpec],
-		fromURL url: String,
-		startingAt startIndex: String.Index
-	) -> (variableName: String, value: String, consumedLength: Int)? {
+        variables: [VariableSpec],
+        fromURL url: String,
+        startingAt startIndex: String.Index
+    ) -> (variableName: String, value: String, consumedLength: Int)? {
 
         let allowedChars = CharacterSet(charactersIn: "#").inverted
         var currentIndex = startIndex
@@ -878,10 +868,10 @@ private struct RFC6570TemplateExtractor {
     }
 
     private func extractLabelVariable(
-		variables: [VariableSpec],
-		fromURL url: String,
-		startingAt startIndex: String.Index
-	) -> (variableName: String, value: String, consumedLength: Int)? {
+        variables: [VariableSpec],
+        fromURL url: String,
+        startingAt startIndex: String.Index
+    ) -> (variableName: String, value: String, consumedLength: Int)? {
 
         // Label expansion starts with a dot
         guard startIndex < url.endIndex && url[startIndex] == "." else {
@@ -923,10 +913,10 @@ private struct RFC6570TemplateExtractor {
     }
 
     private func extractPathSegmentVariable(
-		variables: [VariableSpec],
-		fromURL url: String,
-		startingAt startIndex: String.Index
-	) -> (variableName: String, value: String, consumedLength: Int)? {
+        variables: [VariableSpec],
+        fromURL url: String,
+        startingAt startIndex: String.Index
+    ) -> (variableName: String, value: String, consumedLength: Int)? {
 
         // Path segment expansion starts with a slash
         guard startIndex < url.endIndex && url[startIndex] == "/" else {
@@ -963,10 +953,10 @@ private struct RFC6570TemplateExtractor {
     }
 
     private func extractPathStyleVariable(
-		variables: [VariableSpec],
-		fromURL url: String,
-		startingAt startIndex: String.Index
-	) -> (variableName: String, value: String, consumedLength: Int)? {
+        variables: [VariableSpec],
+        fromURL url: String,
+        startingAt startIndex: String.Index
+    ) -> (variableName: String, value: String, consumedLength: Int)? {
 
         // Path style parameters start with ; and are in format ;name=value
         guard startIndex < url.endIndex && url[startIndex] == ";" else {
@@ -1006,10 +996,10 @@ private struct RFC6570TemplateExtractor {
     }
 
     private func extractQueryVariable(
-		variables: [VariableSpec],
-		fromURL url: String,
-		startingAt startIndex: String.Index
-	) -> (variableName: String, value: String, consumedLength: Int)? {
+        variables: [VariableSpec],
+        fromURL url: String,
+        startingAt startIndex: String.Index
+    ) -> (variableName: String, value: String, consumedLength: Int)? {
 
         // Query parameters are in format ?name=value or &name=value
         var currentIndex = startIndex
@@ -1071,7 +1061,7 @@ private struct RFC6570TemplateExtractor {
                 if let actualValue = urlParams[key] {
                     variables[varName] = actualValue
                 }
-            // Missing parameters are okay for optional query params
+                // Missing parameters are okay for optional query params
             } else {
                 // This is a literal value - must match exactly
                 guard urlParams[key] == templateValue else {
@@ -1102,29 +1092,29 @@ private struct RFC6570TemplateExtractor {
         // Check for operator prefix
         if let firstChar = expr.first {
             switch firstChar {
-                case "+":
-                    operatorType = .reserved
-                    expr = String(expr.dropFirst())
-                case "#":
-                    operatorType = .fragment
-                    expr = String(expr.dropFirst())
-                case ".":
-                    operatorType = .label
-                    expr = String(expr.dropFirst())
-                case "/":
-                    operatorType = .pathSegment
-                    expr = String(expr.dropFirst())
-                case ";":
-                    operatorType = .pathStyle
-                    expr = String(expr.dropFirst())
-                case "?":
-                    operatorType = .query
-                    expr = String(expr.dropFirst())
-                case "&":
-                    operatorType = .queryContinuation
-                    expr = String(expr.dropFirst())
-                default:
-                    break
+            case "+":
+                operatorType = .reserved
+                expr = String(expr.dropFirst())
+            case "#":
+                operatorType = .fragment
+                expr = String(expr.dropFirst())
+            case ".":
+                operatorType = .label
+                expr = String(expr.dropFirst())
+            case "/":
+                operatorType = .pathSegment
+                expr = String(expr.dropFirst())
+            case ";":
+                operatorType = .pathStyle
+                expr = String(expr.dropFirst())
+            case "?":
+                operatorType = .query
+                expr = String(expr.dropFirst())
+            case "&":
+                operatorType = .queryContinuation
+                expr = String(expr.dropFirst())
+            default:
+                break
             }
         }
 
@@ -1196,7 +1186,7 @@ private struct RFC6570TemplateExtractor {
 
             // Remove the expression from the template
             remainingTemplate = String(remainingTemplate[..<Range(matchRange, in: remainingTemplate)!.lowerBound]) +
-							   String(remainingTemplate[Range(matchRange, in: remainingTemplate)!.upperBound...])
+                String(remainingTemplate[Range(matchRange, in: remainingTemplate)!.upperBound...])
         }
 
         // Remove query part from URL since we've processed it
@@ -1228,7 +1218,7 @@ private struct RFC6570TemplateExtractor {
 
         // Remove the expression from template and fragment from URL
         let remainingTemplate = String(template[..<Range(matchRange, in: template)!.lowerBound]) +
-							   String(template[Range(matchRange, in: template)!.upperBound...])
+            String(template[Range(matchRange, in: template)!.upperBound...])
         let remainingURL = String(urlParts[0])
 
         return (remainingTemplate, remainingURL)
@@ -1275,4 +1265,4 @@ private enum VariableModifier {
     case none
     case prefix(Int)
     case explode
-} 
+}

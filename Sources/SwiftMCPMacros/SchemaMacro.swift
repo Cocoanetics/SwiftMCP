@@ -107,7 +107,7 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
                         break
                     }
                 }
-                
+
                 if !hasSchemaAttribute {
                     // Create diagnostic warning about missing @Schema
                     let diagnostic = Diagnostic(
@@ -190,11 +190,11 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
             // Handle different types of default values
             if rawValue.hasPrefix(".") {
                 defaultValue = "\(propertyType)\(rawValue)"
-            } else if rawValue.contains(".") || 
-                      rawValue == "true" || rawValue == "false" ||
-                      Double(rawValue) != nil ||
-                      rawValue == "nil" ||
-                      (rawValue.hasPrefix("[") && rawValue.hasSuffix("]")) {
+            } else if rawValue.contains(".") ||
+                rawValue == "true" || rawValue == "false" ||
+                Double(rawValue) != nil ||
+                rawValue == "nil" ||
+                (rawValue.hasPrefix("[") && rawValue.hasSuffix("]")) {
                 defaultValue = rawValue
             } else if let stringLiteral = initializer.value.as(StringLiteralExprSyntax.self) {
                 defaultValue = "\"\(stringLiteral.segments.description)\""
@@ -273,8 +273,8 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
                     }
 
                     // Get all inherited types as strings
-                    let inheritedTypeDescriptions = enumDecl.inheritanceClause?.inheritedTypes.map { 
-                        $0.type.description.trimmingCharacters(in: .whitespacesAndNewlines) 
+                    let inheritedTypeDescriptions = enumDecl.inheritanceClause?.inheritedTypes.map {
+                        $0.type.description.trimmingCharacters(in: .whitespacesAndNewlines)
                     } ?? []
 
                     guard inheritedTypeDescriptions.contains("String"),
@@ -317,28 +317,28 @@ enum SchemaDiagnostic: DiagnosticMessage {
 
     var message: String {
         switch self {
-            case .onlyStructs:
-                return "@Schema can only be applied to struct declarations"
-            case .nestedStructNeedsSchema(let structName):
-                return "Nested struct '\(structName)' needs the @Schema annotation"
+        case .onlyStructs:
+            return "@Schema can only be applied to struct declarations"
+        case .nestedStructNeedsSchema(let structName):
+            return "Nested struct '\(structName)' needs the @Schema annotation"
         }
     }
 
     var diagnosticID: MessageID {
         switch self {
-            case .onlyStructs:
-                return MessageID(domain: "SchemaMacro", id: "onlyStructs")
-            case .nestedStructNeedsSchema(_):
-                return MessageID(domain: "SchemaMacro", id: "nestedStructNeedsSchema")
+        case .onlyStructs:
+            return MessageID(domain: "SchemaMacro", id: "onlyStructs")
+        case .nestedStructNeedsSchema:
+            return MessageID(domain: "SchemaMacro", id: "nestedStructNeedsSchema")
         }
     }
 
     var severity: DiagnosticSeverity {
         switch self {
-            case .onlyStructs:
-                return .error
-            case .nestedStructNeedsSchema(_):
-                return .warning
+        case .onlyStructs:
+            return .error
+        case .nestedStructNeedsSchema:
+            return .warning
         }
     }
-} 
+}

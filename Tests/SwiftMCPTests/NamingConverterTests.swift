@@ -192,7 +192,7 @@ struct NamingConverterTests {
             ("XcodeWrite", "xcodeWrite"),
             ("BuildProject", "buildProject"),
             ("XcodeRefreshCodeIssuesInFile", "xcodeRefreshCodeIssuesInFile"),
-            ("XcodeMV", "xcodeMv"),
+            ("XcodeMV", "xcodeMv")
         ]
 
         for (tool, expected) in expectations {

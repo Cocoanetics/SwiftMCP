@@ -17,19 +17,19 @@ struct MCPCommand: AsyncParsableCommand {
         abstract: "Expose AppIntents as MCP tools over multiple transports",
         discussion: """
   Expose AppIntents as MCP tools.
-  
+
   The command can operate in three modes:
-  
+
   1. stdio:
      - Reads JSON-RPC requests from stdin
      - Writes responses to stdout
      - Example: SwiftMCPIntentsDemo stdio
-  
+
   2. httpsse:
      - Starts an HTTP server with Server-Sent Events (SSE) support
      - Supports bearer token authentication and OpenAPI endpoints
      - Example: SwiftMCPIntentsDemo httpsse --port 8080 --openapi
-  
+
   3. tcp:
      - Starts a TCP server with Bonjour discovery (_mcp._tcp)
      - Example: SwiftMCPIntentsDemo tcp --name "SwiftMCP Intents Demo"
@@ -43,14 +43,14 @@ struct MCPCommand: AsyncParsableCommand {
         abstract: "Expose AppIntents as MCP tools over multiple transports",
         discussion: """
   Expose AppIntents as MCP tools.
-  
+
   The command can operate in two modes:
-  
+
   1. stdio:
      - Reads JSON-RPC requests from stdin
      - Writes responses to stdout
      - Example: SwiftMCPIntentsDemo stdio
-  
+
   2. httpsse:
      - Starts an HTTP server with Server-Sent Events (SSE) support
      - Supports bearer token authentication and OpenAPI endpoints
@@ -61,4 +61,3 @@ struct MCPCommand: AsyncParsableCommand {
     )
 #endif
 }
-

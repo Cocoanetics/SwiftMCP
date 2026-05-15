@@ -89,12 +89,12 @@ public struct MCPToolMacro: PeerMacro {
         var hintsFromOptionSet: [String] = []
 
         // Annotation hint arguments from legacy Bool? API (nil by default)
-        var readOnlyHintArg: String? = nil
-        var destructiveHintArg: String? = nil
-        var idempotentHintArg: String? = nil
-        var openWorldHintArg: String? = nil
+        var readOnlyHintArg: String?
+        var destructiveHintArg: String?
+        var idempotentHintArg: String?
+        var openWorldHintArg: String?
 
-        var customName: String? = nil
+        var customName: String?
 
         if let arguments = node.arguments?.as(LabeledExprListSyntax.self) {
             for argument in arguments {
@@ -190,7 +190,7 @@ nonisolated private let __mcpMetadata_\(functionName) = MCPToolMetadata(
         for detail in commonMetadata.parameters {
             // Use the original parameter type string (detail.type), which includes optional markers.
             wrapperFuncString += """
-			
+
 			   let \(detail.name): \(detail.typeString) = try enrichedArguments.extractValue(named: "\(detail.name)", as: \(detail.typeString).self)
 			"""
         }

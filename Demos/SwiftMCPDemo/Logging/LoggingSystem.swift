@@ -15,13 +15,13 @@ extension LoggingSystem {
             // Create an OSLog-based logger
             let category = label.split(separator: ".").last?.description ?? "default"
             let osLogger = OSLog(subsystem: subsystem, category: category)
-            
+
             // Set log level based on parameter
             var handler = OSLogHandler(label: label, log: osLogger)
             handler.logLevel = logLevel
-            
+
             return handler
         }
     }
 }
-#endif 
+#endif

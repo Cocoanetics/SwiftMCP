@@ -38,4 +38,4 @@ extension Array where Element == MCPToolMetadata {
             )
         }
     }
-} 
+}

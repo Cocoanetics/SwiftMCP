@@ -39,4 +39,4 @@ public struct MCPParameterInfo: Sendable {
         self.defaultValue = defaultValue
         self.isRequired = isRequired
     }
-} 
+}

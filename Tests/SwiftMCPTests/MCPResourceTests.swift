@@ -12,13 +12,13 @@ public enum Temp: String, CaseIterable, Sendable {
 /// Test server with resource functions
 @MCPServer(name: "ResourceTestServer", version: "1.0")
 actor ResourceTestServer {
-    
+
     /// Gets a static configuration resource
     @MCPResource("config://app")
     func getConfig() -> String {
         return "App configuration here"
     }
-    
+
     /// Gets a user profile by ID
     /// - Parameter user_id: The user's unique identifier
     /// - Returns: The user's profile data
@@ -26,7 +26,7 @@ actor ResourceTestServer {
     func getUserProfile(user_id: Int) -> String {
         return "Profile data for user \(user_id)"
     }
-    
+
     /// Gets a user profile with locale
     /// - Parameters:
     ///   - user_id: The user's unique identifier
@@ -36,7 +36,7 @@ actor ResourceTestServer {
     func getLocalizedProfile(user_id: Int, lang: String = "en") -> String {
         return "Profile for user \(user_id) in \(lang)"
     }
-    
+
     /// Gets multiple resources
     @MCPResource("files://list", mimeType: "application/json")
     func getFileList() -> [String] {
@@ -46,23 +46,23 @@ actor ResourceTestServer {
     /// Gets a temperature status based on an enum parameter
     /// - Parameter status_value: The temperature setting (e.g., warm, hot, cold)
     /// - Returns: A string describing the temperature status
-	@MCPResource("test://temperature/{status}")
-	func getTemperatureStatus(status: Temp) -> String {
-		switch status {
-			case .warm:
-				return "The temperature is pleasantly warm."
-			case .hot:
-				return "It's quite hot!"
-			case .cold:
-				return "Brrr, it's cold."
-		}
-	}
-	
-	/// Test resource with multiple URI templates
-	@MCPResource(["api://v1/users/{user_id}", "api://v2/users/{user_id}"])
-	func getMultiVersionUser(user_id: Int) -> String {
-		return "User data for ID \(user_id)"
-	}
+    @MCPResource("test://temperature/{status}")
+    func getTemperatureStatus(status: Temp) -> String {
+        switch status {
+        case .warm:
+            return "The temperature is pleasantly warm."
+        case .hot:
+            return "It's quite hot!"
+        case .cold:
+            return "Brrr, it's cold."
+        }
+    }
+
+    /// Test resource with multiple URI templates
+    @MCPResource(["api://v1/users/{user_id}", "api://v2/users/{user_id}"])
+    func getMultiVersionUser(user_id: Int) -> String {
+        return "User data for ID \(user_id)"
+    }
 }
 
 @Suite("MCP Resource Tests", .tags(.unit))

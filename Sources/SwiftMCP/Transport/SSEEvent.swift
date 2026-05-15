@@ -4,7 +4,7 @@ import Foundation
 enum SSEEvent {
     /// A comment line starting with colon
     case comment(String)
-    
+
     /// A field with name and value
     case field(name: String, value: String, eventName: String? = nil)
 }

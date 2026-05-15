@@ -48,14 +48,14 @@ extension Session {
             // Return empty array when client doesn't support roots
             return []
         }
-        
+
         let response = try await request(method: "roots/list", params: [:])
-        
+
         // Parse the response to extract the roots list
         guard case .response(let responseData) = response else {
             throw MCPServerError.unexpectedMessageType(method: "roots/list")
         }
-        
+
         guard let result = responseData.result,
               let rootsValue = result["roots"] else {
             preconditionFailure("Malformed roots response")

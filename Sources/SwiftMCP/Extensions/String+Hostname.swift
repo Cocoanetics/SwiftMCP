@@ -9,7 +9,6 @@ import Glibc
 
 import Foundation
 
-
 extension String {
 /**
      Get the local hostname for EHLO/HELO commands

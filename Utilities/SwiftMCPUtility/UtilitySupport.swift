@@ -178,29 +178,29 @@ enum UtilitySupport {
             }
 
             switch character {
-                case "\\":
-                    escapeNext = true
-                case "\"":
-                    if !inSingleQuote {
-                        inDoubleQuote.toggle()
-                    } else {
-                        current.append(character)
-                    }
-                case "'":
-                    if !inDoubleQuote {
-                        inSingleQuote.toggle()
-                    } else {
-                        current.append(character)
-                    }
-                case " ", "\t", "\n":
-                    if inSingleQuote || inDoubleQuote {
-                        current.append(character)
-                    } else if !current.isEmpty {
-                        tokens.append(current)
-                        current = ""
-                    }
-                default:
+            case "\\":
+                escapeNext = true
+            case "\"":
+                if !inSingleQuote {
+                    inDoubleQuote.toggle()
+                } else {
                     current.append(character)
+                }
+            case "'":
+                if !inDoubleQuote {
+                    inSingleQuote.toggle()
+                } else {
+                    current.append(character)
+                }
+            case " ", "\t", "\n":
+                if inSingleQuote || inDoubleQuote {
+                    current.append(character)
+                } else if !current.isEmpty {
+                    tokens.append(current)
+                    current = ""
+                }
+            default:
+                current.append(character)
             }
         }
 

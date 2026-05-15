@@ -40,4 +40,4 @@ extension String {
 
         return false
     }
-} 
+}

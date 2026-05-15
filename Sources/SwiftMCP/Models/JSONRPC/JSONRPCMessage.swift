@@ -5,7 +5,6 @@
 //  Created by Oliver Drobnik on 18.03.25.
 //
 
-
 /**
  Enum representing all possible JSON-RPC message types.
  This unifies all JSON-RPC message handling and makes it easier to work with collections
@@ -122,20 +121,20 @@ public enum JSONRPCMessage: Codable, Sendable {
     /// The JSON-RPC protocol version, typically "2.0"
     public var jsonrpc: String {
         switch self {
-            case .request(let data): return data.jsonrpc
-            case .response(let data): return data.jsonrpc
-            case .errorResponse(let data): return data.jsonrpc
-            case .notification(let data): return data.jsonrpc
+        case .request(let data): return data.jsonrpc
+        case .response(let data): return data.jsonrpc
+        case .errorResponse(let data): return data.jsonrpc
+        case .notification(let data): return data.jsonrpc
         }
     }
 
     /// The unique identifier for the message, used to correlate requests and responses
     public var id: JSONRPCID? {
         switch self {
-            case .request(let data): return data.id
-            case .response(let data): return data.id
-            case .errorResponse(let data): return data.id
-            case .notification(_): return nil
+        case .request(let data): return data.id
+        case .response(let data): return data.id
+        case .errorResponse(let data): return data.id
+        case .notification: return nil
         }
     }
 
@@ -225,26 +224,26 @@ public enum JSONRPCMessage: Codable, Sendable {
         var container = encoder.container(keyedBy: CodingKeys.self)
 
         switch self {
-            case .request(let data):
-                try container.encode(data.jsonrpc, forKey: .jsonrpc)
-                try container.encode(data.id, forKey: .id)
-                try container.encode(data.method, forKey: .method)
-                try container.encodeIfPresent(data.params, forKey: .params)
+        case .request(let data):
+            try container.encode(data.jsonrpc, forKey: .jsonrpc)
+            try container.encode(data.id, forKey: .id)
+            try container.encode(data.method, forKey: .method)
+            try container.encodeIfPresent(data.params, forKey: .params)
 
-            case .notification(let data):
-                try container.encode(data.jsonrpc, forKey: .jsonrpc)
-                try container.encode(data.method, forKey: .method)
-                try container.encodeIfPresent(data.params, forKey: .params)
+        case .notification(let data):
+            try container.encode(data.jsonrpc, forKey: .jsonrpc)
+            try container.encode(data.method, forKey: .method)
+            try container.encodeIfPresent(data.params, forKey: .params)
 
-            case .response(let data):
-                try container.encode(data.jsonrpc, forKey: .jsonrpc)
-                try container.encode(data.id, forKey: .id)
-                try container.encodeIfPresent(data.result, forKey: .result)
+        case .response(let data):
+            try container.encode(data.jsonrpc, forKey: .jsonrpc)
+            try container.encode(data.id, forKey: .id)
+            try container.encodeIfPresent(data.result, forKey: .result)
 
-            case .errorResponse(let data):
-                try container.encode(data.jsonrpc, forKey: .jsonrpc)
-                try container.encodeIfPresent(data.id, forKey: .id)
-                try container.encode(data.error, forKey: .error)
+        case .errorResponse(let data):
+            try container.encode(data.jsonrpc, forKey: .jsonrpc)
+            try container.encodeIfPresent(data.id, forKey: .id)
+            try container.encode(data.error, forKey: .error)
         }
     }
 }

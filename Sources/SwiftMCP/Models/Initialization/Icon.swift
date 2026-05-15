@@ -12,18 +12,18 @@ public struct Icon: Codable, Sendable {
         case light
         case dark
     }
-    
+
     public enum Size: Sendable, Equatable {
         case pixels(width: Int, height: Int)
         case any
     }
-    
+
     public var src: URL
-    
+
     public var mimeType: String?
-    
+
     public var sizes: [Size]?
-    
+
     public var theme: Theme?
 }
 
@@ -46,7 +46,7 @@ extension Icon.Size: Codable {
             self = .pixels(width: width, height: height)
         }
     }
-    
+
     public func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
         switch self {

@@ -1,6 +1,5 @@
 import Foundation
 
-
 /// OpenAPI-related route handlers: AI plugin manifest, OpenAPI spec, and tool call endpoint.
 extension HTTPSSETransport {
 
@@ -18,7 +17,7 @@ extension HTTPSSETransport {
 			HTTPRoute(.GET, "/openapi.json", calling: HTTPSSETransport.handleOpenAPISpec),
 
 			// POST /{serverName}/:toolName — Tool call endpoint
-			HTTPRoute(.POST, "\(serverPath)/:toolName", calling: HTTPSSETransport.handleToolCallAsync),
+			HTTPRoute(.POST, "\(serverPath)/:toolName", calling: HTTPSSETransport.handleToolCallAsync)
 		]
 	}
 
@@ -211,7 +210,7 @@ extension HTTPSSETransport {
 			let data = try! JSONEncoder().encode(err)
 
 			var status: HTTPStatus = .badRequest
-			if let mcpError = error as? MCPToolError, case .unknownTool(_) = mcpError {
+			if let mcpError = error as? MCPToolError, case .unknownTool = mcpError {
 				status = .notFound
 			}
 

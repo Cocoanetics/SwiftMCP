@@ -7,14 +7,14 @@ struct ToolsCommand: AsyncParsableCommand {
         commandName: "tools",
         abstract: "List tools from an MCP server",
         discussion: """
-  Connect to an MCP server using either HTTP+SSE or stdio and list tools.
-
-  Examples:
-    SwiftMCPUtility tools --sse http://localhost:8080/sse
-    SwiftMCPUtility tools --command "npx -y @modelcontextprotocol/server-filesystem"
-    SwiftMCPUtility tools --config mcp.json
-    SwiftMCPUtility tools --sse http://localhost:8080/sse -o tools.json
-"""
+          Connect to an MCP server using either HTTP+SSE or stdio and list tools.
+        
+          Examples:
+            SwiftMCPUtility tools --sse http://localhost:8080/sse
+            SwiftMCPUtility tools --command "npx -y @modelcontextprotocol/server-filesystem"
+            SwiftMCPUtility tools --config mcp.json
+            SwiftMCPUtility tools --sse http://localhost:8080/sse -o tools.json
+        """
     )
 
     @OptionGroup
@@ -74,98 +74,98 @@ struct ToolsCommand: AsyncParsableCommand {
 
     private func appendSchemaDetails(_ schema: JSONSchema, to lines: inout [String]) {
         switch schema {
-            case .object(let object, _):
-                if object.properties.isEmpty {
-                    lines.append("  Parameters: none")
-                    return
-                }
+        case .object(let object, _):
+            if object.properties.isEmpty {
+                lines.append("  Parameters: none")
+                return
+            }
 
-                let required = Set(object.required)
-                lines.append("  Parameters:")
-                for name in object.properties.keys.sorted() {
-                    guard let propertySchema = object.properties[name] else { continue }
-                    let requiredSuffix = required.contains(name) ? " (required)" : " (optional)"
-                    let typeDescription = describeSchema(propertySchema)
-                    let detail = schemaDescription(propertySchema)
-                    if let detail, !detail.isEmpty {
-                        lines.append("    - \(name)\(requiredSuffix): \(typeDescription) - \(detail)")
-                    } else {
-                        lines.append("    - \(name)\(requiredSuffix): \(typeDescription)")
-                    }
+            let required = Set(object.required)
+            lines.append("  Parameters:")
+            for name in object.properties.keys.sorted() {
+                guard let propertySchema = object.properties[name] else { continue }
+                let requiredSuffix = required.contains(name) ? " (required)" : " (optional)"
+                let typeDescription = describeSchema(propertySchema)
+                let detail = schemaDescription(propertySchema)
+                if let detail, !detail.isEmpty {
+                    lines.append("    - \(name)\(requiredSuffix): \(typeDescription) - \(detail)")
+                } else {
+                    lines.append("    - \(name)\(requiredSuffix): \(typeDescription)")
                 }
-            default:
-                lines.append("  Input schema: \(describeSchema(schema))")
+            }
+        default:
+            lines.append("  Input schema: \(describeSchema(schema))")
         }
     }
 
     private func appendOutputSchemaDetails(_ schema: JSONSchema, to lines: inout [String]) {
         switch schema {
-            case .object(let object, _):
-                if object.properties.isEmpty {
-                    lines.append("  Returns: object")
-                    return
-                }
+        case .object(let object, _):
+            if object.properties.isEmpty {
+                lines.append("  Returns: object")
+                return
+            }
 
-                let required = Set(object.required)
-                lines.append("  Returns:")
-                for name in object.properties.keys.sorted() {
-                    guard let propertySchema = object.properties[name] else { continue }
-                    let requiredSuffix = required.contains(name) ? " (required)" : " (optional)"
-                    let typeDescription = describeSchema(propertySchema)
-                    let detail = schemaDescription(propertySchema)
-                    if let detail, !detail.isEmpty {
-                        lines.append("    - \(name)\(requiredSuffix): \(typeDescription) - \(detail)")
-                    } else {
-                        lines.append("    - \(name)\(requiredSuffix): \(typeDescription)")
-                    }
+            let required = Set(object.required)
+            lines.append("  Returns:")
+            for name in object.properties.keys.sorted() {
+                guard let propertySchema = object.properties[name] else { continue }
+                let requiredSuffix = required.contains(name) ? " (required)" : " (optional)"
+                let typeDescription = describeSchema(propertySchema)
+                let detail = schemaDescription(propertySchema)
+                if let detail, !detail.isEmpty {
+                    lines.append("    - \(name)\(requiredSuffix): \(typeDescription) - \(detail)")
+                } else {
+                    lines.append("    - \(name)\(requiredSuffix): \(typeDescription)")
                 }
-            default:
-                lines.append("  Returns: \(describeSchema(schema))")
+            }
+        default:
+            lines.append("  Returns: \(describeSchema(schema))")
         }
     }
 
     private func describeSchema(_ schema: JSONSchema) -> String {
         switch schema {
-            case .string(_, _, let format, _, _, _):
-                if let format, !format.isEmpty {
-                    return "string (\(format))"
-                }
-                return "string"
-            case .number:
-                return "number"
-            case .boolean:
-                return "boolean"
-            case .array(let items, _, _, _):
-                return "array<\(describeSchema(items))>"
-            case .object:
-                return "object"
-            case .enum(let values, _, _, _, _):
-                if values.isEmpty {
-                    return "enum"
-                }
-                return "enum [\(values.joined(separator: ", "))]"
-            case .oneOf(let schemas, _, _):
-                let items = schemas.map(describeSchema).joined(separator: " | ")
-                return "oneOf<\(items)>"
+        case .string(_, _, let format, _, _, _):
+            if let format, !format.isEmpty {
+                return "string (\(format))"
+            }
+            return "string"
+        case .number:
+            return "number"
+        case .boolean:
+            return "boolean"
+        case .array(let items, _, _, _):
+            return "array<\(describeSchema(items))>"
+        case .object:
+            return "object"
+        case .enum(let values, _, _, _, _):
+            if values.isEmpty {
+                return "enum"
+            }
+            return "enum [\(values.joined(separator: ", "))]"
+        case .oneOf(let schemas, _, _):
+            let items = schemas.map(describeSchema).joined(separator: " | ")
+            return "oneOf<\(items)>"
         }
     }
 
     private func schemaDescription(_ schema: JSONSchema) -> String? {
         switch schema {
-            case .string(_, let description, _, _, _, _):
-                return description
-            case .number(_, let description, _, _, _):
-                return description
-            case .boolean(_, let description, _):
-                return description
-            case .array(_, _, let description, _):
-                return description
-            case .object(let object, _):
-                return object.description
-            case .enum(_, _, let description, _, _):
-                return description
-            case .oneOf(_, _, let description):
-                return description
+        case .string(_, let description, _, _, _, _):
+            return description
+        case .number(_, let description, _, _, _):
+            return description
+        case .boolean(_, let description, _):
+            return description
+        case .array(_, _, let description, _):
+            return description
+        case .object(let object, _):
+            return object.description
+        case .enum(_, _, let description, _, _):
+            return description
+        case .oneOf(_, _, let description):
+            return description
         }
     }
 }

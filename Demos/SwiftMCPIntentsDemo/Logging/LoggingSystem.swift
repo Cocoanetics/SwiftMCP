@@ -16,13 +16,12 @@ extension LoggingSystem {
         bootstrap { label in
             let category = label.split(separator: ".").last?.description ?? "default"
             let osLogger = OSLog(subsystem: subsystem, category: category)
-            
+
             var handler = OSLogHandler(label: label, log: osLogger)
             handler.logLevel = logLevel
-            
+
             return handler
         }
     }
 }
 #endif
-

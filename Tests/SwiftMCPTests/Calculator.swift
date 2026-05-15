@@ -14,7 +14,7 @@ class Calculator {
 	func add(a: Int, b: Int) -> Int {
 		return a + b
 	}
-	
+
 	/// Subtracts the second integer from the first and returns the difference
 	/// - Parameter a: Number to subtract from
 	/// - Parameter b: Number to subtract
@@ -23,7 +23,7 @@ class Calculator {
 	func subtract(a: Int, b: Int = 3) -> Int {
 		return a - b
 	}
-	
+
 	/**
 	 Tests array processing
 	 - Parameter a: Array of integers to process
@@ -33,7 +33,7 @@ class Calculator {
 	func testArray(a: [Int]) -> String {
 		return a.map(String.init).joined(separator: ", ")
 	}
-	
+
 	/**
 	 Multiplies two integers and returns their product
 	 - Parameter a: First factor
@@ -44,7 +44,7 @@ class Calculator {
 	func multiply(a: Int, b: Int) -> Int {
 		return a * b
 	}
-	
+
 	/// Divides the numerator by the denominator and returns the quotient
 	/// - Parameter numerator: Number to be divided
 	/// - Parameter denominator: Number to divide by (defaults to 1.0)
@@ -53,7 +53,7 @@ class Calculator {
 	func divide(numerator: Double, denominator: Double = 1.0) -> Double {
 		return numerator / denominator
 	}
-	
+
 	/// Returns a greeting message with the provided name
 	/// - Parameter name: Name of the person to greet
 	/// - Returns: The greeting message
@@ -63,28 +63,27 @@ class Calculator {
 		if name.count < 2 {
 			throw DemoError.nameTooShort(name: name)
 		}
-		
+
 		// Validate name contains only letters and spaces
 		if !name.allSatisfy({ $0.isLetter || $0.isWhitespace }) {
 			throw DemoError.invalidName(name: name)
 		}
-		
+
 		return "Hello, \(name)!"
 	}
 
-	
 	/** A simple ping function that returns 'pong' */
 	@MCPTool
 	func ping() -> String {
 		return "pong"
 	}
-	
+
 	/** A function to test doing nothing, not returning anything*/
 	@MCPTool
 	func noop() {
-		
+
 	}
-	
+
 	/**
 	  Gets the current date/time on the server
 	 - Returns: The current time

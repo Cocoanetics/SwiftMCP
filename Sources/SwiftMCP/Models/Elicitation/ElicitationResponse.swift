@@ -13,13 +13,13 @@ public struct ElicitationCreateResponse: Codable, Sendable {
 
     /// The action taken by the user.
     public let action: Action
-    
+
     /// The submitted data matching the requested schema (present for accept action).
     /// This field contains the user's responses when action is "accept".
     public let content: JSONDictionary?
-    
+
     public init(action: Action, content: JSONDictionary? = nil) {
         self.action = action
         self.content = content
     }
-} 
+}

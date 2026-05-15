@@ -48,12 +48,12 @@ struct PrototypeRunner {
         }
 
         print("\n=== Dispatching tools ===")
-        try await invokeTool(server, "greet",     args: ["name": .string("World")])
-        try await invokeTool(server, "add",       args: ["a": .integer(7),  "b": .integer(5)])
-        try await invokeTool(server, "multiply",  args: ["a": .integer(6),  "b": .integer(7)])
-        try await invokeTool(server, "shout",     args: ["text": .string("hello")])
+        try await invokeTool(server, "greet", args: ["name": .string("World")])
+        try await invokeTool(server, "add", args: ["a": .integer(7), "b": .integer(5)])
+        try await invokeTool(server, "multiply", args: ["a": .integer(6), "b": .integer(7)])
+        try await invokeTool(server, "shout", args: ["text": .string("hello")])
         #if os(macOS) || os(Linux) || os(Windows) || os(iOS)
-        try await invokeTool(server, "subtract",  args: ["a": .integer(10), "b": .integer(4)])
+        try await invokeTool(server, "subtract", args: ["a": .integer(10), "b": .integer(4)])
         #endif
 
         print("\n=== Dispatching resources ===")

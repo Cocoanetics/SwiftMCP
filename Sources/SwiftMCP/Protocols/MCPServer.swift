@@ -13,28 +13,28 @@ import Foundation
  - Server metadata
  */
 public protocol MCPServer {
-/**
+    /**
      The name of the server.
      
      This name is used to identify the server in communications and logging.
      */
     var serverName: String { get }
 
-/**
+    /**
      The version of the server.
      
      This version string helps clients understand the server's capabilities and compatibility.
      */
     var serverVersion: String { get }
 
-/**
+    /**
      The description of the server.
      
      An optional description providing more details about the server's purpose and capabilities.
      */
     var serverDescription: String? { get }
 
-/**
+    /**
      Handles a JSON-RPC message and generates an appropriate response.
      
      - Parameter message: The JSON-RPC message to handle
@@ -48,7 +48,7 @@ public protocol MCPServer {
 
 // MARK: - Default Implementations
 public extension MCPServer {
-/**
+    /**
      Default implementation for handling JSON-RPC messages.
      
      This implementation supports the following message types:
@@ -75,22 +75,22 @@ public extension MCPServer {
         return await context.work { _ in
             // First switch on message type
             switch message {
-                case .request(let requestData):
-                    return await handleRequest(requestData)
+            case .request(let requestData):
+                return await handleRequest(requestData)
 
-                case .notification(let notificationData):
-                    return await handleNotification(notificationData)
+            case .notification(let notificationData):
+                return await handleNotification(notificationData)
 
-                case .response(let responseData):
-                    return await handleResponse(responseData)
+            case .response(let responseData):
+                return await handleResponse(responseData)
 
-                case .errorResponse(let errorResponseData):
-                    return await handleErrorResponse(errorResponseData)
+            case .errorResponse(let errorResponseData):
+                return await handleErrorResponse(errorResponseData)
             }
         }
     }
 
-/**
+    /**
      Handles JSON-RPC requests that expect responses.
      
      - Parameter requestData: The request data
@@ -99,54 +99,52 @@ public extension MCPServer {
     private func handleRequest(_ requestData: JSONRPCMessage.JSONRPCRequestData) async -> JSONRPCMessage? {
         // Prepare the response based on the method
         switch requestData.method {
-            case "initialize":
-                return await handleInitializeRequest(requestData)
+        case "initialize":
+            return await handleInitializeRequest(requestData)
 
-            case "ping":
-                return createPingResponse(id: requestData.id)
+        case "ping":
+            return createPingResponse(id: requestData.id)
 
-            case "tools/list":
-                return createToolsListResponse(id: requestData.id)
+        case "tools/list":
+            return createToolsListResponse(id: requestData.id)
 
-            case "resources/list":
-                return await createResourcesListResponse(id: requestData.id)
+        case "resources/list":
+            return await createResourcesListResponse(id: requestData.id)
 
-            case "resources/templates/list":
-                return await createResourceTemplatesListResponse(id: requestData.id)
+        case "resources/templates/list":
+            return await createResourceTemplatesListResponse(id: requestData.id)
 
-            case "resources/read":
-                return await createResourcesReadResponse(id: requestData.id, request: requestData)
+        case "resources/read":
+            return await createResourcesReadResponse(id: requestData.id, request: requestData)
 
-            case "resources/subscribe":
-                return await handleResourceSubscribe(requestData)
+        case "resources/subscribe":
+            return await handleResourceSubscribe(requestData)
 
-            case "resources/unsubscribe":
-                return await handleResourceUnsubscribe(requestData)
+        case "resources/unsubscribe":
+            return await handleResourceUnsubscribe(requestData)
 
-            case "prompts/list":
-                return createPromptsListResponse(id: requestData.id)
+        case "prompts/list":
+            return createPromptsListResponse(id: requestData.id)
 
-            case "prompts/get":
-                return await handlePromptGet(requestData)
+        case "prompts/get":
+            return await handlePromptGet(requestData)
 
-            case "completion/complete":
-                return await handleCompletion(requestData)
+        case "completion/complete":
+            return await handleCompletion(requestData)
 
-            case "tools/call":
-                return await handleToolCall(requestData)
+        case "tools/call":
+            return await handleToolCall(requestData)
 
-            case "logging/setLevel":
-                return await handleLoggingSetLevel(requestData)
+        case "logging/setLevel":
+            return await handleLoggingSetLevel(requestData)
 
-
-
-            default:
-                // Respond with JSON-RPC error for method not found
-                return JSONRPCMessage.errorResponse(id: requestData.id, error: .init(code: -32601, message: "Method not found"))
+        default:
+            // Respond with JSON-RPC error for method not found
+            return JSONRPCMessage.errorResponse(id: requestData.id, error: .init(code: -32601, message: "Method not found"))
         }
     }
 
-/**
+    /**
      Handles JSON-RPC notifications (no response expected).
      
      - Parameter notificationData: The notification data
@@ -154,29 +152,29 @@ public extension MCPServer {
      */
     private func handleNotification(_ notificationData: JSONRPCMessage.JSONRPCNotificationData) async -> JSONRPCMessage? {
         switch notificationData.method {
-            case "notifications/initialized":
-                // Client has completed initialization
-                return nil
+        case "notifications/initialized":
+            // Client has completed initialization
+            return nil
 
-            case "notifications/cancelled":
-                // Client has cancelled a request
-                return nil
+        case "notifications/cancelled":
+            // Client has cancelled a request
+            return nil
 
-            case "notifications/roots/list_changed":
-                // Client's root list has changed
-                await self.handleRootsListChanged()
-                return nil
+        case "notifications/roots/list_changed":
+            // Client's root list has changed
+            await self.handleRootsListChanged()
+            return nil
 
-            default:
-                // Unknown notification - log it but don't respond
-                return nil
+        default:
+            // Unknown notification - log it but don't respond
+            return nil
         }
     }
-    
+
     /// Handles the roots list changed notification by retrieving the updated roots list.
     func handleRootsListChanged() async {}
 
-/**
+    /**
      Handles JSON-RPC responses from other parties.
      
      - Parameter responseData: The response data
@@ -191,7 +189,7 @@ public extension MCPServer {
         return nil
     }
 
-/**
+    /**
      Handles JSON-RPC error responses from other parties.
      
      - Parameter errorResponseData: The error response data
@@ -206,7 +204,7 @@ public extension MCPServer {
         return nil
     }
 
-/**
+    /**
      Handles an initialization request from the client.
      
      This processes the client capabilities and client info, stores them in the current session,
@@ -233,10 +231,10 @@ public extension MCPServer {
                 await Session.current?.setAccessToken(accessToken)
             }
         }
-        
+
         return createInitializeResponse(id: request.id, protocolVersion: negotiatedProtocolVersion)
     }
-    
+
     private func extractAndStoreCapabilities(_ request: JSONRPCMessage.JSONRPCRequestData) async {
         if let params = request.params,
            let capabilitiesValue = params["capabilities"],
@@ -257,7 +255,7 @@ public extension MCPServer {
         }
     }
 
-/**
+    /**
      Creates an initialization response for the server.
      
      The response includes:
@@ -300,8 +298,6 @@ public extension MCPServer {
             capabilities.logging = .init(enabled: true)
         }
 
-
-
         // Advertise completion support
         capabilities.completions = .object([:])
 
@@ -326,7 +322,7 @@ public extension MCPServer {
         }
     }
 
-/**
+    /**
      Handles a tool execution request.
      
      - Parameter request: The JSON-RPC request containing the tool call details
@@ -393,30 +389,30 @@ public extension MCPServer {
                 resultPayload["content"] = try JSONValue(encoding: [content])
                 return JSONRPCMessage.response(id: request.id, result: resultPayload)
             } else if let contents = wrappedResult as? [MCPText],
-                      (expectsToolResult || !contents.isEmpty) {
+                      expectsToolResult || !contents.isEmpty {
                 resultPayload["content"] = try JSONValue(encoding: contents)
                 return JSONRPCMessage.response(id: request.id, result: resultPayload)
             } else if let contents = wrappedResult as? [MCPImage],
-                      (expectsToolResult || !contents.isEmpty) {
+                      expectsToolResult || !contents.isEmpty {
                 resultPayload["content"] = try JSONValue(encoding: contents)
                 return JSONRPCMessage.response(id: request.id, result: resultPayload)
             } else if let contents = wrappedResult as? [MCPAudio],
-                      (expectsToolResult || !contents.isEmpty) {
+                      expectsToolResult || !contents.isEmpty {
                 resultPayload["content"] = try JSONValue(encoding: contents)
                 return JSONRPCMessage.response(id: request.id, result: resultPayload)
             } else if let contents = wrappedResult as? [MCPResourceLink],
-                      (expectsToolResult || !contents.isEmpty) {
+                      expectsToolResult || !contents.isEmpty {
                 resultPayload["content"] = try JSONValue(encoding: contents)
                 return JSONRPCMessage.response(id: request.id, result: resultPayload)
             } else if let contents = wrappedResult as? [MCPEmbeddedResource],
-                      (expectsToolResult || !contents.isEmpty) {
+                      expectsToolResult || !contents.isEmpty {
                 resultPayload["content"] = try JSONValue(encoding: contents)
                 return JSONRPCMessage.response(id: request.id, result: resultPayload)
             } else if let resource = wrappedResult as? MCPResourceContent {
                 resultPayload["content"] = try JSONValue(encoding: [MCPEmbeddedResource(resource: resource)])
                 return JSONRPCMessage.response(id: request.id, result: resultPayload)
             } else if let resources = wrappedResult as? [MCPResourceContent],
-                      (expectsToolResult || !resources.isEmpty) {
+                      expectsToolResult || !resources.isEmpty {
                 let contents = resources.map { MCPEmbeddedResource(resource: $0) }
                 resultPayload["content"] = try JSONValue(encoding: contents)
                 return JSONRPCMessage.response(id: request.id, result: resultPayload)
@@ -464,7 +460,6 @@ public extension MCPServer {
             )
         }
     }
-
 
     /// Handles a prompt get request
     private func handlePromptGet(_ request: JSONRPCMessage.JSONRPCRequestData) async -> JSONRPCMessage? {
@@ -559,21 +554,21 @@ public extension MCPServer {
         return JSONRPCMessage.response(id: request.id, result: ["completion": .object(["values": .array([])])])
     }
 
-/**
+    /**
      The server's name, derived from the `@MCPServer` macro.
      */
     var serverName: String {
         Mirror(reflecting: self).children.first(where: { $0.label == "__mcpServerName" })?.value as? String ?? "UnknownServer"
     }
 
-/**
+    /**
      The server's version, derived from the `@MCPServer` macro.
      */
     var serverVersion: String {
         Mirror(reflecting: self).children.first(where: { $0.label == "__mcpServerVersion" })?.value as? String ?? "UnknownVersion"
     }
 
-/**
+    /**
      The server's description, derived from the `@MCPServer` macro.
      */
     var serverDescription: String? {
@@ -582,22 +577,21 @@ public extension MCPServer {
 
     // MARK: - List Responses
 
-/**
-	 Creates a response listing all available tools.
+    /**
+     Creates a response listing all available tools.
 	 
-	 - Parameter id: The request ID to include in the response
-	 - Returns: A JSON-RPC message containing the tools list
-	 */
+     - Parameter id: The request ID to include in the response
+     - Returns: A JSON-RPC message containing the tools list
+     */
     private func createToolsListResponse(id: JSONRPCID) -> JSONRPCMessage {
 
-        guard let toolProvider = self as? MCPToolProviding else
-		{
+        guard let toolProvider = self as? MCPToolProviding else {
             return JSONRPCMessage.response(id: id, result: [
-				"content": [
-					["type": "text", "text": "Server does not provide any tools"]
-				],
-				"isError": true
-			])
+                "content": [
+                    ["type": "text", "text": "Server does not provide any tools"]
+                ],
+                "isError": true
+            ])
         }
 
         if let tools = try? JSONValue(encoding: toolProvider.mcpToolMetadata.convertedToTools()) {
@@ -622,22 +616,21 @@ public extension MCPServer {
         return JSONRPCMessage.errorResponse(id: id, error: .init(code: -32603, message: "Failed to encode prompts list"))
     }
 
-/**
-	 Creates a response listing all available resources.
+    /**
+     Creates a response listing all available resources.
 	 
-	 - Parameter id: The request ID to include in the response
-	 - Returns: A JSON-RPC message containing the resources list
-	 */
+     - Parameter id: The request ID to include in the response
+     - Returns: A JSON-RPC message containing the resources list
+     */
     func createResourcesListResponse(id: JSONRPCID) async -> JSONRPCMessage {
 
-        guard let resourceProvider = self as? MCPResourceProviding else
-		{
+        guard let resourceProvider = self as? MCPResourceProviding else {
             return JSONRPCMessage.response(id: id, result: [
-				"content": [
-					["type": "text", "text": "Server does not provide any resources"]
-				],
-				"isError": true
-			])
+                "content": [
+                    ["type": "text", "text": "Server does not provide any resources"]
+                ],
+                "isError": true
+            ])
         }
 
         /// get resources from templates that have no parameters plus developer provided array
@@ -656,7 +649,7 @@ public extension MCPServer {
         return JSONRPCMessage.errorResponse(id: id, error: .init(code: -32603, message: "Failed to encode resources list"))
     }
 
-/**
+    /**
      Creates a response for a resource read request.
      
      - Parameters:
@@ -666,19 +659,18 @@ public extension MCPServer {
      */
     func createResourcesReadResponse(id: JSONRPCID, request: JSONRPCMessage.JSONRPCRequestData) async -> JSONRPCMessage {
 
-        guard let resourceProvider = self as? MCPResourceProviding else
-		{
+        guard let resourceProvider = self as? MCPResourceProviding else {
             return JSONRPCMessage.response(id: id, result: [
-				"content": [
-					["type": "text", "text": "Server does not provide any resources"]
-				],
-				"isError": true
-			])
+                "content": [
+                    ["type": "text", "text": "Server does not provide any resources"]
+                ],
+                "isError": true
+            ])
         }
 
         // Extract the URI from the request params
         guard let uriString = request.params?["uri"]?.stringValue,
-				  let uri = URL(string: uriString) else {
+              let uri = URL(string: uriString) else {
             return JSONRPCMessage.errorResponse(id: id, error: .init(code: -32602, message: "Invalid or missing URI parameter"))
         }
 
@@ -686,8 +678,7 @@ public extension MCPServer {
             // Try to get the resource content
             let resourceContentArray = try await resourceProvider.getResource(uri: uri)
 
-            if !resourceContentArray.isEmpty
-				{
+            if !resourceContentArray.isEmpty {
                 let contents = try resourceContentArray.map { try JSONValue(encoding: $0) }
                 return JSONRPCMessage.response(id: id, result: ["contents": .array(contents)])
             } else {
@@ -698,7 +689,7 @@ public extension MCPServer {
         }
     }
 
-/**
+    /**
      Creates a response listing all available resource templates.
      
      - Parameter id: The request ID to include in the response
@@ -706,14 +697,13 @@ public extension MCPServer {
      */
     func createResourceTemplatesListResponse(id: JSONRPCID) async -> JSONRPCMessage {
 
-        guard let resourceProvider = self as? MCPResourceProviding else
-		{
+        guard let resourceProvider = self as? MCPResourceProviding else {
             return JSONRPCMessage.response(id: id, result: [
-				"content": [
-					["type": "text", "text": "Server does not provide any resource templates"]
-				],
-				"isError": true
-			])
+                "content": [
+                    ["type": "text", "text": "Server does not provide any resource templates"]
+                ],
+                "isError": true
+            ])
         }
 
         let templates = await resourceProvider.mcpResourceTemplates
@@ -731,7 +721,7 @@ public extension MCPServer {
         return JSONRPCMessage.errorResponse(id: id, error: .init(code: -32603, message: "Failed to encode resource templates list"))
     }
 
-/**
+    /**
      Creates a ping response with empty result.
      
      - Parameter id: The request ID to include in the response
@@ -821,17 +811,16 @@ public extension MCPServer {
 
     // MARK: - Internal Helpers
 
-/**
-	 Provides metadata for a function annotated with `@MCPTool`.
+    /**
+     Provides metadata for a function annotated with `@MCPTool`.
 	 
-	 - Parameter toolName: The name of the tool
-	 - Returns: The metadata for the tool
+     - Parameter toolName: The name of the tool
+     - Returns: The metadata for the tool
 	 
-	 This property uses runtime reflection to gather tool metadata from properties
-	 generated by the `@MCPTool` macro.
-	 */
-    func mcpToolMetadata(for toolName: String) -> MCPToolMetadata?
-        {
+     This property uses runtime reflection to gather tool metadata from properties
+     generated by the `@MCPTool` macro.
+     */
+    func mcpToolMetadata(for toolName: String) -> MCPToolMetadata? {
         let metadataKey = "__mcpMetadata_\(toolName)"
         let mirror = Mirror(reflecting: self)
 
@@ -852,12 +841,12 @@ public extension MCPServer {
         }
 
         #if canImport(AppIntents)
-        if #available(macOS 13.0, iOS 16.0, tvOS 16.0, watchOS 9.0, *) {
-            if let providerType = Self.self as? MCPAppShortcutsProvider.Type {
-                let shortcutMetadata = MCPAppIntentTools.toolMetadata(for: providerType)
-                return shortcutMetadata.first(where: { $0.name == toolName })
+            if #available(macOS 13.0, iOS 16.0, tvOS 16.0, watchOS 9.0, *) {
+                if let providerType = Self.self as? MCPAppShortcutsProvider.Type {
+                    let shortcutMetadata = MCPAppIntentTools.toolMetadata(for: providerType)
+                    return shortcutMetadata.first(where: { $0.name == toolName })
+                }
             }
-        }
         #endif
 
         return nil

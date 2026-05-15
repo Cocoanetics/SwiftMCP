@@ -8,17 +8,15 @@
 import SwiftMCP
 
 extension DemoServer: MCPCompletionProviding {
-    
-    func completion(for parameter: MCPParameterInfo, in context: MCPCompletionContext, prefix: String) async -> CompleteResult.Completion
-    {
+
+    func completion(for parameter: MCPParameterInfo, in context: MCPCompletionContext, prefix: String) async -> CompleteResult.Completion {
         // provide completion for any query
-        if parameter.name == "query"
-        {
+        if parameter.name == "query" {
             let values = ["Oliver", "Sylvia", "Max"].sortedByBestCompletion(prefix: prefix)
-            
+
             return .init(values: values, total: values.count, hasMore: false)
         }
-        
+
         // return default otherwise
         let completions = parameter.defaultCompletions.sortedByBestCompletion(prefix: prefix)
         return CompleteResult.Completion(values: completions, total: completions.count, hasMore: false)

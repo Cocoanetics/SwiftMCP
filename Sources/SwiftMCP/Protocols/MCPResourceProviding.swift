@@ -63,9 +63,7 @@ public protocol MCPResourceProviding {
 	 */
     func getNonTemplateResource(uri: URL) async throws -> [MCPResourceContent]
 
-
 }
-
 
 extension MCPResourceProviding {
 
@@ -77,8 +75,7 @@ extension MCPResourceProviding {
     }
 
     /// Resource templates with zero parameters are listed together with mcpResources
-    var mcpStaticResources: [MCPResource]
-	{
+    var mcpStaticResources: [MCPResource] {
         // Find the resources without parameters
         let mirror = Mirror(reflecting: self)
 
@@ -93,8 +90,7 @@ extension MCPResourceProviding {
                 return nil
             }
 
-            guard metadata.parameters.isEmpty else
-			{
+            guard metadata.parameters.isEmpty else {
                 return nil
             }
 

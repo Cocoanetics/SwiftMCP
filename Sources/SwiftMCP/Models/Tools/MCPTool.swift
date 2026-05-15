@@ -47,7 +47,7 @@ public struct MCPTool: Sendable {
         self.outputSchema = outputSchema
         self.annotations = annotations
     }
-} 
+}
 
 /**
  Extension to make MCPTool conform to Codable

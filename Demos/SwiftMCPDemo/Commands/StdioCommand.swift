@@ -27,56 +27,52 @@ struct StdioCommand: AsyncParsableCommand {
         abstract: "Read JSON-RPC requests from stdin and write responses to stdout",
         discussion: """
   Read JSON-RPC requests from stdin and write responses to stdout.
-  
+
   This mode is perfect for integration with other tools via pipes.
-  
+
   Examples:
     # Basic usage
     SwiftMCPDemo stdio
-    
+
     # With pipe
     echo '{"jsonrpc": "2.0", "method": "add", "params": [1, 2]}' | SwiftMCPDemo stdio
 """
     )
-    
+
 	func run() async throws {
 #if canImport(OSLog)
         LoggingSystem.bootstrapWithOSLog()
 #endif
-        
+
         let calculator = DemoServer()
-        
+
         do {
             // need to output to stderror or else npx complains
 			logToStderr("MCP Server \(calculator.serverName) (\(calculator.serverVersion)) started with Stdio transport")
-			
+
             let transport = StdioTransport(server: calculator)
             try await transport.run()
-        }
-        catch let error as TransportError {
+        } catch let error as TransportError {
             // Handle transport errors
             let errorMessage = """
                 Transport Error: \(error.localizedDescription)
                 """
 			logToStderr(errorMessage)
             Foundation.exit(1)
-        }
-        catch let error as ChannelError {
+        } catch let error as ChannelError {
             // Handle specific channel errors
 			logToStderr("Channel Error: \(error)")
             Foundation.exit(1)
-        }
-        catch {
+        } catch {
             // Handle any other errors
 			logToStderr("Error: \(error)")
             Foundation.exit(1)
         }
     }
-} 
+}
 
 /// Function to log a message to stderr
 func logToStderr(_ message: String) {
 	guard let data = (message + "\n").data(using: .utf8) else { return }
 	try? FileHandle.standardError.write(contentsOf: data)
 }
-

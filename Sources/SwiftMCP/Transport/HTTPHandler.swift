@@ -6,7 +6,6 @@ import FoundationNetworking
 import NIOHTTP1
 import Logging
 
-
 /// HTTP request handler for the SSE transport.
 ///
 /// Manages the NIO state machine and dispatches to the router.
@@ -176,7 +175,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
 
             channel.writeAndFlush(HTTPServerResponsePart.end(nil), promise: nil)
         } else {
-            var body: ByteBuffer? = nil
+            var body: ByteBuffer?
             if let data = response.body {
                 body = channel.allocator.buffer(data: data)
             }

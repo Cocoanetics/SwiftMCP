@@ -4,14 +4,14 @@ import SwiftMCP
 /// A simple weather report response
 @Schema
 struct WeatherReport: Sendable, Codable {
-	/// Temperature in celsius
-	let temperature: Double
-	/// Weather conditions description
-	let conditions: String
-	/// Humidity percentage
-	let humidity: Double
-	/// Location for the report
-	let location: String
+    /// Temperature in celsius
+    let temperature: Double
+    /// Weather conditions description
+    let conditions: String
+    /// Humidity percentage
+    let humidity: Double
+    /// Location for the report
+    let location: String
 }
 
 /**
@@ -21,359 +21,357 @@ struct WeatherReport: Sendable, Codable {
  */
 @MCPServer(name: "SwiftMCP Demo", generateClient: true)
 actor DemoServer {
-	
+
     // MARK: - Tools
-    
-	/**
-	 Gets the current date/time on the server
-	 - Returns: The current time
-	 */
-	@MCPTool(hints: [.readOnly])
-	func getCurrentDateTime() async -> Date {
-		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
-			"function": "getCurrentDateTime",
-			"message": "getCurrentDateTime called"
-		]))
-		return Date()
-	}
 
-	/**
-	 Returns a mock weather report for the supplied location.
-	 - Parameter location: City name or zip code
-	 - Returns: A weather report
-	 */
-	@MCPTool(hints: [.readOnly, .openWorld])
-	func getWeatherReport(location: String) async -> WeatherReport {
-		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
-			"function": "getWeatherReport",
-			"location": location
-		]))
-		return WeatherReport(
-			temperature: 22.5,
-			conditions: "Partly cloudy",
-			humidity: 65,
-			location: location
-		)
-	}
-	
-	/**
-	 Formats a date/time as String
-	 - Parameter date: The Date to format
-	 - Returns: A string with the date formatted
-	 */
-	@MCPTool(hints: [.readOnly, .idempotent])
-	func formatDateAsString(date: Date) async -> String {
-		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
-			"function": "formatDateAsString",
-			"date": date,
-			"timestamp": date.timeIntervalSince1970
-		]))
-		let dateFormatter = DateFormatter()
-		dateFormatter.dateStyle = .long
-		dateFormatter.timeStyle = .long
-		
-		return dateFormatter.string(from: date)
-	}
+    /**
+     Gets the current date/time on the server
+     - Returns: The current time
+     */
+    @MCPTool(hints: [.readOnly])
+    func getCurrentDateTime() async -> Date {
+        await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+            "function": "getCurrentDateTime",
+            "message": "getCurrentDateTime called"
+        ]))
+        return Date()
+    }
 
-	/**
-	 Adds the specified number of hours to a date and returns the result.
-	 - Parameter date: The starting date
-	 - Parameter hours: Hours to add
-	 - Returns: The adjusted date
-	 */
-	@MCPTool(hints: [.readOnly, .idempotent])
-	func addHours(date: Date, hours: Int) async -> Date {
-		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
-			"function": "addHours",
-			"hours": hours
-		]))
-		let seconds = TimeInterval(hours * 3600)
-		return date.addingTimeInterval(seconds)
-	}
+    /**
+     Returns a mock weather report for the supplied location.
+     - Parameter location: City name or zip code
+     - Returns: A weather report
+     */
+    @MCPTool(hints: [.readOnly, .openWorld])
+    func getWeatherReport(location: String) async -> WeatherReport {
+        await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+            "function": "getWeatherReport",
+            "location": location
+        ]))
+        return WeatherReport(
+            temperature: 22.5,
+            conditions: "Partly cloudy",
+            humidity: 65,
+            location: location
+        )
+    }
 
-	/**
-	 Returns the normalized URL by removing fragments and resolving the path.
-	 - Parameter url: The URL to normalize
-	 - Returns: The normalized URL
-	 */
-	@MCPTool(hints: [.readOnly, .idempotent])
-	func normalizeURL(url: URL) async -> URL {
-		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
-			"function": "normalizeURL",
-			"url": url.absoluteString
-		]))
-		var components = URLComponents(url: url, resolvingAgainstBaseURL: true)
-		components?.fragment = nil
-		return components?.url ?? url
-	}
+    /**
+     Formats a date/time as String
+     - Parameter date: The Date to format
+     - Returns: A string with the date formatted
+     */
+    @MCPTool(hints: [.readOnly, .idempotent])
+    func formatDateAsString(date: Date) async -> String {
+        await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+            "function": "formatDateAsString",
+            "date": date,
+            "timestamp": date.timeIntervalSince1970
+        ]))
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .long
+        dateFormatter.timeStyle = .long
 
-	/**
-	 Returns the same UUID after logging it, demonstrating UUID round-tripping.
-	 - Parameter uuid: The UUID to round-trip
-	 - Returns: The same UUID
-	 */
-	@MCPTool(hints: [.readOnly, .idempotent])
-	func roundTripUUID(uuid: UUID) async -> UUID {
-		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
-			"function": "roundTripUUID",
-			"uuid": uuid.uuidString
-		]))
-		return uuid
-	}
+        return dateFormatter.string(from: date)
+    }
 
-	/**
-	 Returns the same data after logging its size, demonstrating byte-string encoding.
-	 - Parameter data: The data to round-trip
-	 - Returns: The same data
-	 */
-	@MCPTool(hints: [.readOnly, .idempotent])
-	func roundTripData(data: Data) async -> Data {
-		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
-			"function": "roundTripData",
-			"byteCount": data.count
-		]))
-		return data
-	}
-	
-	/// Adds two integers and returns their sum
-	/// - Parameter a: First number to add
-	/// - Parameter b: Second number to add
-	/// - Returns: The sum of a and b
-	@MCPTool(description: "Custom description: Performs addition of two numbers", hints: [.readOnly, .idempotent])
-	func add(a: Int, b: Int) async -> Int {
-		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
-			"function": "add",
-			"message": "add called",
-			"arguments": ["a": a, "b": b]
-		]))
-		return a + b
-	}
-	
-	/// Subtracts the second integer from the first and returns the difference
-	/// - Parameter a: Number to subtract from
-	/// - Parameter b: Number to subtract
-	/// - Returns: The difference between a and b
-	@MCPTool(hints: [.readOnly, .idempotent])
-	func subtract(a: Int = 5, b: Int = 3) async -> Int {
-		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
-			"function": "subtract",
-			"message": "subtract called",
-			"arguments": ["a": a, "b": b]
-		]))
-		return a - b
-	}
-	
-	/**
-	 Tests array processing
-	 - Parameter a: Array of integers to process
-	 - Returns: A string representation of the array
-	 */
-	@MCPTool(description: "Custom description: Tests array processing", hints: [.readOnly, .idempotent])
-	func testArray(a: [Int] = [1,2,3]) async -> String {
-		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
-			"function": "testArray",
-			"message": "testArray called",
-			"arguments": ["a": a]
-		]))
-		return a.map(String.init).joined(separator: ", ")
-	}
-	
-	/**
-	 Multiplies two integers and returns their product
-	 - Parameter a: First factor
-	 - Parameter b: Second factor
-	 - Returns: The product of a and b
-	 */
-	@MCPTool(hints: [.readOnly, .idempotent])
-	func multiply(a: Int, b: Int) async -> Int {
-		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
-			"function": "multiply",
-			"message": "multiply called",
-			"arguments": ["a": a, "b": b]
-		]))
-		return a * b
-	}
-	
-	/// Divides the numerator by the denominator and returns the quotient
-	/// - Parameter numerator: Number to be divided
-	/// - Parameter denominator: Number to divide by (defaults to 1.0)
-	/// - Returns: The quotient of numerator divided by denominator
-	@MCPTool(hints: [.readOnly, .idempotent])
-	func divide(numerator: Double, denominator: Double = 1.0) async -> Double {
-		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
-			"function": "divide",
-			"message": "divide called",
-			"arguments": ["numerator": numerator, "denominator": denominator]
-		]))
-		return numerator / denominator
-	}
-	
-	/// Returns a greeting message with the provided name
-	/// - Parameter name: Name of the person to greet
-	/// - Returns: The greeting message
-	@MCPTool(description: "Shows a greeting message", hints: [.readOnly, .idempotent])
-	func greet(name: String) async throws -> String {
-		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
-			"function": "greet",
-			"message": "greet called",
-			"arguments": ["name": name]
-		]))
-		// Validate name length
-		if name.count < 2 {
-			throw DemoError.nameTooShort(name: name)
-		}
-		
-		// Validate name contains only letters and spaces
-		if !name.allSatisfy({ $0.isLetter || $0.isWhitespace }) {
-			throw DemoError.invalidName(name: name)
-		}
-		
-		return "Hello, \(name)!"
-	}
-	
-	
-	/** A simple ping function that returns 'pong' */
-	@MCPTool(hints: [.readOnly, .idempotent])
-	func ping() async -> String {
-		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
-			"function": "ping",
-			"message": "ping called"
-		]))
-		return "pong"
-	}
-	
-	/** A function to test doing nothing, not returning anything*/
-	@MCPTool(hints: [.readOnly, .idempotent])
-	func noop() async {
-		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
-			"function": "noop",
-			"message": "noop called"
-		]))
-	}
-	
-	/**
-	 Performs a 30-second countdown with progress notifications every second.
+    /**
+     Adds the specified number of hours to a date and returns the result.
+     - Parameter date: The starting date
+     - Parameter hours: Hours to add
+     - Returns: The adjusted date
+     */
+    @MCPTool(hints: [.readOnly, .idempotent])
+    func addHours(date: Date, hours: Int) async -> Date {
+        await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+            "function": "addHours",
+            "hours": hours
+        ]))
+        let seconds = TimeInterval(hours * 3600)
+        return date.addingTimeInterval(seconds)
+    }
+
+    /**
+     Returns the normalized URL by removing fragments and resolving the path.
+     - Parameter url: The URL to normalize
+     - Returns: The normalized URL
+     */
+    @MCPTool(hints: [.readOnly, .idempotent])
+    func normalizeURL(url: URL) async -> URL {
+        await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+            "function": "normalizeURL",
+            "url": url.absoluteString
+        ]))
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: true)
+        components?.fragment = nil
+        return components?.url ?? url
+    }
+
+    /**
+     Returns the same UUID after logging it, demonstrating UUID round-tripping.
+     - Parameter uuid: The UUID to round-trip
+     - Returns: The same UUID
+     */
+    @MCPTool(hints: [.readOnly, .idempotent])
+    func roundTripUUID(uuid: UUID) async -> UUID {
+        await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+            "function": "roundTripUUID",
+            "uuid": uuid.uuidString
+        ]))
+        return uuid
+    }
+
+    /**
+     Returns the same data after logging its size, demonstrating byte-string encoding.
+     - Parameter data: The data to round-trip
+     - Returns: The same data
+     */
+    @MCPTool(hints: [.readOnly, .idempotent])
+    func roundTripData(data: Data) async -> Data {
+        await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+            "function": "roundTripData",
+            "byteCount": data.count
+        ]))
+        return data
+    }
+
+    /// Adds two integers and returns their sum
+    /// - Parameter a: First number to add
+    /// - Parameter b: Second number to add
+    /// - Returns: The sum of a and b
+    @MCPTool(description: "Custom description: Performs addition of two numbers", hints: [.readOnly, .idempotent])
+    func add(a: Int, b: Int) async -> Int {
+        await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+            "function": "add",
+            "message": "add called",
+            "arguments": ["a": a, "b": b]
+        ]))
+        return a + b
+    }
+
+    /// Subtracts the second integer from the first and returns the difference
+    /// - Parameter a: Number to subtract from
+    /// - Parameter b: Number to subtract
+    /// - Returns: The difference between a and b
+    @MCPTool(hints: [.readOnly, .idempotent])
+    func subtract(a: Int = 5, b: Int = 3) async -> Int {
+        await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+            "function": "subtract",
+            "message": "subtract called",
+            "arguments": ["a": a, "b": b]
+        ]))
+        return a - b
+    }
+
+    /**
+     Tests array processing
+     - Parameter a: Array of integers to process
+     - Returns: A string representation of the array
+     */
+    @MCPTool(description: "Custom description: Tests array processing", hints: [.readOnly, .idempotent])
+    func testArray(a: [Int] = [1, 2, 3]) async -> String {
+        await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+            "function": "testArray",
+            "message": "testArray called",
+            "arguments": ["a": a]
+        ]))
+        return a.map(String.init).joined(separator: ", ")
+    }
+
+    /**
+     Multiplies two integers and returns their product
+     - Parameter a: First factor
+     - Parameter b: Second factor
+     - Returns: The product of a and b
+     */
+    @MCPTool(hints: [.readOnly, .idempotent])
+    func multiply(a: Int, b: Int) async -> Int {
+        await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+            "function": "multiply",
+            "message": "multiply called",
+            "arguments": ["a": a, "b": b]
+        ]))
+        return a * b
+    }
+
+    /// Divides the numerator by the denominator and returns the quotient
+    /// - Parameter numerator: Number to be divided
+    /// - Parameter denominator: Number to divide by (defaults to 1.0)
+    /// - Returns: The quotient of numerator divided by denominator
+    @MCPTool(hints: [.readOnly, .idempotent])
+    func divide(numerator: Double, denominator: Double = 1.0) async -> Double {
+        await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+            "function": "divide",
+            "message": "divide called",
+            "arguments": ["numerator": numerator, "denominator": denominator]
+        ]))
+        return numerator / denominator
+    }
+
+    /// Returns a greeting message with the provided name
+    /// - Parameter name: Name of the person to greet
+    /// - Returns: The greeting message
+    @MCPTool(description: "Shows a greeting message", hints: [.readOnly, .idempotent])
+    func greet(name: String) async throws -> String {
+        await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+            "function": "greet",
+            "message": "greet called",
+            "arguments": ["name": name]
+        ]))
+        // Validate name length
+        if name.count < 2 {
+            throw DemoError.nameTooShort(name: name)
+        }
+
+        // Validate name contains only letters and spaces
+        if !name.allSatisfy({ $0.isLetter || $0.isWhitespace }) {
+            throw DemoError.invalidName(name: name)
+        }
+
+        return "Hello, \(name)!"
+    }
+
+    /** A simple ping function that returns 'pong' */
+    @MCPTool(hints: [.readOnly, .idempotent])
+    func ping() async -> String {
+        await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+            "function": "ping",
+            "message": "ping called"
+        ]))
+        return "pong"
+    }
+
+    /** A function to test doing nothing, not returning anything*/
+    @MCPTool(hints: [.readOnly, .idempotent])
+    func noop() async {
+        await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+            "function": "noop",
+            "message": "noop called"
+        ]))
+    }
+
+    /**
+     Performs a 30-second countdown with progress notifications every second.
 	 
-	 This function demonstrates long-running operations with progress tracking.
-	 It counts down from 30 to 0, sending a progress notification each second.
+     This function demonstrates long-running operations with progress tracking.
+     It counts down from 30 to 0, sending a progress notification each second.
 	 
-	 - Returns: A completion message
-	 */
-	@MCPTool(description: "Performs a 30-second countdown with progress updates", hints: [.readOnly, .idempotent])
-	func countdown() async -> String {
-		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
-			"function": "countdown",
-			"message": "Starting 30-second countdown"
-		]))
-		
-		let totalSeconds = 30
-		
-		for second in (0...totalSeconds).reversed() {
-			let progress = Double(totalSeconds - second) / Double(totalSeconds)
-			let message = second == 0 ? "Countdown complete!" : "\(second) seconds remaining"
-			
-			await RequestContext.current?.reportProgress(progress, total: 1.0, message: message)
-			
-			if second > 0 {
-				try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
-			}
-		}
-		
-		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
-			"function": "countdown",
-			"message": "Countdown completed successfully"
-		]))
-		
-		return "Countdown completed! 🎉"
-	}
-	
-	/** A function returning a random image
-	 - returns: A small PNG file */
-	@MCPTool(hints: [.readOnly])
-	func randomImage() async -> MCPImage
-	{
-		await Session.current?.sendLogNotification(LogMessage(level: .info, message: "randomImage called"))
-		let base64PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2WkAAAAASUVORK5CYII="
-		let data = Data(base64Encoded: base64PNG) ?? Data()
-		return MCPImage(data: data, mimeType: "image/png")
-	}
-	
+     - Returns: A completion message
+     */
+    @MCPTool(description: "Performs a 30-second countdown with progress updates", hints: [.readOnly, .idempotent])
+    func countdown() async -> String {
+        await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+            "function": "countdown",
+            "message": "Starting 30-second countdown"
+        ]))
+
+        let totalSeconds = 30
+
+        for second in (0...totalSeconds).reversed() {
+            let progress = Double(totalSeconds - second) / Double(totalSeconds)
+            let message = second == 0 ? "Countdown complete!" : "\(second) seconds remaining"
+
+            await RequestContext.current?.reportProgress(progress, total: 1.0, message: message)
+
+            if second > 0 {
+                try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+            }
+        }
+
+        await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+            "function": "countdown",
+            "message": "Countdown completed successfully"
+        ]))
+
+        return "Countdown completed! 🎉"
+    }
+
+    /** A function returning a random image
+     - returns: A small PNG file */
+    @MCPTool(hints: [.readOnly])
+    func randomImage() async -> MCPImage {
+        await Session.current?.sendLogNotification(LogMessage(level: .info, message: "randomImage called"))
+        let base64PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2WkAAAAASUVORK5CYII="
+        let data = Data(base64Encoded: base64PNG) ?? Data()
+        return MCPImage(data: data, mimeType: "image/png")
+    }
+
     // MARK: - Resources
-    
-	/// Returns a static server info string
-	@MCPResource("server://info")
-	func getServerInfo() async -> String {
-		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
-			"function": "getServerInfo",
-			"message": "getServerInfo called"
-		]))
-		return "SwiftMCP Demo Server v1.0"
-	}
-	
-	/// Returns a greeting for a user by ID
-	/// - Parameter user_id: The user's unique identifier
-	@MCPResource("users://{user_id}/greeting")
-	func getUserGreeting(user_id: Int) async -> String {
-		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
-			"function": "getUserGreeting",
-			"message": "getUserGreeting called",
-			"arguments": ["user_id": user_id]
-		]))
-		return "Hello, user #\(user_id)!"
-	}
-	
-	/// Searches users with a query and optional page/limit
-	/// - Parameters:
-	///   - query: The search query
-	///   - page: The page number (default: 1)
-	///   - limit: The number of results per page (default: 10)
-	@MCPResource("search://users?query={query}&page={page}&limit={limit}")
-	func searchUsers(query: String, page: Int = 1, limit: Int = 10) async throws -> String {
-		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
-			"function": "searchUsers",
-			"message": "searchUsers called",
-			"arguments": ["query": query, "page": page, "limit": limit]
-		]))
-		return "Results for query '\(query)' (page \(page), limit \(limit))"
-	}
-	
-	/// Returns a list of available features
-	@MCPResource("features://list", name: "Features.list")
-	func getFeatureList() async -> [String] {
-		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
-			"function": "getFeatureList",
-			"message": "getFeatureList called"
-		]))
-		return ["math", "date", "greet", "file"]
-	}
-	
-	// Example enum that is only CaseIterable
-	enum Color: CaseIterable {
-		case red
-		case green
-		case blue
-	}
-	
-	/// Returns a message for the selected color
-	@MCPResource("color://message?color={color}&bool={bool}")
+
+    /// Returns a static server info string
+    @MCPResource("server://info")
+    func getServerInfo() async -> String {
+        await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+            "function": "getServerInfo",
+            "message": "getServerInfo called"
+        ]))
+        return "SwiftMCP Demo Server v1.0"
+    }
+
+    /// Returns a greeting for a user by ID
+    /// - Parameter user_id: The user's unique identifier
+    @MCPResource("users://{user_id}/greeting")
+    func getUserGreeting(user_id: Int) async -> String {
+        await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+            "function": "getUserGreeting",
+            "message": "getUserGreeting called",
+            "arguments": ["user_id": user_id]
+        ]))
+        return "Hello, user #\(user_id)!"
+    }
+
+    /// Searches users with a query and optional page/limit
+    /// - Parameters:
+    ///   - query: The search query
+    ///   - page: The page number (default: 1)
+    ///   - limit: The number of results per page (default: 10)
+    @MCPResource("search://users?query={query}&page={page}&limit={limit}")
+    func searchUsers(query: String, page: Int = 1, limit: Int = 10) async throws -> String {
+        await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+            "function": "searchUsers",
+            "message": "searchUsers called",
+            "arguments": ["query": query, "page": page, "limit": limit]
+        ]))
+        return "Results for query '\(query)' (page \(page), limit \(limit))"
+    }
+
+    /// Returns a list of available features
+    @MCPResource("features://list", name: "Features.list")
+    func getFeatureList() async -> [String] {
+        await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+            "function": "getFeatureList",
+            "message": "getFeatureList called"
+        ]))
+        return ["math", "date", "greet", "file"]
+    }
+
+    // Example enum that is only CaseIterable
+    enum Color: CaseIterable {
+        case red
+        case green
+        case blue
+    }
+
+    /// Returns a message for the selected color
+    @MCPResource("color://message?color={color}&bool={bool}")
     func getColorMessage(color: Color, bool: Bool) async -> String {
-		await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
-			"function": "getColorMessage",
-			"message": "getColorMessage called",
-			"arguments": ["color": color, "bool": bool]
-		]))
-		switch color {
-			case .red:
-				return "You selected RED!"
-			case .green:
-				return "You selected GREEN!"
-			case .blue:
-				return "You selected BLUE!"
-		}
-	}
-    
+        await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
+            "function": "getColorMessage",
+            "message": "getColorMessage called",
+            "arguments": ["color": color, "bool": bool]
+        ]))
+        switch color {
+        case .red:
+            return "You selected RED!"
+        case .green:
+            return "You selected GREEN!"
+        case .blue:
+            return "You selected BLUE!"
+        }
+    }
+
     // MARK: - Prompts
-    
+
     /// A prompt for saying Hello
     @MCPPrompt()
     func helloPrompt(name: String) async throws -> [PromptMessage] {
@@ -385,7 +383,7 @@ actor DemoServer {
         let message = PromptMessage(role: .assistant, content: .init(text: "Hello \(name)!"))
         return [message]
     }
-    
+
     /// A prompt to get a color description
     /// - parameter color: A color
     @MCPPrompt()
@@ -396,19 +394,19 @@ actor DemoServer {
             "arguments": ["color": color]
         ]))
         let text: String
-        
+
         switch color {
-            case .red:
-                text = "You selected RED!"
-            case .green:
-                text = "You selected GREEN!"
-            case .blue:
-                text = "You selected BLUE!"
+        case .red:
+            text = "You selected RED!"
+        case .green:
+            text = "You selected GREEN!"
+        case .blue:
+            text = "You selected BLUE!"
         }
-        
+
         return text
     }
-    
+
     // MARK: - Sampling
 
     /**
@@ -424,7 +422,7 @@ actor DemoServer {
             "message": "sampleFromClient called",
             "arguments": ["prompt": prompt, "has_model_preferences": modelPreferences != nil]
         ]))
-        
+
         return try await RequestContext.current?.sample(prompt: prompt, modelPreferences: modelPreferences) ?? "No response from client"
     }
 
@@ -440,7 +438,7 @@ actor DemoServer {
             "function": "requestContactInfo",
             "message": "requestContactInfo called"
         ]))
-        
+
         // Create a schema for contact information
         let schema = JSONSchema.object(JSONSchema.Object(
             properties: [
@@ -452,16 +450,16 @@ actor DemoServer {
             title: "Contact Information",
             description: "Basic contact details"
         ))
-        
+
         let response = try await RequestContext.current?.elicit(
             message: "Please provide your contact information",
             schema: schema
         )
-        
+
         guard let elicitationResponse = response else {
             return "No elicitation response received"
         }
-        
+
         switch elicitationResponse.action {
         case .accept:
             if let content = elicitationResponse.content {
@@ -478,7 +476,7 @@ actor DemoServer {
             return "User cancelled the contact information request"
         }
     }
-    
+
     /**
      Requests project preferences from the user using predefined options.
      - Returns: A string describing the user's project preferences or their action
@@ -489,7 +487,7 @@ actor DemoServer {
             "function": "requestProjectPreferences",
             "message": "requestProjectPreferences called"
         ]))
-        
+
         // Create a schema for project preferences with enum values
         let schema = JSONSchema.object(JSONSchema.Object(
             properties: [
@@ -501,16 +499,16 @@ actor DemoServer {
             required: ["projectType", "priority"],
             description: "Project preferences and requirements"
         ))
-        
+
         let response = try await RequestContext.current?.elicit(
             message: "Please tell us about your project preferences",
             schema: schema
         )
-        
+
         guard let elicitationResponse = response else {
             return "No elicitation response received"
         }
-        
+
         switch elicitationResponse.action {
         case .accept:
             if let content = elicitationResponse.content {
@@ -518,9 +516,9 @@ actor DemoServer {
                 let framework = content["framework"]?.value as? String ?? "not specified"
                 let priority = content["priority"]?.value as? String ?? "unspecified"
                 let hasDeadline = content["hasDeadline"]?.value as? Bool ?? false
-                
-                return "Project preferences received: \(projectType) project using \(framework), prioritizing \(priority)" + 
-                       (hasDeadline ? " with a deadline" : " without a specific deadline")
+
+                return "Project preferences received: \(projectType) project using \(framework), prioritizing \(priority)" +
+                    (hasDeadline ? " with a deadline" : " without a specific deadline")
             } else {
                 return "User accepted but no content was provided"
             }
@@ -530,7 +528,7 @@ actor DemoServer {
             return "User cancelled the project preferences request"
         }
     }
-    
+
     /**
      Requests user credentials with validation constraints.
      - Returns: A string describing the user's response or the action they took
@@ -541,7 +539,7 @@ actor DemoServer {
             "function": "requestUserCredentials",
             "message": "requestUserCredentials called"
         ]))
-        
+
         // Create a schema with string length constraints and boolean defaults
         let schema = JSONSchema.object(JSONSchema.Object(
             properties: [
@@ -556,16 +554,16 @@ actor DemoServer {
             title: "Account Registration",
             description: "User credentials with validation constraints"
         ))
-        
+
         let response = try await RequestContext.current?.elicit(
             message: "Please create your account credentials",
             schema: schema
         )
-        
+
         guard let elicitationResponse = response else {
             return "No elicitation response received"
         }
-        
+
         switch elicitationResponse.action {
         case .accept:
             if let content = elicitationResponse.content {
@@ -573,7 +571,7 @@ actor DemoServer {
                 let email = content["email"]?.value as? String ?? "Unknown"
                 let password = content["password"]?.value as? String ?? ""
                 let confirmPassword = content["confirmPassword"]?.value as? String ?? ""
-                
+
                 // Basic validation example
                 if password == confirmPassword {
                     return "Account creation successful! Username: \(username), Email: \(email)"
@@ -589,7 +587,7 @@ actor DemoServer {
             return "User cancelled the account creation"
         }
     }
-    
+
     /**
      Requests user preferences with enum options and display names.
      - Returns: A string describing the user's response or the action they took
@@ -600,7 +598,7 @@ actor DemoServer {
             "function": "requestUserPreferences",
             "message": "requestUserPreferences called"
         ]))
-        
+
         // Create a schema with enum values and display names
         let schema = JSONSchema.object(JSONSchema.Object(
             properties: [
@@ -632,16 +630,16 @@ actor DemoServer {
             title: "User Preferences",
             description: "Customize your application experience"
         ))
-        
+
         let response = try await RequestContext.current?.elicit(
             message: "Please configure your preferences",
             schema: schema
         )
-        
+
         guard let elicitationResponse = response else {
             return "No elicitation response received"
         }
-        
+
         switch elicitationResponse.action {
         case .accept:
             if let content = elicitationResponse.content {
@@ -649,7 +647,7 @@ actor DemoServer {
                 let language = content["language"]?.value as? String ?? "unknown"
                 let notifications = content["notifications"]?.value as? Bool ?? false
                 let maxItems = content["maxItems"]?.value as? Double ?? 25.0
-                
+
                 return "Preferences saved! Theme: \(theme), Language: \(language), Notifications: \(notifications), Max items: \(Int(maxItems))"
             } else {
                 return "User accepted but no content was provided"
@@ -662,7 +660,7 @@ actor DemoServer {
     }
 
     // MARK: - Notifications
-    
+
     /**
      Handles the roots list changed notification from the client.
      

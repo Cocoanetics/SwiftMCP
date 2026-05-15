@@ -86,7 +86,7 @@ func testMultiLineParameterDescriptions() {
     let docText = """
     /**
      * Function with parameters that have multi-line descriptions
-     * 
+     *
      * - Parameter param1: This is a parameter description
      *   that spans multiple lines with
      *   consistent indentation.
@@ -130,7 +130,7 @@ func testReturnsSection() {
     let doc = Documentation(from: docText)
     #expect(doc.description == "Simple function with no parameters")
     #expect(doc.returns == "A string")
-    
+
     // Test with multi-line returns section
     let multiLineReturns = """
     /**
@@ -232,7 +232,7 @@ func testParagraphBreaksAndQuotes() {
     let docText = """
     /**
      A Calculator for simple math doing additionals, subtractions etc.
-     
+
      Testing "quoted" stuff. And on multiple lines. 'single quotes'
      */
     """
@@ -245,7 +245,7 @@ func testParameterDescriptionsWithCommasAndNewlines() {
     let docText = """
     /**
      Get reminders from the reminders app with flexible filtering options.
-     
+
      - Parameters:
         - completed: If true, fetch completed reminders. If false, fetch incomplete reminders. If not specified, fetch all reminders.
         - startDate: ISO date string for the start of the date range to fetch reminders from
@@ -269,7 +269,7 @@ func testParameterDescriptionsWithCommasAndNewlines() {
 func testMarkAndDocumentationBlocks() {
     let docText = """
     // MARK: - Utilities
-    
+
     /**
        Determines the current user's date/time, language/region and time zone. Use this if that helps clarify this information for subsequent tool calls.
      */
@@ -289,7 +289,7 @@ func testSingleLineDocumentationBlocks() {
     #expect(doc.description == "Single line documentation")
     #expect(doc.parameters.isEmpty)
     #expect(doc.returns == nil)
-    
+
     // Test with parameters
     let docWithParams = """
     /** Add two numbers - Parameter x: First number - Parameter y: Second number */

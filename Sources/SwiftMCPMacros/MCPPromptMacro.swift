@@ -65,17 +65,17 @@ nonisolated private let __mcpPromptMetadata_\(functionName) = MCPPromptMetadata(
             }
         }
         wrapperFunc += "\nfunc __mcpPromptCall_\(functionName)(_ enrichedArguments: JSONDictionary) async throws -> [PromptMessage] {\n"
-        
+
         for detail in metadata.parameters {
             wrapperFunc += """
         let \(detail.name): \(detail.typeString) = try enrichedArguments.extractValue(named: \"\(detail.name)\", as: \(detail.typeString).self)
 """
         }
-        
+
         let parameterList = metadata.parameters.map { param in
             param.label == "_" ? param.name : "\(param.label): \(param.name)"
         }.joined(separator: ", ")
-        
+
         wrapperFunc += """
         let result = \(metadata.isThrowing ? "try " : "")\(metadata.isAsync ? "await " : "")\(functionName)(\(parameterList))
         return PromptMessage.fromResult(result)

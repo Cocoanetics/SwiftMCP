@@ -5,7 +5,7 @@ import Testing
 @Test
 func testInitializeRequest() async throws {
     let calculator = Calculator()
-    
+
     // Create a request
     let request = JSONRPCMessage.request(
         id: 1,
@@ -23,18 +23,18 @@ func testInitializeRequest() async throws {
             ])
         ]
     )
-    
+
     // Handle the request
     guard let message = await calculator.handleMessage(request) else {
         #expect(Bool(false), "Expected a response message")
         return
     }
-    
+
     guard case .response(let response) = message else {
         #expect(Bool(false), "Expected response case")
         return
     }
-    
+
     #expect(response.jsonrpc == "2.0")
     #expect(response.id == .int(1))
     #expect(response.result != nil)
@@ -88,14 +88,14 @@ func testInitializeRequest() async throws {
 @Test
 func testToolsListRequest() async throws {
     let calculator = Calculator()
-    
+
     // Create a request
     let request = JSONRPCMessage.request(
         id: 2,
         method: "tools/list",
         params: [:]
     )
-    
+
     // Handle the request
     guard let message = await calculator.handleMessage(request) else {
         #expect(Bool(false), "Expected a response message")
@@ -108,19 +108,19 @@ func testToolsListRequest() async throws {
     #expect(response.jsonrpc == "2.0")
     #expect(response.id == .int(2))
     #expect(response.result != nil)
-    
+
     guard let result = response.result else {
         throw TestError("Result is missing")
     }
-    
+
     guard let toolsValue = result["tools"] else {
         throw TestError("Tools not found")
     }
 
     let tools = try toolsValue.decoded([MCPTool].self)
-    
+
     #expect(!tools.isEmpty)
-    
+
     // Check that the tools include the expected functions
     let toolNames = tools.map { $0.name }
     #expect(toolNames.contains("add"))
@@ -130,7 +130,7 @@ func testToolsListRequest() async throws {
 @Test
 func testToolCallRequest() async throws {
     let calculator = Calculator()
-    
+
     // Create a request
     let request = JSONRPCMessage.request(
         id: 3,
@@ -143,7 +143,7 @@ func testToolCallRequest() async throws {
             ])
         ]
     )
-    
+
     // Handle the request
     guard let message = await calculator.handleMessage(request) else {
         #expect(Bool(false), "Expected a response message")
@@ -156,16 +156,16 @@ func testToolCallRequest() async throws {
     #expect(response.jsonrpc == "2.0")
     #expect(response.id == .int(3))
     #expect(response.result != nil)
-    
+
     guard let result = response.result else {
         throw TestError("Result is missing")
     }
     #expect(result["structuredContent"] == nil)
-    
+
     guard let content = result["content"]?.value as? [[String: String]] else {
         throw TestError("Content not found or not an array")
     }
-    
+
     #expect(content.count == 1)
     #expect(content[0]["type"] == "text")
     #expect(content[0]["text"] == "5")
@@ -174,7 +174,7 @@ func testToolCallRequest() async throws {
 @Test
 func testToolCallRequestWithError() async throws {
     let calculator = Calculator()
-    
+
     // Create a request with an unknown tool
     let request = JSONRPCMessage.request(
         id: 4,
@@ -184,7 +184,7 @@ func testToolCallRequestWithError() async throws {
             "arguments": .object([:])
         ]
     )
-    
+
     // Handle the request
     guard let message = await calculator.handleMessage(request) else {
         #expect(Bool(false), "Expected a response message")
@@ -197,22 +197,22 @@ func testToolCallRequestWithError() async throws {
     #expect(response.jsonrpc == "2.0")
     #expect(response.id == .int(4))
     #expect(response.result != nil)
-    
+
     guard let result = response.result else {
         throw TestError("Result is missing")
     }
-    
+
     guard let content = result["content"]?.value as? [[String: String]] else {
         throw TestError("Content not found or not an array")
     }
-    
+
     #expect(content.count == 1)
     #expect(content[0]["type"] == "text")
     guard let text = content[0]["text"] else {
         throw TestError("Text field missing in content")
     }
     #expect(text.contains("not found on the server"))
-    
+
     guard let isError = result["isError"]?.value as? Bool else {
         throw TestError("isError flag not found")
     }
@@ -222,7 +222,7 @@ func testToolCallRequestWithError() async throws {
 @Test
 func testToolCallRequestWithInvalidArgument() async throws {
     let calculator = Calculator()
-    
+
     // Create a request with an invalid argument type
     let request = JSONRPCMessage.request(
         id: 5,
@@ -235,7 +235,7 @@ func testToolCallRequestWithInvalidArgument() async throws {
             ])
         ]
     )
-    
+
     // Handle the request
     guard let message = await calculator.handleMessage(request) else {
         #expect(Bool(false), "Expected a response message")
@@ -248,22 +248,22 @@ func testToolCallRequestWithInvalidArgument() async throws {
     #expect(response.jsonrpc == "2.0")
     #expect(response.id == .int(5))
     #expect(response.result != nil)
-    
+
     guard let result = response.result else {
         throw TestError("Result is missing")
     }
-    
+
     guard let content = result["content"]?.value as? [[String: String]] else {
         throw TestError("Content not found or not an array")
     }
-    
+
     #expect(content.count == 1)
     #expect(content[0]["type"] == "text")
     guard let text = content[0]["text"] else {
         throw TestError("Text field missing in content")
     }
     #expect(text.contains("expected type Int"))
-    
+
     guard let isError = result["isError"]?.value as? Bool else {
         throw TestError("isError flag not found")
     }
@@ -274,7 +274,7 @@ func testToolCallRequestWithInvalidArgument() async throws {
 func testCustomNameAndVersion() async throws {
     // Create an instance of CustomNameCalculator
     let calculator = CustomNameCalculator()
-    
+
     // Get the response using our test method
     let response = calculator.createInitializeResponse(id: .int(1))
 
@@ -282,11 +282,11 @@ func testCustomNameAndVersion() async throws {
     guard case .response(let responseData) = response else {
         throw TestError("Expected response case")
     }
-    
+
     guard let result = responseData.result else {
         throw TestError("Failed to extract result from response")
     }
-    
+
     guard let serverInfoDict = result["serverInfo"]?.value as? [String: Any] else {
         throw TestError("serverInfo not found")
     }
@@ -296,7 +296,7 @@ func testCustomNameAndVersion() async throws {
     guard let version = serverInfoDict["version"] as? String else {
         throw TestError("server version not found")
     }
-    
+
     #expect(name == "CustomCalculator")
     #expect(version == "2.0")
 }
@@ -305,7 +305,7 @@ func testCustomNameAndVersion() async throws {
 func testDefaultNameAndVersion() async throws {
     // Create an instance that uses defaults
     let calculator = DefaultNameCalculator()
-    
+
     // Get the response using our test method
     let response = calculator.createInitializeResponse(id: .int(1))
 
@@ -313,11 +313,11 @@ func testDefaultNameAndVersion() async throws {
     guard case .response(let responseData) = response else {
         throw TestError("Expected response case")
     }
-    
+
     guard let result = responseData.result else {
         throw TestError("Failed to extract result from response")
     }
-    
+
     guard let serverInfoDict = result["serverInfo"]?.value as? [String: Any] else {
         throw TestError("serverInfo not found")
     }
@@ -327,7 +327,7 @@ func testDefaultNameAndVersion() async throws {
     guard let version = serverInfoDict["version"] as? String else {
         throw TestError("server version not found")
     }
-    
+
     #expect(name == "DefaultNameCalculator")
     #expect(version == "1.0")
 }
@@ -335,14 +335,14 @@ func testDefaultNameAndVersion() async throws {
 @Test
 func testUnknownMethodReturnsMethodNotFoundError() async throws {
     let calculator = Calculator()
-    
+
     // Create a request with an unknown method
     let request = JSONRPCMessage.request(
         id: 99,
         method: "unknown_method",
         params: [:]
     )
-    
+
     // Handle the request
     guard let message = await calculator.handleMessage(request) else {
         #expect(Bool(false), "Expected a response message")

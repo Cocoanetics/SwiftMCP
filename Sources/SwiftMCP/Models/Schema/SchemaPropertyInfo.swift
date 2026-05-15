@@ -5,7 +5,6 @@
 //  Created by Oliver Drobnik on 30.03.25.
 //
 
-
 import Foundation
 
 /// Information about a function parameter

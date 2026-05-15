@@ -51,8 +51,7 @@ extension Array where Element == String {
     }
 }
 
-extension CaseIterable
-{
+extension CaseIterable {
     static var caseLabels: [String] {
         return self.allCases.map { caseValue in
             let description = String(describing: caseValue)

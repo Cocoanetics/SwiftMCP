@@ -51,7 +51,7 @@ public actor Session {
 
     /// Client capabilities received during initialization (if any).
     public var clientCapabilities: ClientCapabilities?
-    
+
     /// Client info received during initialization (if any).
     public var clientInfo: Implementation?
 
@@ -171,12 +171,12 @@ public actor Session {
     public func setIDToken(_ token: String?) {
         self.idToken = token
     }
-    
+
     /// Update the client capabilities stored for this session.
     public func setClientCapabilities(_ capabilities: ClientCapabilities?) {
         self.clientCapabilities = capabilities
     }
-    
+
     /// Update the client info stored for this session.
     public func setClientInfo(_ info: Implementation?) {
         self.clientInfo = info
@@ -211,7 +211,7 @@ public actor Session {
         guard let messageId = message.id else {
             preconditionFailure("Message requires an id")
         }
-        
+
         // Extract the string ID for tracking
         let id: String
         switch messageId {
@@ -220,10 +220,10 @@ public actor Session {
         case .string(let stringId):
             id = stringId
         }
-        
+
         return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<JSONRPCMessage, Error>) in
             responseTasks[id] = continuation
-            
+
             // Send the message via the transport, activating the session context
             Task {
                 do {
@@ -239,12 +239,12 @@ public actor Session {
             }
         }
     }
-    
+
     /// Handles an incoming JSON-RPC response by matching it with a waiting continuation.
     /// - Parameter response: The response message to handle
     internal func handleResponse(_ response: JSONRPCMessage) {
         guard let messageId = response.id else { return }
-        
+
         let id: String
         switch messageId {
         case .int(let intId):
@@ -252,13 +252,13 @@ public actor Session {
         case .string(let stringId):
             id = stringId
         }
-        
+
         if let continuation = responseTasks[id] {
             responseTasks.removeValue(forKey: id)
             continuation.resume(returning: response)
         }
     }
-    
+
     /// Sends a JSON-RPC request with an auto-generated ID and waits for the response.
     /// - Parameters:
     ///   - method: The method name to call
@@ -273,13 +273,13 @@ public actor Session {
     public func request<T: Encodable & Sendable>(method: String, params value: T) async throws -> JSONRPCMessage {
         try await request(method: method, params: JSONDictionary(encoding: value))
     }
-    
+
     /// Cancels all waiting continuations when the session is being removed.
     /// This prevents continuation leaks when sessions are disconnected.
     internal func cancelAllWaitingTasks() {
         let tasks = responseTasks
         responseTasks.removeAll()
-        
+
         for (_, continuation) in tasks {
             continuation.resume(throwing: CancellationError())
         }

@@ -4,15 +4,15 @@ import Testing
 
 @Suite("Calculator Mock Client Tests", .tags(.calculator, .mockClient, .unit))
 struct CalculatorMockTests {
-    
+
     @Suite("Basic Arithmetic Operations")
     struct BasicArithmeticTests {
-        
+
         @Test("Add function returns correct sum")
         func addFunctionReturnsCorrectSum() async throws {
             let calculator = Calculator()
             let client = MockClient(server: calculator)
-            
+
             let request = JSONRPCMessage.request(
                 id: 1,
                 method: "tools/call",
@@ -21,12 +21,12 @@ struct CalculatorMockTests {
                     "arguments": ["a": 2, "b": 3]
                 ]
             )
-            
+
             let message = await client.send(request)
             guard case .response(let response) = message else {
                 throw TestError("Expected response case")
             }
-            
+
             #expect(response.id == .int(1))
             let result = try #require(response.result)
             let isError = try #require(result["isError"]?.value as? Bool)
@@ -43,7 +43,7 @@ struct CalculatorMockTests {
         func subtractFunctionReturnsCorrectDifference() async throws {
             let calculator = Calculator()
             let client = MockClient(server: calculator)
-            
+
             let request = JSONRPCMessage.request(
                 id: 1,
                 method: "tools/call",
@@ -52,12 +52,12 @@ struct CalculatorMockTests {
                     "arguments": ["a": 10, "b": 4]
                 ]
             )
-            
+
             let message = try #require(await client.send(request))
             guard case .response(let response) = message else {
                 throw TestError("Expected response case")
             }
-            
+
             #expect(response.id == .int(1))
             let result = try #require(response.result)
             let isError = try #require(result["isError"]?.value as? Bool)
@@ -74,7 +74,7 @@ struct CalculatorMockTests {
         func multiplyFunctionReturnsCorrectProduct() async throws {
             let calculator = Calculator()
             let client = MockClient(server: calculator)
-            
+
             let request = JSONRPCMessage.request(
                 id: 1,
                 method: "tools/call",
@@ -83,12 +83,12 @@ struct CalculatorMockTests {
                     "arguments": ["a": 6, "b": 7]
                 ]
             )
-            
+
             let message = try #require(await client.send(request))
             guard case .response(let response) = message else {
                 throw TestError("Expected response case")
             }
-            
+
             #expect(response.id == .int(1))
             let result = try #require(response.result)
             let isError = try #require(result["isError"]?.value as? Bool)
@@ -105,7 +105,7 @@ struct CalculatorMockTests {
         func divideFunctionReturnsCorrectQuotient() async throws {
             let calculator = Calculator()
             let client = MockClient(server: calculator)
-            
+
             let request = JSONRPCMessage.request(
                 id: 1,
                 method: "tools/call",
@@ -114,12 +114,12 @@ struct CalculatorMockTests {
                     "arguments": ["numerator": 10, "denominator": 2]
                 ]
             )
-            
+
             let message = try #require(await client.send(request))
             guard case .response(let response) = message else {
                 throw TestError("Expected response case")
             }
-            
+
             #expect(response.id == .int(1))
             let result = try #require(response.result)
             let isError = try #require(result["isError"]?.value as? Bool)
@@ -132,15 +132,15 @@ struct CalculatorMockTests {
             #expect(text == "5")
         }
     }
-    
+
     @Suite("String and Array Operations")
     struct StringAndArrayTests {
-        
+
         @Test("Greet function returns personalized greeting")
         func greetFunctionReturnsPersonalizedGreeting() async throws {
             let calculator = Calculator()
             let client = MockClient(server: calculator)
-            
+
             let request = JSONRPCMessage.request(
                 id: 1,
                 method: "tools/call",
@@ -149,12 +149,12 @@ struct CalculatorMockTests {
                     "arguments": ["name": "Oliver"]
                 ]
             )
-            
+
             let message = try #require(await client.send(request))
             guard case .response(let response) = message else {
                 throw TestError("Expected response case")
             }
-            
+
             #expect(response.id == .int(1))
             let result = try #require(response.result)
             let isError = try #require(result["isError"]?.value as? Bool)
@@ -171,7 +171,7 @@ struct CalculatorMockTests {
         func testArrayFunctionProcessesArrayCorrectly() async throws {
             let calculator = Calculator()
             let client = MockClient(server: calculator)
-            
+
             let request = JSONRPCMessage.request(
                 id: 1,
                 method: "tools/call",
@@ -180,12 +180,12 @@ struct CalculatorMockTests {
                     "arguments": ["a": [1, 2, 3, 4, 5]]
                 ]
             )
-            
+
             let message = try #require(await client.send(request))
             guard case .response(let response) = message else {
                 throw TestError("Expected response case")
             }
-            
+
             #expect(response.id == .int(1))
             let result = try #require(response.result)
             let isError = try #require(result["isError"]?.value as? Bool)
@@ -198,15 +198,15 @@ struct CalculatorMockTests {
             #expect(text == "1, 2, 3, 4, 5")
         }
     }
-    
+
     @Suite("Error Handling Tests")
     struct ErrorHandlingTests {
-        
+
         @Test("Division by zero returns infinity")
         func divisionByZeroReturnsInfinity() async throws {
             let calculator = Calculator()
             let client = MockClient(server: calculator)
-            
+
             let request = JSONRPCMessage.request(
                 id: 1,
                 method: "tools/call",
@@ -215,12 +215,12 @@ struct CalculatorMockTests {
                     "arguments": ["numerator": 10, "denominator": 0]
                 ]
             )
-            
+
             let message = try #require(await client.send(request))
             guard case .response(let response) = message else {
                 throw TestError("Expected response case")
             }
-            
+
             #expect(response.id == .int(1))
             let result = try #require(response.result)
             let isError = try #require(result["isError"]?.value as? Bool)
@@ -232,12 +232,12 @@ struct CalculatorMockTests {
             #expect(type == "text")
             #expect(text == "Infinity")
         }
-        
+
         @Test("Negative division by zero returns negative infinity")
         func negativeDivisionByZeroReturnsNegativeInfinity() async throws {
             let calculator = Calculator()
             let client = MockClient(server: calculator)
-            
+
             let request = JSONRPCMessage.request(
                 id: 1,
                 method: "tools/call",
@@ -246,12 +246,12 @@ struct CalculatorMockTests {
                     "arguments": ["numerator": -10, "denominator": 0]
                 ]
             )
-            
+
             let message = try #require(await client.send(request))
             guard case .response(let response) = message else {
                 throw TestError("Expected response case")
             }
-            
+
             let result = try #require(response.result)
             let isError = try #require(result["isError"]?.value as? Bool)
             #expect(isError == false)
@@ -260,12 +260,12 @@ struct CalculatorMockTests {
             let text = try #require(firstContent["text"])
             #expect(text == "-Infinity")
         }
-        
+
         @Test("Zero divided by zero returns NaN")
         func zeroDividedByZeroReturnsNaN() async throws {
             let calculator = Calculator()
             let client = MockClient(server: calculator)
-            
+
             let request = JSONRPCMessage.request(
                 id: 1,
                 method: "tools/call",
@@ -274,12 +274,12 @@ struct CalculatorMockTests {
                     "arguments": ["numerator": 0, "denominator": 0]
                 ]
             )
-            
+
             let message = try #require(await client.send(request))
             guard case .response(let response) = message else {
                 throw TestError("Expected response case")
             }
-            
+
             let result = try #require(response.result)
             let isError = try #require(result["isError"]?.value as? Bool)
             #expect(isError == false)
@@ -288,12 +288,12 @@ struct CalculatorMockTests {
             let text = try #require(firstContent["text"])
             #expect(text == "NaN")
         }
-        
+
         @Test("Invalid tool name returns error")
         func invalidToolNameReturnsError() async throws {
             let calculator = Calculator()
             let client = MockClient(server: calculator)
-            
+
             let request = JSONRPCMessage.request(
                 id: 1,
                 method: "tools/call",
@@ -302,12 +302,12 @@ struct CalculatorMockTests {
                     "arguments": [:]
                 ]
             )
-            
+
             let message = try #require(await client.send(request))
             guard case .response(let response) = message else {
                 throw TestError("Expected response case")
             }
-            
+
             #expect(response.id == .int(1))
             let result = try #require(response.result)
             let isError = try #require(result["isError"]?.value as? Bool)
@@ -320,15 +320,15 @@ struct CalculatorMockTests {
             #expect(text.contains("The tool 'invalidTool' was not found on the server"))
         }
     }
-    
+
     @Suite("Complex Operations")
     struct ComplexOperationTests {
-        
+
         @Test("Complex calculation with multiple steps")
         func complexCalculationWithMultipleSteps() async throws {
             let calculator = Calculator()
             let client = MockClient(server: calculator)
-            
+
             // First operation: 5 + 3 = 8
             let addRequest = JSONRPCMessage.request(
                 id: 1,
@@ -338,17 +338,17 @@ struct CalculatorMockTests {
                     "arguments": ["a": 5, "b": 3]
                 ]
             )
-            
+
             let addMessage = try #require(await client.send(addRequest))
             guard case .response(let addResponse) = addMessage else {
                 throw TestError("Expected response case")
             }
-            
+
             let addResult = try #require(addResponse.result)
             let addContent = try #require(addResult["content"]?.value as? [[String: String]])
             let addText = try #require(addContent.first?["text"])
             #expect(addText == "8")
-            
+
             // Second operation: 8 * 2 = 16
             let multiplyRequest = JSONRPCMessage.request(
                 id: 2,
@@ -358,12 +358,12 @@ struct CalculatorMockTests {
                     "arguments": ["a": 8, "b": 2]
                 ]
             )
-            
+
             let multiplyMessage = try #require(await client.send(multiplyRequest))
             guard case .response(let multiplyResponse) = multiplyMessage else {
                 throw TestError("Expected response case")
             }
-            
+
             let multiplyResult = try #require(multiplyResponse.result)
             let multiplyContent = try #require(multiplyResult["content"]?.value as? [[String: String]])
             let multiplyText = try #require(multiplyContent.first?["text"])

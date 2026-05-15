@@ -1,6 +1,6 @@
 import Foundation
 #if canImport(FoundationNetworking)
-import FoundationNetworking
+    import FoundationNetworking
 #endif
 import SwiftMCP
 import SwiftSyntax
@@ -902,32 +902,32 @@ public enum ProxyGenerator {
 
     private static func swiftTypeInfo(for schema: JSONSchema) -> SwiftTypeInfo {
         switch schema {
-            case .string(_, _, let format, _, _, _):
-                switch format ?? "" {
-                    case "date-time":
-                        return SwiftTypeInfo(typeName: "Date", needsEncoding: true)
-                    case "uri":
-                        return SwiftTypeInfo(typeName: "URL", needsEncoding: true)
-                    case "uuid":
-                        return SwiftTypeInfo(typeName: "UUID", needsEncoding: true)
-                    case "byte":
-                        return SwiftTypeInfo(typeName: "Data", needsEncoding: true)
-                    default:
-                        return SwiftTypeInfo(typeName: "String", needsEncoding: false)
-                }
-            case .number:
-                return SwiftTypeInfo(typeName: "Double", needsEncoding: false)
-            case .boolean:
-                return SwiftTypeInfo(typeName: "Bool", needsEncoding: false)
-            case .array(let items, _, _, _):
-                let elementInfo = swiftTypeInfo(for: items)
-                return SwiftTypeInfo(typeName: "[\(elementInfo.typeName)]", needsEncoding: elementInfo.needsEncoding)
-            case .object:
-                return SwiftTypeInfo(typeName: "JSONDictionary", needsEncoding: false)
-            case .enum:
+        case .string(_, _, let format, _, _, _):
+            switch format ?? "" {
+            case "date-time":
+                return SwiftTypeInfo(typeName: "Date", needsEncoding: true)
+            case "uri":
+                return SwiftTypeInfo(typeName: "URL", needsEncoding: true)
+            case "uuid":
+                return SwiftTypeInfo(typeName: "UUID", needsEncoding: true)
+            case "byte":
+                return SwiftTypeInfo(typeName: "Data", needsEncoding: true)
+            default:
                 return SwiftTypeInfo(typeName: "String", needsEncoding: false)
-            case .oneOf:
-                return SwiftTypeInfo(typeName: "String", needsEncoding: false)
+            }
+        case .number:
+            return SwiftTypeInfo(typeName: "Double", needsEncoding: false)
+        case .boolean:
+            return SwiftTypeInfo(typeName: "Bool", needsEncoding: false)
+        case .array(let items, _, _, _):
+            let elementInfo = swiftTypeInfo(for: items)
+            return SwiftTypeInfo(typeName: "[\(elementInfo.typeName)]", needsEncoding: elementInfo.needsEncoding)
+        case .object:
+            return SwiftTypeInfo(typeName: "JSONDictionary", needsEncoding: false)
+        case .enum:
+            return SwiftTypeInfo(typeName: "String", needsEncoding: false)
+        case .oneOf:
+            return SwiftTypeInfo(typeName: "String", needsEncoding: false)
         }
     }
 
@@ -949,20 +949,20 @@ public enum ProxyGenerator {
 
     private static func schemaDescription(_ schema: JSONSchema) -> String? {
         switch schema {
-            case .string(_, let description, _, _, _, _):
-                return description
-            case .number(_, let description, _, _, _):
-                return description
-            case .boolean(_, let description, _):
-                return description
-            case .array(_, _, let description, _):
-                return description
-            case .object(let object, _):
-                return object.description
-            case .enum(_, _, let description, _, _):
-                return description
-            case .oneOf(_, _, let description):
-                return description
+        case .string(_, let description, _, _, _, _):
+            return description
+        case .number(_, let description, _, _, _):
+            return description
+        case .boolean(_, let description, _):
+            return description
+        case .array(_, _, let description, _):
+            return description
+        case .object(let object, _):
+            return object.description
+        case .enum(_, _, let description, _, _):
+            return description
+        case .oneOf(_, _, let description):
+            return description
         }
     }
 
@@ -993,16 +993,16 @@ public enum ProxyGenerator {
 
         if typeInfo.needsEncoding {
             switch value {
-                case let date as Date:
-                    return encodedLiteral(for: typeInfo.typeName, value: MCPToolArgumentEncoder.encode(date))
-                case let url as URL:
-                    return encodedLiteral(for: typeInfo.typeName, value: url.absoluteString)
-                case let uuid as UUID:
-                    return encodedLiteral(for: typeInfo.typeName, value: uuid.uuidString)
-                case let data as Data:
-                    return encodedLiteral(for: typeInfo.typeName, value: data.base64EncodedString())
-                default:
-                    break
+            case let date as Date:
+                return encodedLiteral(for: typeInfo.typeName, value: MCPToolArgumentEncoder.encode(date))
+            case let url as URL:
+                return encodedLiteral(for: typeInfo.typeName, value: url.absoluteString)
+            case let uuid as UUID:
+                return encodedLiteral(for: typeInfo.typeName, value: uuid.uuidString)
+            case let data as Data:
+                return encodedLiteral(for: typeInfo.typeName, value: data.base64EncodedString())
+            default:
+                break
             }
         }
 
@@ -1433,7 +1433,7 @@ private final class OpenAPITypeRegistry {
         if keys.isSubset(of: resourceContentKeys),
            keys.contains("uri"),
            object.required.contains("uri"),
-            matchesStringSchema(object.properties["uri"]) {
+           matchesStringSchema(object.properties["uri"]) {
             return "GenericResourceContent"
         }
 
@@ -1570,6 +1570,6 @@ private final class OpenAPITypeRegistry {
             return description
         case .oneOf(_, _, let description):
             return description
+        }
     }
-}
 }

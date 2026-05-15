@@ -108,5 +108,4 @@ struct CapabilitiesCommand: AsyncParsableCommand {
         }
     }
 
-    
 }
