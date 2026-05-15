@@ -16,44 +16,8 @@ struct SSEMessageSequence<Base: AsyncSequence>: AsyncSequence where Base.Element
         mutating func next() async throws -> SSEClientMessage? {
             while let lineValue = try await iterator.next() {
                 let line = String(lineValue)
-                if line.isEmpty {
-                    if hasPendingFields {
-                        return yieldCurrent()
-                    }
-                    continue
-                }
-
-                if line.hasPrefix(":") {
-                    continue
-                }
-
-                let parts = line.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
-                let field = String(parts[0])
-                let rawValue = parts.count > 1 ? String(parts[1]) : ""
-                let value = rawValue.hasPrefix(" ") ? String(rawValue.dropFirst()) : rawValue
-
-                switch field {
-                case "event":
-                    currentEvent = value
-                    hasPendingFields = true
-                    continue
-                case "data":
-                    currentDataLines.append(value)
-                    hasPendingFields = true
-                    if currentEvent == "endpoint" || value.contains("jsonrpc") || (currentID != nil && value.isEmpty) {
-                        return yieldCurrent()
-                    }
-                    continue
-                case "id":
-                    currentID = value
-                    hasPendingFields = true
-                    continue
-                case "retry":
-                    currentRetry = Int(value)
-                    hasPendingFields = true
-                    continue
-                default:
-                    continue
+                if let yielded = handleLine(line) {
+                    return yielded
                 }
             }
 
@@ -61,6 +25,48 @@ struct SSEMessageSequence<Base: AsyncSequence>: AsyncSequence where Base.Element
                 return yieldCurrent()
             }
 
+            return nil
+        }
+
+        /// Process one raw SSE line; returns a message to yield, or nil to continue.
+        private mutating func handleLine(_ line: String) -> SSEClientMessage? {
+            if line.isEmpty {
+                return hasPendingFields ? yieldCurrent() : nil
+            }
+
+            if line.hasPrefix(":") {
+                return nil
+            }
+
+            let parts = line.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+            let field = String(parts[0])
+            let rawValue = parts.count > 1 ? String(parts[1]) : ""
+            let value = rawValue.hasPrefix(" ") ? String(rawValue.dropFirst()) : rawValue
+
+            return applyField(field, value: value)
+        }
+
+        /// Apply a single SSE field to the in-progress message and return a yielded message if complete.
+        private mutating func applyField(_ field: String, value: String) -> SSEClientMessage? {
+            switch field {
+            case "event":
+                currentEvent = value
+                hasPendingFields = true
+            case "data":
+                currentDataLines.append(value)
+                hasPendingFields = true
+                if currentEvent == "endpoint" || value.contains("jsonrpc") || (currentID != nil && value.isEmpty) {
+                    return yieldCurrent()
+                }
+            case "id":
+                currentID = value
+                hasPendingFields = true
+            case "retry":
+                currentRetry = Int(value)
+                hasPendingFields = true
+            default:
+                break
+            }
             return nil
         }
 

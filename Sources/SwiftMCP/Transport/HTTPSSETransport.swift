@@ -7,10 +7,10 @@ import NIOPosix
 
 /**
  A transport that exposes an HTTP server with Server-Sent Events (SSE) and JSON-RPC endpoints.
- 
+
  This transport is built on top of SwiftNIO and allows clients to connect via HTTP to interact
  with the MCPServer. It provides:
- 
+
  - Server-Sent Events (SSE) for real-time updates
  - JSON-RPC over HTTP for command processing
  - Optional OpenAPI endpoints for API documentation
@@ -28,7 +28,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     /// If initialized with `0`, the system will select an available port
     /// when the server starts. The actual bound port is then available
     /// via this property after ``start()`` completes.
-    public private(set) var port: Int
+    public internal(set) var port: Int
 
     /// Logger for logging transport events and errors.
     public let logger = Logger(label: "com.cocoanetics.SwiftMCP.HTTPSSETransport")
@@ -71,122 +71,6 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     /// validated using the provided settings and `.well-known` endpoints are
     /// served with the corresponding metadata.
     public var oauthConfiguration: OAuthConfiguration?
-
-    /// Perform authorization using either the OAuth configuration or the
-    /// synchronous ``authorizationHandler`` closure.
-    func authorize(_ token: String?, sessionID: UUID?) async -> AuthorizationResult {
-        // Check for JWE tokens first (5 segments: header.encrypted_key.iv.ciphertext.tag)
-        if let token = token {
-            let segments = token.split(separator: ".")
-            if segments.count == 5 {
-                // JWE token detected - only allow in proxy mode
-                if let oauthConfiguration = oauthConfiguration, oauthConfiguration.transparentProxy {
-                    // In proxy mode, we can handle JWE tokens by proxying them
-                    // Continue with normal validation
-                } else {
-                    // In non-proxy mode, JWE tokens are not supported
-                    let audience = oauthConfiguration?.audience ?? "your-api"
-                    return .jweNotSupported(
-                        "Encrypted (JWE) tokens are not supported. "
-                            + "Use a signed JWT (JWS) with audience=\(audience)"
-                    )
-                }
-            }
-        }
-
-        // 1. If we have a session ID, check token against session-stored value
-        if let id = sessionID, let session = await sessionManager.existingSession(id: id) {
-            if let stored = await session.accessToken {
-                if stored == token, (await session.accessTokenExpiry ?? Date.distantFuture) > Date() {
-                    return .authorized
-                } else {
-                    return .unauthorized("Invalid or expired token")
-                }
-            } else if let token {
-                // First time we see a token for this session - validate it before accepting
-                let isValid = await validateNewToken(token)
-                if isValid {
-                    await session.setAccessToken(token)
-                    // Without expires_in we can't know exact lifetime; fall back to 24 h.
-                    await session.setAccessTokenExpiry(Date().addingTimeInterval(24 * 60 * 60))
-
-                    // Fetch and store user info if we have OAuth configuration
-                    if let oauthConfiguration = oauthConfiguration {
-                        await sessionManager.fetchAndStoreUserInfo(for: id, oauthConfiguration: oauthConfiguration)
-                    }
-
-                    return .authorized
-                } else {
-                    return .unauthorized("Invalid token - token exchange required")
-                }
-            } else {
-                // No token provided for this session
-                // If OAuth is configured, require authentication
-                if oauthConfiguration != nil {
-                    return .unauthorized("Authentication required")
-                }
-                // Otherwise use legacy handler (for unauthenticated mode)
-                return authorizationHandler(token)
-            }
-        }
-
-        // 2. If we don't have a sessionID, see if we can locate a session by token.
-        if let token, sessionID == nil {
-            if await sessionManager.session(forToken: token) != nil {
-                return .authorized
-            }
-        }
-
-        // 3. For tokens without session context, validate them
-        if let token {
-            let isValid = await validateNewToken(token)
-            return isValid ? .authorized : .unauthorized("Invalid token - token exchange required")
-        }
-
-        // 4. If OAuth is configured, require authentication
-        if oauthConfiguration != nil {
-            guard let token = token, !token.isEmpty else {
-                return .unauthorized("Authentication required")
-            }
-            return .unauthorized("Invalid token - token exchange required")
-        }
-
-        // 5. Otherwise use legacy handler (for unauthenticated mode)
-        return authorizationHandler(token)
-    }
-
-    /// Validate a new token using OAuth configuration or authorization handler
-    internal func validateNewToken(_ token: String) async -> Bool {
-        // If we have OAuth configuration, use its validation
-        if let oauthConfiguration {
-            // In transparent proxy mode, only accept tokens that are already stored in a session
-            // This ensures we only trust tokens that came through our proxy
-            if oauthConfiguration.transparentProxy {
-                // Check if this token is already stored in any session
-                if await sessionManager.session(forToken: token) != nil {
-                    return true
-                }
-            }
-
-            // Try OAuth validation for non-proxy mode
-            let oauthValid = await oauthConfiguration.validate(token: token)
-            if oauthValid {
-                return true
-            }
-
-            return false
-        }
-
-        // Fallback to authorization handler
-        switch authorizationHandler(token) {
-        case .authorized:
-            return true
-        case .unauthorized:
-            return false
-        case .jweNotSupported:
-            return false
-        }
-    }
 
     /// Defines the available keep-alive modes for maintaining connections.
     public enum KeepAliveMode: Sendable {
@@ -269,20 +153,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
                 }
             }
         } catch let error as IOError {
-            let errorMessage: String
-            switch error.errnoCode {
-            case EADDRINUSE:
-                errorMessage = "Port \(port) is already in use. "
-                    + "Please choose a different port or ensure no other service is using this port."
-            case EACCES:
-                errorMessage = "Permission denied to bind to port \(port). This port may require elevated privileges."
-            case EADDRNOTAVAIL:
-                errorMessage = "The address \(host) is not available for binding."
-            default:
-                errorMessage = "Failed to bind to \(host):\(port). Error: \(error.localizedDescription)"
-            }
-            logger.error("\(errorMessage)")
-            throw TransportError.bindingFailed(errorMessage)
+            throw bindingError(for: error)
         } catch {
             logger.error("Server error: \(error)")
             throw TransportError.bindingFailed(error.localizedDescription)
@@ -313,146 +184,6 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         logger.info("Server stopped")
     }
 
-    /// Start the keep-alive timer that sends messages every 60 seconds.
-    internal func startKeepAliveTimer() {
-        keepAliveTimer = DispatchSource.makeTimerSource(queue: DispatchQueue.global())
-        keepAliveTimer?.schedule(deadline: .now(), repeating: .seconds(60))
-        keepAliveTimer?.setEventHandler { [weak self] in
-            self?.sendKeepAlive()
-        }
-        keepAliveTimer?.resume()
-        logger.trace("Started keep-alive timer")
-    }
-
-    /// Stop the keep-alive timer.
-    internal func stopKeepAliveTimer() {
-        keepAliveTimer?.cancel()
-        keepAliveTimer = nil
-        logger.trace("Stopped keep-alive timer")
-    }
-
-    /// Send a keep-alive message to all connected SSE clients.
-    internal func sendKeepAlive() {
-        Task { [weak self] in
-            guard let self = self else { return }
-
-            switch self.keepAliveMode {
-            case .none:
-                return
-            case .sse:
-                let activeStreamIDs = await self.sessionManager.activeStreamIDs()
-                for streamID in activeStreamIDs {
-                    _ = await self.sessionManager.sendComment("keep-alive", to: streamID)
-                }
-            case .ping:
-                await self.sessionManager.forEachSession { session in
-                    guard await self.sessionManager.hasActivePrimaryGeneralConnection(for: session.id) else {
-                        return
-                    }
-
-                    Task {
-                        let ping = JSONRPCMessage.request(id: .string(UUID().uuidString), method: "ping")
-                        do {
-                            try await session.send(ping)
-                        } catch {
-                            print("Failed to send ping to session \(session.id): \(error)")
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: - Handling SSE Connections
-
-    func createSSEStream(sessionID: UUID, kind: SSEStreamKind) async -> (AsyncStream<Data>, StreamRouteResponseInfo) {
-        await sessionManager.createStream(sessionID: sessionID, kind: kind)
-    }
-
-    func resumeSSEStream(
-        sessionID: UUID,
-        lastEventID: String
-    ) async throws -> (AsyncStream<Data>, StreamRouteResponseInfo) {
-        try await sessionManager.resumeStream(sessionID: sessionID, after: lastEventID)
-    }
-
-    /// Register the NIO channel for an SSE stream and set up close handling.
-    /// Called by `HTTPHandler` after the route handler returns a streaming response.
-    func registerSSEChannel(_ channel: Channel, sessionID: UUID, streamID: UUID) {
-        Task {
-            guard let connectionToken = await sessionManager.register(
-                channel: channel,
-                sessionID: sessionID,
-                streamID: streamID
-            ) else {
-                return
-            }
-            let count = await sessionManager.channelCount
-            logger.info("New SSE channel registered (total: \(count))")
-
-            channel.closeFuture.whenComplete { [weak self] _ in
-                guard let self = self else { return }
-                Task {
-                    await self.sessionManager.markStreamDisconnected(
-                        streamID: streamID,
-                        connectionToken: connectionToken
-                    )
-                    let count = await self.sessionManager.channelCount
-                    self.logger.info("SSE channel removed (remaining: \(count))")
-                }
-            }
-        }
-    }
-
-    /// Send a message to a specific client.
-    func sendSSE(_ message: SSEMessage, to sessionID: UUID) {
-        Task {
-            _ = await sessionManager.routeSSEMessage(message, sessionID: sessionID, preferredStreamID: nil)
-        }
-    }
-
-    @discardableResult
-    func routeSSEMessage(_ message: SSEMessage, sessionID: UUID, preferredStreamID: UUID?) async -> Bool {
-        await sessionManager.routeSSEMessage(message, sessionID: sessionID, preferredStreamID: preferredStreamID)
-    }
-
-    @discardableResult
-    func sendJSONRPC(_ message: JSONRPCMessage, to streamID: UUID) async throws -> Bool {
-        try await sessionManager.sendJSONRPC(message, to: streamID)
-    }
-
-    func finishSSEStream(_ streamID: UUID) async {
-        await sessionManager.finishStream(streamID: streamID)
-    }
-
-    /// Broadcast a log message to all connected clients.
-    /// - Parameter message: The log message to broadcast
-    public func broadcastLog(_ message: LogMessage) async {
-        // Send to all connected sessions, filtered by their minimumLogLevel
-        await sessionManager.broadcastLog(message)
-    }
-
-    /// Broadcast a tools list-changed notification to all connected clients.
-    public func broadcastToolsListChanged() async {
-        await sessionManager.broadcastToolsListChanged()
-    }
-
-    /// Broadcast a resources list-changed notification to all connected clients.
-    public func broadcastResourcesListChanged() async {
-        await sessionManager.broadcastResourcesListChanged()
-    }
-
-    /// Broadcast a prompts list-changed notification to all connected clients.
-    public func broadcastPromptsListChanged() async {
-        await sessionManager.broadcastPromptsListChanged()
-    }
-
-    /// Broadcast a resource-updated notification to all connected clients.
-    /// - Parameter uri: The URI of the resource that was updated.
-    public func broadcastResourceUpdated(uri: URL) async {
-        await sessionManager.broadcastResourceUpdated(uri: uri)
-    }
-
     // MARK: - Transport
 
     /// Send raw data to the client associated with the current `Session`.
@@ -472,125 +203,22 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         }
     }
 
-    // MARK: - Route Registration
+    // MARK: - Binding helpers
 
-    /// Register a route with buffered input and buffered output.
-    ///
-    /// - Parameter maxBodySize: Optional per-route body size limit in bytes.
-    ///   When `nil`, requests are capped by the transport's ``maxMessageSize``.
-    ///   Set this for routes that accept larger-than-default payloads.
-    ///
-    /// Must be called before ``start()``.
-    public func addRoute(
-        _ method: RouteMethod,
-        _ path: String,
-        maxBodySize: Int? = nil,
-        handler: @escaping @Sendable (HTTPRouteRequest<Data?>) async throws -> HTTPRouteResponse<Data?>
-    ) {
-        customRoutes.append(HTTPRoute(
-            method: method,
-            pathPattern: path,
-            maxBodySize: maxBodySize,
-            handler: { _, request in
-                RouteResponse(try await handler(request))
-            }
-        ))
-    }
-
-    /// Register a route with buffered input and streaming output.
-    ///
-    /// - Parameter maxBodySize: Optional per-route body size limit in bytes.
-    ///   When `nil`, requests are capped by the transport's ``maxMessageSize``.
-    ///
-    /// Must be called before ``start()``.
-    public func addRoute(
-        _ method: RouteMethod,
-        _ path: String,
-        maxBodySize: Int? = nil,
-        handler: @escaping @Sendable (HTTPRouteRequest<Data?>) async throws -> HTTPRouteResponse<AsyncStream<Data>>
-    ) {
-        customRoutes.append(HTTPRoute(
-            method: method,
-            pathPattern: path,
-            maxBodySize: maxBodySize,
-            handler: { _, request in
-                RouteResponse(try await handler(request))
-            }
-        ))
-    }
-
-    /// Register a route with streaming input and buffered output.
-    ///
-    /// Each incoming body chunk is yielded on the handler's `AsyncStream<Data>` as
-    /// it arrives from the underlying HTTP transport, without the full body being
-    /// buffered first. Use this for uploads larger than memory, or when the handler
-    /// needs to tee / forward chunks (e.g. to a remote resumable upload) while the
-    /// client is still sending.
-    ///
-    /// The `streamingHandler:` label distinguishes the overload from the two
-    /// buffered-input variants above.
-    ///
-    /// - Parameter maxBodySize: Optional per-route body size limit in bytes.
-    ///   When `nil`, requests are capped by the transport's ``maxMessageSize``.
-    ///
-    /// Must be called before ``start()``.
-    public func addRoute(
-        _ method: RouteMethod,
-        _ path: String,
-        maxBodySize: Int? = nil,
-        streamingHandler: @escaping @Sendable (HTTPRouteRequest<AsyncStream<Data>>) async throws
-            -> HTTPRouteResponse<Data?>
-    ) {
-        customRoutes.append(HTTPRoute(
-            method: method,
-            pathPattern: path,
-            maxBodySize: maxBodySize,
-            handler: { _, request in
-                RouteResponse(try await streamingHandler(request))
-            }
-        ))
-    }
-
-    /// Register a route with streaming input and streaming output.
-    ///
-    /// See ``addRoute(_:_:maxBodySize:streamingHandler:)-<Data?>`` for input behaviour.
-    ///
-    /// - Parameter maxBodySize: Optional per-route body size limit in bytes.
-    ///   When `nil`, requests are capped by the transport's ``maxMessageSize``.
-    ///
-    /// Must be called before ``start()``.
-    public func addRoute(
-        _ method: RouteMethod,
-        _ path: String,
-        maxBodySize: Int? = nil,
-        streamingHandler: @escaping @Sendable (HTTPRouteRequest<AsyncStream<Data>>) async throws
-            -> HTTPRouteResponse<AsyncStream<Data>>
-    ) {
-        customRoutes.append(HTTPRoute(
-            method: method,
-            pathPattern: path,
-            maxBodySize: maxBodySize,
-            handler: { _, request in
-                RouteResponse(try await streamingHandler(request))
-            }
-        ))
-    }
-
-    // MARK: - Router Assembly
-
-    /// Build the router with all built-in and custom routes.
-    internal func buildRouter() -> Router {
-        let router = Router()
-
-        // Built-in routes (order matters — first match wins)
-        router.addRoutes(corsRoutes())
-        router.addRoutes(mcpRoutes())
-        router.addRoutes(legacySSERoutes())
-        router.addRoutes(openAPIRoutes())
-        router.addRoutes(oauthRoutes())
-
-        // Custom routes registered by the user
-        router.addRoutes(customRoutes)
-        return router
+    private func bindingError(for error: IOError) -> TransportError {
+        let errorMessage: String
+        switch error.errnoCode {
+        case EADDRINUSE:
+            errorMessage = "Port \(port) is already in use. "
+                + "Please choose a different port or ensure no other service is using this port."
+        case EACCES:
+            errorMessage = "Permission denied to bind to port \(port). This port may require elevated privileges."
+        case EADDRNOTAVAIL:
+            errorMessage = "The address \(host) is not available for binding."
+        default:
+            errorMessage = "Failed to bind to \(host):\(port). Error: \(error.localizedDescription)"
+        }
+        logger.error("\(errorMessage)")
+        return TransportError.bindingFailed(errorMessage)
     }
 }

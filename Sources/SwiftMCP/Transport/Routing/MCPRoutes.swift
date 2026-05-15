@@ -19,25 +19,24 @@ extension HTTPSSETransport {
 
 	// MARK: - Handler Implementations
 
+	/// Resolved request context used by `handleStreamableHTTP` after gate / auth checks.
+	private struct StreamableHTTPContext {
+		let sessionID: UUID
+		let authSessionID: UUID?
+		let acceptHeader: String
+	}
+
 	/// Handle POST /mcp — streamable HTTP endpoint.
 	func handleStreamableHTTP(request: HTTPRouteRequest<Data?>) async throws -> RouteResponse {
 		let sessionHeader = await resolveSessionHeader(for: request)
-		switch sessionHeader {
-		case .malformed:
-			return textResponse(status: .badRequest, body: "Invalid Mcp-Session-Id header.")
-		case .unknown:
-			return textResponse(status: .notFound, body: "Unknown session. Send initialize first.")
-		case .missing, .existing:
-			break
+		if let earlyResponse = streamableEarlyRejection(for: sessionHeader) {
+			return earlyResponse
 		}
 
 		// Validate Accept header
 		let acceptHeader = request.header("accept") ?? request.header("Accept") ?? ""
-		let acceptsJSON = "application/json".matchesAcceptHeader(acceptHeader)
-		let acceptsAny = "*/*".matchesAcceptHeader(acceptHeader)
-		if !acceptHeader.isEmpty && !(acceptsJSON || acceptsAny) {
-			logger.warning("Rejected non-json request (Accept: \(acceptHeader))")
-			return textResponse(status: .badRequest, body: "Client must accept application/json.")
+		if let acceptError = validateAcceptForStreamableHTTP(acceptHeader: acceptHeader) {
+			return acceptError
 		}
 
 		guard let body = request.body else {
@@ -49,217 +48,188 @@ extension HTTPSSETransport {
 			let messages = try JSONRPCMessage.decodeMessages(from: body)
 			let token = request.bearerToken
 
-			let sessionID: UUID
-			let authSessionID: UUID?
-			if case .missing = sessionHeader {
-				guard SessionInitializationGate.batchStartsWithInitialize(messages) else {
-					logger.warning("Rejected request without session ID before initialize")
-					return textResponse(status: .badRequest, body: "Missing Mcp-Session-Id. Send initialize first.")
-				}
-				sessionID = UUID()
-				authSessionID = nil
-			} else if case .existing(let existingSessionID) = sessionHeader {
-				if await sessionNeedsInitialize(existingSessionID), !SessionInitializationGate.batchStartsWithInitialize(messages) {
-					logger.warning("Rejected request for uninitialized session \(existingSessionID)")
-					return textResponse(
-						status: .badRequest,
-						body: "Session not initialized. Send initialize first.",
-						sessionID: existingSessionID
-					)
-				}
-				sessionID = existingSessionID
-				authSessionID = existingSessionID
-			} else {
+			guard let context = try await resolveStreamableContext(
+				sessionHeader: sessionHeader,
+				messages: messages,
+				acceptHeader: acceptHeader
+			) else {
 				return textResponse(status: .internalServerError, body: "Session validation failed.")
 			}
 
-			if let errorResponse = await validateHTTPProtocolVersion(for: request, sessionID: authSessionID) {
+			if let errorResponse = await validateHTTPProtocolVersion(for: request, sessionID: context.authSessionID) {
 				return errorResponse
 			}
 
-			let authResult = await authorize(token, sessionID: authSessionID)
-			switch authResult {
-			case .unauthorized(let message):
-				let errorMessage = JSONRPCMessage.errorResponse(
-					id: nil,
-					error: .init(code: -32000, message: "Unauthorized: \(message)")
-				)
-				return .json(errorMessage, status: .unauthorized, sessionId: authSessionID?.uuidString)
-			case .jweNotSupported(let message):
-				let errorMessage = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32000, message: message))
-				return .json(errorMessage, status: .forbidden, sessionId: authSessionID?.uuidString)
-			case .authorized:
-				break
+			if let authError = await authorizeRequest(token: token, authSessionID: context.authSessionID) {
+				return authError
 			}
 
-			let sid = sessionID.uuidString
-			let session = await sessionManager.session(id: sessionID)
-			await bindBearerTokenIfNeeded(token, to: sessionID)
-			let containsRequests = batchContainsRequests(messages)
-
-			if containsRequests {
-				guard "text/event-stream".matchesAcceptHeader(acceptHeader) || "*/*".matchesAcceptHeader(acceptHeader) else {
-					return textResponse(status: .badRequest, body: "Client must accept text/event-stream.", sessionID: sessionID)
-				}
-
-				let (stream, streamInfo) = await createSSEStream(sessionID: sessionID, kind: .request)
-				let streamContext = OutboundStreamContext(streamID: streamInfo.streamID, kind: .request)
-
-				Task {
-					let responses = await session.work(onStream: streamContext) { _ in
-						await self.server.processBatch(messages, ignoringEmptyResponses: true)
-					}
-
-					for response in responses {
-						_ = try? await self.sendJSONRPC(response, to: streamInfo.streamID)
-					}
-
-					await self.finishSSEStream(streamInfo.streamID)
-				}
-
-				let headers: [(String, String)] = [
-					("Content-Type", "text/event-stream"),
-					("Cache-Control", "no-cache"),
-					("Connection", "keep-alive"),
-					("Mcp-Session-Id", sid)
-				]
-
-				return RouteResponse(status: .ok, headers: headers, bodyStream: stream, streamInfo: streamInfo)
-			}
-
-			_ = await session.work { _ in
-				await self.server.processBatch(messages, ignoringEmptyResponses: true)
-			}
-
-			return RouteResponse(status: .accepted, headers: [("Mcp-Session-Id", sid)])
+			return await dispatchStreamable(
+				messages: messages,
+				token: token,
+				context: context
+			)
 		} catch {
-			logger.error("Failed to decode JSON-RPC message: \(error)")
-			let response = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32700, message: error.localizedDescription))
-			let sessionID: String? = {
-				if case .existing(let existingSessionID) = sessionHeader {
-					return existingSessionID.uuidString
-				}
-				return nil
-			}()
-			return .json(response, status: .badRequest, sessionId: sessionID)
+			return decodeFailureResponse(error: error, sessionHeader: sessionHeader)
 		}
 	}
 
-	/// Handle GET /mcp — SSE connection for streamable HTTP.
-	/// Also used by legacy SSE routes for `GET /sse`.
-	///
-	/// Returns a streaming response whose `AsyncStream<Data>` body stays open
-	/// for the lifetime of the SSE connection. SSE events are yielded into the
-	/// stream by `Session.sendSSE`.
-	func handleSSE(request: HTTPRouteRequest<Data?>) async throws -> RouteResponse {
-		let isLegacy = request.path == "/sse"
-		let sessionHeader = await resolveSessionHeader(for: request)
-		let sessionID: UUID
-		let authSessionID: UUID?
-
+	/// Early rejection for malformed/unknown session headers.
+	private func streamableEarlyRejection(for sessionHeader: SessionHeaderResolution) -> RouteResponse? {
 		switch sessionHeader {
-		case .missing:
-			if isLegacy {
-				sessionID = UUID()
-				authSessionID = nil
-			} else {
-				return textResponse(status: .badRequest, body: "Missing Mcp-Session-Id. Send initialize first.")
-			}
-		case .existing(let existingSessionID):
-			sessionID = existingSessionID
-			authSessionID = existingSessionID
 		case .malformed:
 			return textResponse(status: .badRequest, body: "Invalid Mcp-Session-Id header.")
 		case .unknown:
 			return textResponse(status: .notFound, body: "Unknown session. Send initialize first.")
+		case .missing, .existing:
+			return nil
 		}
+	}
 
-		if let errorResponse = await validateHTTPProtocolVersion(for: request, sessionID: authSessionID) {
-			return errorResponse
+	/// Validate Accept header for the streamable HTTP endpoint.
+	private func validateAcceptForStreamableHTTP(acceptHeader: String) -> RouteResponse? {
+		let acceptsJSON = "application/json".matchesAcceptHeader(acceptHeader)
+		let acceptsAny = "*/*".matchesAcceptHeader(acceptHeader)
+		guard acceptHeader.isEmpty || acceptsJSON || acceptsAny else {
+			logger.warning("Rejected non-json request (Accept: \(acceptHeader))")
+			return textResponse(status: .badRequest, body: "Client must accept application/json.")
 		}
+		return nil
+	}
 
-		// Validate SSE headers
-		let acceptHeader = request.header("accept") ?? request.header("Accept") ?? ""
-		guard "text/event-stream".matchesAcceptHeader(acceptHeader) else {
-			logger.warning("Rejected non-SSE request (Accept: \(acceptHeader))")
-			return RouteResponse(status: .badRequest)
+	/// Resolve the request context from the session header and messages, returning early-response on failure.
+	private func resolveStreamableContext(
+		sessionHeader: SessionHeaderResolution,
+		messages: [JSONRPCMessage],
+		acceptHeader: String
+	) async throws -> StreamableHTTPContext? {
+		switch sessionHeader {
+		case .missing:
+			guard SessionInitializationGate.batchStartsWithInitialize(messages) else {
+				logger.warning("Rejected request without session ID before initialize")
+				throw StreamableHTTPError.missingSessionForNonInitialize
+			}
+			return StreamableHTTPContext(sessionID: UUID(), authSessionID: nil, acceptHeader: acceptHeader)
+		case .existing(let existingSessionID):
+			if await sessionNeedsInitialize(existingSessionID),
+			   !SessionInitializationGate.batchStartsWithInitialize(messages) {
+				logger.warning("Rejected request for uninitialized session \(existingSessionID)")
+				throw StreamableHTTPError.uninitializedSession(existingSessionID)
+			}
+			return StreamableHTTPContext(
+				sessionID: existingSessionID,
+				authSessionID: existingSessionID,
+				acceptHeader: acceptHeader
+			)
+		case .malformed, .unknown:
+			return nil
 		}
+	}
 
-		let userAgent = request.header("User-Agent") ?? request.header("user-agent") ?? "unknown"
-
-		logger.info("""
-			SSE connection attempt:
-			- Client/Session ID: \(sessionID)
-			- User-Agent: \(userAgent)
-			- Accept: \(acceptHeader)
-			- Protocol: \(isLegacy ? "Old (HTTP+SSE)" : "New (Streamable HTTP)")
-			""")
-
-		// Validate token
-		let token = request.bearerToken
-
+	/// Run authorization for an inbound request and return an error response (if any).
+	private func authorizeRequest(token: String?, authSessionID: UUID?) async -> RouteResponse? {
 		let authResult = await authorize(token, sessionID: authSessionID)
 		switch authResult {
 		case .unauthorized(let message):
-			logger.warning("Unauthorized SSE connect: \(message)")
-			return RouteResponse(status: .unauthorized)
+			let errorMessage = JSONRPCMessage.errorResponse(
+				id: nil,
+				error: .init(code: -32000, message: "Unauthorized: \(message)")
+			)
+			return .json(errorMessage, status: .unauthorized, sessionId: authSessionID?.uuidString)
 		case .jweNotSupported(let message):
-			logger.warning("JWE token not supported for SSE connect: \(message)")
-			return RouteResponse(status: .forbidden)
+			let errorMessage = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32000, message: message))
+			return .json(errorMessage, status: .forbidden, sessionId: authSessionID?.uuidString)
 		case .authorized:
-			break
+			return nil
 		}
+	}
 
-		await bindBearerTokenIfNeeded(token, to: sessionID)
-		let stream: AsyncStream<Data>
-		let streamInfo: StreamRouteResponseInfo
+	/// Dispatch the messages either as a streaming SSE response or buffered accepted response.
+	private func dispatchStreamable(
+		messages: [JSONRPCMessage],
+		token: String?,
+		context: StreamableHTTPContext
+	) async -> RouteResponse {
+		let sid = context.sessionID.uuidString
+		let session = await sessionManager.session(id: context.sessionID)
+		await bindBearerTokenIfNeeded(token, to: context.sessionID)
+		let containsRequests = batchContainsRequests(messages)
 
-		if isLegacy {
-			(stream, streamInfo) = await createSSEStream(sessionID: sessionID, kind: .legacyGeneral)
-		} else if let lastEventID = request.header("Last-Event-ID") ?? request.header("last-event-id") {
-			do {
-				(stream, streamInfo) = try await resumeSSEStream(sessionID: sessionID, lastEventID: lastEventID)
-			} catch SessionManager.StreamResumeError.malformedEventID {
-				return textResponse(status: .badRequest, body: "Malformed Last-Event-ID header.", sessionID: sessionID)
-			} catch SessionManager.StreamResumeError.sessionMismatch,
-			        SessionManager.StreamResumeError.unknownStream,
-			        SessionManager.StreamResumeError.resumePointUnavailable {
-				return textResponse(status: .notFound, body: "Unknown or expired resumable stream.", sessionID: sessionID)
-			} catch {
-				return textResponse(status: .internalServerError, body: "Failed to resume stream.", sessionID: sessionID)
+		if containsRequests {
+			guard "text/event-stream".matchesAcceptHeader(context.acceptHeader)
+				|| "*/*".matchesAcceptHeader(context.acceptHeader) else {
+				return textResponse(
+					status: .badRequest,
+					body: "Client must accept text/event-stream.",
+					sessionID: context.sessionID
+				)
 			}
-		} else {
-			(stream, streamInfo) = await createSSEStream(sessionID: sessionID, kind: .general)
+
+			let (stream, streamInfo) = await createSSEStream(sessionID: context.sessionID, kind: .request)
+			let streamContext = OutboundStreamContext(streamID: streamInfo.streamID, kind: .request)
+
+			Task {
+				let responses = await session.work(onStream: streamContext) { _ in
+					await self.server.processBatch(messages, ignoringEmptyResponses: true)
+				}
+
+				for response in responses {
+					_ = try? await self.sendJSONRPC(response, to: streamInfo.streamID)
+				}
+
+				await self.finishSSEStream(streamInfo.streamID)
+			}
+
+			let headers: [(String, String)] = [
+				("Content-Type", "text/event-stream"),
+				("Cache-Control", "no-cache"),
+				("Connection", "keep-alive"),
+				("Mcp-Session-Id", sid)
+			]
+
+			return RouteResponse(status: .ok, headers: headers, bodyStream: stream, streamInfo: streamInfo)
 		}
 
-		// For the legacy protocol, send the endpoint event as the first stream item
-		if isLegacy {
-			if let endpointUrl = endpointUrl(from: request, sessionID: sessionID) {
-				logger.info("Sending endpoint event with URL: \(endpointUrl)")
-				let message = SSEMessage(data: endpointUrl.absoluteString, eventName: "endpoint")
-				sendSSE(message, to: sessionID)
-			} else {
-				logger.error("Failed to construct endpoint URL")
-				return RouteResponse(status: .internalServerError)
+		_ = await session.work { _ in
+			await self.server.processBatch(messages, ignoringEmptyResponses: true)
+		}
+
+		return RouteResponse(status: .accepted, headers: [("Mcp-Session-Id", sid)])
+	}
+
+	/// Internal errors thrown while resolving the streamable HTTP context.
+	private enum StreamableHTTPError: Error {
+		case missingSessionForNonInitialize
+		case uninitializedSession(UUID)
+	}
+
+	/// Build a response describing why JSON-RPC decoding failed.
+	private func decodeFailureResponse(error: Error, sessionHeader: SessionHeaderResolution) -> RouteResponse {
+		if let streamableError = error as? StreamableHTTPError {
+			switch streamableError {
+			case .missingSessionForNonInitialize:
+				return textResponse(status: .badRequest, body: "Missing Mcp-Session-Id. Send initialize first.")
+			case .uninitializedSession(let id):
+				return textResponse(
+					status: .badRequest,
+					body: "Session not initialized. Send initialize first.",
+					sessionID: id
+				)
 			}
 		}
 
-		logger.info("SSE connection setup complete for client \(sessionID)")
-
-		// Build SSE response headers
-		var headers: [(String, String)] = [
-			("Content-Type", "text/event-stream"),
-			("Cache-Control", "no-cache"),
-			("Connection", "keep-alive"),
-			("Access-Control-Allow-Methods", "GET"),
-			("Access-Control-Allow-Headers", "Content-Type, Authorization, MCP-Protocol-Version")
-		]
-
-		if !isLegacy {
-			headers.append(("Mcp-Session-Id", sessionID.uuidString))
-		}
-
-		return RouteResponse(status: .ok, headers: headers, bodyStream: stream, streamInfo: streamInfo)
+		logger.error("Failed to decode JSON-RPC message: \(error)")
+		let response = JSONRPCMessage.errorResponse(
+			id: nil,
+			error: .init(code: -32700, message: error.localizedDescription)
+		)
+		let sessionID: String? = {
+			if case .existing(let existingSessionID) = sessionHeader {
+				return existingSessionID.uuidString
+			}
+			return nil
+		}()
+		return .json(response, status: .badRequest, sessionId: sessionID)
 	}
 
 	/// Handle DELETE /mcp — remove a session.

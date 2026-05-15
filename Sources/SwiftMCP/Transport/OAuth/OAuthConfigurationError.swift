@@ -38,39 +38,13 @@ public struct JSONOAuthConfiguration: Codable, Sendable {
 
     /// Convert to OAuthConfiguration
     public func toOAuthConfiguration() throws -> OAuthConfiguration {
-        guard let issuerURL = URL(string: issuer) else {
-            throw OAuthConfigurationError.invalidURL("issuer: \(issuer)")
-        }
-        guard let authURL = URL(string: authorizationEndpoint) else {
-            throw OAuthConfigurationError.invalidURL("authorization_endpoint: \(authorizationEndpoint)")
-        }
-        guard let tokenURL = URL(string: tokenEndpoint) else {
-            throw OAuthConfigurationError.invalidURL("token_endpoint: \(tokenEndpoint)")
-        }
+        let issuerURL = try parseRequiredURL(issuer, label: "issuer")
+        let authURL = try parseRequiredURL(authorizationEndpoint, label: "authorization_endpoint")
+        let tokenURL = try parseRequiredURL(tokenEndpoint, label: "token_endpoint")
 
-        var introspectionURL: URL?
-        if let introspectionEndpoint = introspectionEndpoint {
-            guard let url = URL(string: introspectionEndpoint) else {
-                throw OAuthConfigurationError.invalidURL("introspection_endpoint: \(introspectionEndpoint)")
-            }
-            introspectionURL = url
-        }
-
-        var jwksURL: URL?
-        if let jwksEndpoint = jwksEndpoint {
-            guard let url = URL(string: jwksEndpoint) else {
-                throw OAuthConfigurationError.invalidURL("jwks_uri: \(jwksEndpoint)")
-            }
-            jwksURL = url
-        }
-
-        var registrationURL: URL?
-        if let registrationEndpoint = registrationEndpoint {
-            guard let url = URL(string: registrationEndpoint) else {
-                throw OAuthConfigurationError.invalidURL("registration_endpoint: \(registrationEndpoint)")
-            }
-            registrationURL = url
-        }
+        let introspectionURL = try parseOptionalURL(introspectionEndpoint, label: "introspection_endpoint")
+        let jwksURL = try parseOptionalURL(jwksEndpoint, label: "jwks_uri")
+        let registrationURL = try parseOptionalURL(registrationEndpoint, label: "registration_endpoint")
 
         // Use JWT validation if no introspection endpoint is provided
         let tokenValidator: (@Sendable (String?) async -> Bool)? = if introspectionURL == nil {
@@ -96,6 +70,23 @@ public struct JSONOAuthConfiguration: Codable, Sendable {
             transparentProxy: transparentProxy ?? false,
             tokenValidator: tokenValidator
         )
+    }
+
+    /// Parse a required URL string, throwing on failure.
+    private func parseRequiredURL(_ value: String, label: String) throws -> URL {
+        guard let url = URL(string: value) else {
+            throw OAuthConfigurationError.invalidURL("\(label): \(value)")
+        }
+        return url
+    }
+
+    /// Parse an optional URL string, throwing only if a non-nil value is invalid.
+    private func parseOptionalURL(_ value: String?, label: String) throws -> URL? {
+        guard let value else { return nil }
+        guard let url = URL(string: value) else {
+            throw OAuthConfigurationError.invalidURL("\(label): \(value)")
+        }
+        return url
     }
 
     /// Load configuration from a JSON file
