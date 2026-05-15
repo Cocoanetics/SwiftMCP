@@ -4,8 +4,8 @@ import Testing
 
 // MARK: - Test Resource Loading Helper
 
-/// JWKS data for testing (embedded directly to avoid file loading issues)
 // swiftlint:disable line_length
+// JWKS data for testing (embedded directly to avoid file loading issues)
 let testJWKSData = """
 {
   "keys": [
