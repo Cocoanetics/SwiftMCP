@@ -43,7 +43,10 @@ struct TCPBonjourCommand: AsyncParsableCommand {
         let calculator = DemoServer()
 
         do {
-            logToStderr("MCP Server \(calculator.serverName) (\(calculator.serverVersion)) started with TCP+Bonjour transport")
+            logToStderr(
+                "MCP Server \(calculator.serverName) (\(calculator.serverVersion)) "
+                + "started with TCP+Bonjour transport"
+            )
 
             let bindPort = port == 0 ? nil : port
             let transport = TCPBonjourTransport(

@@ -89,7 +89,7 @@ struct MCPServerProxyTests {
         let proxy = MCPServerProxy(config: config)
         try await proxy.connect()
         let name = await proxy.serverName
-        let _ = try #require(name, "Expected MCP server name after connect")
+        _ = try #require(name, "Expected MCP server name after connect")
         await proxy.disconnect()
     }
 
@@ -117,7 +117,7 @@ struct MCPServerProxyTests {
             #expect(!tools.isEmpty)
             for tool in tools {
                 #expect(!tool.name.isEmpty)
-                if case .object(_, _) = tool.inputSchema {
+                if case .object = tool.inputSchema {
                 } else {
                     Issue.record("Tool schema should be an object type")
                 }
@@ -164,11 +164,11 @@ struct MCPServerProxyTests {
 
         if tools.contains(where: { $0.name == "getCurrentDateTime" }) {
             let result = try await proxy.callTool("getCurrentDateTime")
-            let _ = try #require(result.isEmpty == false, "Expected non-empty result from getCurrentDateTime")
+            _ = try #require(result.isEmpty == false, "Expected non-empty result from getCurrentDateTime")
 
             let isoFormatter = ISO8601DateFormatter()
             let date = isoFormatter.date(from: result)
-            let _ = try #require(date, "Result should be a valid ISO 8601 date: \(result)")
+            _ = try #require(date, "Result should be a valid ISO 8601 date: \(result)")
         }
 
         await proxy.disconnect()
@@ -337,6 +337,7 @@ final class LocalStdioServer: Sendable {
     }
 
     @MCPResource("users://{user_id}/profile")
+    // swiftlint:disable:next identifier_name
     func userProfile(user_id: Int) -> String {
         "profile-\(user_id)"
     }
@@ -346,7 +347,6 @@ final class LocalStdioServer: Sendable {
         [PromptMessage(role: .assistant, content: .init(text: "Hello \(name)"))]
     }
 }
-
 
 private final class AvailabilityFlag: @unchecked Sendable {
     private let lock = NSLock()

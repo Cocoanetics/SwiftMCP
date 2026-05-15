@@ -12,9 +12,13 @@ public enum JSONRPCID: Codable, Sendable, Hashable {
         } else if let stringValue = try? container.decode(String.self) {
             self = .string(stringValue)
         } else {
-            throw DecodingError.typeMismatch(JSONRPCID.self,
-                                             DecodingError.Context(codingPath: decoder.codingPath,
-                                                                  debugDescription: "Expected Int or String for JSON-RPC id"))
+            throw DecodingError.typeMismatch(
+                JSONRPCID.self,
+                DecodingError.Context(
+                    codingPath: decoder.codingPath,
+                    debugDescription: "Expected Int or String for JSON-RPC id"
+                )
+            )
         }
     }
 

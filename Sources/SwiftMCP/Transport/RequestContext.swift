@@ -10,7 +10,7 @@ public final class RequestContext: Sendable {
     public struct Meta: Sendable {
         /// Optional progress token for sending progress notifications.
         public let progressToken: JSONValue?
-        
+
         /// Optional authentication token for authorization.
         public let accessToken: String?
 
@@ -18,7 +18,7 @@ public final class RequestContext: Sendable {
             if dictionary.isEmpty {
                 return nil
             }
-            
+
             self.progressToken = dictionary["progressToken"]
             self.accessToken = dictionary["accessToken"]?.stringValue
         }
@@ -79,13 +79,13 @@ public final class RequestContext: Sendable {
     /// Send a progress notification if a progress token was provided.
     public func reportProgress(_ progress: Double, total: Double? = nil, message: String? = nil) async {
         guard let progressToken = meta?.progressToken else { return }
-        
+
         await Session.current?.sendProgressNotification(progressToken: progressToken,
                                                         progress: progress,
                                                         total: total,
                                                         message: message)
     }
-    
+
     /// Request sampling from the client.
     ///
     /// This method sends a sampling request to the client and returns the generated response.
@@ -98,32 +98,32 @@ public final class RequestContext: Sendable {
         guard let session = Session.current else {
             throw MCPServerError.noActiveSession
         }
-        
+
         // Check if client supports sampling  
         guard await session.clientCapabilities?.sampling != nil else {
             throw MCPServerError.clientHasNoSamplingSupport
         }
-        
+
         // Encode the request parameters
         let params = try JSONDictionary(encoding: request)
-        
+
         // Send the sampling request to the client
         let response = try await session.request(method: "sampling/createMessage", params: params)
-        
+
         // Check for error responses from the client
         if case .errorResponse(let errorData) = response {
             throw MCPServerError.clientError(code: errorData.error.code, message: errorData.error.message)
         }
-        
+
         // Parse the response
         guard case .response(let responseData) = response,
               let result = responseData.result else {
             throw MCPServerError.unexpectedMessageType(method: "sampling/createMessage")
         }
-        
+
         return try result.decoded(SamplingCreateMessageResponse.self)
     }
-    
+
     /// Convenience method for simple text sampling.
     ///
     /// - Parameters:
@@ -143,25 +143,25 @@ public final class RequestContext: Sendable {
             role: .user,
             content: SamplingContent(text: prompt)
         )
-        
+
         let request = SamplingCreateMessageRequest(
             messages: [message],
             modelPreferences: modelPreferences,
             systemPrompt: systemPrompt,
             maxTokens: maxTokens
         )
-        
+
         let response = try await sample(request)
-        
+
         // Extract text content from response
         guard response.content.type == .text,
               let text = response.content.text else {
             throw MCPToolError.unknownTool(name: "sampling/createMessage")
         }
-        
+
         return text
     }
-    
+
     /// Request information from the user through the client.
     ///
     /// This method sends an elicitation request to the client asking for structured user input.
@@ -174,7 +174,7 @@ public final class RequestContext: Sendable {
         guard let session = Session.current else {
             throw MCPServerError.noActiveSession
         }
-        
+
         // Check if client supports elicitation
         let capabilities = await session.clientCapabilities
         print("DEBUG: Client capabilities: \(String(describing: capabilities))")
@@ -182,30 +182,30 @@ public final class RequestContext: Sendable {
         guard capabilities?.elicitation != nil else {
             throw MCPServerError.clientHasNoElicitationSupport
         }
-        
+
         // Encode the request parameters
         let params = try JSONDictionary(encoding: request)
-        
+
         // Debug: Print the encoded parameters
         print("DEBUG: Encoded elicitation params: \(params)")
-        
+
         // Send the elicitation request to the client
         let response = try await session.request(method: "elicitation/create", params: params)
-        
+
         // Check for error responses from the client
         if case .errorResponse(let errorData) = response {
             throw MCPServerError.clientError(code: errorData.error.code, message: errorData.error.message)
         }
-        
+
         // Parse the response
         guard case .response(let responseData) = response,
               let result = responseData.result else {
             throw MCPServerError.unexpectedMessageType(method: "elicitation/create")
         }
-        
+
         return try result.decoded(ElicitationCreateResponse.self)
     }
-    
+
     /// Convenience method for simple elicitation with basic schema.
     ///
     /// - Parameters:

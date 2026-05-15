@@ -10,7 +10,8 @@ import Foundation
 extension String {
     var removingUnprintableCharacters: String {
         // Create a character set of printable ASCII characters (32-126) plus newline, tab, etc.
-        let printableCharacters = CharacterSet(charactersIn: " \t\n\r").union(CharacterSet(charactersIn: UnicodeScalar(32)...UnicodeScalar(126)))
+        let printableASCII = CharacterSet(charactersIn: UnicodeScalar(32)...UnicodeScalar(126))
+        let printableCharacters = CharacterSet(charactersIn: " \t\n\r").union(printableASCII)
 
         // Filter out any characters that are not in the printable set
         return unicodeScalars.filter { printableCharacters.contains($0) }.map { String($0) }.joined()

@@ -25,10 +25,10 @@ class PromptTestServer {
 
 @Suite("Prompt Tests", .tags(.prompt, .unit))
 struct PromptTests {
-    
+
     @Suite("Metadata Tests")
     struct MetadataTests {
-        
+
         @Test("Prompt metadata extraction identifies all prompts")
         func promptMetadataExtractionIdentifiesAllPrompts() throws {
             let server = PromptTestServer()
@@ -42,7 +42,7 @@ struct PromptTests {
 
     @Suite("Completion Tests")
     struct CompletionTests {
-        
+
         @Test("Prompt enum completion returns case labels")
         func promptEnumCompletionReturnsCaseLabels() async throws {
             let server = PromptTestServer()
@@ -54,22 +54,22 @@ struct PromptTests {
                     "ref": ["type": "ref/prompt", "name": "greet"]
                 ]
             )
-            
+
             let message = try #require(await server.handleMessage(request))
             guard case .response(let response) = message else {
                 throw TestError("Expected response")
             }
-            
+
             let result = try #require(response.result)
             let comp = try #require(result["completion"]?.value as? [String: Any])
             let values = try #require(comp["values"] as? [String])
             #expect(values == ["happy", "sad", "excited"])
         }
     }
-    
+
     @Suite("Capability Tests")
     struct CapabilityTests {
-        
+
         @Test("Initialize shows prompts capability")
         func initializeShowsPromptsCapability() async throws {
             let server = PromptTestServer()
@@ -78,21 +78,21 @@ struct PromptTests {
                 method: "initialize",
                 params: [:]
             )
-            
+
             let message = try #require(await server.handleMessage(request))
             guard case .response(let response) = message else {
                 throw TestError("Expected response")
             }
-            
+
             let result = try #require(response.result)
             let caps = try #require(result["capabilities"]?.value as? [String: Any])
             #expect(caps["prompts"] != nil)
         }
     }
-    
+
     @Suite("Prompt Execution Tests")
     struct PromptExecutionTests {
-        
+
         @Test("Call prompts via mock client with parameters")
         func callPromptsViaMockClientWithParameters() async throws {
             let server = PromptTestServer()
@@ -105,12 +105,12 @@ struct PromptTests {
                     "arguments": ["name": "Oliver", "mood": "excited"]
                 ]
             )
-            
+
             let message = try #require(await client.send(request))
             guard case .response(let resp) = message else {
                 throw TestError("Expected response")
             }
-            
+
             let result = try #require(resp.result)
             let messages = try #require(result["messages"]?.value as? [[String: Any]])
             #expect(messages.count == 1)
@@ -131,12 +131,12 @@ struct PromptTests {
                     "arguments": ["name": "Oliver"]
                 ]
             )
-            
+
             let message = try #require(await client.send(request))
             guard case .response(let resp) = message else {
                 throw TestError("Expected response")
             }
-            
+
             let result = try #require(resp.result)
             let messages = try #require(result["messages"]?.value as? [[String: Any]])
             let content = try #require(messages.first?["content"] as? [String: Any])
@@ -153,12 +153,12 @@ struct PromptTests {
                 method: "prompts/get",
                 params: ["name": "pingPrompt"]
             )
-            
+
             let message = try #require(await client.send(request))
             guard case .response(let resp) = message else {
                 throw TestError("Expected response")
             }
-            
+
             let result = try #require(resp.result)
             let messages = try #require(result["messages"]?.value as? [[String: Any]])
             let content = try #require(messages.first?["content"] as? [String: Any])
@@ -169,7 +169,7 @@ struct PromptTests {
 
     @Suite("Advanced Completion Tests")
     struct AdvancedCompletionTests {
-        
+
         @Test("Prompt enum completion with prefix returns matching items first")
         func promptEnumCompletionWithPrefixReturnsMatchingItemsFirst() async throws {
             let server = PromptTestServer()
@@ -181,16 +181,16 @@ struct PromptTests {
                     "ref": ["type": "ref/prompt", "name": "greet"]
                 ]
             )
-            
+
             let message = try #require(await server.handleMessage(request))
             guard case .response(let response) = message else {
                 throw TestError("Expected response")
             }
-            
+
             let result = try #require(response.result)
             let comp = try #require(result["completion"]?.value as? [String: Any])
             let values = try #require(comp["values"] as? [String])
-            
+
             // With prefix "s", "sad" should come first (matches prefix), then others
             #expect(values.first == "sad")
             #expect(values.contains("happy"))
@@ -209,16 +209,16 @@ struct PromptTests {
                     "ref": ["type": "ref/prompt", "name": "greet"]
                 ]
             )
-            
+
             let message = try #require(await server.handleMessage(request))
             guard case .response(let response) = message else {
                 throw TestError("Expected response")
             }
-            
+
             let result = try #require(response.result)
             let comp = try #require(result["completion"]?.value as? [String: Any])
             let values = try #require(comp["values"] as? [String])
-            
+
             // With empty prefix, should return all values in original order
             #expect(values.count == 3)
             #expect(Set(values) == Set(["happy", "sad", "excited"]))
@@ -235,16 +235,16 @@ struct PromptTests {
                     "ref": ["type": "ref/prompt", "name": "setTaskPriority"]
                 ]
             )
-            
+
             let message = try #require(await server.handleMessage(request))
             guard case .response(let response) = message else {
                 throw TestError("Expected response")
             }
-            
+
             let result = try #require(response.result)
             let comp = try #require(result["completion"]?.value as? [String: Any])
             let values = try #require(comp["values"] as? [String])
-            
+
             // With prefix "h", "high" should come first (matches prefix), then others
             #expect(values.first == "high")
             #expect(values.contains("low"))
@@ -263,16 +263,16 @@ struct PromptTests {
                     "ref": ["type": "ref/prompt", "name": "nonExistentPrompt"]
                 ]
             )
-            
+
             let message = try #require(await server.handleMessage(request))
             guard case .response(let response) = message else {
                 throw TestError("Expected response")
             }
-            
+
             let result = try #require(response.result)
             let comp = try #require(result["completion"]?.value as? [String: Any])
             let values = try #require(comp["values"] as? [String])
-            
+
             // Should return empty array for non-existent prompt
             #expect(values.isEmpty)
         }
@@ -286,7 +286,7 @@ extension Tag {
 
 @Suite("Additional Prompt Tests")
 struct AdditionalPromptTests {
-    
+
     @Test("Prompt completion for non-enum parameter returns empty")
     func promptCompletionForNonEnumParameterReturnsEmpty() async throws {
         let server = PromptTestServer()
@@ -298,16 +298,16 @@ struct AdditionalPromptTests {
                 "ref": ["type": "ref/prompt", "name": "greet"]
             ]
         )
-        
+
         let message = try #require(await server.handleMessage(request))
         guard case .response(let response) = message else {
             throw TestError("Expected response")
         }
-        
+
         let result = try #require(response.result)
         let comp = try #require(result["completion"]?.value as? [String: Any])
         let values = try #require(comp["values"] as? [String])
-        
+
         // Should return empty array for non-enum parameter
         #expect(values.isEmpty)
     }
@@ -316,16 +316,16 @@ struct AdditionalPromptTests {
     func directJSONEncodingOfPromptMessage() throws {
         // Create a PromptMessage array like the server would
         let messages = [PromptMessage(role: .assistant, content: .init(text: "Hello Oliver! Mood: excited"))]
-        
+
         // Encode as JSON like it would go over the wire
         let response: JSONDictionary = ["description": "greet", "messages": try JSONValue(encoding: messages)]
         let encoder = JSONEncoder()
         let jsonData = try encoder.encode(response)
-        
+
         // Decode back like a client would
         let decoder = JSONDecoder()
         let decoded = try decoder.decode(JSONDictionary.self, from: jsonData)
-        
+
         // Now test if we can access it like the test expects
         let messagesValue = try #require(decoded["messages"]?.value as? [[String: Any]])
         let firstMessage = try #require(messagesValue.first)

@@ -4,79 +4,79 @@ import Foundation
 /// Based on OpenID Connect Core 1.0 specification, section 5.1 "Standard Claims"
 public struct UserInfo: Codable, Sendable {
     // MARK: - Required Claims
-    
+
     /// Unique identifier for the user (always present)
     public let sub: String
-    
+
     // MARK: - Personal Information
-    
+
     /// Full name
     public let name: String?
-    
+
     /// Given name(s) or first name(s)
     public let givenName: String?
-    
+
     /// Surname(s) or last name(s)
     public let familyName: String?
-    
+
     /// Middle name(s)
     public let middleName: String?
-    
+
     /// Casual name
     public let nickname: String?
-    
+
     /// Shorthand name by which the End-User wishes to be referred to
     public let preferredUsername: String?
-    
+
     // MARK: - Profile & Contact
-    
+
     /// URL of the End-User's profile page
     public let profile: String?
-    
+
     /// URL of the End-User's profile picture
     public let picture: String?
-    
+
     /// URL of the End-User's Web page or blog
     public let website: String?
-    
+
     /// End-User's preferred e-mail address
     public let email: String?
-    
+
     /// True if the End-User's e-mail address has been verified
     public let emailVerified: Bool?
-    
+
     /// End-User's preferred telephone number
     public let phoneNumber: String?
-    
+
     /// True if the End-User's phone number has been verified
     public let phoneNumberVerified: Bool?
-    
+
     // MARK: - Demographics
-    
+
     /// End-User's gender
     public let gender: String?
-    
+
     /// End-User's birthday, represented as an ISO 8601:2004 [ISO8601‑2004] YYYY-MM-DD format
     public let birthdate: String?
-    
+
     /// String from zoneinfo [zoneinfo] time zone database
     public let zoneinfo: String?
-    
+
     /// End-User's locale, represented as a BCP47 [RFC5646] language tag
     public let locale: String?
-    
+
     // MARK: - Address
-    
+
     /// End-User's preferred postal address
     public let address: Address?
-    
+
     // MARK: - Metadata
-    
+
     /// Time the End-User's information was last updated
     public let updatedAt: Date?
-    
+
     // MARK: - Initialization
-    
+
     public init(
         sub: String,
         name: String? = nil,
@@ -120,9 +120,9 @@ public struct UserInfo: Codable, Sendable {
         self.address = address
         self.updatedAt = updatedAt
     }
-    
+
     // MARK: - Codable Implementation
-    
+
     internal enum CodingKeys: String, CodingKey {
         case sub
         case name

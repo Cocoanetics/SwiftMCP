@@ -7,6 +7,7 @@ public struct PromptMessage: Codable, Sendable {
     }
 
     public struct Content: Codable, Sendable {
+        // swiftlint:disable:next nesting
         public enum ContentType: String, Codable, Sendable {
             case text
             case image

@@ -17,14 +17,14 @@ enum URIConstructionError: Error {
 
 @Suite("URI Construction Tests", .tags(.uri, .unit))
 struct URIConstructionTests {
-    
+
     @Test("Basic URI construction with no parameters")
     func basicURIConstructionWithNoParameters() throws {
         let template = "https://api.example.com/users"
         let result = try constructURI(from: template, with: [:])
         #expect(result == "https://api.example.com/users")
     }
-    
+
     @Test("URI construction with single parameter")
     func uriConstructionWithSingleParameter() throws {
         let template = "https://api.example.com/users/{id}"
@@ -32,7 +32,7 @@ struct URIConstructionTests {
         let result = try constructURI(from: template, with: parameters)
         #expect(result == "https://api.example.com/users/123")
     }
-    
+
     @Test("URI construction with multiple parameters")
     func uriConstructionWithMultipleParameters() throws {
         let template = "https://api.example.com/users/{userId}/posts/{postId}"
@@ -40,7 +40,7 @@ struct URIConstructionTests {
         let result = try constructURI(from: template, with: parameters)
         #expect(result == "https://api.example.com/users/123/posts/456")
     }
-    
+
     @Test("URI construction with query parameters")
     func uriConstructionWithQueryParameters() throws {
         let template = "https://api.example.com/users{?limit,offset}"
@@ -48,7 +48,7 @@ struct URIConstructionTests {
         let result = try constructURI(from: template, with: parameters)
         #expect(result == "https://api.example.com/users?limit=10&offset=20")
     }
-    
+
     @Test("URI construction with mixed path and query parameters")
     func uriConstructionWithMixedPathAndQueryParameters() throws {
         let template = "https://api.example.com/users/{id}{?include}"
@@ -56,7 +56,7 @@ struct URIConstructionTests {
         let result = try constructURI(from: template, with: parameters)
         #expect(result == "https://api.example.com/users/123?include=profile")
     }
-    
+
     @Test("URI construction with URL encoding")
     func uriConstructionWithURLEncoding() throws {
         let template = "https://api.example.com/search{?q}"
@@ -64,17 +64,17 @@ struct URIConstructionTests {
         let result = try constructURI(from: template, with: parameters)
         #expect(result == "https://api.example.com/search?q=hello%20world")
     }
-    
+
     @Test("URI construction with missing required parameter removes placeholder")
     func uriConstructionWithMissingRequiredParameter() throws {
         let template = "https://api.example.com/users/{id}"
         let parameters: [String: String] = [:]
-        
+
         // Current implementation removes the placeholder when parameter is missing
         let result = try constructURI(from: template, with: parameters)
         #expect(result == "https://api.example.com/users/")
     }
-    
+
     @Test("URI construction with optional parameter omitted")
     func uriConstructionWithOptionalParameterOmitted() throws {
         let template = "https://api.example.com/users{?limit}"
@@ -82,7 +82,7 @@ struct URIConstructionTests {
         let result = try constructURI(from: template, with: parameters)
         #expect(result == "https://api.example.com/users")
     }
-    
+
     @Test("URI construction with fragment")
     func uriConstructionWithFragment() throws {
         let template = "https://api.example.com/users/{id}#section"
@@ -90,7 +90,7 @@ struct URIConstructionTests {
         let result = try constructURI(from: template, with: parameters)
         #expect(result == "https://api.example.com/users/123#section")
     }
-    
+
     @Test("URI construction with complex template")
     func uriConstructionWithComplexTemplate() throws {
         let template = "https://api.example.com/v{version}/users/{userId}/posts{?limit,offset,sort}"
@@ -108,4 +108,4 @@ struct URIConstructionTests {
 // MARK: - Test Tags Extension
 extension Tag {
     @Tag static var uri: Self
-} 
+}

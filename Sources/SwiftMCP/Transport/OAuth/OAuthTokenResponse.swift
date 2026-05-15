@@ -5,22 +5,22 @@ import Foundation
 public struct OAuthTokenResponse: Codable, Sendable {
     /// The access token issued by the authorization server
     public let accessToken: String
-    
+
     /// The type of the token issued (e.g., "Bearer")
     public let tokenType: String
-    
+
     /// The lifetime in seconds of the access token
     public let expiresIn: Int?
-    
+
     /// The refresh token, which can be used to obtain new access tokens
     public let refreshToken: String?
-    
+
     /// The scope of the access token
     public let scope: String?
-    
+
     /// ID token (for OpenID Connect)
     public let idToken: String?
-    
+
     public init(
         accessToken: String,
         tokenType: String,
@@ -36,7 +36,7 @@ public struct OAuthTokenResponse: Codable, Sendable {
         self.scope = scope
         self.idToken = idToken
     }
-    
+
     internal enum CodingKeys: String, CodingKey {
         case accessToken = "access_token"
         case tokenType = "token_type"

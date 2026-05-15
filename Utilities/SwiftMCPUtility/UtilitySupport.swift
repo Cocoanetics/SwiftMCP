@@ -25,8 +25,16 @@ struct ConnectionOptions: ParsableArguments {
 enum UtilitySupport {
     static func makeConfig(from options: ConnectionOptions) throws -> MCPServerConfig {
         if let configPath = options.config {
-            if options.sse != nil || options.command != nil || !options.header.isEmpty || options.cwd != nil || !options.env.isEmpty {
-                throw ValidationError("Use --config by itself; do not combine it with --sse, --command, --header, --cwd, or --env.")
+            let hasOther = options.sse != nil
+                || options.command != nil
+                || !options.header.isEmpty
+                || options.cwd != nil
+                || !options.env.isEmpty
+            if hasOther {
+                throw ValidationError(
+                    "Use --config by itself; do not combine it with "
+                    + "--sse, --command, --header, --cwd, or --env."
+                )
             }
             let config = try loadConfig(from: configPath)
             return try makeConfig(from: config)
@@ -163,60 +171,85 @@ enum UtilitySupport {
     }
 
     static func splitCommandLine(_ commandLine: String) throws -> [String] {
+        var state = CommandLineSplitState()
+
+        for scalar in commandLine.unicodeScalars {
+            processCommandLineCharacter(Character(scalar), state: &state)
+        }
+
+        if state.escapeNext {
+            state.current.append("\\")
+        }
+
+        if state.inSingleQuote || state.inDoubleQuote {
+            throw ValidationError("Unterminated quote in --command.")
+        }
+
+        if !state.current.isEmpty {
+            state.tokens.append(state.current)
+        }
+
+        return state.tokens
+    }
+
+    /// Mutable accumulator for `splitCommandLine`. Pulled out of the
+    /// per-character switch so each helper stays under the cyclomatic
+    /// complexity limit.
+    private struct CommandLineSplitState {
         var tokens: [String] = []
         var current = ""
         var inSingleQuote = false
         var inDoubleQuote = false
         var escapeNext = false
+    }
 
-        for scalar in commandLine.unicodeScalars {
-            let character = Character(scalar)
-            if escapeNext {
-                current.append(character)
-                escapeNext = false
-                continue
-            }
-
-            switch character {
-                case "\\":
-                    escapeNext = true
-                case "\"":
-                    if !inSingleQuote {
-                        inDoubleQuote.toggle()
-                    } else {
-                        current.append(character)
-                    }
-                case "'":
-                    if !inDoubleQuote {
-                        inSingleQuote.toggle()
-                    } else {
-                        current.append(character)
-                    }
-                case " ", "\t", "\n":
-                    if inSingleQuote || inDoubleQuote {
-                        current.append(character)
-                    } else if !current.isEmpty {
-                        tokens.append(current)
-                        current = ""
-                    }
-                default:
-                    current.append(character)
-            }
+    private static func processCommandLineCharacter(
+        _ character: Character,
+        state: inout CommandLineSplitState
+    ) {
+        if state.escapeNext {
+            state.current.append(character)
+            state.escapeNext = false
+            return
         }
 
-        if escapeNext {
-            current.append("\\")
+        switch character {
+        case "\\":
+            state.escapeNext = true
+        case "\"":
+            handleDoubleQuote(state: &state, character: character)
+        case "'":
+            handleSingleQuote(state: &state, character: character)
+        case " ", "\t", "\n":
+            handleWhitespace(state: &state, character: character)
+        default:
+            state.current.append(character)
         }
+    }
 
-        if inSingleQuote || inDoubleQuote {
-            throw ValidationError("Unterminated quote in --command.")
+    private static func handleDoubleQuote(state: inout CommandLineSplitState, character: Character) {
+        if !state.inSingleQuote {
+            state.inDoubleQuote.toggle()
+        } else {
+            state.current.append(character)
         }
+    }
 
-        if !current.isEmpty {
-            tokens.append(current)
+    private static func handleSingleQuote(state: inout CommandLineSplitState, character: Character) {
+        if !state.inDoubleQuote {
+            state.inSingleQuote.toggle()
+        } else {
+            state.current.append(character)
         }
+    }
 
-        return tokens
+    private static func handleWhitespace(state: inout CommandLineSplitState, character: Character) {
+        if state.inSingleQuote || state.inDoubleQuote {
+            state.current.append(character)
+        } else if !state.current.isEmpty {
+            state.tokens.append(state.current)
+            state.current = ""
+        }
     }
 }
 

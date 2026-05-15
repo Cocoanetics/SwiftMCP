@@ -33,22 +33,34 @@ class CustomCompletionServer: MCPCompletionProviding {
         }
     }
 
-    func completion(for parameter: MCPParameterInfo, in context: MCPCompletionContext, prefix: String) async -> CompleteResult.Completion {
+    func completion(
+        for parameter: MCPParameterInfo,
+        in context: MCPCompletionContext,
+        prefix: String
+    ) async -> CompleteResult.Completion {
         if parameter.name == "color" {
-            
+
             let completions = parameter.defaultCompletions + ["ruby", "rose"]
-            
-            return CompleteResult.Completion(values: completions.sortedByBestCompletion(prefix: prefix), total: completions.count, hasMore: false)
+
+            return CompleteResult.Completion(
+                values: completions.sortedByBestCompletion(prefix: prefix),
+                total: completions.count,
+                hasMore: false
+            )
         }
-        
+
         let completions = parameter.defaultCompletions
-        return CompleteResult.Completion(values: completions.sortedByBestCompletion(prefix: prefix), total: completions.count, hasMore: false)
+        return CompleteResult.Completion(
+            values: completions.sortedByBestCompletion(prefix: prefix),
+            total: completions.count,
+            hasMore: false
+        )
     }
 }
 
 @Suite("Completion Tests", .tags(.completion, .unit))
 struct CompletionTests {
-    
+
     @Test("Enum completion returns case labels with prefix match first")
     func enumCompletionReturnsCaseLabelsWithPrefixFirst() async throws {
         let server = CompletionServer()
@@ -63,7 +75,7 @@ struct CompletionTests {
         )
 
         let message = try #require(await server.handleMessage(request))
-        
+
         guard case .response(let response) = message else {
             throw TestError("Expected response")
         }
@@ -89,7 +101,7 @@ struct CompletionTests {
         )
 
         let message = try #require(await server.handleMessage(request))
-        
+
         guard case .response(let response) = message else {
             throw TestError("Expected response")
         }
@@ -115,5 +127,3 @@ struct CompletionTests {
 extension Tag {
     @Tag static var completion: Self
 }
-
-

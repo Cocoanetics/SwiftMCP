@@ -63,83 +63,117 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
         providingMembersOf declaration: some DeclGroupSyntax,
         in context: some MacroExpansionContext
     ) throws -> [DeclSyntax] {
-        // Handle struct declarations
         guard let structDecl = declaration.as(StructDeclSyntax.self) else {
             let diagnostic = Diagnostic(node: node, message: SchemaDiagnostic.onlyStructs)
             context.diagnose(diagnostic)
             return []
         }
 
-        // Extract struct name
         let structName = structDecl.name.text
-
-        // Extract property descriptions from documentation
         let documentation = Documentation(from: structDecl.leadingTrivia.description)
+        let (propertyString, propertyInfos) = try collectProperties(
+            of: structDecl,
+            documentation: documentation,
+            context: context
+        )
 
-        // Extract property information
+        let registrationDecl = makeRegistrationDeclaration(
+            structName: structName,
+            documentation: documentation,
+            propertyString: propertyString
+        )
+
+        var declarations = [DeclSyntax(stringLiteral: registrationDecl)]
+        declarations.append(DeclSyntax(stringLiteral: makeClientReturnTypealias(
+            structName: structName,
+            propertyInfos: propertyInfos
+        )))
+        return declarations
+    }
+
+    /// Walks the struct members collecting property metadata. Emits a
+    /// diagnostic for nested structs lacking `@Schema`.
+    private static func collectProperties(
+        of structDecl: StructDeclSyntax,
+        documentation: Documentation,
+        context: MacroExpansionContext
+    ) throws -> (String, [PropertyInfo]) {
         var propertyString = ""
-        var propertyInfos: [(name: String, type: String, defaultValue: String?)] = []
+        var propertyInfos: [PropertyInfo] = []
 
-        // Process all members, but only properties (ignore nested structs)
         for member in structDecl.memberBlock.members {
             if let property = member.decl.as(VariableDeclSyntax.self) {
                 guard shouldIncludeProperty(property) else { continue }
-                // Process regular property
                 let (propertyStr, propertyInfo) = try processProperty(
                     property: property,
                     documentation: documentation,
                     context: context
                 )
-
                 if !propertyString.isEmpty {
                     propertyString += ", "
                 }
                 propertyString += propertyStr
                 propertyInfos.append(propertyInfo)
             } else if let nestedStruct = member.decl.as(StructDeclSyntax.self) {
-                // Check if nested struct has @Schema annotation
-                var hasSchemaAttribute = false
-                for attribute in nestedStruct.attributes {
-                    if let identifierAttr = attribute.as(AttributeSyntax.self),
-                       let identifier = identifierAttr.attributeName.as(IdentifierTypeSyntax.self),
-                       identifier.name.text == "Schema" {
-                        hasSchemaAttribute = true
-                        break
-                    }
-                }
-                
-                if !hasSchemaAttribute {
-                    // Create diagnostic warning about missing @Schema
-                    let diagnostic = Diagnostic(
-                        node: nestedStruct.structKeyword,
-                        message: SchemaDiagnostic.nestedStructNeedsSchema(nestedStruct.name.text)
-                    )
-                    context.diagnose(diagnostic)
-                }
+                diagnoseNestedStructIfNeeded(nestedStruct, context: context)
             }
         }
 
-        // Create a registration statement
-        let registrationDecl = """
+        return (propertyString, propertyInfos)
+    }
+
+    private static func diagnoseNestedStructIfNeeded(
+        _ nestedStruct: StructDeclSyntax,
+        context: MacroExpansionContext
+    ) {
+        let hasSchemaAttribute = nestedStruct.attributes.contains { attribute in
+            guard let identifierAttr = attribute.as(AttributeSyntax.self),
+                  let identifier = identifierAttr.attributeName.as(IdentifierTypeSyntax.self) else {
+                return false
+            }
+            return identifier.name.text == "Schema"
+        }
+        guard !hasSchemaAttribute else { return }
+        let diagnostic = Diagnostic(
+            node: nestedStruct.structKeyword,
+            message: SchemaDiagnostic.nestedStructNeedsSchema(nestedStruct.name.text)
+        )
+        context.diagnose(diagnostic)
+    }
+
+    private static func makeRegistrationDeclaration(
+        structName: String,
+        documentation: Documentation,
+        propertyString: String
+    ) -> String {
+        let descriptionArg = documentation.description.isEmpty
+            ? "nil"
+            : "\"\(documentation.description.escapedForSwiftString)\""
+        return """
         /// generated
-        public static let schemaMetadata = SchemaMetadata(name: "\(structName)", description: \(documentation.description.isEmpty ? "nil" : "\"\(documentation.description.escapedForSwiftString)\""), parameters: [\(propertyString)])
+        public static let schemaMetadata = SchemaMetadata(
+            name: "\(structName)",
+            description: \(descriptionArg),
+            parameters: [\(propertyString)]
+        )
         """
+    }
 
-        var declarations = [DeclSyntax(stringLiteral: registrationDecl)]
-
-        // Generate MCPClientReturn typealias for the proxy generator.
-        // Single-array wrapper structs (exactly one stored property that is an array)
-        // resolve to [Element], allowing the generated proxy to return the unwrapped
-        // array type. All other structs resolve to Self (identity).
+    /// Generates the `MCPClientReturn` typealias for the proxy generator.
+    /// Single-array wrapper structs (exactly one stored array property) resolve
+    /// to `[Element]`; all other structs resolve to `Self`.
+    private static func makeClientReturnTypealias(
+        structName: String,
+        propertyInfos: [PropertyInfo]
+    ) -> String {
         if propertyInfos.count == 1,
            let onlyProp = propertyInfos.first,
-           let elementType = Self.arrayElementType(from: onlyProp.type.trimmingCharacters(in: .whitespacesAndNewlines)) {
-            declarations.append(DeclSyntax(stringLiteral: "public typealias MCPClientReturn = [\(elementType)]"))
-        } else {
-            declarations.append(DeclSyntax(stringLiteral: "public typealias MCPClientReturn = \(structName)"))
+           let elementType = Self.arrayElementType(
+               from: onlyProp.type.trimmingCharacters(in: .whitespacesAndNewlines)
+           ) {
+            return "public typealias MCPClientReturn = [\(elementType)]"
         }
-
-        return declarations
+        return "public typealias MCPClientReturn = \(structName)"
     }
 
     public static func expansion(
@@ -166,14 +200,23 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
         return [extensionDecl]
     }
 
+    struct PropertyInfo {
+        let name: String
+        let type: String
+        let defaultValue: String?
+    }
+
     private static func processProperty(
         property: VariableDeclSyntax,
         documentation: Documentation,
         context: MacroExpansionContext
-    ) throws -> (String, (name: String, type: String, defaultValue: String?)) {
+    ) throws -> (String, PropertyInfo) {
         // Get the property name and type
-        let propertyName = property.bindings.first?.pattern.as(IdentifierPatternSyntax.self)?.identifier.text ?? ""
-        let propertyType = property.bindings.first?.typeAnnotation?.type.description.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) ?? ""
+        let propertyName = property.bindings.first?
+            .pattern.as(IdentifierPatternSyntax.self)?.identifier.text ?? ""
+        let propertyType = property.bindings.first?
+            .typeAnnotation?.type.description
+            .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) ?? ""
 
         // Get property description from property's documentation
         var propertyDescription = "nil"
@@ -190,11 +233,11 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
             // Handle different types of default values
             if rawValue.hasPrefix(".") {
                 defaultValue = "\(propertyType)\(rawValue)"
-            } else if rawValue.contains(".") || 
-                      rawValue == "true" || rawValue == "false" ||
-                      Double(rawValue) != nil ||
-                      rawValue == "nil" ||
-                      (rawValue.hasPrefix("[") && rawValue.hasSuffix("]")) {
+            } else if rawValue.contains(".") ||
+                rawValue == "true" || rawValue == "false" ||
+                Double(rawValue) != nil ||
+                rawValue == "nil" ||
+                (rawValue.hasPrefix("[") && rawValue.hasSuffix("]")) {
                 defaultValue = rawValue
             } else if let stringLiteral = initializer.value.as(StringLiteralExprSyntax.self) {
                 defaultValue = "\"\(stringLiteral.segments.description)\""
@@ -214,9 +257,15 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
         let schemaName = getCodingKeyRawValue(for: propertyName, in: Syntax(property)) ?? propertyName
 
         // Create parameter info with the type directly
-        let propertyStr = "SchemaPropertyInfo(name: \"\(schemaName)\", type: \(baseType).self, description: \(propertyDescription), defaultValue: \(defaultValue) as Sendable?, isRequired: \(isRequired))"
+        let propertyStr = "SchemaPropertyInfo(name: \"\(schemaName)\", type: \(baseType).self, "
+            + "description: \(propertyDescription), "
+            + "defaultValue: \(defaultValue) as Sendable?, "
+            + "isRequired: \(isRequired))"
 
-        return (propertyStr, (name: propertyName, type: propertyType, defaultValue: defaultValue))
+        return (
+            propertyStr,
+            PropertyInfo(name: propertyName, type: propertyType, defaultValue: defaultValue)
+        )
     }
 
     private static func shouldIncludeProperty(_ property: VariableDeclSyntax) -> Bool {
@@ -225,10 +274,8 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
             return false
         }
 
-        for binding in property.bindings {
-            if binding.accessorBlock != nil {
-                return false
-            }
+        for binding in property.bindings where binding.accessorBlock != nil {
+            return false
         }
 
         return true
@@ -273,8 +320,8 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
                     }
 
                     // Get all inherited types as strings
-                    let inheritedTypeDescriptions = enumDecl.inheritanceClause?.inheritedTypes.map { 
-                        $0.type.description.trimmingCharacters(in: .whitespacesAndNewlines) 
+                    let inheritedTypeDescriptions = enumDecl.inheritanceClause?.inheritedTypes.map {
+                        $0.type.description.trimmingCharacters(in: .whitespacesAndNewlines)
                     } ?? []
 
                     guard inheritedTypeDescriptions.contains("String"),
@@ -286,19 +333,17 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
                     for member in enumDecl.memberBlock.members {
                         guard let enumCase = member.decl.as(EnumCaseDeclSyntax.self) else { continue }
 
-                        for element in enumCase.elements {
-                            if element.name.text == propertyName {
-                                // Found matching case, check for raw value
-                                if let rawValue = element.rawValue?.value {
-                                    // Handle string literal
-                                    if let stringLiteral = rawValue.as(StringLiteralExprSyntax.self) {
-                                        return stringLiteral.segments.description
-                                            .trimmingCharacters(in: .init(charactersIn: "\""))
-                                    }
+                        for element in enumCase.elements where element.name.text == propertyName {
+                            // Found matching case, check for raw value
+                            if let rawValue = element.rawValue?.value {
+                                // Handle string literal
+                                if let stringLiteral = rawValue.as(StringLiteralExprSyntax.self) {
+                                    return stringLiteral.segments.description
+                                        .trimmingCharacters(in: .init(charactersIn: "\""))
                                 }
-                                // If no raw value, use the case name
-                                return element.name.text
                             }
+                            // If no raw value, use the case name
+                            return element.name.text
                         }
                     }
                 }
@@ -317,28 +362,28 @@ enum SchemaDiagnostic: DiagnosticMessage {
 
     var message: String {
         switch self {
-            case .onlyStructs:
-                return "@Schema can only be applied to struct declarations"
-            case .nestedStructNeedsSchema(let structName):
-                return "Nested struct '\(structName)' needs the @Schema annotation"
+        case .onlyStructs:
+            return "@Schema can only be applied to struct declarations"
+        case .nestedStructNeedsSchema(let structName):
+            return "Nested struct '\(structName)' needs the @Schema annotation"
         }
     }
 
     var diagnosticID: MessageID {
         switch self {
-            case .onlyStructs:
-                return MessageID(domain: "SchemaMacro", id: "onlyStructs")
-            case .nestedStructNeedsSchema(_):
-                return MessageID(domain: "SchemaMacro", id: "nestedStructNeedsSchema")
+        case .onlyStructs:
+            return MessageID(domain: "SchemaMacro", id: "onlyStructs")
+        case .nestedStructNeedsSchema:
+            return MessageID(domain: "SchemaMacro", id: "nestedStructNeedsSchema")
         }
     }
 
     var severity: DiagnosticSeverity {
         switch self {
-            case .onlyStructs:
-                return .error
-            case .nestedStructNeedsSchema(_):
-                return .warning
+        case .onlyStructs:
+            return .error
+        case .nestedStructNeedsSchema:
+            return .warning
         }
     }
-} 
+}

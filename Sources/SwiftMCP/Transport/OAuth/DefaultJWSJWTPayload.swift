@@ -5,10 +5,10 @@ import FoundationNetworking
 
 public extension OAuthConfiguration {
     init?(issuer: URL,
-         audience: String? = nil,
-         clientID: String? = nil,
-         clientSecret: String? = nil,
-         transparentProxy: Bool = false) async {
+          audience: String? = nil,
+          clientID: String? = nil,
+          clientSecret: String? = nil,
+          transparentProxy: Bool = false) async {
         let configURL = issuer.appendingPathComponent(".well-known/openid-configuration")
 
         do {
@@ -16,7 +16,7 @@ public extension OAuthConfiguration {
             guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
                 return nil
             }
-            
+
             let config = try JSONDecoder().decode(OIDCWellKnownConfiguration.self, from: data)
 
             self.init(

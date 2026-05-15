@@ -8,20 +8,38 @@
 import Foundation
 import Logging
 
+// swiftlint:disable function_parameter_count unused_setter_value
+// `LogHandler` protocol from swift-log dictates the signatures; we just no-op.
 struct NoOpLogHandler: LogHandler {
 	var logLevel: Logger.Level = .critical
 	var metadata: Logger.Metadata = [:]
-	
+
 	subscript(metadataKey key: String) -> Logger.Metadata.Value? {
 		get { return nil }
 		set { }
 	}
-	
-	func log(level: Logger.Level, message: Logger.Message, metadata: Logger.Metadata?, source: String, file: String, function: String, line: UInt) {
+
+	func log(
+		level: Logger.Level,
+		message: Logger.Message,
+		metadata: Logger.Metadata?,
+		source: String,
+		file: String,
+		function: String,
+		line: UInt
+	) {
 		// Discard all log messages.
 	}
 
-	func log(level: Logger.Level, message: Logger.Message, metadata: Logger.Metadata?, file: String, function: String, line: UInt) {
+	func log(
+		level: Logger.Level,
+		message: Logger.Message,
+		metadata: Logger.Metadata?,
+		file: String,
+		function: String,
+		line: UInt
+	) {
 		// Discard all log messages.
 	}
 }
+// swiftlint:enable function_parameter_count unused_setter_value

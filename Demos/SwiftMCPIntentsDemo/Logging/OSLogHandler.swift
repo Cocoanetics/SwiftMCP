@@ -8,21 +8,30 @@ import Logging
 struct OSLogHandler: LogHandler {
     let label: String
     let log: OSLog
-    
+
     var logLevel: Logging.Logger.Level = .debug
     var metadata = Logging.Logger.Metadata()
-    
+
     subscript(metadataKey metadataKey: String) -> Logging.Logger.Metadata.Value? {
         get { metadata[metadataKey] }
         set { metadata[metadataKey] = newValue }
     }
-    
+
     init(label: String, log: OSLog) {
         self.label = label
         self.log = log
     }
-    
-    func log(level: Logging.Logger.Level, message: Logging.Logger.Message, metadata: Logging.Logger.Metadata?, source: String, file: String, function: String, line: UInt) {
+
+    // swiftlint:disable:next function_parameter_count
+    func log(
+        level: Logging.Logger.Level,
+        message: Logging.Logger.Message,
+        metadata: Logging.Logger.Metadata?,
+        source: String,
+        file: String,
+        function: String,
+        line: UInt
+    ) {
         let type: OSLogType
         switch level {
         case .trace, .debug:
@@ -36,9 +45,8 @@ struct OSLogHandler: LogHandler {
         case .critical:
             type = .fault
         }
-        
+
         os_log("%{public}@", log: log, type: type, message.description)
     }
 }
 #endif
-

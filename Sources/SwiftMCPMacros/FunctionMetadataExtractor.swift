@@ -38,7 +38,10 @@ struct ParsedParameter {
         let descriptionString = description ?? "nil"
         // A parameter is required if it has no default value AND is not optional
         let isRequired = defaultValueClause == nil && !isOptionalType
-        return "MCPParameterInfo(name: \"\(name)\", type: \(baseTypeString).self, description: \(descriptionString), defaultValue: \(defaultValueForMetadata), isRequired: \(isRequired))"
+        return "MCPParameterInfo(name: \"\(name)\", type: \(baseTypeString).self, "
+            + "description: \(descriptionString), "
+            + "defaultValue: \(defaultValueForMetadata), "
+            + "isRequired: \(isRequired))"
     }
 }
 
@@ -67,105 +70,13 @@ struct FunctionMetadataExtractor {
     }
 
     func extract() throws -> ExtractedFunctionMetadata {
-        let functionName = funcDecl.name.text
         let documentation = Documentation(from: funcDecl.leadingTrivia.description)
-
-        var propagatedAttributes: [String] = []
-        for attr in funcDecl.attributes {
-            guard let attribute = attr.as(AttributeSyntax.self) else { continue }
-            let attributeName = attribute.attributeName.description.trimmingCharacters(in: .whitespacesAndNewlines)
-            if attributeName.isEmpty { continue }
-            // Skip the MCP macros themselves to avoid recursive generation.
-            if ["MCPTool", "MCPResource", "MCPPrompt", "MCPServer", "MCPToolProvider", "Schema", "MCPExtension"].contains(attributeName) {
-                continue
-            }
-            let trimmedDescription = attribute.description.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmedDescription.isEmpty {
-                propagatedAttributes.append(trimmedDescription)
-            }
-        }
-
-        var parsedParameters: [ParsedParameter] = []
-
-        for param in funcDecl.signature.parameterClause.parameters {
-            let paramName = param.secondName?.text ?? param.firstName.text
-            let paramLabel = param.firstName.text
-            let paramTypeSyntax = param.type
-            let paramTypeString = paramTypeSyntax.description.trimmingCharacters(in: .whitespacesAndNewlines)
-
-            let isOptionalType = paramTypeSyntax.is(OptionalTypeSyntax.self) ||
-                               paramTypeSyntax.is(ImplicitlyUnwrappedOptionalTypeSyntax.self) ||
-                               paramTypeString.hasSuffix("?") ||
-                               paramTypeString.hasSuffix("!")
-
-            let baseTypeString: String
-            if isOptionalType {
-                if paramTypeString.hasSuffix("?") {
-                    baseTypeString = String(paramTypeString.dropLast())
-                } else if paramTypeString.hasSuffix("!") {
-                    baseTypeString = String(paramTypeString.dropLast())
-                } else if let optType = paramTypeSyntax.as(OptionalTypeSyntax.self) {
-                    baseTypeString = optType.wrappedType.description.trimmingCharacters(in: .whitespacesAndNewlines)
-                } else if let iuoType = paramTypeSyntax.as(ImplicitlyUnwrappedOptionalTypeSyntax.self) {
-                    baseTypeString = iuoType.wrappedType.description.trimmingCharacters(in: .whitespacesAndNewlines)
-                }
-                else {
-                    baseTypeString = paramTypeString // Should not happen if isOptional is true
-                }
-            } else {
-                baseTypeString = paramTypeString
-            }
-
-
-            var paramDocDescription: String? = nil
-            if let doc = documentation.parameters[paramName], !doc.isEmpty {
-                paramDocDescription = "\"\(doc.escapedForSwiftString)\""
-            }
-
-            let defaultValueClause = param.defaultValue
-            let defaultValueForMetadata = try processDefaultValue(
-                defaultValueClause?.value,
-                paramTypeString: baseTypeString, // Pass base type for enum cases like .value
-                isArray: paramTypeSyntax.is(ArrayTypeSyntax.self) || paramTypeString.hasPrefix("[") 
-            )
-
-            // Common diagnostic for optional parameters needing default values
-            if isOptionalType && defaultValueClause == nil {
-                let diagnostic = Diagnostic(
-                    node: Syntax(paramTypeSyntax),
-                    // Using a generic diagnostic message here, specific macros might want to customize
-                    message: MCPToolDiagnostic.optionalParameterNeedsDefault(paramName: paramName, typeName: paramTypeString), 
-                    fixIts: [
-                        FixIt(message: MCPToolFixItMessage.addDefaultValue(paramName: paramName),
-                              changes: [
-                                  .replace(oldNode: Syntax(param),
-                                           newNode: Syntax(param.with(\.defaultValue, InitializerClauseSyntax(
-                                               equal: .equalToken(leadingTrivia: .space, trailingTrivia: .space),
-                                               value: ExprSyntax(NilLiteralExprSyntax())
-                                           ))))
-                              ])
-                    ]
-                )
-                context.diagnose(diagnostic)
-            }
-
-            parsedParameters.append(ParsedParameter(
-                funcParam: param,
-                name: paramName,
-                label: paramLabel,
-                typeSyntax: paramTypeSyntax,
-                typeString: paramTypeString,
-                baseTypeString: baseTypeString,
-                defaultValueClause: defaultValueClause,
-                defaultValueForMetadata: defaultValueForMetadata,
-                description: paramDocDescription,
-                isOptionalType: isOptionalType
-            ))
-        }
-
+        let propagatedAttributes = collectPropagatedAttributes()
+        let parsedParameters = try parseParameters(documentation: documentation)
         let returnTypeSyntax = funcDecl.signature.returnClause?.type
         let returnTypeString = returnTypeSyntax?.description.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Void"
-        var returnDocDescription: String? = nil
+
+        var returnDocDescription: String?
         if let doc = documentation.returns, !doc.isEmpty {
             returnDocDescription = "\"\(doc.escapedForSwiftString)\""
         }
@@ -175,7 +86,7 @@ struct FunctionMetadataExtractor {
 
         return ExtractedFunctionMetadata(
             funcDecl: funcDecl,
-            functionName: functionName,
+            functionName: funcDecl.name.text,
             documentation: documentation,
             parameters: parsedParameters,
             returnTypeSyntax: returnTypeSyntax,
@@ -187,7 +98,146 @@ struct FunctionMetadataExtractor {
         )
     }
 
-    private func processDefaultValue(_ defaultExpr: ExprSyntax?, paramTypeString: String, isArray: Bool) throws -> String {
+    /// Collects re-emittable attributes from the function (e.g. `@MainActor`),
+    /// excluding the MCP macros themselves to avoid recursive generation.
+    private func collectPropagatedAttributes() -> [String] {
+        var propagatedAttributes: [String] = []
+        let mcpMacroNames: Set<String> = [
+            "MCPTool", "MCPResource", "MCPPrompt",
+            "MCPServer", "MCPToolProvider", "Schema", "MCPExtension"
+        ]
+
+        for attr in funcDecl.attributes {
+            guard let attribute = attr.as(AttributeSyntax.self) else { continue }
+            let attributeName = attribute.attributeName.description.trimmingCharacters(in: .whitespacesAndNewlines)
+            if attributeName.isEmpty || mcpMacroNames.contains(attributeName) {
+                continue
+            }
+            let trimmedDescription = attribute.description.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedDescription.isEmpty {
+                propagatedAttributes.append(trimmedDescription)
+            }
+        }
+        return propagatedAttributes
+    }
+
+    /// Parses each function parameter into a `ParsedParameter`, emitting
+    /// diagnostics for optional parameters without default values.
+    private func parseParameters(documentation: Documentation) throws -> [ParsedParameter] {
+        var parsedParameters: [ParsedParameter] = []
+        for param in funcDecl.signature.parameterClause.parameters {
+            parsedParameters.append(try parseParameter(param, documentation: documentation))
+        }
+        return parsedParameters
+    }
+
+    private func parseParameter(
+        _ param: FunctionParameterSyntax,
+        documentation: Documentation
+    ) throws -> ParsedParameter {
+        let paramName = param.secondName?.text ?? param.firstName.text
+        let paramLabel = param.firstName.text
+        let paramTypeSyntax = param.type
+        let paramTypeString = paramTypeSyntax.description.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let isOptionalType = isOptionalParameter(paramTypeSyntax, typeString: paramTypeString)
+        let baseTypeString = computeBaseTypeString(
+            from: paramTypeSyntax,
+            typeString: paramTypeString,
+            isOptional: isOptionalType
+        )
+
+        var paramDocDescription: String?
+        if let doc = documentation.parameters[paramName], !doc.isEmpty {
+            paramDocDescription = "\"\(doc.escapedForSwiftString)\""
+        }
+
+        let defaultValueClause = param.defaultValue
+        let defaultValueForMetadata = try processDefaultValue(
+            defaultValueClause?.value,
+            paramTypeString: baseTypeString,
+            isArray: paramTypeSyntax.is(ArrayTypeSyntax.self) || paramTypeString.hasPrefix("[")
+        )
+
+        if isOptionalType && defaultValueClause == nil {
+            diagnoseOptionalWithoutDefault(
+                param: param,
+                paramName: paramName,
+                paramTypeString: paramTypeString,
+                paramTypeSyntax: paramTypeSyntax
+            )
+        }
+
+        return ParsedParameter(
+            funcParam: param,
+            name: paramName,
+            label: paramLabel,
+            typeSyntax: paramTypeSyntax,
+            typeString: paramTypeString,
+            baseTypeString: baseTypeString,
+            defaultValueClause: defaultValueClause,
+            defaultValueForMetadata: defaultValueForMetadata,
+            description: paramDocDescription,
+            isOptionalType: isOptionalType
+        )
+    }
+
+    private func isOptionalParameter(_ typeSyntax: TypeSyntax, typeString: String) -> Bool {
+        return typeSyntax.is(OptionalTypeSyntax.self) ||
+            typeSyntax.is(ImplicitlyUnwrappedOptionalTypeSyntax.self) ||
+            typeString.hasSuffix("?") ||
+            typeString.hasSuffix("!")
+    }
+
+    private func computeBaseTypeString(
+        from typeSyntax: TypeSyntax,
+        typeString: String,
+        isOptional: Bool
+    ) -> String {
+        guard isOptional else { return typeString }
+        if typeString.hasSuffix("?") || typeString.hasSuffix("!") {
+            return String(typeString.dropLast())
+        }
+        if let optType = typeSyntax.as(OptionalTypeSyntax.self) {
+            return optType.wrappedType.description.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if let iuoType = typeSyntax.as(ImplicitlyUnwrappedOptionalTypeSyntax.self) {
+            return iuoType.wrappedType.description.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return typeString
+    }
+
+    private func diagnoseOptionalWithoutDefault(
+        param: FunctionParameterSyntax,
+        paramName: String,
+        paramTypeString: String,
+        paramTypeSyntax: TypeSyntax
+    ) {
+        let diagnostic = Diagnostic(
+            node: Syntax(paramTypeSyntax),
+            message: MCPToolDiagnostic.optionalParameterNeedsDefault(
+                paramName: paramName,
+                typeName: paramTypeString
+            ),
+            fixIts: [
+                FixIt(message: MCPToolFixItMessage.addDefaultValue(paramName: paramName),
+                      changes: [
+                          .replace(oldNode: Syntax(param),
+                                   newNode: Syntax(param.with(\.defaultValue, InitializerClauseSyntax(
+                                       equal: .equalToken(leadingTrivia: .space, trailingTrivia: .space),
+                                       value: ExprSyntax(NilLiteralExprSyntax())
+                                   ))))
+                      ])
+            ]
+        )
+        context.diagnose(diagnostic)
+    }
+
+    private func processDefaultValue(
+        _ defaultExpr: ExprSyntax?,
+        paramTypeString: String,
+        isArray: Bool
+    ) throws -> String {
         guard let expr = defaultExpr else { return "nil" }
 
         let rawValue = expr.description.trimmingCharacters(in: .whitespaces)
@@ -218,4 +268,4 @@ struct FunctionMetadataExtractor {
         // This includes cases like `MyEnum.value`, `[1, 2]`, `["a": 1]`.
         return rawValue
     }
-} 
+}

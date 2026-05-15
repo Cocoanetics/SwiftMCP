@@ -4,9 +4,9 @@ import SwiftMCPUtilityCore
 
 @Suite("Proxy Generator Default Value Tests", .tags(.proxyGenerator))
 struct ProxyGeneratorDefaultValueTests {
-    @Test("Default values appear in generated signatures")
-    func proxyGeneratorIncludesDefaultValues() throws {
-        let schema = JSONSchema.object(.init(
+
+    private func makeDefaultsSchema() -> JSONSchema {
+        .object(.init(
             properties: [
                 "requiredValue": .number(title: nil, description: nil, minimum: nil, maximum: nil),
                 "optionalValue": .number(title: nil, description: nil, minimum: nil, maximum: nil),
@@ -49,7 +49,11 @@ struct ProxyGeneratorDefaultValueTests {
             ],
             required: ["requiredValue"]
         ))
-        let tool = MCPTool(name: "defaultsTest", description: nil, inputSchema: schema)
+    }
+
+    @Test("Default values appear in generated signatures")
+    func proxyGeneratorIncludesDefaultValues() throws {
+        let tool = MCPTool(name: "defaultsTest", description: nil, inputSchema: makeDefaultsSchema())
 
         let source = ProxyGenerator.generate(
             typeName: "DefaultsProxy",

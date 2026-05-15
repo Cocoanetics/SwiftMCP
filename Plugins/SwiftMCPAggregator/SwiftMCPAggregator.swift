@@ -39,11 +39,11 @@ struct SwiftMCPAggregator: BuildToolPlugin {
         ]
     }
 
-    private func sanitize(_ s: String) -> String {
+    private func sanitize(_ raw: String) -> String {
         var out = ""
-        for ch in s {
-            if ch.isLetter || ch.isNumber || ch == "_" {
-                out.append(ch)
+        for character in raw {
+            if character.isLetter || character.isNumber || character == "_" {
+                out.append(character)
             } else {
                 out.append("_")
             }

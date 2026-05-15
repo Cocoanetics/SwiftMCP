@@ -2,7 +2,6 @@ import Testing
 import Foundation
 @testable import SwiftMCP
 
-
 @Suite("Router Path Matching")
 struct RouterTests {
 
@@ -154,14 +153,18 @@ struct RouterTests {
 		router.addRoute(HTTPRoute(
 			method: .GET,
 			pathPattern: "/mcp",
-			handler: { (_: HTTPSSETransport, _: HTTPRouteRequest<Data?>) in RouteResponse(status: .ok, body: Data("specific".utf8)) }
+			handler: { (_: HTTPSSETransport, _: HTTPRouteRequest<Data?>) in
+				RouteResponse(status: .ok, body: Data("specific".utf8))
+			}
 		))
 
 		// Catch-all second
 		router.addRoute(HTTPRoute(
 			method: .GET,
 			pathPattern: "/:anything",
-			handler: { (_: HTTPSSETransport, _: HTTPRouteRequest<Data?>) in RouteResponse(status: .ok, body: Data("catchall".utf8)) }
+			handler: { (_: HTTPSSETransport, _: HTTPRouteRequest<Data?>) in
+				RouteResponse(status: .ok, body: Data("catchall".utf8))
+			}
 		))
 
 		let match = router.match(method: .GET, path: "/mcp")

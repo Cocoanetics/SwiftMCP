@@ -34,7 +34,7 @@ class HintsTestServer {
 
     /// A tool that interacts with external systems
     @MCPTool(hints: [.openWorld])
-    func sendEmail(to: String, message: String) -> Bool {
+    func sendEmail(recipient: String, message: String) -> Bool {
         return true
     }
 
@@ -143,6 +143,7 @@ func testMCPToolAnnotationsJSONEncoding() throws {
     #expect(!json.contains("rawValue"))
 
     // Parse JSON and verify structure
+    // swiftlint:disable:next force_cast
     let decoded = try JSONSerialization.jsonObject(with: data) as! [String: Any]
     #expect(decoded["readOnlyHint"] as? Bool == true)
     #expect(decoded["destructiveHint"] as? Bool == true)

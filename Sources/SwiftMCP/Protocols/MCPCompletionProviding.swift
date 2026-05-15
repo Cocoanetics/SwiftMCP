@@ -20,12 +20,20 @@ public protocol MCPCompletionProviding: MCPService {
     ///   - parameter: The parameter for which a completion is requested.
     ///   - context: The prompt or resource context.
     ///   - prefix: The prefix string already entered by the client.
-    func completion(for parameter: MCPParameterInfo, in context: MCPCompletionContext, prefix: String) async -> CompleteResult.Completion
+    func completion(
+        for parameter: MCPParameterInfo,
+        in context: MCPCompletionContext,
+        prefix: String
+    ) async -> CompleteResult.Completion
 }
 
 public extension MCPCompletionProviding {
     /// Default implementation that mirrors the behaviour of `MCPParameterInfo.defaultCompletion(prefix:)`.
-    func completion(for parameter: MCPParameterInfo, in context: MCPCompletionContext, prefix: String) async -> CompleteResult.Completion {
+    func completion(
+        for parameter: MCPParameterInfo,
+        in context: MCPCompletionContext,
+        prefix: String
+    ) async -> CompleteResult.Completion {
         let completions = parameter.defaultCompletions.sortedByBestCompletion(prefix: prefix)
         return CompleteResult.Completion(values: completions, total: completions.count, hasMore: false)
     }

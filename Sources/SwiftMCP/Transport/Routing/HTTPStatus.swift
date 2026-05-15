@@ -11,6 +11,7 @@ public struct HTTPStatus: RawRepresentable, Sendable, Equatable {
 		self.rawValue = rawValue
 	}
 
+	// swiftlint:disable:next identifier_name
 	public static let ok = HTTPStatus(rawValue: 200)
 	public static let created = HTTPStatus(rawValue: 201)
 	public static let accepted = HTTPStatus(rawValue: 202)

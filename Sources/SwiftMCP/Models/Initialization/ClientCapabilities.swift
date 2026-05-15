@@ -22,7 +22,7 @@ public struct ClientCapabilities: Codable, Sendable {
 
     /// Present if the client supports sampling functionality.
     public var sampling: SamplingCapabilities?
-    
+
     /// Present if the client supports elicitation functionality.
     public var elicitation: ElicitationCapabilities?
 
@@ -40,16 +40,21 @@ public struct ClientCapabilities: Codable, Sendable {
     public struct SamplingCapabilities: Codable, Sendable {
         public init() {}
     }
-    
+
     /// Capabilities related to elicitation.
     public struct ElicitationCapabilities: Codable, Sendable {
         public init() {}
     }
 
-    public init(experimental: JSONDictionary? = nil, roots: RootsCapabilities? = nil, sampling: SamplingCapabilities? = nil, elicitation: ElicitationCapabilities? = nil) {
+    public init(
+        experimental: JSONDictionary? = nil,
+        roots: RootsCapabilities? = nil,
+        sampling: SamplingCapabilities? = nil,
+        elicitation: ElicitationCapabilities? = nil
+    ) {
         self.experimental = experimental
         self.roots = roots
         self.sampling = sampling
         self.elicitation = elicitation
     }
-} 
+}

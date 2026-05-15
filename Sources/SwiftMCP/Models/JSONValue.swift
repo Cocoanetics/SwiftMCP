@@ -112,62 +112,28 @@ public enum MCPJSONCoding {
             return
         }
 
-        switch value {
-        case is NSNull:
-            self = .null
-        case let value as JSONValue:
-            self = value
-        case let value as Bool:
-            self = .bool(value)
-        case let value as Int:
-            self = .integer(value)
-        case let value as Int8:
-            self = .integer(Int(value))
-        case let value as Int16:
-            self = .integer(Int(value))
-        case let value as Int32:
-            self = .integer(Int(value))
-        case let value as Int64:
-            if let exact = Int(exactly: value) {
-                self = .integer(exact)
-            } else {
-                throw JSONValueError.invalidJSONObject
-            }
-        case let value as UInt:
-            self = .unsignedInteger(value)
-        case let value as UInt8:
-            self = .unsignedInteger(UInt(value))
-        case let value as UInt16:
-            self = .unsignedInteger(UInt(value))
-        case let value as UInt32:
-            self = .unsignedInteger(UInt(value))
-        case let value as UInt64:
-            if let exact = UInt(exactly: value) {
-                self = .unsignedInteger(exact)
-            } else {
-                throw JSONValueError.invalidJSONObject
-            }
-        case let value as Float:
-            self = .double(Double(value))
-        case let value as Double:
-            self = .double(value)
-        case let value as NSNumber:
-            if let exact = Int(exactly: value.int64Value), value.doubleValue == Double(exact) {
-                self = .integer(exact)
-            } else if let exact = UInt(exactly: value.uint64Value), value.doubleValue == Double(exact) {
-                self = .unsignedInteger(exact)
-            } else {
-                self = .double(value.doubleValue)
-            }
-        case let value as String:
-            self = .string(value)
-        case let value as [Any]:
-            self = .array(try value.map { try JSONValue(jsonObject: $0) })
-        case let value as [String: Any]:
-            self = .object(try value.mapValues { try JSONValue(jsonObject: $0) })
-        default:
-            throw JSONValueError.invalidJSONObject
+        if let result = Self.matchJSONValueOrNull(value) {
+            self = result
+            return
         }
+        if let result = try Self.matchIntegerJSONObject(value) {
+            self = result
+            return
+        }
+        if let result = try Self.matchUnsignedIntegerJSONObject(value) {
+            self = result
+            return
+        }
+        if let result = Self.matchFloatingPointJSONObject(value) {
+            self = result
+            return
+        }
+        if let result = try Self.matchContainerJSONObject(value) {
+            self = result
+            return
+        }
+
+        throw JSONValueError.invalidJSONObject
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -270,12 +236,18 @@ public enum MCPJSONCoding {
         }
     }
 
-    public func decoded<T: Decodable>(_ type: T.Type = T.self, using decoder: JSONDecoder = MCPJSONCoding.makeDecoder()) throws -> T {
+    public func decoded<T: Decodable>(
+        _ type: T.Type = T.self,
+        using decoder: JSONDecoder = MCPJSONCoding.makeDecoder()
+    ) throws -> T {
         let data = try MCPJSONCoding.makeWireEncoder().encode(self)
         return try decoder.decode(T.self, from: data)
     }
 
-    func decodeDynamically(_ type: any Decodable.Type, using decoder: JSONDecoder = MCPJSONCoding.makeDecoder()) throws -> any Decodable {
+    func decodeDynamically(
+        _ type: any Decodable.Type,
+        using decoder: JSONDecoder = MCPJSONCoding.makeDecoder()
+    ) throws -> any Decodable {
         let data = try MCPJSONCoding.makeWireEncoder().encode(self)
         return try decoder.decode(type, from: data)
     }
@@ -359,17 +331,25 @@ public extension Dictionary where Key == String, Value == JSONValue {
         self = object
     }
 
-    func decoded<T: Decodable>(_ type: T.Type = T.self, using decoder: JSONDecoder = MCPJSONCoding.makeDecoder()) throws -> T {
+    func decoded<T: Decodable>(
+        _ type: T.Type = T.self,
+        using decoder: JSONDecoder = MCPJSONCoding.makeDecoder()
+    ) throws -> T {
         try JSONValue.object(self).decoded(type, using: decoder)
     }
 }
 
 public extension Array where Element == JSONValue {
-    func decoded<T: Decodable>(_ type: T.Type = T.self, using decoder: JSONDecoder = MCPJSONCoding.makeDecoder()) throws -> T {
+    func decoded<T: Decodable>(
+        _ type: T.Type = T.self,
+        using decoder: JSONDecoder = MCPJSONCoding.makeDecoder()
+    ) throws -> T {
         try JSONValue.array(self).decoded(type, using: decoder)
     }
 }
 
+// Leading underscore marks this as an internal, unstable type-erasing wrapper.
+// swiftlint:disable:next type_name
 struct _JSONValueOpaqueEncodable: Encodable {
     private let encodeImpl: (Encoder) throws -> Void
 

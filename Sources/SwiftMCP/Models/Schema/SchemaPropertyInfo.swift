@@ -5,7 +5,6 @@
 //  Created by Oliver Drobnik on 30.03.25.
 //
 
-
 import Foundation
 
 /// Information about a function parameter
@@ -34,7 +33,13 @@ public struct SchemaPropertyInfo: Sendable {
        - description: An optional description of the parameter
        - defaultValue: An optional default value for the parameter
      */
-    public init(name: String, type: Any.Type, description: String? = nil, defaultValue: Sendable? = nil, isRequired: Bool) {
+    public init(
+        name: String,
+        type: Any.Type,
+        description: String? = nil,
+        defaultValue: Sendable? = nil,
+        isRequired: Bool
+    ) {
         self.name = name
         self.type = type
         self.description = description

@@ -44,4 +44,3 @@ public protocol MCPToolProviding: MCPService {
 	 */
     func callTool(_ name: String, arguments: JSONDictionary) async throws -> Encodable & Sendable
 }
-

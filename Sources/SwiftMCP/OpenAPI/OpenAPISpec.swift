@@ -57,6 +57,7 @@ struct OpenAPISpec: Codable {
         /// If the method requires extra confirmation
         let isConsequential: Bool
 
+        // swiftlint:disable:next nesting
         private enum CodingKeys: String, CodingKey {
             case summary
             case operationId
@@ -84,7 +85,7 @@ struct OpenAPISpec: Codable {
 
 /**
      Creates an OpenAPI specification for an MCP server
-     
+
      - Parameters:
        - server: The MCP server to create the spec for
        - scheme: The URL scheme to use (e.g., "http" or "https")
@@ -105,11 +106,23 @@ struct OpenAPISpec: Codable {
             )
         ]
 
-        // Create paths from server tools and resources
+        // Combine MCPTool, MCPResource, and MCPPrompt functions as tools
+        let allToolMetadata = Self.collectToolMetadata(for: server)
+
+        // Generate OpenAPI paths for all tools
         let rootPath = server.serverName.asModelName
         var paths: [String: PathItem] = [:]
+        for metadata in allToolMetadata {
+            let pathKey = "/\(rootPath)/\(metadata.name)"
+            paths[pathKey] = Self.makePathItem(for: metadata)
+        }
 
-        // Combine MCPTool, MCPResource, and MCPPrompt functions as tools
+        self.paths = paths
+    }
+
+    /// Collects the union of MCPTool / MCPResource / MCPPrompt metadata exposed by `server`,
+    /// rewriting resource/prompt metadata into tool metadata so they can share a single output path.
+    private static func collectToolMetadata(for server: MCPServer) -> [MCPToolMetadata] {
         var allToolMetadata: [MCPToolMetadata] = []
 
         // Add MCPTool functions
@@ -120,7 +133,7 @@ struct OpenAPISpec: Codable {
         // Add MCPResource functions converted to tools
         if let resourceProvider = server as? MCPResourceProviding {
             let resourceAsTools = resourceProvider.mcpResourceMetadata.map { resourceMeta in
-                return MCPToolMetadata(
+                MCPToolMetadata(
                     name: resourceMeta.functionMetadata.name,
                     description: resourceMeta.description,
                     parameters: resourceMeta.parameters,
@@ -151,79 +164,82 @@ struct OpenAPISpec: Codable {
             allToolMetadata.append(contentsOf: promptAsTools)
         }
 
-        // Generate OpenAPI paths for all tools
-        for metadata in allToolMetadata {
-            let pathKey = "/\(rootPath)/\(metadata.name)"
+        return allToolMetadata
+    }
 
-            let returnInfo = metadata.returnSchemaInfo
-            let responseSchema = returnInfo.schema
-            let responseDescription = returnInfo.description
+    /// Builds a `PathItem` representing one tool, with its input schema (request body), success
+    /// response and (if throwing) error response.
+    private static func makePathItem(for metadata: MCPToolMetadata) -> PathItem {
+        let returnInfo = metadata.returnSchemaInfo
+        let responseSchema = returnInfo.schema
+        let responseDescription = returnInfo.description
 
-            // Create error response schema matching {"error": {"code": Int, "message": String}}
-            let errorSchema = JSONSchema.object(JSONSchema.Object(
-                properties: [
-                    "error": .object(JSONSchema.Object(
-                        properties: [
-                            "code": .number(title: nil, description: nil, minimum: nil, maximum: nil),
-                            "message": .string(title: nil, description: nil)
-                        ],
-                        required: ["code", "message"]
-                    ))
-                ],
-                required: ["error"],
-                description: "Error response containing the error code and message"
-            ))
+        var responses: [String: Response] = [
+            "200": Response(
+                description: responseDescription,
+                content: [
+                    "application/json": Content(schema: responseSchema.withoutRequired)
+                ]
+            )
+        ]
 
-            // Create responses dictionary with success and error cases
-            var responses: [String: Response] = [
-                "200": Response(
-                    description: responseDescription,
+        // Add error response if the function can throw
+        if metadata.isThrowing {
+            responses["400"] = Response(
+                description: "The function threw an error",
+                content: [
+                    "application/json": Content(schema: errorResponseSchema().withoutRequired)
+                ]
+            )
+        }
+
+        let inputSchema = makeInputSchema(for: metadata)
+
+        return PathItem(
+            post: Operation(
+                summary: metadata.name,
+                operationId: metadata.name,
+                description: metadata.description ?? "No description available",
+                requestBody: metadata.parameters.isEmpty ? nil : RequestBody(
+                    required: true,
                     content: [
-						"application/json": Content(schema: responseSchema.withoutRequired)
+                        "application/json": Content(schema: inputSchema)
                     ]
-                )
-            ]
+                ),
+                responses: responses,
+                isConsequential: metadata.computedIsConsequential
+            )
+        )
+    }
 
-            // Add error response if the function can throw
-            if metadata.isThrowing {
-                responses["400"] = Response(
-                    description: "The function threw an error",
-                    content: [
-						"application/json": Content(schema: errorSchema.withoutRequired)
-                    ]
-                )
-            }
+    /// Constructs the canonical `{"error": {"code": Int, "message": String}}` schema used for
+    /// error responses across all tool paths.
+    private static func errorResponseSchema() -> JSONSchema {
+        JSONSchema.object(JSONSchema.Object(
+            properties: [
+                "error": .object(JSONSchema.Object(
+                    properties: [
+                        "code": .number(title: nil, description: nil, minimum: nil, maximum: nil),
+                        "message": .string(title: nil, description: nil)
+                    ],
+                    required: ["code", "message"]
+                ))
+            ],
+            required: ["error"],
+            description: "Error response containing the error code and message"
+        ))
+    }
 
-            // Create input schema from parameters
-            let inputSchema = JSONSchema.object(JSONSchema.Object(
-                properties: metadata.parameters.reduce(into: [:]) { dict, param in
+    /// Builds the request-body schema for `metadata`, mapping each parameter to its `JSONSchema`
+    /// and marking required parameters explicitly.
+    private static func makeInputSchema(for metadata: MCPToolMetadata) -> JSONSchema {
+        JSONSchema.object(JSONSchema.Object(
+            properties: metadata.parameters.reduce(into: [:]) { dict, param in
                 // Use the parameter's JSONSchema directly
                 dict[param.name] = param.schema
             },
-                required: metadata.parameters.filter { $0.isRequired }.map { $0.name },
-                description: metadata.description ?? "No description available"
-            ))
-
-            // Create the path item
-            let pathItem = PathItem(
-                post: Operation(
-                    summary: metadata.name,
-                    operationId: metadata.name,
-                    description: metadata.description ?? "No description available",
-                    requestBody: metadata.parameters.isEmpty ? nil : RequestBody(
-                        required: true,
-                        content: [
-                            "application/json": Content(schema: inputSchema)
-                        ]
-                    ),
-                    responses: responses,
-                    isConsequential: metadata.computedIsConsequential
-                )
-            )
-
-            paths[pathKey] = pathItem
-        }
-
-        self.paths = paths
+            required: metadata.parameters.filter { $0.isRequired }.map { $0.name },
+            description: metadata.description ?? "No description available"
+        ))
     }
-} 
+}

@@ -8,15 +8,14 @@
 import Foundation
 import SwiftMCP
 
-extension DemoServer
-{
+extension DemoServer {
     /// Returns an array of all MCP resources defined in this type
     var mcpResources: [any MCPResource] {
         get async {
 			return await getDynamicFileResources()
         }
     }
-    
+
     /// Returns dynamic file-based resources from Downloads folder
     private func getDynamicFileResources() async -> [MCPResource] {
         // Get the Downloads folder URL
@@ -24,7 +23,7 @@ extension DemoServer
             logToStderr("Could not get Downloads folder URL")
             return []
         }
-        
+
         do {
             // List all files in the Downloads folder
             let fileURLs = try FileManager.default.contentsOfDirectory(
@@ -32,7 +31,7 @@ extension DemoServer
                 includingPropertiesForKeys: [.isRegularFileKey, .nameKey, .fileSizeKey],
                 options: [.skipsHiddenFiles]
             )
-            
+
             // Filter to only include regular files
             let regularFileURLs = fileURLs.filter { url in
                 do {
@@ -42,7 +41,7 @@ extension DemoServer
                     return false
                 }
             }
-            
+
             // Create FileResource objects for each file
             return regularFileURLs.map { fileURL in
                 // Get file attributes for description
@@ -54,11 +53,13 @@ extension DemoServer
                     let formatter = DateFormatter()
                     formatter.dateStyle = .medium
                     formatter.timeStyle = .short
-                    fileAttributes = "Size: \(ByteCountFormatter.string(fromByteCount: fileSize, countStyle: .file)), Modified: \(formatter.string(from: modificationDate))"
+                    let sizeString = ByteCountFormatter.string(fromByteCount: fileSize, countStyle: .file)
+                    let modifiedString = formatter.string(from: modificationDate)
+                    fileAttributes = "Size: \(sizeString), Modified: \(modifiedString)"
                 } catch {
                     fileAttributes = "File in Downloads folder"
                 }
-                
+
                 return FileResource(
                     uri: fileURL,
                     name: fileURL.lastPathComponent,
@@ -70,14 +71,14 @@ extension DemoServer
             return []
         }
     }
-    
+
     /// Override to handle file-based resources by reading actual file content
     public func getNonTemplateResource(uri: URL) async throws -> [MCPResourceContent] {
 		// Check if the file exists
 		guard FileManager.default.fileExists(atPath: uri.path) else {
 			return []
 		}
-		
+
 		// Get the resource content
 		return try [FileResourceContent.from(fileURL: uri)]
     }

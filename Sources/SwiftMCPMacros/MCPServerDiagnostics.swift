@@ -16,22 +16,22 @@ enum MCPServerDiagnostic: DiagnosticMessage {
 
     var message: String {
         switch self {
-            case .requiresReferenceType(let typeName):
-                return "'\(typeName)' must be a reference type (class or actor)"
+        case .requiresReferenceType(let typeName):
+            return "'\(typeName)' must be a reference type (class or actor)"
         }
     }
 
     var severity: DiagnosticSeverity {
         switch self {
-            case .requiresReferenceType:
-                return .error
+        case .requiresReferenceType:
+            return .error
         }
     }
 
     var diagnosticID: MessageID {
         switch self {
-            case .requiresReferenceType:
-                return MessageID(domain: "SwiftMCPMacros", id: "RequiresReferenceType")
+        case .requiresReferenceType:
+            return MessageID(domain: "SwiftMCPMacros", id: "RequiresReferenceType")
         }
     }
 }
@@ -42,15 +42,15 @@ enum MCPServerFixItMessage: FixItMessage {
 
     var message: String {
         switch self {
-            case .replaceWithClass(let keyword):
-                return "Change '\(keyword)' to 'class'"
+        case .replaceWithClass(let keyword):
+            return "Change '\(keyword)' to 'class'"
         }
     }
 
     var fixItID: MessageID {
         switch self {
-            case .replaceWithClass:
-                return MessageID(domain: "SwiftMCPMacros", id: "ReplaceWithClass")
+        case .replaceWithClass:
+            return MessageID(domain: "SwiftMCPMacros", id: "ReplaceWithClass")
         }
     }
-} 
+}

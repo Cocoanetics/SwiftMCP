@@ -6,6 +6,9 @@
 
 import SwiftMCP
 
+// swiftlint:disable identifier_name
+// Parameters `a`, `b` mirror the canonical MCP tutorial math example.
+
 // Name omitted — derived from filename "PrototypeServer+Math.swift" → "Math".
 @MCPExtension
 extension PrototypeServer {
@@ -21,3 +24,4 @@ extension PrototypeServer {
         a * b
     }
 }
+// swiftlint:enable identifier_name

@@ -6,16 +6,16 @@ import SwiftMCP
 public struct FileResource: MCPResource {
     /// The URI of the resource
     public let uri: URL
-    
+
     /// The name of the resource
     public let name: String
-    
+
     /// The description of the resource
     public let description: String
-    
+
     /// The MIME type of the resource
     public let mimeType: String
-    
+
     /// Creates a new FileResource
     /// - Parameters:
     ///   - uri: The URI of the file
@@ -26,7 +26,7 @@ public struct FileResource: MCPResource {
         self.uri = uri
         self.name = name ?? uri.lastPathComponent
         self.description = description ?? "File at \(uri.path)"
-        
+
         if let mimeType = mimeType {
             self.mimeType = mimeType
         } else {
@@ -42,16 +42,16 @@ public struct FileResource: MCPResource {
 public struct FileResourceContent: MCPResourceContent {
     /// The URI of the resource
     public let uri: URL
-    
+
     /// The MIME type of the resource
     public let mimeType: String?
-    
+
     /// The text content of the resource (if it's a text resource)
     public let text: String?
-    
+
     /// The binary content of the resource (if it's a binary resource)
     public let blob: Data?
-    
+
     /// Creates a new FileResourceContent
     /// - Parameters:
     ///   - uri: The URI of the file
@@ -64,7 +64,7 @@ public struct FileResourceContent: MCPResourceContent {
         self.text = text
         self.blob = blob
     }
-    
+
     /// Creates a new FileResourceContent from a file
     /// - Parameters:
     ///   - fileURL: The URL of the file
@@ -73,10 +73,10 @@ public struct FileResourceContent: MCPResourceContent {
     public static func from(fileURL: URL, mimeType: String? = nil) throws -> FileResourceContent {
         // Determine MIME type if not provided
         let determinedMimeType = mimeType ?? String.mimeType(for: fileURL.pathExtension)
-        
+
         // Check if it's a text file
         let isTextFile = determinedMimeType.hasPrefix("text/")
-        
+
         if isTextFile {
             // Read as text
             let text = try String(contentsOf: fileURL, encoding: .utf8)
@@ -87,4 +87,4 @@ public struct FileResourceContent: MCPResourceContent {
             return FileResourceContent(uri: fileURL, mimeType: determinedMimeType, blob: data)
         }
     }
-} 
+}

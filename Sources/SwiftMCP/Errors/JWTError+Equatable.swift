@@ -24,4 +24,4 @@ extension JWTError: Equatable {
             return false
         }
     }
-} 
+}

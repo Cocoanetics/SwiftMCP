@@ -1,0 +1,15 @@
+included:
+  - Sources
+  - Tests
+  - Utilities
+  - Demos
+  - Plugins
+
+excluded:
+  - .build
+  - "**/.build"
+  # DocC tutorial step files — deliberately tiny pedagogical snippets
+  - Sources/SwiftMCP/SwiftMCP.docc/Resources
+  # Generated proxy files — do not lint hand-written rules over machine output
+  - Demos/SwiftMCPDemo/XcodeProxy.swift
+  - Demos/ProxyDemoCLI/ToolsProxy.swift

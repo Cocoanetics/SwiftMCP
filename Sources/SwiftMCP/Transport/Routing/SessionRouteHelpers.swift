@@ -54,7 +54,11 @@ extension HTTPSSETransport {
                let session = await sessionManager.existingSession(id: sessionID),
                let negotiatedVersion = await session.negotiatedProtocolVersion,
                negotiatedVersion != headerVersion {
-                return textResponse(status: .badRequest, body: "MCP-Protocol-Version does not match the negotiated session version.", sessionID: sessionID)
+                return textResponse(
+                    status: .badRequest,
+                    body: "MCP-Protocol-Version does not match the negotiated session version.",
+                    sessionID: sessionID
+                )
             }
 
             return nil

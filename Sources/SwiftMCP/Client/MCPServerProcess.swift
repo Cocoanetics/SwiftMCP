@@ -132,7 +132,11 @@ public final actor MCPServerProcess: StdioConnection {
 
     public var lines: AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
-            continuation.finish(throwing: MCPServerProxyError.unsupportedPlatform("Stdio-based MCP servers require Process support."))
+            continuation.finish(
+                throwing: MCPServerProxyError.unsupportedPlatform(
+                    "Stdio-based MCP servers require Process support."
+                )
+            )
         }
     }
 

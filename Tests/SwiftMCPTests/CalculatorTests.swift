@@ -4,10 +4,10 @@ import SwiftMCP
 @Test("Addition")
 func testAdd() async throws {
     let calculator = Calculator()
-    
+
     // Test direct function call
     #expect(calculator.add(a: 2, b: 3) == 5)
-    
+
     // Test through callTool
     let result = try await calculator.callTool("add", arguments: ["a": 2, "b": 3])
     #expect(result as? Int == 5)
@@ -16,10 +16,10 @@ func testAdd() async throws {
 @Test
 func testTestArray() async throws {
     let calculator = Calculator()
-    
+
     // Test direct function call
     #expect(calculator.testArray(a: [1, 2, 3]) == "1, 2, 3")
-    
+
     // Test through callTool
     let result = try await calculator.callTool("testArray", arguments: ["a": [1, 2, 3]])
     #expect(result as? String == "1, 2, 3")
@@ -28,7 +28,7 @@ func testTestArray() async throws {
 @Test
 func testUnknownTool() async throws {
     let calculator = Calculator()
-    
+
     do {
         _ = try await calculator.callTool("unknown", arguments: [:])
         #expect(Bool(false), "Should throw an error for unknown tool")
@@ -46,7 +46,7 @@ func testUnknownTool() async throws {
 @Test
 func testInvalidArgumentType() async throws {
     let calculator = Calculator()
-    
+
     do {
         _ = try await calculator.callTool("add", arguments: ["a": "not_a_number", "b": 3])
         #expect(Bool(false), "Should throw an error for invalid argument type")

@@ -102,4 +102,4 @@ public struct MCPToolMetadata: Sendable {
             annotations: annotations
         )
     }
-} 
+}

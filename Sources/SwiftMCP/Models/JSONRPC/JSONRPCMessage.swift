@@ -5,7 +5,6 @@
 //  Created by Oliver Drobnik on 18.03.25.
 //
 
-
 /**
  Enum representing all possible JSON-RPC message types.
  This unifies all JSON-RPC message handling and makes it easier to work with collections
@@ -82,6 +81,7 @@ public enum JSONRPCMessage: Codable, Sendable {
 
     /// Data structure for JSON-RPC error responses
     public struct JSONRPCErrorResponseData: Codable, Sendable {
+        // swiftlint:disable nesting
         /// Represents the error payload containing error details.
         /// Includes an error code and a descriptive message.
         public struct ErrorPayload: Codable, Sendable {
@@ -100,6 +100,7 @@ public enum JSONRPCMessage: Codable, Sendable {
                 self.data = data
             }
         }
+        // swiftlint:enable nesting
 
         /// The JSON-RPC protocol version, always "2.0"
         public var jsonrpc: String = "2.0"
@@ -122,54 +123,89 @@ public enum JSONRPCMessage: Codable, Sendable {
     /// The JSON-RPC protocol version, typically "2.0"
     public var jsonrpc: String {
         switch self {
-            case .request(let data): return data.jsonrpc
-            case .response(let data): return data.jsonrpc
-            case .errorResponse(let data): return data.jsonrpc
-            case .notification(let data): return data.jsonrpc
+        case .request(let data): return data.jsonrpc
+        case .response(let data): return data.jsonrpc
+        case .errorResponse(let data): return data.jsonrpc
+        case .notification(let data): return data.jsonrpc
         }
     }
 
     /// The unique identifier for the message, used to correlate requests and responses
     public var id: JSONRPCID? {
         switch self {
-            case .request(let data): return data.id
-            case .response(let data): return data.id
-            case .errorResponse(let data): return data.id
-            case .notification(_): return nil
+        case .request(let data): return data.id
+        case .response(let data): return data.id
+        case .errorResponse(let data): return data.id
+        case .notification: return nil
         }
     }
 
     // MARK: - Convenience Initializers
 
-    public static func request(jsonrpc: String = "2.0", id: JSONRPCID, method: String, params: JSONDictionary? = nil) -> JSONRPCMessage {
+    public static func request(
+        jsonrpc: String = "2.0",
+        id: JSONRPCID,
+        method: String,
+        params: JSONDictionary? = nil
+    ) -> JSONRPCMessage {
         return .request(JSONRPCRequestData(jsonrpc: jsonrpc, id: id, method: method, params: params))
     }
 
-    public static func request(jsonrpc: String = "2.0", id: Int, method: String, params: JSONDictionary? = nil) -> JSONRPCMessage {
+    public static func request(
+        jsonrpc: String = "2.0",
+        id: Int,
+        method: String,
+        params: JSONDictionary? = nil
+    ) -> JSONRPCMessage {
         request(jsonrpc: jsonrpc, id: .int(id), method: method, params: params)
     }
 
-    public static func request(jsonrpc: String = "2.0", id: String, method: String, params: JSONDictionary? = nil) -> JSONRPCMessage {
+    public static func request(
+        jsonrpc: String = "2.0",
+        id: String,
+        method: String,
+        params: JSONDictionary? = nil
+    ) -> JSONRPCMessage {
         request(jsonrpc: jsonrpc, id: .string(id), method: method, params: params)
     }
 
-    public static func response(jsonrpc: String = "2.0", id: JSONRPCID, result: JSONDictionary? = nil) -> JSONRPCMessage {
+    public static func response(
+        jsonrpc: String = "2.0",
+        id: JSONRPCID,
+        result: JSONDictionary? = nil
+    ) -> JSONRPCMessage {
         return .response(JSONRPCResponseData(jsonrpc: jsonrpc, id: id, result: result))
     }
 
-    public static func response(jsonrpc: String = "2.0", id: Int, result: JSONDictionary? = nil) -> JSONRPCMessage {
+    public static func response(
+        jsonrpc: String = "2.0",
+        id: Int,
+        result: JSONDictionary? = nil
+    ) -> JSONRPCMessage {
         response(jsonrpc: jsonrpc, id: .int(id), result: result)
     }
 
-    public static func response(jsonrpc: String = "2.0", id: String, result: JSONDictionary? = nil) -> JSONRPCMessage {
+    public static func response(
+        jsonrpc: String = "2.0",
+        id: String,
+        result: JSONDictionary? = nil
+    ) -> JSONRPCMessage {
         response(jsonrpc: jsonrpc, id: .string(id), result: result)
     }
 
-    public static func errorResponse(jsonrpc: String = "2.0", id: JSONRPCID?, error: JSONRPCErrorResponseData.ErrorPayload) -> JSONRPCMessage {
+    public static func errorResponse(
+        jsonrpc: String = "2.0",
+        id: JSONRPCID?,
+        error: JSONRPCErrorResponseData.ErrorPayload
+    ) -> JSONRPCMessage {
         return .errorResponse(JSONRPCErrorResponseData(jsonrpc: jsonrpc, id: id, error: error))
     }
 
-    public static func notification(jsonrpc: String = "2.0", method: String, params: JSONDictionary? = nil) -> JSONRPCMessage {
+    public static func notification(
+        jsonrpc: String = "2.0",
+        method: String,
+        params: JSONDictionary? = nil
+    ) -> JSONRPCMessage {
         return .notification(JSONRPCNotificationData(jsonrpc: jsonrpc, method: method, params: params))
     }
 
@@ -210,14 +246,20 @@ public enum JSONRPCMessage: Codable, Sendable {
         } else if container.contains(.result) {
             // This is a result response - must have ID
             guard let id = id else {
-                throw DecodingError.dataCorrupted(DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Response missing required id field"))
+                throw DecodingError.dataCorrupted(DecodingError.Context(
+                    codingPath: decoder.codingPath,
+                    debugDescription: "Response missing required id field"
+                ))
             }
 
             // Handle both empty and non-empty result dictionaries as regular responses
             let result = try container.decode(JSONDictionary.self, forKey: .result)
             self = .response(JSONRPCResponseData(jsonrpc: jsonrpc, id: id, result: result))
         } else {
-            throw DecodingError.dataCorrupted(DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Unable to determine JSON-RPC message type"))
+            throw DecodingError.dataCorrupted(DecodingError.Context(
+                codingPath: decoder.codingPath,
+                debugDescription: "Unable to determine JSON-RPC message type"
+            ))
         }
     }
 
@@ -225,26 +267,26 @@ public enum JSONRPCMessage: Codable, Sendable {
         var container = encoder.container(keyedBy: CodingKeys.self)
 
         switch self {
-            case .request(let data):
-                try container.encode(data.jsonrpc, forKey: .jsonrpc)
-                try container.encode(data.id, forKey: .id)
-                try container.encode(data.method, forKey: .method)
-                try container.encodeIfPresent(data.params, forKey: .params)
+        case .request(let data):
+            try container.encode(data.jsonrpc, forKey: .jsonrpc)
+            try container.encode(data.id, forKey: .id)
+            try container.encode(data.method, forKey: .method)
+            try container.encodeIfPresent(data.params, forKey: .params)
 
-            case .notification(let data):
-                try container.encode(data.jsonrpc, forKey: .jsonrpc)
-                try container.encode(data.method, forKey: .method)
-                try container.encodeIfPresent(data.params, forKey: .params)
+        case .notification(let data):
+            try container.encode(data.jsonrpc, forKey: .jsonrpc)
+            try container.encode(data.method, forKey: .method)
+            try container.encodeIfPresent(data.params, forKey: .params)
 
-            case .response(let data):
-                try container.encode(data.jsonrpc, forKey: .jsonrpc)
-                try container.encode(data.id, forKey: .id)
-                try container.encodeIfPresent(data.result, forKey: .result)
+        case .response(let data):
+            try container.encode(data.jsonrpc, forKey: .jsonrpc)
+            try container.encode(data.id, forKey: .id)
+            try container.encodeIfPresent(data.result, forKey: .result)
 
-            case .errorResponse(let data):
-                try container.encode(data.jsonrpc, forKey: .jsonrpc)
-                try container.encodeIfPresent(data.id, forKey: .id)
-                try container.encode(data.error, forKey: .error)
+        case .errorResponse(let data):
+            try container.encode(data.jsonrpc, forKey: .jsonrpc)
+            try container.encodeIfPresent(data.id, forKey: .id)
+            try container.encode(data.error, forKey: .error)
         }
     }
 }

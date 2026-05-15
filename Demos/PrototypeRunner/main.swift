@@ -48,12 +48,12 @@ struct PrototypeRunner {
         }
 
         print("\n=== Dispatching tools ===")
-        try await invokeTool(server, "greet",     args: ["name": .string("World")])
-        try await invokeTool(server, "add",       args: ["a": .integer(7),  "b": .integer(5)])
-        try await invokeTool(server, "multiply",  args: ["a": .integer(6),  "b": .integer(7)])
-        try await invokeTool(server, "shout",     args: ["text": .string("hello")])
+        try await invokeTool(server, "greet", args: ["name": .string("World")])
+        try await invokeTool(server, "add", args: ["a": .integer(7), "b": .integer(5)])
+        try await invokeTool(server, "multiply", args: ["a": .integer(6), "b": .integer(7)])
+        try await invokeTool(server, "shout", args: ["text": .string("hello")])
         #if os(macOS) || os(Linux) || os(Windows) || os(iOS)
-        try await invokeTool(server, "subtract",  args: ["a": .integer(10), "b": .integer(4)])
+        try await invokeTool(server, "subtract", args: ["a": .integer(10), "b": .integer(4)])
         #endif
 
         print("\n=== Dispatching resources ===")
@@ -86,9 +86,11 @@ struct PrototypeRunner {
         print("  \(name) → \(summary)")
     }
 
+    // swiftlint:disable identifier_name
     /// Compile-only check: every extension-contributed method is reachable
     /// on the typed `PrototypeServer.Client` thanks to the aggregator plugin's
     /// emitted Client extensions. Never invoked at runtime.
+    /// Leading underscore signals "compile-only smoke test, never call".
     @inline(never) static func _clientSurfaceSmokeTest(_ client: PrototypeServer.Client) throws {
         // Primary
         _ = try client.greet(name: "")
@@ -105,4 +107,5 @@ struct PrototypeRunner {
         _ = try client.schedulingPrompt(person: "")
         #endif
     }
+    // swiftlint:enable identifier_name
 }

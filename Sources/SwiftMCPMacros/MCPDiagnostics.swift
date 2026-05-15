@@ -42,48 +42,57 @@ enum MCPToolDiagnostic: DiagnosticMessage {
 
     var message: String {
         switch self {
-            case .onlyFunctions:
-                return "The MCPTool macro can only be applied to functions"
-            case .requiresAppIntentConformance(let typeName):
-                return "Type '\(typeName)' must conform to AppIntent to use the MCPAppIntentTool macro."
-            case .missingDescription(let functionName):
-                return "Function '\(functionName)' is missing a description. Add a documentation comment or provide a description parameter."
-            case .invalidDefaultValueType(let paramName, let typeName):
-                return "Parameter '\(paramName)' has an unsupported default value type '\(typeName)'. Only numbers, booleans, and strings are supported."
-            case .closureTypeNotSupported(let paramName, let typeName):
-                return "Parameter '\(paramName)' has an unsupported closure type '\(typeName)'. Closures are not supported in MCP tools."
-            case .optionalParameterNeedsDefault(let paramName, let typeName):
-                return "Optional parameter '\(paramName)' of type '\(typeName)' requires a default value (e.g. = nil)."
-            case .missingMCPExtensionAttribute(let macroName):
-                return "@\(macroName) inside an extension requires @MCPExtension on the enclosing extension. Add @MCPExtension(\"<Name>\") (or @MCPExtension to derive the name from the filename) to surface this declaration at runtime."
+        case .onlyFunctions:
+            return "The MCPTool macro can only be applied to functions"
+        case .requiresAppIntentConformance(let typeName):
+            return "Type '\(typeName)' must conform to AppIntent to use the MCPAppIntentTool macro."
+        case .missingDescription(let functionName):
+            // swiftlint:disable:next line_length
+            return "Function '\(functionName)' is missing a description. Add a documentation comment or provide a description parameter."
+        case .invalidDefaultValueType(let paramName, let typeName):
+            // swiftlint:disable:next line_length
+            return "Parameter '\(paramName)' has an unsupported default value type '\(typeName)'. Only numbers, booleans, and strings are supported."
+        case .closureTypeNotSupported(let paramName, let typeName):
+            // swiftlint:disable:next line_length
+            return "Parameter '\(paramName)' has an unsupported closure type '\(typeName)'. Closures are not supported in MCP tools."
+        case .optionalParameterNeedsDefault(let paramName, let typeName):
+            return "Optional parameter '\(paramName)' of type '\(typeName)' requires a default value (e.g. = nil)."
+        case .missingMCPExtensionAttribute(let macroName):
+            // swiftlint:disable:next line_length
+            return "@\(macroName) inside an extension requires @MCPExtension on the enclosing extension. Add @MCPExtension(\"<Name>\") (or @MCPExtension to derive the name from the filename) to surface this declaration at runtime."
         }
     }
 
     var severity: DiagnosticSeverity {
         switch self {
-            case .onlyFunctions, .requiresAppIntentConformance, .invalidDefaultValueType, .closureTypeNotSupported, .optionalParameterNeedsDefault, .missingMCPExtensionAttribute:
-                return .error
-            case .missingDescription:
-                return .warning
+        case .onlyFunctions,
+             .requiresAppIntentConformance,
+             .invalidDefaultValueType,
+             .closureTypeNotSupported,
+             .optionalParameterNeedsDefault,
+             .missingMCPExtensionAttribute:
+            return .error
+        case .missingDescription:
+            return .warning
         }
     }
 
     var diagnosticID: MessageID {
         switch self {
-            case .onlyFunctions:
-                return MessageID(domain: "SwiftMCP", id: "onlyFunctions")
-            case .requiresAppIntentConformance:
-                return MessageID(domain: "SwiftMCP", id: "requiresAppIntentConformance")
-            case .missingDescription:
-                return MessageID(domain: "SwiftMCP", id: "missingDescription")
-            case .invalidDefaultValueType:
-                return MessageID(domain: "SwiftMCP", id: "invalidDefaultValueType")
-            case .closureTypeNotSupported:
-                return MessageID(domain: "SwiftMCP", id: "closureTypeNotSupported")
-            case .optionalParameterNeedsDefault:
-                return MessageID(domain: "SwiftMCP", id: "optionalParameterNeedsDefault")
-            case .missingMCPExtensionAttribute:
-                return MessageID(domain: "SwiftMCP", id: "missingMCPExtensionAttribute")
+        case .onlyFunctions:
+            return MessageID(domain: "SwiftMCP", id: "onlyFunctions")
+        case .requiresAppIntentConformance:
+            return MessageID(domain: "SwiftMCP", id: "requiresAppIntentConformance")
+        case .missingDescription:
+            return MessageID(domain: "SwiftMCP", id: "missingDescription")
+        case .invalidDefaultValueType:
+            return MessageID(domain: "SwiftMCP", id: "invalidDefaultValueType")
+        case .closureTypeNotSupported:
+            return MessageID(domain: "SwiftMCP", id: "closureTypeNotSupported")
+        case .optionalParameterNeedsDefault:
+            return MessageID(domain: "SwiftMCP", id: "optionalParameterNeedsDefault")
+        case .missingMCPExtensionAttribute:
+            return MessageID(domain: "SwiftMCP", id: "missingMCPExtensionAttribute")
         }
     }
 }
@@ -93,22 +102,22 @@ enum MCPToolFixItMessage: FixItMessage {
 
     var message: String {
         switch self {
-            case .addDefaultValue(let paramName):
-                return "Add default value '= nil' for parameter '\(paramName)'"
+        case .addDefaultValue(let paramName):
+            return "Add default value '= nil' for parameter '\(paramName)'"
         }
     }
 
     var diagnosticID: MessageID {
         switch self {
-            case .addDefaultValue:
-                return MessageID(domain: "SwiftMCP", id: "addDefaultValue")
+        case .addDefaultValue:
+            return MessageID(domain: "SwiftMCP", id: "addDefaultValue")
         }
     }
 
     var fixItID: MessageID {
         switch self {
-            case .addDefaultValue:
-                return MessageID(domain: "SwiftMCP", id: "addDefaultValue")
+        case .addDefaultValue:
+            return MessageID(domain: "SwiftMCP", id: "addDefaultValue")
         }
     }
-} 
+}

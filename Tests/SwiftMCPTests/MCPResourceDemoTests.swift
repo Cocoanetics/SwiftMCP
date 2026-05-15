@@ -5,7 +5,7 @@ import SwiftMCP
 /// Test server demonstrating various @MCPResource use cases
 @MCPServer(name: "DemoResourceServer", version: "1.0")
 actor DemoResourceTestServer {
-    
+
     /// Get server information as a static resource
     @MCPResource("server://info")
     func getServerInfo() -> String {
@@ -15,9 +15,10 @@ actor DemoResourceTestServer {
         Resources: Available
         """
     }
-    
+
     /// Get user information by ID
     @MCPResource("users://profile/{user_id}", mimeType: "application/json")
+    // swiftlint:disable:next identifier_name
     func getUser(user_id: Int) -> String {
         return """
         {
@@ -27,7 +28,7 @@ actor DemoResourceTestServer {
         }
         """
     }
-    
+
     /// Search for users with pagination
     @MCPResource("users://search?q={query}&page={page}&limit={limit}", mimeType: "application/json")
     func searchUsers(query: String, page: Int = 1, limit: Int = 10) -> String {
@@ -44,30 +45,31 @@ actor DemoResourceTestServer {
         }
         """
     }
-    
+
     /// Get system metrics
     @MCPResource("metrics://system")
     func getSystemMetrics() -> [Double] {
         return [0.75, 0.82, 0.91, 0.68, 0.79]
     }
-    
+
     /// Check if a feature is enabled
     @MCPResource("features://{feature_name}/enabled")
+    // swiftlint:disable:next identifier_name
     func isFeatureEnabled(feature_name: String) -> Bool {
         let enabledFeatures = ["dark_mode", "beta_ui", "advanced_search"]
         return enabledFeatures.contains(feature_name.lowercased())
     }
-    
+
     struct ConfigData: Codable, CustomStringConvertible {
         let theme: String
         let maxUploadSize: Int
         let features: [String]
-        
+
         var description: String {
             return "ConfigData(theme: \"\(theme)\", maxUploadSize: \(maxUploadSize), features: \(features))"
         }
     }
-    
+
     /// Get application configuration
     @MCPResource("config://{env}", mimeType: "application/json")
     func getConfig(env: String = "prod") -> ConfigData {
@@ -80,7 +82,7 @@ actor DemoResourceTestServer {
             )
         default:
             return ConfigData(
-                theme: "default", 
+                theme: "default",
                 maxUploadSize: 10_000_000,
                 features: ["stable_features"]
             )
@@ -101,7 +103,9 @@ struct MCPResourceDemoTests {
         // Verify each resource is properly registered
         #expect(metadata.first { $0.uriTemplates.contains("server://info") } != nil)
         #expect(metadata.first { $0.uriTemplates.contains("users://profile/{user_id}") } != nil)
-        #expect(metadata.first { $0.uriTemplates.contains("users://search?q={query}&page={page}&limit={limit}") } != nil)
+        #expect(metadata.first {
+            $0.uriTemplates.contains("users://search?q={query}&page={page}&limit={limit}")
+        } != nil)
         #expect(metadata.first { $0.uriTemplates.contains("metrics://system") } != nil)
         #expect(metadata.first { $0.uriTemplates.contains("features://{feature_name}/enabled") } != nil)
         #expect(metadata.first { $0.uriTemplates.contains("config://{env}") } != nil)

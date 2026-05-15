@@ -15,6 +15,19 @@ import SwiftSyntaxMacros
 /// func getUserProfile(user_id: Int, lang: String = "en") -> ProfileResource
 /// ```
 public struct MCPResourceMacro: PeerMacro {
+    struct WrapperParamDetail {
+        let name: String
+        let label: String
+        let type: String
+    }
+
+    /// Resource-attribute arguments parsed from `@MCPResource(...)`.
+    struct ResourceAttributeArgs {
+        var templates: [String]
+        var resourceName: String
+        var mimeTypeArg: String
+    }
+
     public static func expansion(
         of node: AttributeSyntax,
         providingPeersOf declaration: some DeclSyntaxProtocol,
@@ -29,200 +42,81 @@ public struct MCPResourceMacro: PeerMacro {
         let extractor = FunctionMetadataExtractor(funcDecl: funcDecl, context: context)
         let commonMetadata = try extractor.extract()
 
-        let functionName = commonMetadata.functionName
-
-        // Extract templates from the macro arguments
-        var templates: [String] = []
-
-        guard let argList = node.arguments?.as(LabeledExprListSyntax.self) else {
-            let diag = Diagnostic(node: Syntax(node), message: MCPResourceDiagnostic.requiresStringLiteral)
-            context.diagnose(diag)
+        guard let attrArgs = parseAttributeArguments(
+            node: node,
+            functionName: commonMetadata.functionName,
+            context: context
+        ) else {
             return []
         }
 
-        // Process all unlabeled arguments as templates
-        for arg in argList {
-            if arg.label == nil {
-                if let stringLiteral = arg.expression.as(StringLiteralExprSyntax.self) {
-                    let template = stringLiteral.segments.description
-                    templates.append(template)
-                } else if let arrayExpr = arg.expression.as(ArrayExprSyntax.self) {
-                    // Handle array of templates
-                    for element in arrayExpr.elements {
-                        if let stringLiteral = element.expression.as(StringLiteralExprSyntax.self) {
-                            let template = stringLiteral.segments.description
-                            templates.append(template)
-                        }
-                    }
-                }
-            }
-        }
+        diagnoseAttributeAndParameters(
+            attrArgs: attrArgs,
+            commonMetadata: commonMetadata,
+            node: node,
+            context: context
+        )
 
-        if templates.isEmpty {
-            let diag = Diagnostic(node: Syntax(node), message: MCPResourceDiagnostic.requiresStringLiteral)
-            context.diagnose(diag)
-            return []
-        }
+        return try emitDeclarations(
+            funcDecl: funcDecl,
+            attrArgs: attrArgs,
+            commonMetadata: commonMetadata,
+            context: context
+        )
+    }
 
-        // Validate all templates and collect all variables
-        var allPlaceholders: Set<String> = []
-        for template in templates {
-            let validationResult = URITemplateValidator.validate(template)
-            if let validationError = validationResult.error {
-                let diag = Diagnostic(
-                    node: Syntax(node),
-                    message: validationError
-                )
-                context.diagnose(diag)
-            // Continue processing even with validation errors for better developer experience
-            }
+    /// Runs validation and diagnostic emission against the parsed attribute
+    /// arguments and the function's parameters.
+    private static func diagnoseAttributeAndParameters(
+        attrArgs: ResourceAttributeArgs,
+        commonMetadata: ExtractedFunctionMetadata,
+        node: AttributeSyntax,
+        context: some MacroExpansionContext
+    ) {
+        validateTemplates(templates: attrArgs.templates, node: node, context: context)
+        let allPlaceholders = collectPlaceholders(from: attrArgs.templates)
+        let functionParamNames = commonMetadata.parameters.map { $0.name }
 
-            // Extract variables using the validator (which properly handles RFC 6570 syntax)
-            let placeholders = validationResult.variables
-            allPlaceholders.formUnion(placeholders)
-        }
+        diagnoseMissingParameters(
+            placeholders: allPlaceholders,
+            functionParamNames: functionParamNames,
+            node: node,
+            context: context
+        )
+        diagnoseUnknownPlaceholders(
+            functionParamNames: functionParamNames,
+            placeholders: allPlaceholders,
+            metadata: commonMetadata,
+            context: context
+        )
+    }
 
-        var descriptionArg = "nil"
-        if !commonMetadata.documentation.description.isEmpty {
-            descriptionArg = "\"\(commonMetadata.documentation.description.escapedForSwiftString)\""
-        }
+    /// Builds the metadata-and-wrapper declarations. When expanded inside an
+    /// extension, only the wrapper is emitted (the metadata is regenerated by
+    /// `@MCPExtension`).
+    private static func emitDeclarations(
+        funcDecl: FunctionDeclSyntax,
+        attrArgs: ResourceAttributeArgs,
+        commonMetadata: ExtractedFunctionMetadata,
+        context: some MacroExpansionContext
+    ) throws -> [DeclSyntax] {
+        let descriptionArg = makeDescriptionArg(from: commonMetadata)
+        let wrapperDetails = makeWrapperDetails(from: commonMetadata)
 
-        var resourceName = functionName
-        var mimeTypeArg = "nil"
+        let metadataDeclaration = makeMetadataDeclaration(
+            functionName: commonMetadata.functionName,
+            attrArgs: attrArgs,
+            descriptionArg: descriptionArg,
+            parameterInfoStrings: wrapperDetails.parameterInfoStrings,
+            commonMetadata: commonMetadata
+        )
 
-        if let arguments = node.arguments?.as(LabeledExprListSyntax.self) {
-            for argument in arguments {
-                if argument.label == nil { continue }
+        let wrapperMethod = makeWrapperMethod(
+            functionName: commonMetadata.functionName,
+            commonMetadata: commonMetadata,
+            wrapperParamDetails: wrapperDetails.wrapperParamDetails
+        )
 
-                if argument.label?.text == "name",
-                   let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
-                    resourceName = stringLiteral.segments.description
-                } else if argument.label?.text == "mimeType", 
-                   let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
-                    let stringValue = stringLiteral.segments.description
-                    mimeTypeArg = "\"\(stringValue.escapedForSwiftString)\""
-                }
-            }
-        }
-
-        // Generate parameter info strings using the new unified approach
-        var parameterInfoStrings: [String] = []
-        var functionParamNames: [String] = []
-        var wrapperParamDetails: [(name: String, label: String, type: String)] = []
-
-        for parsedParam in commonMetadata.parameters {
-            functionParamNames.append(parsedParam.name)
-            parameterInfoStrings.append(parsedParam.toMCPParameterInfo())
-            wrapperParamDetails.append((name: parsedParam.name, label: parsedParam.label, type: parsedParam.typeString))
-        }
-
-        for ph in allPlaceholders {
-            if !functionParamNames.contains(ph) {
-                let diag = Diagnostic(node: Syntax(node), message: MCPResourceDiagnostic.missingParameterForPlaceholder(placeholder: ph))
-                context.diagnose(diag)
-            }
-        }
-
-        for funcParamName in functionParamNames {
-            // Find the parameter metadata
-            guard let paramMeta = commonMetadata.parameters.first(where: { $0.name == funcParamName }) else { continue }
-            // Only require a placeholder if the parameter does NOT have a default value
-            if !allPlaceholders.contains(funcParamName) && paramMeta.defaultValueClause == nil {
-                let originalParamSyntax = paramMeta.funcParam
-                let diag = Diagnostic(
-                    node: Syntax(originalParamSyntax),
-                    message: MCPResourceDiagnostic.unknownPlaceholder(parameterName: funcParamName)
-                )
-                context.diagnose(diag)
-            }
-        }
-
-        let returnTypeString = commonMetadata.returnTypeString
-
-        let returnDescriptionString = commonMetadata.returnDescription ?? "nil"
-
-        // Generate the Set of templates for the metadata
-        let templatesSetString = "[\(templates.map { "\"\($0)\"" }.joined(separator: ", "))]"
-
-        // Generate the metadata variable
-        let metadataDeclaration = """
-/// Metadata for the \(functionName) resource
-nonisolated private let __mcpResourceMetadata_\(functionName) = MCPResourceMetadata(
-   uriTemplates: Set(\(templatesSetString)),
-   name: "\(resourceName)",
-   functionName: "\(functionName)",
-   description: \(descriptionArg),
-   parameters: [\(parameterInfoStrings.joined(separator: ", "))],
-   returnType: \(returnTypeString).self,
-   returnTypeDescription: \(returnDescriptionString),
-   isAsync: \(commonMetadata.isAsync),
-   isThrowing: \(commonMetadata.isThrowing),
-   mimeType: \(mimeTypeArg)
-)
-"""
-
-        let callParameterList = wrapperParamDetails.map { param in
-            if param.label == "_" {
-                return param.name
-            }
-            return "\(param.label): \(param.name)"
-        }.joined(separator: ", ")
-
-        var wrapperMethod = """
-
-        /// Autogenerated wrapper for \(functionName) that takes a dictionary of parameters and URI
-"""
-        if !commonMetadata.propagatedAttributes.isEmpty {
-            for attribute in commonMetadata.propagatedAttributes {
-                wrapperMethod += "\n        \(attribute)"
-            }
-        }
-        wrapperMethod += "\n        private func __mcpResourceCall_\(functionName)(_ params: JSONDictionary, requestedUri: URL, overrideMimeType: String?) async throws -> [MCPResourceContent] {\n"
-
-        for detail in wrapperParamDetails {
-            wrapperMethod += """
-                let \(detail.name): \(detail.type) = try params.extractValue(named: "\(detail.name)", as: \(detail.type).self)
-            """
-        }
-
-        let concreteFunctionCall = "\(commonMetadata.isThrowing ? "try " : "")\(commonMetadata.isAsync ? "await " : "")\(functionName)(\(callParameterList))"
-        let concreteResourceContentTypeName = "GenericResourceContent"
-
-        var returnHandlingCode: String
-        if returnTypeString == "String" {
-            returnHandlingCode = """
-                let result = \(concreteFunctionCall)
-                return [\(concreteResourceContentTypeName)(uri: requestedUri, mimeType: overrideMimeType ?? "text/plain", text: result)]
-            """
-        } else if returnTypeString == "Data" {
-            returnHandlingCode = """
-                let result = \(concreteFunctionCall)
-                return [\(concreteResourceContentTypeName)(uri: requestedUri, mimeType: overrideMimeType ?? "application/octet-stream", blob: result)]
-            """
-        } else if returnTypeString == "MCPResourceContent" {
-            returnHandlingCode = """
-                let result = \(concreteFunctionCall)
-                return [result]
-            """
-        } else if returnTypeString == "[MCPResourceContent]" || returnTypeString == "[\(concreteResourceContentTypeName)]" {
-            returnHandlingCode = """
-                let result = \(concreteFunctionCall)
-                return result
-            """
-        } else {
-            returnHandlingCode = """
-                let result = \(concreteFunctionCall)
-                return GenericResourceContent.fromResult(result, uri: requestedUri, mimeType: overrideMimeType)
-            """
-        }
-
-        wrapperMethod += """
-        \(returnHandlingCode)
-        }
-        """
-
-        // Inside an extension: emit wrapper only. `@MCPExtension` will
-        // regenerate metadata at the extension level.
         if let enclosing = MCPMacroContextDetection.enclosingExtension(in: context) {
             if !MCPMacroContextDetection.hasMCPExtensionAttribute(enclosing) {
                 let diag = Diagnostic(

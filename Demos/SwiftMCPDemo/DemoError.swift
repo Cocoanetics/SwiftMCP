@@ -4,13 +4,13 @@ import Foundation
 public enum DemoError: LocalizedError {
     /// When a greeting name is too short
     case nameTooShort(name: String)
-    
+
     /// When a greeting name contains invalid characters
     case invalidName(name: String)
-    
+
     /// When the greeting service is temporarily unavailable
     case serviceUnavailable
-    
+
     public var errorDescription: String? {
         switch self {
         case .nameTooShort(let name):
@@ -21,4 +21,4 @@ public enum DemoError: LocalizedError {
             return "The greeting service is temporarily unavailable. Please try again later."
         }
     }
-} 
+}

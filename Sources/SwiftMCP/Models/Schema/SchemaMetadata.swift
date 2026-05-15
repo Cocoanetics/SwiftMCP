@@ -5,7 +5,6 @@
 //  Created by Oliver Drobnik on 30.03.25.
 //
 
-
 import Foundation
 
 /// Metadata about a SchemaRepresentable struct
@@ -54,4 +53,4 @@ public struct SchemaMetadata: Sendable {
 			description: description
 		))
     }
-} 
+}

@@ -25,13 +25,13 @@ extension OAuthConfiguration {
     ) -> OAuthConfiguration {
         let baseURL = "https://\(domain)"
         let expectedIssuer = "\(baseURL)/"
-        
+
         let validator = JWTTokenValidator(
             expectedIssuer: expectedIssuer,
             expectedAudience: expectedAudience,
             cacheValidityDuration: 3600 // 1 hour cache
         )
-        
+
         return OAuthConfiguration(
             issuer: URL(string: baseURL)!,
             authorizationEndpoint: URL(string: "\(baseURL)/authorize")!,

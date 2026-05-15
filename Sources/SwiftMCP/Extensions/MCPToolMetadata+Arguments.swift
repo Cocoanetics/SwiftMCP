@@ -25,13 +25,11 @@ extension MCPToolMetadata {
         var enrichedArguments = arguments
 
         // Add default values for missing parameters
-        for param in parameters {
-            if enrichedArguments[param.name] == nil {
-                if let defaultValue = param.jsonDefaultValue() {
-                    enrichedArguments[param.name] = defaultValue
-                } else if param.isRequired {
-                    throw MCPToolError.missingRequiredParameter(parameterName: param.name)
-                }
+        for param in parameters where enrichedArguments[param.name] == nil {
+            if let defaultValue = param.jsonDefaultValue() {
+                enrichedArguments[param.name] = defaultValue
+            } else if param.isRequired {
+                throw MCPToolError.missingRequiredParameter(parameterName: param.name)
             }
         }
 

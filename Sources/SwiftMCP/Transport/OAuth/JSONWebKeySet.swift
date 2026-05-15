@@ -14,22 +14,22 @@ import FoundationNetworking
 public actor JWKSCache {
     /// Internal cache storage mapping issuer URLs to cached JWKS and timestamp
     private var cache: [URL: (JSONWebKeySet, Date)] = [:]
-    
+
     /// How long to keep JWKS in cache before refetching (in seconds)
     private let cacheValidityDuration: TimeInterval
-    
+
     /// Initialize a JWKS cache with custom validity duration
     /// - Parameter cacheValidityDuration: How long to cache JWKS (default: 1 hour)
     public init(cacheValidityDuration: TimeInterval = 3600) { // Default 1 hour
         self.cacheValidityDuration = cacheValidityDuration
     }
-    
+
     /// Shared global JWKS cache instance for use across the application
     /// 
     /// Use this shared instance when you want to share JWKS cache across different
     /// parts of your application to maximize cache efficiency.
     public static let shared = JWKSCache()
-    
+
     /// Get JWKS for an issuer, using cache if available and valid
     /// 
     /// This method first checks if a valid cached JWKS exists for the issuer.
@@ -51,26 +51,26 @@ public actor JWKSCache {
     /// ```
     func getJWKS(for issuer: URL) async throws -> JSONWebKeySet {
         let now = Date()
-        
+
         // Check if we have a valid cached entry
         if let (jwks, cachedAt) = cache[issuer],
            now.timeIntervalSince(cachedAt) < cacheValidityDuration {
             return jwks
         }
-        
+
         // Fetch new JWKS
         let jwks = try await JSONWebKeySet(fromIssuer: issuer)
         cache[issuer] = (jwks, now)
         return jwks
     }
-    
+
     /// Clear all cached JWKS entries
     /// 
     /// Use this method to force fresh JWKS fetches on the next request.
     func clearCache() {
         cache.removeAll()
     }
-    
+
     /// Remove a specific issuer from cache
     /// 
     /// Use this method to force a fresh JWKS fetch for a specific issuer
@@ -90,13 +90,13 @@ public actor JWKSCache {
 public struct JSONWebKeySet: Codable, Sendable {
     /// Array of JSON Web Keys in this set
     public let keys: [JSONWebKey]
-    
+
     /// Initialize a JSON Web Key Set
     /// - Parameter keys: Array of JSON Web Keys
     public init(keys: [JSONWebKey]) {
         self.keys = keys
     }
-    
+
     /// Get a public key by key ID
     /// 
     /// This method searches through the JWKS to find a key with the specified `kid`
@@ -109,10 +109,10 @@ public struct JSONWebKeySet: Codable, Sendable {
         guard let jwk = keys.first(where: { $0.kid == kid }) else {
             return nil
         }
-        
+
         return try? jwk.createRSAPublicKey()
     }
-    
+
     /// Initialize JSONWebKeySet by fetching from an issuer
     /// 
     /// This initializer fetches the JWKS from the issuer's `.well-known/jwks.json`
@@ -123,14 +123,14 @@ public struct JSONWebKeySet: Codable, Sendable {
     /// - Throws: JWTError if fetch fails
     public init(fromIssuer issuer: URL) async throws {
         let url = issuer.appendingPathComponent(".well-known/jwks.json")
-        
+
         let (data, response) = try await URLSession.shared.data(from: url)
-        
+
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else {
             throw JWTError.jwksFetchFailed
         }
-        
+
         do {
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .secondsSince1970
@@ -140,4 +140,4 @@ public struct JSONWebKeySet: Codable, Sendable {
             throw JWTError.jwksFetchFailed
         }
     }
-} 
+}

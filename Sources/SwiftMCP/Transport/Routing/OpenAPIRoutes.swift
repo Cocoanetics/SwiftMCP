@@ -1,6 +1,5 @@
 import Foundation
 
-
 /// OpenAPI-related route handlers: AI plugin manifest, OpenAPI spec, and tool call endpoint.
 extension HTTPSSETransport {
 
@@ -18,7 +17,7 @@ extension HTTPSSETransport {
 			HTTPRoute(.GET, "/openapi.json", calling: HTTPSSETransport.handleOpenAPISpec),
 
 			// POST /{serverName}/:toolName — Tool call endpoint
-			HTTPRoute(.POST, "\(serverPath)/:toolName", calling: HTTPSSETransport.handleToolCallAsync),
+			HTTPRoute(.POST, "\(serverPath)/:toolName", calling: HTTPSSETransport.handleToolCallAsync)
 		]
 	}
 
@@ -114,7 +113,7 @@ extension HTTPSSETransport {
 
 		if case .unauthorized(let message) = await authorize(token, sessionID: sessionID) {
 			let err = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32000, message: "Unauthorized: \(message)"))
-			let data = try! JSONEncoder().encode(err)
+			let data = (try? JSONEncoder().encode(err)) ?? Data()
 			return RouteResponse(status: .unauthorized, headers: [("Content-Type", "application/json")], body: data)
 		}
 
@@ -124,56 +123,9 @@ extension HTTPSSETransport {
 
 		do {
 			let arguments = try MCPJSONCoding.makeDecoder().decode(JSONDictionary.self, from: body)
-			let result: Encodable & Sendable
-			let metadata: MCPToolMetadata?
-
-			if let toolProvider = server as? MCPToolProviding,
-			   toolProvider.mcpToolMetadata.contains(where: { $0.name == toolName }) {
-				metadata = toolProvider.mcpToolMetadata.first(where: { $0.name == toolName })
-				result = try await toolProvider.callTool(toolName, arguments: arguments)
-			} else if let resourceProvider = server as? MCPResourceProviding,
-					  resourceProvider.mcpResourceMetadata.contains(where: { $0.functionMetadata.name == toolName }) {
-				metadata = nil
-				result = try await resourceProvider.callResourceAsFunction(toolName, arguments: arguments)
-			} else if let promptProvider = server as? MCPPromptProviding,
-					  promptProvider.mcpPromptMetadata.contains(where: { $0.name == toolName }) {
-				metadata = nil
-				let messages = try await promptProvider.callPrompt(toolName, arguments: arguments)
-				result = messages
-			} else {
-				throw MCPToolError.unknownTool(name: toolName)
-			}
-
+			let (result, metadata) = try await dispatchTool(toolName: toolName, arguments: arguments)
 			let wrappedResult = try metadata?.wrapOutputIfNeeded(result) ?? result
-
-			let responseToEncode: Encodable
-			if let toolResult = wrappedResult as? MCPText {
-				responseToEncode = toolResult
-			} else if let toolResult = wrappedResult as? MCPImage {
-				responseToEncode = toolResult
-			} else if let toolResult = wrappedResult as? MCPAudio {
-				responseToEncode = toolResult
-			} else if let toolResult = wrappedResult as? MCPResourceLink {
-				responseToEncode = toolResult
-			} else if let toolResult = wrappedResult as? MCPEmbeddedResource {
-				responseToEncode = toolResult
-			} else if let toolResults = wrappedResult as? [MCPText] {
-				responseToEncode = toolResults
-			} else if let toolResults = wrappedResult as? [MCPImage] {
-				responseToEncode = toolResults
-			} else if let toolResults = wrappedResult as? [MCPAudio] {
-				responseToEncode = toolResults
-			} else if let toolResults = wrappedResult as? [MCPResourceLink] {
-				responseToEncode = toolResults
-			} else if let toolResults = wrappedResult as? [MCPEmbeddedResource] {
-				responseToEncode = toolResults
-			} else if let resourceContent = wrappedResult as? MCPResourceContent {
-				responseToEncode = MCPEmbeddedResource(resource: resourceContent)
-			} else if let resourceContentArray = wrappedResult as? [MCPResourceContent] {
-				responseToEncode = resourceContentArray.map { MCPEmbeddedResource(resource: $0) }
-			} else {
-				responseToEncode = wrappedResult
-			}
+			let responseToEncode = openAPIEncodable(for: wrappedResult)
 
 			let encoder = MCPJSONCoding.makeValueEncoder()
 			encoder.outputFormatting = [.prettyPrinted]
@@ -181,41 +133,109 @@ extension HTTPSSETransport {
 			return RouteResponse(status: .ok, headers: [("Content-Type", "application/json")], body: jsonData)
 
 		} catch {
-			let localizedDescription = error.localizedDescription
-			let reflectedDescription = String(reflecting: error)
-			let errorType = String(describing: type(of: error))
-			let nsError = error as NSError
-
-			var errorData: JSONDictionary = [
-				"errorType": .string(errorType),
-				"debugDescription": .string(reflectedDescription),
-				"localizedDescription": .string(localizedDescription),
-				"nsErrorDomain": .string(nsError.domain),
-				"nsErrorCode": .integer(nsError.code)
-			]
-
-			if let localizedError = error as? LocalizedError {
-				if let failureReason = localizedError.failureReason {
-					errorData["failureReason"] = .string(failureReason)
-				}
-				if let recoverySuggestion = localizedError.recoverySuggestion {
-					errorData["recoverySuggestion"] = .string(recoverySuggestion)
-				}
-			}
-
-			let err = JSONRPCMessage.errorResponse(
-				id: nil,
-				error: .init(code: -32000, message: localizedDescription, data: errorData)
-			)
-
-			let data = try! JSONEncoder().encode(err)
-
-			var status: HTTPStatus = .badRequest
-			if let mcpError = error as? MCPToolError, case .unknownTool(_) = mcpError {
-				status = .notFound
-			}
-
-			return RouteResponse(status: status, headers: [("Content-Type", "application/json")], body: data)
+			return openAPIErrorResponse(for: error)
 		}
+	}
+
+	/// Dispatch a tool / resource / prompt by name and return its result along with metadata (if a tool).
+	private func dispatchTool(toolName: String, arguments: JSONDictionary) async throws
+		-> (Encodable & Sendable, MCPToolMetadata?) {
+		if let toolProvider = server as? MCPToolProviding,
+		   toolProvider.mcpToolMetadata.contains(where: { $0.name == toolName }) {
+			let metadata = toolProvider.mcpToolMetadata.first(where: { $0.name == toolName })
+			let result = try await toolProvider.callTool(toolName, arguments: arguments)
+			return (result, metadata)
+		}
+		if let resourceProvider = server as? MCPResourceProviding,
+		   resourceProvider.mcpResourceMetadata.contains(where: { $0.functionMetadata.name == toolName }) {
+			let result = try await resourceProvider.callResourceAsFunction(toolName, arguments: arguments)
+			return (result, nil)
+		}
+		if let promptProvider = server as? MCPPromptProviding,
+		   promptProvider.mcpPromptMetadata.contains(where: { $0.name == toolName }) {
+			let messages = try await promptProvider.callPrompt(toolName, arguments: arguments)
+			return (messages, nil)
+		}
+		throw MCPToolError.unknownTool(name: toolName)
+	}
+
+	/// Map a wrapped result to the Encodable representation used by OpenAPI responses.
+	private func openAPIEncodable(for wrappedResult: Encodable) -> Encodable {
+		if let encodableResult = openAPIScalarContent(for: wrappedResult) {
+			return encodableResult
+		}
+		if let encodableArray = openAPIArrayContent(for: wrappedResult) {
+			return encodableArray
+		}
+		if let resourceContent = wrappedResult as? MCPResourceContent {
+			return MCPEmbeddedResource(resource: resourceContent)
+		}
+		if let resourceContentArray = wrappedResult as? [MCPResourceContent] {
+			return resourceContentArray.map { MCPEmbeddedResource(resource: $0) }
+		}
+		return wrappedResult
+	}
+
+	/// Return the wrapped result re-cast to a known scalar content type, if it matches.
+	private func openAPIScalarContent(for wrappedResult: Encodable) -> Encodable? {
+		switch wrappedResult {
+		case let toolResult as MCPText: return toolResult
+		case let toolResult as MCPImage: return toolResult
+		case let toolResult as MCPAudio: return toolResult
+		case let toolResult as MCPResourceLink: return toolResult
+		case let toolResult as MCPEmbeddedResource: return toolResult
+		default: return nil
+		}
+	}
+
+	/// Return the wrapped result re-cast to a known array content type, if it matches.
+	private func openAPIArrayContent(for wrappedResult: Encodable) -> Encodable? {
+		switch wrappedResult {
+		case let toolResults as [MCPText]: return toolResults
+		case let toolResults as [MCPImage]: return toolResults
+		case let toolResults as [MCPAudio]: return toolResults
+		case let toolResults as [MCPResourceLink]: return toolResults
+		case let toolResults as [MCPEmbeddedResource]: return toolResults
+		default: return nil
+		}
+	}
+
+	/// Build a JSON error response with rich diagnostic information.
+	private func openAPIErrorResponse(for error: Error) -> RouteResponse {
+		let localizedDescription = error.localizedDescription
+		let reflectedDescription = String(reflecting: error)
+		let errorType = String(describing: type(of: error))
+		let nsError = error as NSError
+
+		var errorData: JSONDictionary = [
+			"errorType": .string(errorType),
+			"debugDescription": .string(reflectedDescription),
+			"localizedDescription": .string(localizedDescription),
+			"nsErrorDomain": .string(nsError.domain),
+			"nsErrorCode": .integer(nsError.code)
+		]
+
+		if let localizedError = error as? LocalizedError {
+			if let failureReason = localizedError.failureReason {
+				errorData["failureReason"] = .string(failureReason)
+			}
+			if let recoverySuggestion = localizedError.recoverySuggestion {
+				errorData["recoverySuggestion"] = .string(recoverySuggestion)
+			}
+		}
+
+		let err = JSONRPCMessage.errorResponse(
+			id: nil,
+			error: .init(code: -32000, message: localizedDescription, data: errorData)
+		)
+
+		let data = (try? JSONEncoder().encode(err)) ?? Data()
+
+		var status: HTTPStatus = .badRequest
+		if let mcpError = error as? MCPToolError, case .unknownTool = mcpError {
+			status = .notFound
+		}
+
+		return RouteResponse(status: status, headers: [("Content-Type", "application/json")], body: data)
 	}
 }

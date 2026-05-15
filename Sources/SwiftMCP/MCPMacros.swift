@@ -71,11 +71,16 @@ public enum MCPToolNaming {
 ///   - name: Optional custom tool name override. If nil, uses the Swift function name.
 ///   - description: Optional override for the function's documentation description
 ///   - hints: OptionSet of tool behavior hints (preferred API)
-///   - isConsequential: Whether the function's actions are consequential (defaults to true, deprecated - use hints instead)
-///   - readOnlyHint: If true, the tool does not modify its environment (deprecated - use hints: [.readOnly])
-///   - destructiveHint: If true (and readOnlyHint is false), tool may perform destructive updates (deprecated - use hints: [.destructive])
-///   - idempotentHint: If true, calling multiple times with same args has no additional effect (deprecated - use hints: [.idempotent])
-///   - openWorldHint: If true, tool may interact with external entities (deprecated - use hints: [.openWorld])
+///   - isConsequential: Whether the function's actions are consequential (defaults to true,
+///     deprecated - use hints instead)
+///   - readOnlyHint: If true, the tool does not modify its environment
+///     (deprecated - use hints: [.readOnly])
+///   - destructiveHint: If true (and readOnlyHint is false), tool may perform destructive updates
+///     (deprecated - use hints: [.destructive])
+///   - idempotentHint: If true, calling multiple times with same args has no additional effect
+///     (deprecated - use hints: [.idempotent])
+///   - openWorldHint: If true, tool may interact with external entities
+///     (deprecated - use hints: [.openWorld])
 @attached(peer, names: prefixed(__mcpMetadata_), prefixed(__mcpCall_))
 public macro MCPTool(
     name: String? = nil,
@@ -102,7 +107,8 @@ public macro MCPTool(
 /// - Parameters:
 ///   - description: Optional override for the intent's description
 ///   - hints: OptionSet of tool behavior hints (preferred API)
-///   - isConsequential: Whether the function's actions are consequential (defaults to true, deprecated - use hints instead)
+///   - isConsequential: Whether the function's actions are consequential (defaults to true,
+///     deprecated - use hints instead)
 @attached(member, names: named(mcpToolMetadata), named(mcpPerform))
 @attached(extension, conformances: MCPAppIntentTool)
 public macro MCPAppIntentTool(
@@ -128,7 +134,28 @@ public macro MCPAppIntentTool(
 ///     }
 /// }
 /// ```
-@attached(member, names: named(callTool), named(mcpToolMetadata), named(__mcpServerName), named(__mcpServerVersion), named(__mcpServerDescription), named(mcpResourceMetadata), named(mcpResources), named(mcpStaticResources), named(mcpResourceTemplates), named(getResource), named(__callResourceFunction), named(callResourceAsFunction), named(mcpPromptMetadata), named(callPrompt), named(Client), named(__mcpExtensionContributions), named(__mcpRegisterExtension), named(__mcpRegisteredExtensionIDs))
+@attached(
+    member,
+    names:
+        named(callTool),
+        named(mcpToolMetadata),
+        named(__mcpServerName),
+        named(__mcpServerVersion),
+        named(__mcpServerDescription),
+        named(mcpResourceMetadata),
+        named(mcpResources),
+        named(mcpStaticResources),
+        named(mcpResourceTemplates),
+        named(getResource),
+        named(__callResourceFunction),
+        named(callResourceAsFunction),
+        named(mcpPromptMetadata),
+        named(callPrompt),
+        named(Client),
+        named(__mcpExtensionContributions),
+        named(__mcpRegisterExtension),
+        named(__mcpRegisteredExtensionIDs)
+)
 @attached(memberAttribute)
 @attached(extension, conformances: MCPServer, MCPToolProviding, MCPResourceProviding, MCPPromptProviding)
 public macro MCPServer(
@@ -179,7 +206,11 @@ public macro Schema() = #externalMacro(module: "SwiftMCPMacros", type: "SchemaMa
 /// func getUserProfile(user_id: Int, lang: String = "en") -> ProfileResource
 /// ```
 @attached(peer, names: prefixed(__mcpResourceMetadata_), prefixed(__mcpResourceCall_))
-public macro MCPResource<T>(_ template: T, name: String? = nil, mimeType: String? = nil) = #externalMacro(module: "SwiftMCPMacros", type: "MCPResourceMacro")
+public macro MCPResource<T>(
+    _ template: T,
+    name: String? = nil,
+    mimeType: String? = nil
+) = #externalMacro(module: "SwiftMCPMacros", type: "MCPResourceMacro")
 
 @attached(peer, names: prefixed(__mcpPromptMetadata_), prefixed(__mcpPromptCall_))
 public macro MCPPrompt(description: String? = nil) = #externalMacro(module: "SwiftMCPMacros", type: "MCPPromptMacro")

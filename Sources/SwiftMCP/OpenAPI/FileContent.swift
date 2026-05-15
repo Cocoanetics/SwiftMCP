@@ -5,7 +5,6 @@
 //  Created by Oliver Drobnik on 06.04.25.
 //
 
-
 import Foundation
 
 /// Contents of a File to be returned by a tool call

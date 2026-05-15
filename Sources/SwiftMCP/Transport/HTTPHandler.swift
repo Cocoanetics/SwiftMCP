@@ -6,7 +6,6 @@ import FoundationNetworking
 import NIOHTTP1
 import Logging
 
-
 /// HTTP request handler for the SSE transport.
 ///
 /// Manages the NIO state machine and dispatches to the router.
@@ -143,7 +142,10 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
                 await self.writeRouteResponse(response, to: channel)
             } catch {
                 self.logger.error("Route handler error: \(error)")
-                let errorResponse = RouteResponse(status: .internalServerError, body: Data("Internal Server Error".utf8))
+                let errorResponse = RouteResponse(
+                    status: .internalServerError,
+                    body: Data("Internal Server Error".utf8)
+                )
                 await self.writeRouteResponse(errorResponse, to: channel)
             }
         }
@@ -176,7 +178,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
 
             channel.writeAndFlush(HTTPServerResponsePart.end(nil), promise: nil)
         } else {
-            var body: ByteBuffer? = nil
+            var body: ByteBuffer?
             if let data = response.body {
                 body = channel.allocator.buffer(data: data)
             }
@@ -271,7 +273,12 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         return responseHeaders.map { ($0.name, $0.value) }
     }
 
-    private func sendResponse(channel: Channel, status: HTTPResponseStatus, headers: HTTPHeaders? = nil, body: ByteBuffer? = nil) {
+    private func sendResponse(
+        channel: Channel,
+        status: HTTPResponseStatus,
+        headers: HTTPHeaders? = nil,
+        body: ByteBuffer? = nil
+    ) {
         let headerPairs = (headers ?? HTTPHeaders()).map { ($0.name, $0.value) }
         let resolvedHeaders = Self.responseHeadersApplyingDefaults(headerPairs, bodyLength: body?.readableBytes)
 

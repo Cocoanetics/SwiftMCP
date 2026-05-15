@@ -1,6 +1,5 @@
 import Foundation
 
-
 /// Legacy SSE protocol routes (`/sse`, `/messages/:sessionID`).
 extension HTTPSSETransport {
 
@@ -19,7 +18,7 @@ extension HTTPSSETransport {
 
 			// Non-POST on /messages/* → 405
 			HTTPRoute(method: nil, pathPattern: "/messages/:sessionID",
-				handler: { (_: HTTPSSETransport, _: HTTPRouteRequest<Data?>) in RouteResponse(status: .methodNotAllowed) }),
+				handler: { (_: HTTPSSETransport, _: HTTPRouteRequest<Data?>) in RouteResponse(status: .methodNotAllowed) })
 		]
 	}
 

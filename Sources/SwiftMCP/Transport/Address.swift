@@ -4,22 +4,23 @@ import Foundation
 public struct Address: Codable, Sendable {
     /// Full mailing address, formatted for display or use with a mailing label
     public let formatted: String?
-    
-    /// Full street address component, which may include house number, street name, Post Office Box, and multi-line extended street address information
+
+    /// Full street address component, which may include house number, street name,
+    /// Post Office Box, and multi-line extended street address information
     public let streetAddress: String?
-    
+
     /// City or locality component
     public let locality: String?
-    
+
     /// State, province, prefecture, or region component
     public let region: String?
-    
+
     /// Zip code or postal code component
     public let postalCode: String?
-    
+
     /// Country name component
     public let country: String?
-    
+
     public init(
         formatted: String? = nil,
         streetAddress: String? = nil,
@@ -35,7 +36,7 @@ public struct Address: Codable, Sendable {
         self.postalCode = postalCode
         self.country = country
     }
-    
+
     internal enum CodingKeys: String, CodingKey {
         case formatted
         case streetAddress = "street_address"

@@ -22,18 +22,18 @@ public enum MCPResourceError: LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-            case .notFound(let uri):
-                return "Resource not found: \(uri)"
-            case .templateMismatch(let template, let uri):
-                return "URI '\(uri)' does not match template '\(template)'"
-            case .missingParameter(let name):
-                return "Missing required parameter: \(name)"
-            case .typeMismatch(let parameter, let expectedType, let actualValue):
-                return "Parameter '\(parameter)' type mismatch: expected \(expectedType), got '\(actualValue)'"
-            case .executionError(let error):
-                return "Resource execution error: \(error.localizedDescription)"
-            case .invalidTemplate(let template):
-                return "Invalid URI template: \(template)"
+        case .notFound(let uri):
+            return "Resource not found: \(uri)"
+        case .templateMismatch(let template, let uri):
+            return "URI '\(uri)' does not match template '\(template)'"
+        case .missingParameter(let name):
+            return "Missing required parameter: \(name)"
+        case .typeMismatch(let parameter, let expectedType, let actualValue):
+            return "Parameter '\(parameter)' type mismatch: expected \(expectedType), got '\(actualValue)'"
+        case .executionError(let error):
+            return "Resource execution error: \(error.localizedDescription)"
+        case .invalidTemplate(let template):
+            return "Invalid URI template: \(template)"
         }
     }
-} 
+}

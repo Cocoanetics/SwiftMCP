@@ -13,6 +13,33 @@ import SwiftSyntaxMacros
 
 /// Implementation of the MCPAppIntentTool macro.
 public struct MCPAppIntentToolMacro: MemberMacro, ExtensionMacro {
+
+    /// Arguments parsed from `@MCPAppIntentTool(...)`.
+    struct AttributeArgs {
+        var descriptionOverrideArg: String = "nil"
+        var docDescriptionArg: String = "nil"
+        var isConsequentialArg: String = "true"
+        var hintsFromOptionSet: [String] = []
+    }
+
+    struct AppIntentParameter {
+        let name: String
+        let typeString: String
+        let baseTypeString: String
+        let defaultValueForMetadata: String
+        let description: String?
+        let isOptionalType: Bool
+
+        func toMCPParameterInfo() -> String {
+            let descriptionString = description ?? "nil"
+            let isRequired = defaultValueForMetadata == "nil" && !isOptionalType
+            return "MCPParameterInfo(name: \"\(name)\", type: \(baseTypeString).self, "
+                + "description: \(descriptionString), "
+                + "defaultValue: \(defaultValueForMetadata), "
+                + "isRequired: \(isRequired))"
+        }
+    }
+
     public static func expansion(
         of node: AttributeSyntax,
         providingMembersOf declaration: some DeclGroupSyntax,
@@ -20,103 +47,40 @@ public struct MCPAppIntentToolMacro: MemberMacro, ExtensionMacro {
     ) throws -> [DeclSyntax] {
         guard let typeName = typeName(from: declaration) else { return [] }
         guard isAppIntentDeclaration(declaration) else {
-            let diagnostic = Diagnostic(node: Syntax(node), message: MCPToolDiagnostic.requiresAppIntentConformance(typeName: typeName))
+            let diagnostic = Diagnostic(
+                node: Syntax(node),
+                message: MCPToolDiagnostic.requiresAppIntentConformance(typeName: typeName)
+            )
             context.diagnose(diagnostic)
             return []
         }
 
         let documentation = Documentation(from: declaration.leadingTrivia.description)
-
-        var descriptionOverrideArg = "nil"
-        var docDescriptionArg = "nil"
-        var isConsequentialArg = "true"
-        var hintsFromOptionSet: [String] = []
-
-        if let arguments = node.arguments?.as(LabeledExprListSyntax.self) {
-            for argument in arguments {
-                if argument.label?.text == "description",
-                   let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
-                    let stringValue = stringLiteral.segments.description
-                    descriptionOverrideArg = "\"\(stringValue.escapedForSwiftString)\""
-                } else if argument.label?.text == "hints" {
-                    hintsFromOptionSet.append(contentsOf: parseHintsExpression(argument.expression))
-                } else if argument.label?.text == "isConsequential",
-                          let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
-                    isConsequentialArg = boolLiteral.literal.text
-                }
-            }
-        }
-
-        let annotationsArg: String
-        if hintsFromOptionSet.isEmpty {
-            annotationsArg = "nil"
-        } else {
-            let sortedHints = Set(hintsFromOptionSet).sorted()
-            annotationsArg = "MCPToolAnnotations(hints: [\(sortedHints.joined(separator: ", "))])"
-        }
+        var attrArgs = parseAttributeArguments(node: node)
 
         if !documentation.description.isEmpty {
-            docDescriptionArg = "\"\(documentation.description.escapedForSwiftString)\""
+            attrArgs.docDescriptionArg = "\"\(documentation.description.escapedForSwiftString)\""
         }
 
+        let annotationsArg = makeAnnotationsArg(hints: attrArgs.hintsFromOptionSet)
         let parameters = appIntentParameters(from: declaration)
         let parameterInfoStrings = parameters.map { $0.toMCPParameterInfo() }
-
         let returnValueType = appIntentReturnValueType(from: declaration)
-        let returnTypeExpression = returnValueType == nil ? "Void.self" : "\(returnValueType!).self"
+        let returnTypeExpression = returnValueType.map { "\($0).self" } ?? "Void.self"
 
-        let metadataDeclaration = """
-/// Metadata for the \(typeName) tool
-public static let mcpToolMetadata: MCPToolMetadata = {
-   let descriptionOverride: String? = \(descriptionOverrideArg)
-   let docDescription: String? = \(docDescriptionArg)
-   let resolvedDescription = descriptionOverride ?? MCPAppIntentTools.descriptionText(for: Self.self) ?? docDescription
-   return MCPToolMetadata(
-      name: "\(typeName)",
-      description: resolvedDescription,
-      parameters: [\(parameterInfoStrings.joined(separator: ", "))],
-      returnType: \(returnTypeExpression),
-      returnTypeDescription: nil,
-      isAsync: true,
-      isThrowing: true,
-      isConsequential: \(isConsequentialArg),
-      annotations: \(annotationsArg)
-   )
-}()
-"""
+        let metadataDeclaration = makeMetadataDeclaration(
+            typeName: typeName,
+            attrArgs: attrArgs,
+            parameterInfoStrings: parameterInfoStrings,
+            returnTypeExpression: returnTypeExpression,
+            annotationsArg: annotationsArg
+        )
 
-        var performMethod = """
-
-/// Autogenerated AppIntent wrapper for \(typeName)
-public static func mcpPerform(arguments: JSONDictionary) async throws -> (Encodable & Sendable) {
-   let intent = Self()
-"""
-
-        for param in parameters {
-            performMethod += """
-
-   intent.\(param.name) = try arguments.extractValue(named: "\(param.name)", as: \(param.typeString).self)
-"""
-        }
-
-        if returnValueType == nil {
-            performMethod += """
-
-   _ = try await intent.perform()
-   return ""
-}
-"""
-        } else {
-            performMethod += """
-
-   let result = try await intent.perform()
-   if let value: \(returnValueType!) = MCPAppIntentTools.extractReturnValue(from: result, as: \(returnValueType!).self) {
-      return value
-   }
-   return ""
-}
-"""
-        }
+        let performMethod = makePerformMethod(
+            typeName: typeName,
+            parameters: parameters,
+            returnValueType: returnValueType
+        )
 
         return [
             DeclSyntax(stringLiteral: metadataDeclaration),
@@ -150,200 +114,109 @@ public static func mcpPerform(arguments: JSONDictionary) async throws -> (Encoda
         return [extensionDecl]
     }
 
-    private struct AppIntentParameter {
-        let name: String
-        let typeString: String
-        let baseTypeString: String
-        let defaultValueForMetadata: String
-        let description: String?
-        let isOptionalType: Bool
+    // MARK: - Attribute parsing
 
-        func toMCPParameterInfo() -> String {
-            let descriptionString = description ?? "nil"
-            let isRequired = defaultValueForMetadata == "nil" && !isOptionalType
-            return "MCPParameterInfo(name: \"\(name)\", type: \(baseTypeString).self, description: \(descriptionString), defaultValue: \(defaultValueForMetadata), isRequired: \(isRequired))"
-        }
-    }
-
-    private static func typeName(from declaration: some DeclGroupSyntax) -> String? {
-        if let structDecl = declaration.as(StructDeclSyntax.self) {
-            return structDecl.name.text
-        }
-        if let classDecl = declaration.as(ClassDeclSyntax.self) {
-            return classDecl.name.text
-        }
-        if let actorDecl = declaration.as(ActorDeclSyntax.self) {
-            return actorDecl.name.text
-        }
-        return nil
-    }
-
-    private static func isAppIntentDeclaration(_ declaration: some DeclGroupSyntax) -> Bool {
-        let inheritedTypes = declaration.inheritanceClause?.inheritedTypes ?? []
-        return inheritedTypes.contains { type in
-            let name = type.type.trimmedDescription
-            return name == "AppIntent" || name.hasSuffix(".AppIntent")
-        }
-    }
-
-    private static func appIntentParameters(from declaration: some DeclGroupSyntax) -> [AppIntentParameter] {
-        var parameters: [AppIntentParameter] = []
-
-        for member in declaration.memberBlock.members {
-            guard let varDecl = member.decl.as(VariableDeclSyntax.self) else { continue }
-            guard let parameterAttribute = varDecl.attributes.compactMap({ $0.as(AttributeSyntax.self) }).first(where: {
-                guard let identifier = $0.attributeName.as(IdentifierTypeSyntax.self) else { return false }
-                return identifier.name.text == "Parameter"
-            }) else {
+    private static func parseAttributeArguments(node: AttributeSyntax) -> AttributeArgs {
+        var args = AttributeArgs()
+        guard let arguments = node.arguments?.as(LabeledExprListSyntax.self) else { return args }
+        for argument in arguments {
+            guard let label = argument.label?.text else { continue }
+            switch label {
+            case "description":
+                if let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
+                    let stringValue = stringLiteral.segments.description
+                    args.descriptionOverrideArg = "\"\(stringValue.escapedForSwiftString)\""
+                }
+            case "hints":
+                args.hintsFromOptionSet.append(contentsOf: parseHintsExpression(argument.expression))
+            case "isConsequential":
+                if let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
+                    args.isConsequentialArg = boolLiteral.literal.text
+                }
+            default:
                 continue
             }
-
-            for binding in varDecl.bindings {
-                guard let pattern = binding.pattern.as(IdentifierPatternSyntax.self) else { continue }
-                guard let typeSyntax = binding.typeAnnotation?.type else { continue }
-
-                let name = pattern.identifier.text
-                let typeString = typeSyntax.description.trimmingCharacters(in: .whitespacesAndNewlines)
-                let isOptionalType = typeSyntax.is(OptionalTypeSyntax.self) ||
-                    typeSyntax.is(ImplicitlyUnwrappedOptionalTypeSyntax.self) ||
-                    typeString.hasSuffix("?") ||
-                    typeString.hasSuffix("!")
-
-                let baseTypeString: String
-                if isOptionalType {
-                    if typeString.hasSuffix("?") || typeString.hasSuffix("!") {
-                        baseTypeString = String(typeString.dropLast())
-                    } else if let optType = typeSyntax.as(OptionalTypeSyntax.self) {
-                        baseTypeString = optType.wrappedType.description.trimmingCharacters(in: .whitespacesAndNewlines)
-                    } else if let iuoType = typeSyntax.as(ImplicitlyUnwrappedOptionalTypeSyntax.self) {
-                        baseTypeString = iuoType.wrappedType.description.trimmingCharacters(in: .whitespacesAndNewlines)
-                    } else {
-                        baseTypeString = typeString
-                    }
-                } else {
-                    baseTypeString = typeString
-                }
-
-                let propertyDoc = Documentation(from: varDecl.leadingTrivia.description)
-                var description: String? = nil
-                if !propertyDoc.description.isEmpty {
-                    description = "\"\(propertyDoc.description.escapedForSwiftString)\""
-                } else if let title = parameterTitle(from: parameterAttribute) {
-                    description = "\"\(title.escapedForSwiftString)\""
-                }
-
-                let defaultValueExpr = binding.initializer?.value
-                let defaultValueForMetadata = processDefaultValue(
-                    defaultValueExpr,
-                    paramTypeString: baseTypeString,
-                    isArray: typeSyntax.is(ArrayTypeSyntax.self) || typeString.hasPrefix("[")
-                )
-
-                parameters.append(AppIntentParameter(
-                    name: name,
-                    typeString: typeString,
-                    baseTypeString: baseTypeString,
-                    defaultValueForMetadata: defaultValueForMetadata,
-                    description: description,
-                    isOptionalType: isOptionalType
-                ))
-            }
         }
-
-        return parameters
+        return args
     }
 
-    private static func appIntentReturnValueType(from declaration: some DeclGroupSyntax) -> String? {
-        let functionDecls = declaration.memberBlock.members.compactMap { $0.decl.as(FunctionDeclSyntax.self) }
-        guard let performDecl = functionDecls.first(where: { $0.name.text == "perform" }) else { return nil }
-        guard let returnType = performDecl.signature.returnClause?.type else { return nil }
-        return returnsValueTypeName(from: returnType)
+    private static func makeAnnotationsArg(hints: [String]) -> String {
+        guard !hints.isEmpty else { return "nil" }
+        let sortedHints = Set(hints).sorted()
+        return "MCPToolAnnotations(hints: [\(sortedHints.joined(separator: ", "))])"
     }
 
-    private static func returnsValueTypeName(from returnType: TypeSyntax) -> String? {
-        let raw = returnType.description
-        return extractGenericArgument(named: "ReturnsValue", from: raw)
-    }
+    // MARK: - Emission
 
-    private static func extractGenericArgument(named name: String, from raw: String) -> String? {
-        guard let nameRange = raw.range(of: name) else { return nil }
-        var index = nameRange.upperBound
-
-        while index < raw.endIndex, raw[index].isWhitespace {
-            index = raw.index(after: index)
-        }
-
-        if index == raw.endIndex {
-            return nil
-        }
-
-        if raw[index] != "<" {
-            guard let next = raw[index...].firstIndex(of: "<") else { return nil }
-            index = next
-        }
-
-        guard raw[index] == "<" else { return nil }
-
-        let start = raw.index(after: index)
-        var depth = 1
-        var current = start
-
-        while current < raw.endIndex {
-            let char = raw[current]
-            if char == "<" {
-                depth += 1
-            } else if char == ">" {
-                depth -= 1
-                if depth == 0 {
-                    let content = raw[start..<current]
-                    return content.trimmingCharacters(in: .whitespacesAndNewlines)
-                }
-            }
-            current = raw.index(after: current)
-        }
-
-        return nil
-    }
-
-    private static func parameterTitle(from attribute: AttributeSyntax) -> String? {
-        guard let arguments = attribute.arguments?.as(LabeledExprListSyntax.self) else { return nil }
-
-        for argument in arguments {
-            if argument.label?.text == "title" || argument.label == nil {
-                if let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
-                    return stringLiteral.segments.description
-                }
-            }
-        }
-        return nil
-    }
-
-    private static func processDefaultValue(
-        _ defaultExpr: ExprSyntax?,
-        paramTypeString: String,
-        isArray: Bool
+    private static func makeMetadataDeclaration(
+        typeName: String,
+        attrArgs: AttributeArgs,
+        parameterInfoStrings: [String],
+        returnTypeExpression: String,
+        annotationsArg: String
     ) -> String {
-        guard let expr = defaultExpr else { return "nil" }
+        return """
+/// Metadata for the \(typeName) tool
+public static let mcpToolMetadata: MCPToolMetadata = {
+   let descriptionOverride: String? = \(attrArgs.descriptionOverrideArg)
+   let docDescription: String? = \(attrArgs.docDescriptionArg)
+   let resolvedDescription = descriptionOverride ?? MCPAppIntentTools.descriptionText(for: Self.self) ?? docDescription
+   return MCPToolMetadata(
+      name: "\(typeName)",
+      description: resolvedDescription,
+      parameters: [\(parameterInfoStrings.joined(separator: ", "))],
+      returnType: \(returnTypeExpression),
+      returnTypeDescription: nil,
+      isAsync: true,
+      isThrowing: true,
+      isConsequential: \(attrArgs.isConsequentialArg),
+      annotations: \(annotationsArg)
+   )
+}()
+"""
+    }
 
-        let rawValue = expr.description.trimmingCharacters(in: .whitespaces)
+    private static func makePerformMethod(
+        typeName: String,
+        parameters: [AppIntentParameter],
+        returnValueType: String?
+    ) -> String {
+        var performMethod = """
 
-        if expr.is(NilLiteralExprSyntax.self) {
-            return "nil"
-        } else if let stringLiteral = expr.as(StringLiteralExprSyntax.self) {
-            return "\"\(stringLiteral.segments.description.escapedForSwiftString)\""
-        } else if expr.is(BooleanLiteralExprSyntax.self) ||
-                    expr.is(IntegerLiteralExprSyntax.self) ||
-                    expr.is(FloatLiteralExprSyntax.self) {
-            return rawValue
-        } else if rawValue.hasPrefix(".") {
-            return "\(paramTypeString)\(rawValue)"
-        } else if expr.is(ArrayExprSyntax.self) && rawValue == "[]" {
-            if isArray {
-                return "[] as \(paramTypeString)"
-            }
-            return "[]"
+/// Autogenerated AppIntent wrapper for \(typeName)
+public static func mcpPerform(arguments: JSONDictionary) async throws -> (Encodable & Sendable) {
+   let intent = Self()
+"""
+
+        for param in parameters {
+            performMethod += """
+
+   intent.\(param.name) = try arguments.extractValue(named: "\(param.name)", as: \(param.typeString).self)
+"""
         }
 
-        return rawValue
+        if let returnValueType {
+            performMethod += """
+
+   let result = try await intent.perform()
+   if let value: \(returnValueType) = MCPAppIntentTools.extractReturnValue(
+      from: result,
+      as: \(returnValueType).self
+   ) {
+      return value
+   }
+   return ""
+}
+"""
+        } else {
+            performMethod += """
+
+   _ = try await intent.perform()
+   return ""
+}
+"""
+        }
+
+        return performMethod
     }
 }

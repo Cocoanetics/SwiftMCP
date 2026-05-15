@@ -18,6 +18,7 @@ public struct CompleteRequest: Codable, Sendable {
         case prompt(name: String)
         case resource(uri: String)
 
+        // swiftlint:disable:next nesting
         private enum CodingKeys: String, CodingKey { case type, name, uri }
 
         public init(from decoder: Decoder) throws {
@@ -31,7 +32,11 @@ public struct CompleteRequest: Codable, Sendable {
                 let uri = try container.decode(String.self, forKey: .uri)
                 self = .resource(uri: uri)
             default:
-                throw DecodingError.dataCorruptedError(forKey: .type, in: container, debugDescription: "Unknown reference type")
+                throw DecodingError.dataCorruptedError(
+                    forKey: .type,
+                    in: container,
+                    debugDescription: "Unknown reference type"
+                )
             }
         }
 

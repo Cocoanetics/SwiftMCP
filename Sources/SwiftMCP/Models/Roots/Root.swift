@@ -15,10 +15,10 @@ import Foundation
 public struct Root: Codable, Sendable, Hashable {
     /// Unique identifier for the root. This MUST be a `file://` URI in the current specification.
     public let uri: String
-    
+
     /// Optional human-readable name for display purposes.
     public let name: String?
-    
+
     /// Creates a new root.
     /// - Parameters:
     ///   - uri: The URI identifying the root location. Must be a `file://` URI.

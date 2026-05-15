@@ -162,4 +162,4 @@ extension Optional: JSONSchemaTypeConvertible {
         }
         return .string(title: nil, description: description, format: nil, minLength: nil, maxLength: nil)
     }
-} 
+}

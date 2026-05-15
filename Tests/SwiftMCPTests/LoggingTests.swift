@@ -7,11 +7,11 @@ import Logging
 @MCPServer(name: "Test Logging Server")
 class TestLoggingServer: MCPLoggingProviding {
     var minimumLogLevel: LogLevel = .info
-    
+
     func setMinimumLogLevel(_ level: LogLevel) {
         minimumLogLevel = level
     }
-    
+
     func sendLog(_ message: LogMessage) async {
         // Only send messages that meet the minimum level requirement
         guard message.level.isAtLeast(minimumLogLevel) else {
@@ -19,7 +19,7 @@ class TestLoggingServer: MCPLoggingProviding {
         }
         // For testing, do nothing (was: print log message)
     }
-    
+
     @MCPTool(description: "Test logging functionality with different log levels")
     func testLogging() async {
         await log(.debug, "This is a debug message", logger: "test")
@@ -35,17 +35,17 @@ func testLogLevelPriority() throws {
     let info = LogLevel.info
     let warning = LogLevel.warning
     let error = LogLevel.error
-    
+
     #expect(debug.priority == 7)
     #expect(info.priority == 6)
     #expect(warning.priority == 4)
     #expect(error.priority == 3)
-    
+
     #expect(debug.isAtLeast(debug))
     #expect(info.isAtLeast(debug))
     #expect(warning.isAtLeast(debug))
     #expect(error.isAtLeast(debug))
-    
+
     #expect(!debug.isAtLeast(info))
     #expect(info.isAtLeast(info))
     #expect(warning.isAtLeast(info))
@@ -61,11 +61,11 @@ func testLogLevelFromString() throws {
     #expect(LogLevel(string: "critical") == .critical)
     #expect(LogLevel(string: "alert") == .alert)
     #expect(LogLevel(string: "emergency") == .emergency)
-    
+
     #expect(LogLevel(string: "DEBUG") == .debug)
     #expect(LogLevel(string: "INFO") == .info)
     #expect(LogLevel(string: "WARNING") == .warning)
-    
+
     #expect(LogLevel(string: "invalid") == nil)
     #expect(LogLevel(string: "unknown") == nil)
 }
@@ -76,12 +76,12 @@ func testLogMessageCreation() throws {
     #expect(message1.level == .info)
     #expect(message1.logger == nil)
     #expect(message1.data.value as? String == "Test message")
-    
+
     let message2 = LogMessage(level: .error, message: "Error message", logger: "test")
     #expect(message2.level == .error)
     #expect(message2.logger == "test")
     #expect(message2.data.value as? String == "Error message")
-    
+
     let data: [String: Any] = ["key": "value", "number": 42]
     let message3 = LogMessage(level: .debug, data: data, logger: "debug")
     #expect(message3.level == .debug)
@@ -95,14 +95,14 @@ func testLogMessageCreation() throws {
 @Test
 func testLoggingServer() async throws {
     let server = TestLoggingServer()
-    
+
     // Test with default level (info)
     await server.testLogging()
-    
+
     // Test with debug level
     server.setMinimumLogLevel(.debug)
     await server.testLogging()
-    
+
     // Test with error level
     server.setMinimumLogLevel(.error)
     await server.testLogging()

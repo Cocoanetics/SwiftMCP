@@ -13,7 +13,8 @@ struct GenerateProxyCommand: AsyncParsableCommand {
 
   Examples:
     SwiftMCPUtility generate-proxy --sse http://localhost:8080/sse -o ToolsProxy.swift
-    SwiftMCPUtility generate-proxy --sse http://localhost:8080/sse --openapi http://localhost:8080/openapi.json -o ToolsProxy.swift
+    SwiftMCPUtility generate-proxy --sse http://localhost:8080/sse \\
+        --openapi http://localhost:8080/openapi.json -o ToolsProxy.swift
     SwiftMCPUtility generate-proxy --command "npx -y @modelcontextprotocol/server-filesystem"
     SwiftMCPUtility generate-proxy --config mcp.json --name FileToolsProxy
 """
@@ -25,12 +26,16 @@ struct GenerateProxyCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Override the namespace type name (mutually exclusive with -o)")
     var name: String?
 
-    @Option(name: [.customShort("o"), .long], help: "Output file path (default: inferred from server name, mutually exclusive with --name)")
+    @Option(
+        name: [.customShort("o"), .long],
+        help: "Output file path (default: inferred from server name, mutually exclusive with --name)"
+    )
     var output: String?
 
     @Option(name: .long, help: "OpenAPI JSON URL or file path to infer return types")
     var openapi: String?
 
+    // swiftlint:disable:next line_length
     @Option(name: .long, help: "Naming style for generated Swift functions: verbatim, lowerCamelCase (default), snakeCase")
     var functionNaming: String?
 
@@ -45,6 +50,46 @@ struct GenerateProxyCommand: AsyncParsableCommand {
         }
 
         try await proxy.connect(clientName: "SwiftMCP Utility")
+        let surfaces = try await collectServerSurfaces(proxy: proxy)
+        try validateNameAndOutput()
+
+        let typeName = resolveTypeName(serverName: surfaces.serverName)
+        let outputPath = output ?? "\(typeName).swift"
+        let fileName = URL(fileURLWithPath: outputPath).lastPathComponent
+        let openAPIReturnInfo = try await OpenAPIProxyLoader.loadReturnSchemas(from: openapi)
+        let headerMetadata = makeHeaderMetadata(fileName: fileName, surfaces: surfaces)
+        let naming = resolveFunctionNaming()
+
+        let source = ProxyGenerator.generate(
+            typeName: typeName,
+            tools: surfaces.tools,
+            resources: surfaces.resources,
+            resourceTemplates: surfaces.resourceTemplates,
+            prompts: surfaces.prompts,
+            supportsResources: surfaces.supportsResources,
+            supportsPrompts: surfaces.supportsPrompts,
+            openapiReturnSchemas: openAPIReturnInfo,
+            functionNaming: naming,
+            fileName: fileName,
+            headerMetadata: headerMetadata
+        )
+        try UtilitySupport.writeOutput(source.description, to: outputPath)
+    }
+
+    /// Snapshot of the surfaces and identity advertised by an MCP server.
+    private struct ServerSurfaces {
+        let tools: [MCPTool]
+        let resources: [SimpleResource]
+        let resourceTemplates: [SimpleResourceTemplate]
+        let prompts: [Prompt]
+        let supportsResources: Bool
+        let supportsPrompts: Bool
+        let serverName: String?
+        let serverVersion: String?
+        let serverDescription: String?
+    }
+
+    private func collectServerSurfaces(proxy: MCPServerProxy) async throws -> ServerSurfaces {
         let tools = try await proxy.listTools()
         let supportsResources = await proxy.serverCapabilities?.resources != nil
         let supportsPrompts = await proxy.serverCapabilities?.prompts != nil
@@ -54,55 +99,57 @@ struct GenerateProxyCommand: AsyncParsableCommand {
         let serverName = await proxy.serverName
         let serverVersion = await proxy.serverVersion
         let serverDescription = await proxy.serverDescription
-        if name != nil && output != nil {
-            throw ValidationError("Use --name or -o, not both. The file name is derived from the type name.")
-        }
-
-        let typeName: String
-        if let name {
-            typeName = name
-        } else if let output {
-            // Derive type name from output filename
-            let base = URL(fileURLWithPath: output).deletingPathExtension().lastPathComponent
-            typeName = ProxyGenerator.defaultTypeName(serverName: base)
-        } else {
-            typeName = ProxyGenerator.defaultTypeName(serverName: serverName)
-        }
-
-        let outputPath = output ?? "\(typeName).swift"
-        let openAPIReturnInfo = try await OpenAPIProxyLoader.loadReturnSchemas(from: openapi)
-        let fileName = URL(fileURLWithPath: outputPath).lastPathComponent
-        let sourceDescription = connectionSourceDescription()
-        let headerMetadata = ProxyGenerator.HeaderMetadata(
-            fileName: fileName,
-            serverName: serverName,
-            serverVersion: serverVersion,
-            serverDescription: serverDescription,
-            source: sourceDescription,
-            openAPI: openapi
-        )
-        let naming: ProxyGenerator.FunctionNaming
-        switch functionNaming?.lowercased() {
-        case "verbatim": naming = .verbatim
-        case "snakecase", "snake_case": naming = .snakeCase
-        default: naming = .lowerCamelCase
-        }
-
-        let source = ProxyGenerator.generate(
-            typeName: typeName,
+        return ServerSurfaces(
             tools: tools,
             resources: resources,
             resourceTemplates: resourceTemplates,
             prompts: prompts,
             supportsResources: supportsResources,
             supportsPrompts: supportsPrompts,
-            openapiReturnSchemas: openAPIReturnInfo,
-            functionNaming: naming,
-            fileName: fileName,
-            headerMetadata: headerMetadata
+            serverName: serverName,
+            serverVersion: serverVersion,
+            serverDescription: serverDescription
         )
-        let outputText = source.description
-        try UtilitySupport.writeOutput(outputText, to: outputPath)
+    }
+
+    private func validateNameAndOutput() throws {
+        if name != nil && output != nil {
+            throw ValidationError("Use --name or -o, not both. The file name is derived from the type name.")
+        }
+    }
+
+    private func resolveTypeName(serverName: String?) -> String {
+        if let name {
+            return name
+        }
+        if let output {
+            // Derive type name from output filename
+            let base = URL(fileURLWithPath: output).deletingPathExtension().lastPathComponent
+            return ProxyGenerator.defaultTypeName(serverName: base)
+        }
+        return ProxyGenerator.defaultTypeName(serverName: serverName)
+    }
+
+    private func makeHeaderMetadata(
+        fileName: String,
+        surfaces: ServerSurfaces
+    ) -> ProxyGenerator.HeaderMetadata {
+        ProxyGenerator.HeaderMetadata(
+            fileName: fileName,
+            serverName: surfaces.serverName,
+            serverVersion: surfaces.serverVersion,
+            serverDescription: surfaces.serverDescription,
+            source: connectionSourceDescription(),
+            openAPI: openapi
+        )
+    }
+
+    private func resolveFunctionNaming() -> ProxyGenerator.FunctionNaming {
+        switch functionNaming?.lowercased() {
+        case "verbatim": return .verbatim
+        case "snakecase", "snake_case": return .snakeCase
+        default: return .lowerCamelCase
+        }
     }
 
     private func connectionSourceDescription() -> String? {

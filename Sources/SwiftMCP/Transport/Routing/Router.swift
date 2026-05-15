@@ -40,7 +40,7 @@ final class Router: @unchecked Sendable {
 	internal func matchPattern(_ pattern: String, against requestSegments: [String]) -> [String: String]? {
 		let patternSegments = pathSegments(pattern)
 		var params: [String: String] = [:]
-		var i = 0
+		var requestIdx = 0
 
 		for (index, segment) in patternSegments.enumerated() {
 			if segment == "*" {
@@ -50,23 +50,23 @@ final class Router: @unchecked Sendable {
 				return nil
 			}
 
-			guard i < requestSegments.count else {
+			guard requestIdx < requestSegments.count else {
 				return nil
 			}
 
 			if segment.hasPrefix(":") {
 				let paramName = String(segment.dropFirst())
-				params[paramName] = requestSegments[i]
+				params[paramName] = requestSegments[requestIdx]
 			} else {
-				guard segment == requestSegments[i] else {
+				guard segment == requestSegments[requestIdx] else {
 					return nil
 				}
 			}
 
-			i += 1
+			requestIdx += 1
 		}
 
-		guard i == requestSegments.count else {
+		guard requestIdx == requestSegments.count else {
 			return nil
 		}
 

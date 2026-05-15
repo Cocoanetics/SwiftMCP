@@ -47,7 +47,7 @@ public struct MCPTool: Sendable {
         self.outputSchema = outputSchema
         self.annotations = annotations
     }
-} 
+}
 
 /**
  Extension to make MCPTool conform to Codable
@@ -71,7 +71,13 @@ extension MCPTool: Codable {
         let outputSchema = try container.decodeIfPresent(JSONSchema.self, forKey: .outputSchema)
         let annotations = try container.decodeIfPresent(MCPToolAnnotations.self, forKey: .annotations)
 
-        self.init(name: name, description: description, inputSchema: inputSchema, outputSchema: outputSchema, annotations: annotations)
+        self.init(
+            name: name,
+            description: description,
+            inputSchema: inputSchema,
+            outputSchema: outputSchema,
+            annotations: annotations
+        )
     }
 
     public func encode(to encoder: Encoder) throws {
