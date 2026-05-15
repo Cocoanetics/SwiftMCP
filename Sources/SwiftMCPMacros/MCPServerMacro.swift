@@ -264,14 +264,55 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro, MemberAttributeMacro 
             }
         }
 
+        // Extract the class/actor name for typing the per-instance contributions storage.
+        let serverTypeName = declaration.as(ClassDeclSyntax.self)?.name.text
+            ?? declaration.as(ActorDeclSyntax.self)?.name.text
+            ?? "Self"
+
         var declarations: [DeclSyntax] = [
 			DeclSyntax(stringLiteral: nameProperty),
 			DeclSyntax(stringLiteral: versionProperty),
 			DeclSyntax(stringLiteral: descriptionProperty),
 		]
 
-        // Only add callTool method if there are MCPTools or AppShortcuts defined
-        if !mcpTools.isEmpty || hasAppShortcutsProvider {
+        // Per-instance storage for contributions from `@MCPExtension`-annotated
+        // extensions. Each `MyServer.<Name>.register(in: server)` call appends
+        // one entry. Stored properties are legal here because we're in the
+        // primary class declaration.
+        let contributionsStorage = """
+/// Contributions from `@MCPExtension`-annotated extensions.
+/// Populated by `MyServer.<Name>.register(in:)` calls at startup.
+nonisolated(unsafe) private var __mcpExtensionContributions: [MCPExtensionContribution<\(serverTypeName)>] = []
+"""
+        declarations.append(DeclSyntax(stringLiteral: contributionsStorage))
+
+        // Set of metatype identities (one per `@MCPExtension`-emitted nested
+        // type) that have already been registered on this instance. Used to
+        // make `register(in:)` idempotent — calling it twice for the same
+        // extension is a no-op.
+        let registeredIDsStorage = """
+/// IDs of `@MCPExtension` nested types already registered on this instance.
+nonisolated(unsafe) private var __mcpRegisteredExtensionIDs: Set<ObjectIdentifier> = []
+"""
+        declarations.append(DeclSyntax(stringLiteral: registeredIDsStorage))
+
+        let registerExtensionMethod = """
+/// Installs an extension's contribution on this server instance.
+/// Called by `register(in:)` emitted by `@MCPExtension`. Idempotent on the
+/// extension's metatype identity — registering the same extension twice
+/// has no effect.
+public func __mcpRegisterExtension(_ contribution: MCPExtensionContribution<\(serverTypeName)>, byID id: ObjectIdentifier) {
+   guard !__mcpRegisteredExtensionIDs.contains(id) else { return }
+   __mcpRegisteredExtensionIDs.insert(id)
+   __mcpExtensionContributions.append(contribution)
+}
+"""
+        declarations.append(DeclSyntax(stringLiteral: registerExtensionMethod))
+
+        // Always emit the tool machinery: even if no `@MCPTool` is declared
+        // in the primary type, `@MCPExtension`-annotated extensions in this
+        // or downstream targets may contribute tools at runtime.
+        do {
             // Create a callTool method that uses a switch statement to call the appropriate wrapper function
             var switchCases = ""
             for (index, tool) in mcpTools.enumerated() {
@@ -301,6 +342,39 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro, MemberAttributeMacro 
 }
 """
 
+            // The default case consults this instance's __mcpExtensionContributions
+            // before falling through to AppShortcuts / unknownTool. Each contribution's
+            // dispatcher is the corresponding `Type.<Name>.callTool(_:on:arguments:)`
+            // — an unbound static function reference, so no retain cycle.
+            let extensionFallback = """
+         for contribution in __mcpExtensionContributions {
+            if contribution.toolMetadata.contains(where: { $0.name == name }),
+               let dispatcher = contribution.toolDispatcher {
+               return try await dispatcher(name, self, enrichedArguments)
+            }
+         }
+"""
+
+            var defaultCaseV2 = """
+      default:
+\(extensionFallback)
+"""
+            if hasAppShortcutsProvider {
+                defaultCaseV2 += """
+         let providerType: MCPAppShortcutsProvider.Type = Self.self
+         if let result = try await MCPAppIntentTools.callTool(named: name, providerType: providerType, arguments: enrichedArguments) {
+            return result
+         }
+         throw MCPToolError.unknownTool(name: name)
+"""
+            } else {
+                defaultCaseV2 += "         throw MCPToolError.unknownTool(name: name)\n"
+            }
+            defaultCaseV2 += """
+   }
+}
+"""
+
             let callToolMethod = """
 /// Calls a tool by name with the provided arguments
 /// - Parameters:
@@ -313,22 +387,23 @@ public func callTool(_ name: String, arguments: JSONDictionary) async throws -> 
    guard let metadata = mcpToolMetadata.first(where: { $0.name == name }) ?? mcpToolMetadata(for: name) else {
       throw MCPToolError.unknownTool(name: name)
    }
-   
+
    // Enrich arguments with default values
    let enrichedArguments = try metadata.enrichArguments(arguments)
-   
+
    // Call the appropriate wrapper method based on the tool name
    switch name {
 \(switchCases)
 
-\(defaultCase)
+\(defaultCaseV2)
 """
 
             declarations.append(DeclSyntax(stringLiteral: callToolMethod))
+            _ = defaultCase  // keep variable usage; intentionally unused
         }
 
-        // Add static mcpToolMetadata property
-        if !mcpTools.isEmpty || hasAppShortcutsProvider {
+        // Always emit `mcpToolMetadata`: extensions may contribute tools.
+        do {
             let metadataArray = mcpTools.map { tool -> String in
                 // When server-level toolNaming changes the name, use .renamed() to
                 // produce metadata whose .name matches the switch-case strings.
@@ -355,22 +430,36 @@ public func callTool(_ name: String, arguments: JSONDictionary) async throws -> 
             let metadataProperty = """
 /// Returns an array of all available tool metadata
 nonisolated public var mcpToolMetadata: [MCPToolMetadata] {
-   \(metadataDeclaration) metadata: [MCPToolMetadata] = \(metadataSeed)
+   var metadata: [MCPToolMetadata] = \(metadataSeed)
 \(appShortcutsBlock)
+   for contribution in __mcpExtensionContributions {
+      for m in contribution.toolMetadata where !metadata.contains(where: { $0.name == m.name }) {
+         metadata.append(m)
+      }
+   }
    return metadata
 }
 """
             declarations.append(DeclSyntax(stringLiteral: metadataProperty))
+            _ = metadataDeclaration  // intentionally unused after refactor
         }
 
-        // Add resource-related properties and methods if there are MCPResources defined
-        if !mcpResources.isEmpty {
+        // Always emit resource-related machinery: extensions may contribute
+        // resources even when the primary type declares none.
+        do {
             // Add mcpResourceMetadata property
             let resourceMetadataArray = mcpResources.map { "__mcpResourceMetadata_\($0)" }.joined(separator: ", ")
+            let resourceMetadataSeed = mcpResources.isEmpty ? "[]" : "[\(resourceMetadataArray)]"
             let resourceMetadataProperty = """
-/// Returns an array of all available resource metadata
+/// Returns an array of all available resource metadata, including contributions from `@MCPExtension`-annotated extensions.
 nonisolated public var mcpResourceMetadata: [MCPResourceMetadata] {
-   return [\(resourceMetadataArray)]
+   var metadata: [MCPResourceMetadata] = \(resourceMetadataSeed)
+   for contribution in __mcpExtensionContributions {
+      for m in contribution.resourceMetadata where !metadata.contains(where: { $0.name == m.name }) {
+         metadata.append(m)
+      }
+   }
+   return metadata
 }
 """
             declarations.append(DeclSyntax(stringLiteral: resourceMetadataProperty))
@@ -413,6 +502,12 @@ internal func __callResourceFunction(_ name: String, enrichedArguments: JSONDict
    switch name {
 \(resourceFunctionSwitchCases)
       default:
+         for contribution in __mcpExtensionContributions {
+            if contribution.resourceMetadata.contains(where: { $0.functionMetadata.name == name }),
+               let dispatcher = contribution.resourceDispatcher {
+               return try await dispatcher(name, self, enrichedArguments, requestedUri, overrideMimeType)
+            }
+         }
          throw MCPResourceError.notFound(uri: requestedUri.absoluteString)
    }
 }
@@ -499,13 +594,21 @@ public func getResource(uri: URL) async throws -> [MCPResourceContent] {
             declarations.append(DeclSyntax(stringLiteral: getResourceMethod))
         }
 
-        // Add prompt related properties and methods if there are MCPPrompts defined
-        if !mcpPrompts.isEmpty {
+        // Always emit prompt-related machinery: extensions may contribute
+        // prompts even when the primary type declares none.
+        do {
             let promptMetadataArray = mcpPrompts.map { "__mcpPromptMetadata_\($0)" }.joined(separator: ", ")
+            let promptMetadataSeed = mcpPrompts.isEmpty ? "[]" : "[\(promptMetadataArray)]"
             let promptMetadataProperty = """
-/// Returns an array of all available prompt metadata
+/// Returns an array of all available prompt metadata, including contributions from `@MCPExtension`-annotated extensions.
 nonisolated public var mcpPromptMetadata: [MCPPromptMetadata] {
-   return [\(promptMetadataArray)]
+   var metadata: [MCPPromptMetadata] = \(promptMetadataSeed)
+   for contribution in __mcpExtensionContributions {
+      for m in contribution.promptMetadata where !metadata.contains(where: { $0.name == m.name }) {
+         metadata.append(m)
+      }
+   }
+   return metadata
 }
 """
             declarations.append(DeclSyntax(stringLiteral: promptMetadataProperty))
@@ -527,6 +630,12 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
    switch name {
 \(promptSwitchCases)
       default:
+         for contribution in __mcpExtensionContributions {
+            if contribution.promptMetadata.contains(where: { $0.name == name }),
+               let dispatcher = contribution.promptDispatcher {
+               return try await dispatcher(name, self, enrichedArguments)
+            }
+         }
          throw MCPToolError.unknownTool(name: name)
    }
 }
@@ -534,16 +643,20 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
             declarations.append(DeclSyntax(stringLiteral: callPromptMethod))
         }
 
-        if generateClient, !(toolFunctions.isEmpty && resourceFunctions.isEmpty && promptFunctions.isEmpty) {
-            let clientType = makeClientType(
-                toolFunctions: toolFunctions,
-                mcpTools: mcpTools,
-                resourceFunctions: resourceFunctions,
-                promptFunctions: promptFunctions,
-                serverDescription: serverDescriptionText
-            )
-            declarations.append(DeclSyntax(stringLiteral: clientType))
-        }
+        // Always emit the nested `Client` type. `@MCPExtension` peer
+        // expansions extend `<Type>.Client` with extension-contributed
+        // methods, so Client must exist for any `@MCPServer` type.
+        // The `generateClient:` parameter is retained on the public API
+        // for source-compat with earlier code but is now a no-op.
+        _ = generateClient
+        let clientType = makeClientType(
+            toolFunctions: toolFunctions,
+            mcpTools: mcpTools,
+            resourceFunctions: resourceFunctions,
+            promptFunctions: promptFunctions,
+            serverDescription: serverDescriptionText
+        )
+        declarations.append(DeclSyntax(stringLiteral: clientType))
 
         return declarations
     }
@@ -647,15 +760,22 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
             protocolsToAdd.append("MCPServer")
         }
 
-        if (hasMCPTools || hasAppShortcutsProvider) && !alreadyConformsToToolProviding {
+        // Always conform to MCPToolProviding / MCPResourceProviding /
+        // MCPPromptProviding so `@MCPExtension`-contributed tools, resources,
+        // and prompts can surface at runtime even when the primary type
+        // declares none. The macro can't see other files; the safe default
+        // is to assume any kind might come from an extension.
+        _ = hasMCPTools
+        _ = hasMCPResources
+        _ = hasMCPPrompts
+        _ = hasAppShortcutsProvider
+        if !alreadyConformsToToolProviding {
             protocolsToAdd.append("MCPToolProviding")
         }
-
-        if hasMCPResources && !alreadyConformsToResourceProviding {
+        if !alreadyConformsToResourceProviding {
             protocolsToAdd.append("MCPResourceProviding")
         }
-
-        if hasMCPPrompts && !alreadyConformsToPromptProviding {
+        if !alreadyConformsToPromptProviding {
             protocolsToAdd.append("MCPPromptProviding")
         }
 
@@ -678,7 +798,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         try expansion(of: node, providingMembersOf: declaration, in: context)
     }
 
-    private struct ClientParameter {
+    struct ClientParameter {
         let name: String
         let label: String
         let typeString: String
@@ -686,7 +806,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         let isOptional: Bool
     }
 
-    private struct ClientFunctionMetadata {
+    struct ClientFunctionMetadata {
         let kind: ClientFunctionKind
         let name: String
         let documentation: Documentation
@@ -699,13 +819,13 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         let propagatedAttributes: [String]
     }
 
-    private enum ClientFunctionKind {
+    enum ClientFunctionKind {
         case tool
         case resource(templates: [String])
         case prompt
     }
 
-    private static func makeClientType(
+    static func makeClientType(
         toolFunctions: [FunctionDeclSyntax],
         mcpTools: [(functionName: String, toolName: String)] = [],
         resourceFunctions: [FunctionDeclSyntax],
@@ -770,7 +890,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         return lines.joined(separator: "\n")
     }
 
-    private static func clientFunctionMetadata(
+    static func clientFunctionMetadata(
         from funcDecl: FunctionDeclSyntax,
         kind: ClientFunctionKind,
         generatedName: String? = nil
@@ -816,13 +936,13 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         )
     }
 
-    private static func propagatedAttributes(for funcDecl: FunctionDeclSyntax) -> [String] {
+    static func propagatedAttributes(for funcDecl: FunctionDeclSyntax) -> [String] {
         var attributes: [String] = []
         for attr in funcDecl.attributes {
             guard let attribute = attr.as(AttributeSyntax.self) else { continue }
             let attributeName = attribute.attributeName.description.trimmingCharacters(in: .whitespacesAndNewlines)
             if attributeName.isEmpty { continue }
-            if ["MCPTool", "MCPResource", "MCPPrompt", "MCPServer", "MCPToolProvider", "Schema"].contains(attributeName) {
+            if ["MCPTool", "MCPResource", "MCPPrompt", "MCPServer", "MCPToolProvider", "Schema", "MCPExtension"].contains(attributeName) {
                 continue
             }
             let trimmed = attribute.description.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -833,7 +953,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         return attributes
     }
 
-    private static func makeClientMethodLines(metadata: ClientFunctionMetadata, wireToolName: String? = nil) -> [String] {
+    static func makeClientMethodLines(metadata: ClientFunctionMetadata, wireToolName: String? = nil) -> [String] {
         var lines: [String] = []
         lines.append(contentsOf: docCommentLines(for: metadata))
 
@@ -969,7 +1089,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         return lines
     }
 
-    private static func docCommentLines(for metadata: ClientFunctionMetadata) -> [String] {
+    static func docCommentLines(for metadata: ClientFunctionMetadata) -> [String] {
         var bodyLines: [String] = []
         if !metadata.documentation.description.isEmpty {
             for line in metadata.documentation.description.split(separator: "\n") {
@@ -998,13 +1118,13 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         return lines
     }
 
-    private static func clientTypeDocCommentLines(description: String?) -> [String] {
+    static func clientTypeDocCommentLines(description: String?) -> [String] {
         guard let description, !description.isEmpty else { return [] }
         let bodyLines = description.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
         return blockDocCommentLines(bodyLines, indent: "")
     }
 
-    private static func initDocCommentLines() -> [String] {
+    static func initDocCommentLines() -> [String] {
         let bodyLines = [
             "Creates a client using the provided proxy.",
             "- Parameter proxy: The proxy used to call server tools, resources, and prompts."
@@ -1012,7 +1132,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         return blockDocCommentLines(bodyLines, indent: "    ")
     }
 
-    private static func encodedArgumentLines(
+    static func encodedArgumentLines(
         for parameters: [ClientParameter],
         variableName: String,
         indent: String
@@ -1030,7 +1150,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         return lines
     }
 
-    private static func blockDocCommentLines(_ bodyLines: [String], indent: String) -> [String] {
+    static func blockDocCommentLines(_ bodyLines: [String], indent: String) -> [String] {
         guard !bodyLines.isEmpty else { return [] }
         var lines: [String] = []
         lines.append("\(indent)/**")
@@ -1041,7 +1161,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         return lines
     }
 
-    private static func parameterSignature(_ parameter: ClientParameter) -> String {
+    static func parameterSignature(_ parameter: ClientParameter) -> String {
         let label: String
         if parameter.label == "_" {
             label = "_ \(parameter.name)"
@@ -1058,7 +1178,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         return signature
     }
 
-    private static func effectSpecifiersString(isAsync: Bool, throwsKeyword: String?) -> String {
+    static func effectSpecifiersString(isAsync: Bool, throwsKeyword: String?) -> String {
         var parts: [String] = []
         if isAsync {
             parts.append("async")
@@ -1070,7 +1190,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         return " " + parts.joined(separator: " ")
     }
 
-    private static func toolCallExpression(
+    static func toolCallExpression(
         toolName: String,
         hasParameters: Bool,
         argumentsName: String,
@@ -1090,7 +1210,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         return "\(tryPrefix)MCPClientBlocking.call { try await \(call) }"
     }
 
-    private static func resourceReadExpression(
+    static func resourceReadExpression(
         isAsync: Bool,
         isThrowing: Bool
     ) -> String {
@@ -1104,7 +1224,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         return "\(tryPrefix)MCPClientBlocking.call { try await \(call) }"
     }
 
-    private static func promptCallExpression(
+    static func promptCallExpression(
         promptName: String,
         hasParameters: Bool,
         argumentsName: String,
@@ -1124,7 +1244,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         return "\(tryPrefix)MCPClientBlocking.call { try await \(call) }"
     }
 
-    private static func resourceTemplates(from funcDecl: FunctionDeclSyntax) -> [String] {
+    static func resourceTemplates(from funcDecl: FunctionDeclSyntax) -> [String] {
         for attribute in funcDecl.attributes {
             guard let identifierAttr = attribute.as(AttributeSyntax.self),
                   let identifier = identifierAttr.attributeName.as(IdentifierTypeSyntax.self),
@@ -1151,7 +1271,7 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         return []
     }
 
-    private static func resourceTemplateVariables(in template: String) -> [String] {
+    static func resourceTemplateVariables(in template: String) -> [String] {
         guard let regex = try? NSRegularExpression(pattern: #"\{[^}]+\}"#) else {
             return []
         }

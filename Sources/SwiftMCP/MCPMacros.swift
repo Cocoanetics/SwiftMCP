@@ -128,7 +128,7 @@ public macro MCPAppIntentTool(
 ///     }
 /// }
 /// ```
-@attached(member, names: named(callTool), named(mcpToolMetadata), named(__mcpServerName), named(__mcpServerVersion), named(__mcpServerDescription), named(mcpResourceMetadata), named(mcpResources), named(mcpStaticResources), named(mcpResourceTemplates), named(getResource), named(__callResourceFunction), named(callResourceAsFunction), named(mcpPromptMetadata), named(callPrompt), named(Client))
+@attached(member, names: named(callTool), named(mcpToolMetadata), named(__mcpServerName), named(__mcpServerVersion), named(__mcpServerDescription), named(mcpResourceMetadata), named(mcpResources), named(mcpStaticResources), named(mcpResourceTemplates), named(getResource), named(__callResourceFunction), named(callResourceAsFunction), named(mcpPromptMetadata), named(callPrompt), named(Client), named(__mcpExtensionContributions), named(__mcpRegisterExtension), named(__mcpRegisteredExtensionIDs))
 @attached(memberAttribute)
 @attached(extension, conformances: MCPServer, MCPToolProviding, MCPResourceProviding, MCPPromptProviding)
 public macro MCPServer(
@@ -136,7 +136,7 @@ public macro MCPServer(
     version: String? = nil,
     description: String? = nil,
     toolNaming: MCPToolNaming = .functionName,
-    generateClient: Bool = false
+    generateClient: Bool = true
 ) = #externalMacro(module: "SwiftMCPMacros", type: "MCPServerMacro")
 
 /// A macro that generates schema metadata for a struct.
@@ -183,3 +183,46 @@ public macro MCPResource<T>(_ template: T, name: String? = nil, mimeType: String
 
 @attached(peer, names: prefixed(__mcpPromptMetadata_), prefixed(__mcpPromptCall_))
 public macro MCPPrompt(description: String? = nil) = #externalMacro(module: "SwiftMCPMacros", type: "MCPPromptMacro")
+
+/// Marks an extension as contributing tools, resources, and/or prompts to a
+/// `@MCPServer` type.
+///
+/// Generates a nested namespace enum on the extended type with the supplied
+/// name. The enum exposes (depending on which kinds the extension contains):
+///  - `static let toolMetadata: [MCPToolMetadata]` and a typed
+///    `static func callTool(_:on:arguments:)` dispatcher.
+///  - `static let resourceMetadata: [MCPResourceMetadata]` and a typed
+///    `static func callResource(_:on:arguments:requestedUri:overrideMimeType:)`
+///    dispatcher.
+///  - `static let promptMetadata: [MCPPromptMetadata]` and a typed
+///    `static func callPrompt(_:on:arguments:)` dispatcher.
+///  - `static func register(in: <ServerType>)` — installs this extension on
+///    a specific server instance.
+///
+/// Inside `@MCPExtension`-annotated extensions, the regular `@MCPTool`,
+/// `@MCPResource`, and `@MCPPrompt` macros automatically detect extension
+/// context and emit only the typed wrapper (no stored metadata `let`,
+/// which Swift disallows in extensions). `@MCPExtension` regenerates the
+/// metadata at the extension level.
+///
+/// Use:
+/// ```swift
+/// @MCPExtension("Calendar")
+/// extension MyServer {
+///     /// List all events.
+///     @MCPTool
+///     func listEvents() async -> [Event] { ... }
+///
+///     @MCPResource("calendar://events/{id}")
+///     func event(id: String) -> String { ... }
+///
+///     @MCPPrompt
+///     func summary() -> String { ... }
+/// }
+///
+/// // At startup:
+/// let server = MyServer()
+/// MyServer.Calendar.register(in: server)
+/// ```
+@attached(member, names: arbitrary)
+public macro MCPExtension(_ name: String? = nil) = #externalMacro(module: "SwiftMCPMacros", type: "MCPExtensionMacro")

@@ -35,6 +35,11 @@ enum MCPToolDiagnostic: DiagnosticMessage {
     /// Error when an optional parameter is missing a default value
     case optionalParameterNeedsDefault(paramName: String, typeName: String)
 
+    /// Error when a tool/resource/prompt is declared inside an extension that
+    /// lacks `@MCPExtension`. Without the marker the function cannot be
+    /// surfaced or dispatched at runtime.
+    case missingMCPExtensionAttribute(macroName: String)
+
     var message: String {
         switch self {
             case .onlyFunctions:
@@ -49,12 +54,14 @@ enum MCPToolDiagnostic: DiagnosticMessage {
                 return "Parameter '\(paramName)' has an unsupported closure type '\(typeName)'. Closures are not supported in MCP tools."
             case .optionalParameterNeedsDefault(let paramName, let typeName):
                 return "Optional parameter '\(paramName)' of type '\(typeName)' requires a default value (e.g. = nil)."
+            case .missingMCPExtensionAttribute(let macroName):
+                return "@\(macroName) inside an extension requires @MCPExtension on the enclosing extension. Add @MCPExtension(\"<Name>\") (or @MCPExtension to derive the name from the filename) to surface this declaration at runtime."
         }
     }
 
     var severity: DiagnosticSeverity {
         switch self {
-            case .onlyFunctions, .requiresAppIntentConformance, .invalidDefaultValueType, .closureTypeNotSupported, .optionalParameterNeedsDefault:
+            case .onlyFunctions, .requiresAppIntentConformance, .invalidDefaultValueType, .closureTypeNotSupported, .optionalParameterNeedsDefault, .missingMCPExtensionAttribute:
                 return .error
             case .missingDescription:
                 return .warning
@@ -75,6 +82,8 @@ enum MCPToolDiagnostic: DiagnosticMessage {
                 return MessageID(domain: "SwiftMCP", id: "closureTypeNotSupported")
             case .optionalParameterNeedsDefault:
                 return MessageID(domain: "SwiftMCP", id: "optionalParameterNeedsDefault")
+            case .missingMCPExtensionAttribute:
+                return MessageID(domain: "SwiftMCP", id: "missingMCPExtensionAttribute")
         }
     }
 }

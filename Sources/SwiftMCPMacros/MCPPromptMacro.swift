@@ -82,6 +82,19 @@ nonisolated private let __mcpPromptMetadata_\(functionName) = MCPPromptMetadata(
     }
     """
 
+        // Inside an extension: emit wrapper only. `@MCPExtension` will
+        // regenerate metadata at the extension level.
+        if let enclosing = MCPMacroContextDetection.enclosingExtension(in: context) {
+            if !MCPMacroContextDetection.hasMCPExtensionAttribute(enclosing) {
+                let diag = Diagnostic(
+                    node: Syntax(funcDecl.name),
+                    message: MCPToolDiagnostic.missingMCPExtensionAttribute(macroName: "MCPPrompt")
+                )
+                context.diagnose(diag)
+            }
+            return [DeclSyntax(stringLiteral: wrapperFunc)]
+        }
+
         return [
             DeclSyntax(stringLiteral: metadataDeclaration),
             DeclSyntax(stringLiteral: wrapperFunc)
