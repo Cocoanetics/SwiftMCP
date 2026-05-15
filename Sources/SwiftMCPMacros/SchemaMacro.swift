@@ -63,67 +63,93 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
         providingMembersOf declaration: some DeclGroupSyntax,
         in context: some MacroExpansionContext
     ) throws -> [DeclSyntax] {
-        // Handle struct declarations
         guard let structDecl = declaration.as(StructDeclSyntax.self) else {
             let diagnostic = Diagnostic(node: node, message: SchemaDiagnostic.onlyStructs)
             context.diagnose(diagnostic)
             return []
         }
 
-        // Extract struct name
         let structName = structDecl.name.text
-
-        // Extract property descriptions from documentation
         let documentation = Documentation(from: structDecl.leadingTrivia.description)
+        let (propertyString, propertyInfos) = try collectProperties(
+            of: structDecl,
+            documentation: documentation,
+            context: context
+        )
 
-        // Extract property information
+        let registrationDecl = makeRegistrationDeclaration(
+            structName: structName,
+            documentation: documentation,
+            propertyString: propertyString
+        )
+
+        var declarations = [DeclSyntax(stringLiteral: registrationDecl)]
+        declarations.append(DeclSyntax(stringLiteral: makeClientReturnTypealias(
+            structName: structName,
+            propertyInfos: propertyInfos
+        )))
+        return declarations
+    }
+
+    /// Walks the struct members collecting property metadata. Emits a
+    /// diagnostic for nested structs lacking `@Schema`.
+    private static func collectProperties(
+        of structDecl: StructDeclSyntax,
+        documentation: Documentation,
+        context: MacroExpansionContext
+    ) throws -> (String, [PropertyInfo]) {
         var propertyString = ""
         var propertyInfos: [PropertyInfo] = []
 
-        // Process all members, but only properties (ignore nested structs)
         for member in structDecl.memberBlock.members {
             if let property = member.decl.as(VariableDeclSyntax.self) {
                 guard shouldIncludeProperty(property) else { continue }
-                // Process regular property
                 let (propertyStr, propertyInfo) = try processProperty(
                     property: property,
                     documentation: documentation,
                     context: context
                 )
-
                 if !propertyString.isEmpty {
                     propertyString += ", "
                 }
                 propertyString += propertyStr
                 propertyInfos.append(propertyInfo)
             } else if let nestedStruct = member.decl.as(StructDeclSyntax.self) {
-                // Check if nested struct has @Schema annotation
-                var hasSchemaAttribute = false
-                for attribute in nestedStruct.attributes {
-                    if let identifierAttr = attribute.as(AttributeSyntax.self),
-                       let identifier = identifierAttr.attributeName.as(IdentifierTypeSyntax.self),
-                       identifier.name.text == "Schema" {
-                        hasSchemaAttribute = true
-                        break
-                    }
-                }
-
-                if !hasSchemaAttribute {
-                    // Create diagnostic warning about missing @Schema
-                    let diagnostic = Diagnostic(
-                        node: nestedStruct.structKeyword,
-                        message: SchemaDiagnostic.nestedStructNeedsSchema(nestedStruct.name.text)
-                    )
-                    context.diagnose(diagnostic)
-                }
+                diagnoseNestedStructIfNeeded(nestedStruct, context: context)
             }
         }
 
-        // Create a registration statement
+        return (propertyString, propertyInfos)
+    }
+
+    private static func diagnoseNestedStructIfNeeded(
+        _ nestedStruct: StructDeclSyntax,
+        context: MacroExpansionContext
+    ) {
+        let hasSchemaAttribute = nestedStruct.attributes.contains { attribute in
+            guard let identifierAttr = attribute.as(AttributeSyntax.self),
+                  let identifier = identifierAttr.attributeName.as(IdentifierTypeSyntax.self) else {
+                return false
+            }
+            return identifier.name.text == "Schema"
+        }
+        guard !hasSchemaAttribute else { return }
+        let diagnostic = Diagnostic(
+            node: nestedStruct.structKeyword,
+            message: SchemaDiagnostic.nestedStructNeedsSchema(nestedStruct.name.text)
+        )
+        context.diagnose(diagnostic)
+    }
+
+    private static func makeRegistrationDeclaration(
+        structName: String,
+        documentation: Documentation,
+        propertyString: String
+    ) -> String {
         let descriptionArg = documentation.description.isEmpty
             ? "nil"
             : "\"\(documentation.description.escapedForSwiftString)\""
-        let registrationDecl = """
+        return """
         /// generated
         public static let schemaMetadata = SchemaMetadata(
             name: "\(structName)",
@@ -131,28 +157,23 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
             parameters: [\(propertyString)]
         )
         """
+    }
 
-        var declarations = [DeclSyntax(stringLiteral: registrationDecl)]
-
-        // Generate MCPClientReturn typealias for the proxy generator.
-        // Single-array wrapper structs (exactly one stored property that is an array)
-        // resolve to [Element], allowing the generated proxy to return the unwrapped
-        // array type. All other structs resolve to Self (identity).
+    /// Generates the `MCPClientReturn` typealias for the proxy generator.
+    /// Single-array wrapper structs (exactly one stored array property) resolve
+    /// to `[Element]`; all other structs resolve to `Self`.
+    private static func makeClientReturnTypealias(
+        structName: String,
+        propertyInfos: [PropertyInfo]
+    ) -> String {
         if propertyInfos.count == 1,
            let onlyProp = propertyInfos.first,
            let elementType = Self.arrayElementType(
                from: onlyProp.type.trimmingCharacters(in: .whitespacesAndNewlines)
            ) {
-            declarations.append(DeclSyntax(
-                stringLiteral: "public typealias MCPClientReturn = [\(elementType)]"
-            ))
-        } else {
-            declarations.append(DeclSyntax(
-                stringLiteral: "public typealias MCPClientReturn = \(structName)"
-            ))
+            return "public typealias MCPClientReturn = [\(elementType)]"
         }
-
-        return declarations
+        return "public typealias MCPClientReturn = \(structName)"
     }
 
     public static func expansion(

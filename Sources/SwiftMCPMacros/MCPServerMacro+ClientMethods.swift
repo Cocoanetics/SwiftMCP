@@ -68,8 +68,15 @@ extension MCPServerMacro {
         let clientReturnType = metadata.hasReturnClause ? "\(metadata.returnTypeString).MCPClientReturn" : nil
         let returnClause = clientReturnType.map { " -> \($0)" } ?? ""
 
-        lines.append("    public func \(metadata.name)(\(signature))\(effectSpecifiers)\(returnClause) {")
-        lines.append(contentsOf: encodedArgumentLines(for: metadata.parameters, variableName: "arguments", indent: "        "))
+        lines.append(
+            "    public func \(metadata.name)(\(signature))"
+            + "\(effectSpecifiers)\(returnClause) {"
+        )
+        lines.append(contentsOf: encodedArgumentLines(
+            for: metadata.parameters,
+            variableName: "arguments",
+            indent: "        "
+        ))
 
         let argumentsName = (hasParameters && !metadata.isAsync) ? "capturedArguments" : "arguments"
         if hasParameters && !metadata.isAsync {
@@ -86,9 +93,15 @@ extension MCPServerMacro {
         lines.append("        let text = \(callExpression)")
 
         if metadata.hasReturnClause, let clientReturnType {
-            lines.append("        return try MCPClientResultDecoder.decode(\(clientReturnType).self, from: text)")
+            lines.append(
+                "        return try MCPClientResultDecoder.decode("
+                + "\(clientReturnType).self, from: text)"
+            )
         } else if metadata.hasReturnClause {
-            lines.append("        return try MCPClientResultDecoder.decode(\(metadata.returnTypeString).self, from: text)")
+            lines.append(
+                "        return try MCPClientResultDecoder.decode("
+                + "\(metadata.returnTypeString).self, from: text)"
+            )
         } else {
             lines.append("        _ = try MCPClientResultDecoder.decode(Void.self, from: text)")
             lines.append("        return")
@@ -107,10 +120,19 @@ extension MCPServerMacro {
         let clientReturnType = metadata.hasReturnClause ? "\(metadata.returnTypeString).MCPClientReturn" : nil
         let returnClause = clientReturnType.map { " -> \($0)" } ?? ""
 
-        lines.append("    public func \(metadata.name)(\(signature))\(effectSpecifiers)\(returnClause) {")
-        lines.append(contentsOf: encodedArgumentLines(for: metadata.parameters, variableName: "arguments", indent: "        "))
+        lines.append(
+            "    public func \(metadata.name)(\(signature))"
+            + "\(effectSpecifiers)\(returnClause) {"
+        )
+        lines.append(contentsOf: encodedArgumentLines(
+            for: metadata.parameters,
+            variableName: "arguments",
+            indent: "        "
+        ))
 
-        let argumentsName = hasParameters ? ((metadata.isAsync ? "arguments" : "capturedArguments")) : "[:]"
+        let argumentsName = hasParameters
+            ? (metadata.isAsync ? "arguments" : "capturedArguments")
+            : "[:]"
         if hasParameters && !metadata.isAsync {
             lines.append("        let capturedArguments = arguments")
         }
@@ -127,7 +149,11 @@ extension MCPServerMacro {
             orderedTemplates: orderedTemplates,
             argumentsName: argumentsName
         ))
-        lines.append("        let contents = \(resourceReadExpression(isAsync: metadata.isAsync, isThrowing: metadata.isThrowing))")
+        let readExpression = resourceReadExpression(
+            isAsync: metadata.isAsync,
+            isThrowing: metadata.isThrowing
+        )
+        lines.append("        let contents = \(readExpression)")
 
         lines.append(contentsOf: resourceReturnLines(metadata: metadata, clientReturnType: clientReturnType))
         return lines
@@ -140,7 +166,10 @@ extension MCPServerMacro {
     ) -> [String] {
         var lines: [String] = []
         if orderedTemplates.count == 1, let template = orderedTemplates.first {
-            lines.append("        let uri = try \"\(template.escapedForSwiftString)\".constructURI(with: \(argumentsName))")
+            lines.append(
+                "        let uri = try \"\(template.escapedForSwiftString)\""
+                + ".constructURI(with: \(argumentsName))"
+            )
         } else {
             lines.append("        let uri: URL")
             for (index, template) in orderedTemplates.enumerated() {
@@ -150,11 +179,17 @@ extension MCPServerMacro {
                     : variables.map { "\(argumentsName)[\"\($0)\"] != nil" }.joined(separator: " && ")
                 let keyword = index == 0 ? "if" : "else if"
                 lines.append("        \(keyword) \(condition) {")
-                lines.append("            uri = try \"\(template.escapedForSwiftString)\".constructURI(with: \(argumentsName))")
+                lines.append(
+                    "            uri = try \"\(template.escapedForSwiftString)\""
+                    + ".constructURI(with: \(argumentsName))"
+                )
                 lines.append("        }")
             }
             lines.append("        else {")
-            lines.append("            throw MCPServerProxyError.communicationError(\"No resource template matched for \(metadata.name)\")")
+            lines.append(
+                "            throw MCPServerProxyError.communicationError("
+                + "\"No resource template matched for \(metadata.name)\")"
+            )
             lines.append("        }")
         }
         return lines
@@ -165,31 +200,47 @@ extension MCPServerMacro {
         clientReturnType: String?
     ) -> [String] {
         var lines: [String] = []
-        if !metadata.hasReturnClause || metadata.returnTypeString == "Void" {
+        let returnType = metadata.returnTypeString
+        if !metadata.hasReturnClause || returnType == "Void" {
             lines.append("        return")
-        } else if metadata.returnTypeString == "MCPResourceContent" || metadata.returnTypeString == "GenericResourceContent" {
+        } else if returnType == "MCPResourceContent" || returnType == "GenericResourceContent" {
             lines.append("        guard let content = contents.first else {")
-            lines.append("            throw MCPServerProxyError.communicationError(\"Resource \(metadata.name) returned no content\")")
+            lines.append(
+                "            throw MCPServerProxyError.communicationError("
+                + "\"Resource \(metadata.name) returned no content\")"
+            )
             lines.append("        }")
             lines.append("        return content")
-        } else if metadata.returnTypeString == "[MCPResourceContent]" || metadata.returnTypeString == "[GenericResourceContent]" {
+        } else if returnType == "[MCPResourceContent]" || returnType == "[GenericResourceContent]" {
             lines.append("        return contents")
-        } else if metadata.returnTypeString == "Data" {
+        } else if returnType == "Data" {
             lines.append("        if let blob = contents.first?.blob {")
             lines.append("            return blob")
             lines.append("        }")
             lines.append("        if let text = contents.first?.text {")
             lines.append("            return try MCPClientResultDecoder.decode(Data.self, from: text)")
             lines.append("        }")
-            lines.append("        throw MCPServerProxyError.communicationError(\"Resource \(metadata.name) returned no blob content\")")
+            lines.append(
+                "        throw MCPServerProxyError.communicationError("
+                + "\"Resource \(metadata.name) returned no blob content\")"
+            )
         } else {
             lines.append("        guard let text = contents.first?.text else {")
-            lines.append("            throw MCPServerProxyError.communicationError(\"Resource \(metadata.name) returned no text content\")")
+            lines.append(
+                "            throw MCPServerProxyError.communicationError("
+                + "\"Resource \(metadata.name) returned no text content\")"
+            )
             lines.append("        }")
             if let clientReturnType {
-                lines.append("        return try MCPClientResultDecoder.decode(\(clientReturnType).self, from: text)")
+                lines.append(
+                    "        return try MCPClientResultDecoder.decode("
+                    + "\(clientReturnType).self, from: text)"
+                )
             } else {
-                lines.append("        return try MCPClientResultDecoder.decode(\(metadata.returnTypeString).self, from: text)")
+                lines.append(
+                    "        return try MCPClientResultDecoder.decode("
+                    + "\(metadata.returnTypeString).self, from: text)"
+                )
             }
         }
         return lines
@@ -202,8 +253,15 @@ extension MCPServerMacro {
         hasParameters: Bool
     ) -> [String] {
         var lines: [String] = []
-        lines.append("    public func \(metadata.name)(\(signature))\(effectSpecifiers) -> PromptResult {")
-        lines.append(contentsOf: encodedArgumentLines(for: metadata.parameters, variableName: "arguments", indent: "        "))
+        lines.append(
+            "    public func \(metadata.name)(\(signature))"
+            + "\(effectSpecifiers) -> PromptResult {"
+        )
+        lines.append(contentsOf: encodedArgumentLines(
+            for: metadata.parameters,
+            variableName: "arguments",
+            indent: "        "
+        ))
 
         let argumentsName = (hasParameters && !metadata.isAsync) ? "capturedArguments" : "arguments"
         if hasParameters && !metadata.isAsync {

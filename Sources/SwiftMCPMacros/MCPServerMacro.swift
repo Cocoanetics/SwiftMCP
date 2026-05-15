@@ -41,7 +41,8 @@ import SwiftDiagnostics
  }
  ```
 
- - Note: The server description is automatically extracted from the documentation comment unless overridden via the `description` parameter.
+ - Note: The server description is automatically extracted from the documentation comment
+   unless overridden via the `description` parameter.
 
  - Parameters:
    - name: The name of the server. Defaults to the declaration name.

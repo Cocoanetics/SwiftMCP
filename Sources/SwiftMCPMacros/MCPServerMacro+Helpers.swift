@@ -25,8 +25,14 @@ extension MCPServerMacro {
         declaration: some DeclGroupSyntax
     ) -> ServerArguments {
         let arguments = node.arguments?.as(LabeledExprListSyntax.self)
-        let nameArg = arguments?.first(where: { $0.label?.text == "name" })?.expression.description.trimmingCharacters(in: .punctuationCharacters)
-        let versionArg = arguments?.first(where: { $0.label?.text == "version" })?.expression.description.trimmingCharacters(in: .punctuationCharacters)
+        let nameArg = arguments?
+            .first(where: { $0.label?.text == "name" })?
+            .expression.description
+            .trimmingCharacters(in: .punctuationCharacters)
+        let versionArg = arguments?
+            .first(where: { $0.label?.text == "version" })?
+            .expression.description
+            .trimmingCharacters(in: .punctuationCharacters)
 
         let parsed = parseLabeledArguments(arguments)
 

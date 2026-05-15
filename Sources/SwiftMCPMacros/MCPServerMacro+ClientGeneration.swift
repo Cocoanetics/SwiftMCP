@@ -46,7 +46,10 @@ extension MCPServerMacro {
         serverDescription: String?
     ) -> String {
         // Build a lookup from function name → wire tool name
-        let toolNameMap = Dictionary(mcpTools.map { ($0.functionName, $0.toolName) }, uniquingKeysWith: { _, last in last })
+        let toolNameMap = Dictionary(
+            mcpTools.map { ($0.functionName, $0.toolName) },
+            uniquingKeysWith: { _, last in last }
+        )
         var lines: [String] = []
         lines.append(contentsOf: clientTypeDocCommentLines(description: serverDescription))
         lines.append("public struct Client: Sendable {")
@@ -172,7 +175,11 @@ extension MCPServerMacro {
             guard let attribute = attr.as(AttributeSyntax.self) else { continue }
             let attributeName = attribute.attributeName.description.trimmingCharacters(in: .whitespacesAndNewlines)
             if attributeName.isEmpty { continue }
-            if ["MCPTool", "MCPResource", "MCPPrompt", "MCPServer", "MCPToolProvider", "Schema", "MCPExtension"].contains(attributeName) {
+            let mcpMacroNames: Set<String> = [
+                "MCPTool", "MCPResource", "MCPPrompt",
+                "MCPServer", "MCPToolProvider", "Schema", "MCPExtension"
+            ]
+            if mcpMacroNames.contains(attributeName) {
                 continue
             }
             let trimmed = attribute.description.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -236,7 +243,10 @@ extension MCPServerMacro {
         for parameter in parameters {
             let encodeCall = "try MCPClientArgumentEncoder.encode(\(parameter.name))"
             if parameter.isOptional {
-                lines.append("\(indent)if let \(parameter.name) { \(variableName)[\"\(parameter.name)\"] = \(encodeCall) }")
+                lines.append(
+                    "\(indent)if let \(parameter.name) { "
+                    + "\(variableName)[\"\(parameter.name)\"] = \(encodeCall) }"
+                )
             } else {
                 lines.append("\(indent)\(variableName)[\"\(parameter.name)\"] = \(encodeCall)")
             }

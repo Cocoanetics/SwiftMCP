@@ -79,7 +79,11 @@ public func callTool(_ name: String, arguments: JSONDictionary) async throws -> 
         if hasAppShortcutsProvider {
             defaultCase += """
          let providerType: MCPAppShortcutsProvider.Type = Self.self
-         if let result = try await MCPAppIntentTools.callTool(named: name, providerType: providerType, arguments: enrichedArguments) {
+         if let result = try await MCPAppIntentTools.callTool(
+            named: name,
+            providerType: providerType,
+            arguments: enrichedArguments
+         ) {
             return result
          }
          throw MCPToolError.unknownTool(name: name)
@@ -140,10 +144,14 @@ nonisolated public var mcpToolMetadata: [MCPToolMetadata] {
         var output: [String] = []
 
         // Add mcpResourceMetadata property
-        let resourceMetadataArray = mcpResources.map { "__mcpResourceMetadata_\($0)" }.joined(separator: ", ")
+        let resourceMetadataArray = mcpResources
+            .map { "__mcpResourceMetadata_\($0)" }
+            .joined(separator: ", ")
         let resourceMetadataSeed = mcpResources.isEmpty ? "[]" : "[\(resourceMetadataArray)]"
+        let resourceMetadataDocLine = "/// Returns an array of all available resource metadata, "
+            + "including contributions from `@MCPExtension`-annotated extensions."
         let resourceMetadataProperty = """
-/// Returns an array of all available resource metadata, including contributions from `@MCPExtension`-annotated extensions.
+\(resourceMetadataDocLine)
 nonisolated public var mcpResourceMetadata: [MCPResourceMetadata] {
    var metadata: [MCPResourceMetadata] = \(resourceMetadataSeed)
    for contribution in __mcpExtensionContributions {
@@ -181,7 +189,9 @@ public var mcpResourceTemplates: [MCPResourceTemplate] {
         var resourceFunctionSwitchCases = ""
         for (index, funcName) in mcpResources.enumerated() {
             resourceFunctionSwitchCases += "      case \"\(funcName)\":\n"
-            resourceFunctionSwitchCases += "         return try await __mcpResourceCall_\(funcName)(enrichedArguments, requestedUri: requestedUri, overrideMimeType: overrideMimeType)"
+            resourceFunctionSwitchCases += "         return try await __mcpResourceCall_\(funcName)("
+                + "enrichedArguments, requestedUri: requestedUri, "
+                + "overrideMimeType: overrideMimeType)"
             if index < mcpResources.count - 1 {
                 resourceFunctionSwitchCases += "\n"
             }
@@ -196,7 +206,12 @@ public var mcpResourceTemplates: [MCPResourceTemplate] {
 ///   - overrideMimeType: Optional MIME type override
 /// - Returns: The resource content from the function call
 /// - Throws: MCPResourceError if the resource function doesn't exist or cannot be called
-internal func __callResourceFunction(_ name: String, enrichedArguments: JSONDictionary, requestedUri: URL, overrideMimeType: String?) async throws -> [MCPResourceContent] {
+internal func __callResourceFunction(
+   _ name: String,
+   enrichedArguments: JSONDictionary,
+   requestedUri: URL,
+   overrideMimeType: String?
+) async throws -> [MCPResourceContent] {
    // Call the appropriate wrapper method based on the resource name
    switch name {
 \(resourceFunctionSwitchCases)
@@ -204,7 +219,9 @@ internal func __callResourceFunction(_ name: String, enrichedArguments: JSONDict
          for contribution in __mcpExtensionContributions {
             if contribution.resourceMetadata.contains(where: { $0.functionMetadata.name == name }),
                let dispatcher = contribution.resourceDispatcher {
-               return try await dispatcher(name, self, enrichedArguments, requestedUri, overrideMimeType)
+               return try await dispatcher(
+                  name, self, enrichedArguments, requestedUri, overrideMimeType
+               )
             }
          }
          throw MCPResourceError.notFound(uri: requestedUri.absoluteString)
@@ -221,7 +238,10 @@ internal func __callResourceFunction(_ name: String, enrichedArguments: JSONDict
 ///   - arguments: The arguments to pass to the resource function
 /// - Returns: The result of the resource function execution
 /// - Throws: An error if the resource function doesn't exist or cannot be called
-public func callResourceAsFunction(_ name: String, arguments: JSONDictionary) async throws -> Encodable & Sendable {
+public func callResourceAsFunction(
+   _ name: String,
+   arguments: JSONDictionary
+) async throws -> Encodable & Sendable {
    // Find the resource metadata by name
    guard let metadata = mcpResourceMetadata.first(where: { $0.functionMetadata.name == name }) else {
       throw MCPResourceError.notFound(uri: "function://\\(name)")
@@ -239,7 +259,12 @@ public func callResourceAsFunction(_ name: String, arguments: JSONDictionary) as
    let constructedUri = try template.constructURI(with: enrichedArguments)
 
    // Call the existing resource wrapper method
-   let resourceContents = try await __callResourceFunction(metadata.functionMetadata.name, enrichedArguments: enrichedArguments, requestedUri: constructedUri, overrideMimeType: metadata.mimeType)
+   let resourceContents = try await __callResourceFunction(
+      metadata.functionMetadata.name,
+      enrichedArguments: enrichedArguments,
+      requestedUri: constructedUri,
+      overrideMimeType: metadata.mimeType
+   )
 
    // Return the first content's text or an empty string if no content
    return resourceContents.first?.text ?? ""
@@ -279,7 +304,12 @@ public func getResource(uri: URL) async throws -> [MCPResourceContent] {
       let enrichedParams = try match.metadata.enrichArguments(sendableParams)
 
       // Call the internal helper method
-      return try await __callResourceFunction(match.metadata.functionMetadata.name, enrichedArguments: enrichedParams, requestedUri: uri, overrideMimeType: match.metadata.mimeType)
+      return try await __callResourceFunction(
+         match.metadata.functionMetadata.name,
+         enrichedArguments: enrichedParams,
+         requestedUri: uri,
+         overrideMimeType: match.metadata.mimeType
+      )
    }
 
    // If no template matched. Calling getNonTemplateResource for URI
@@ -294,78 +324,4 @@ public func getResource(uri: URL) async throws -> [MCPResourceContent] {
 """
     }
 
-    // MARK: - Prompt dispatch
-    static func makePromptDeclarations(mcpPrompts: [String]) -> [String] {
-        let promptMetadataArray = mcpPrompts.map { "__mcpPromptMetadata_\($0)" }.joined(separator: ", ")
-        let promptMetadataSeed = mcpPrompts.isEmpty ? "[]" : "[\(promptMetadataArray)]"
-        let promptMetadataProperty = """
-/// Returns an array of all available prompt metadata, including contributions from `@MCPExtension`-annotated extensions.
-nonisolated public var mcpPromptMetadata: [MCPPromptMetadata] {
-   var metadata: [MCPPromptMetadata] = \(promptMetadataSeed)
-   for contribution in __mcpExtensionContributions {
-      for m in contribution.promptMetadata where !metadata.contains(where: { $0.name == m.name }) {
-         metadata.append(m)
-      }
-   }
-   return metadata
-}
-"""
-
-        var promptSwitchCases = ""
-        for (idx, funcName) in mcpPrompts.enumerated() {
-            promptSwitchCases += "      case \"\(funcName)\":\n"
-            promptSwitchCases += "         return try await __mcpPromptCall_\(funcName)(enrichedArguments)"
-            if idx < mcpPrompts.count - 1 { promptSwitchCases += "\n" }
-        }
-
-        let callPromptMethod = """
-/// Calls a prompt by name with the provided arguments
-public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -> [PromptMessage] {
-   guard let metadata = mcpPromptMetadata.first(where: { $0.name == name }) else {
-      throw MCPToolError.unknownTool(name: name)
-   }
-   let enrichedArguments = try metadata.enrichArguments(arguments)
-   switch name {
-\(promptSwitchCases)
-      default:
-         for contribution in __mcpExtensionContributions {
-            if contribution.promptMetadata.contains(where: { $0.name == name }),
-               let dispatcher = contribution.promptDispatcher {
-               return try await dispatcher(name, self, enrichedArguments)
-            }
-         }
-         throw MCPToolError.unknownTool(name: name)
-   }
-}
-"""
-
-        return [promptMetadataProperty, callPromptMethod]
-    }
-
-    // MARK: - Extension storage
-    static func makeExtensionStorageDeclarations(serverTypeName: String) -> [String] {
-        let contributionsStorage = """
-/// Contributions from `@MCPExtension`-annotated extensions.
-/// Populated by `MyServer.<Name>.register(in:)` calls at startup.
-nonisolated(unsafe) private var __mcpExtensionContributions: [MCPExtensionContribution<\(serverTypeName)>] = []
-"""
-
-        let registeredIDsStorage = """
-/// IDs of `@MCPExtension` nested types already registered on this instance.
-nonisolated(unsafe) private var __mcpRegisteredExtensionIDs: Set<ObjectIdentifier> = []
-"""
-
-        let registerExtensionMethod = """
-/// Installs an extension's contribution on this server instance.
-/// Called by `register(in:)` emitted by `@MCPExtension`. Idempotent on the
-/// extension's metatype identity — registering the same extension twice
-/// has no effect.
-public func __mcpRegisterExtension(_ contribution: MCPExtensionContribution<\(serverTypeName)>, byID id: ObjectIdentifier) {
-   guard !__mcpRegisteredExtensionIDs.contains(id) else { return }
-   __mcpRegisteredExtensionIDs.insert(id)
-   __mcpExtensionContributions.append(contribution)
-}
-"""
-        return [contributionsStorage, registeredIDsStorage, registerExtensionMethod]
-    }
 }

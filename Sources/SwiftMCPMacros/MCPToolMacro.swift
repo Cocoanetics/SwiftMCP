@@ -13,10 +13,10 @@ import SwiftSyntaxMacros
 
 /**
  Implementation of the MCPTool macro.
- 
+
  This macro transforms a function into an MCP tool by generating metadata and wrapper
  functions for parameter handling and type safety.
- 
+
  Example usage:
  ```swift
  /// Adds two numbers together
@@ -29,37 +29,42 @@ import SwiftSyntaxMacros
      return a + b
  }
  ```
- 
+
  - Parameters:
    - description: Optional override for the function's documentation description.
    - isConsequential: Whether the function's actions are consequential (defaults to true).
- 
+
  - Note: The macro extracts documentation from the function's comments for:
    * Function description
    * Parameter descriptions
    * Return value description
- 
+
  - Attention: The macro will emit diagnostics for:
    * Missing function descriptions
    * Invalid default value types
    * Non-function declarations
  */
 public struct MCPToolMacro: PeerMacro {
-/**
-	 Expands the macro to provide peers for the declaration.
-	 
-	 - Parameters:
-	 - node: The attribute syntax node
-	 - declaration: The declaration syntax
-	 - context: The macro expansion context
-	 
-	 - Returns: An array of declaration syntax nodes
-	 */
+    /// Arguments parsed from `@MCPTool(...)`.
+    struct ToolAttributeArgs {
+        var customName: String?
+        var descriptionArg: String = "nil"
+        var isConsequentialArg: String = "true"
+        var hintsFromOptionSet: [String] = []
+        var readOnlyHintArg: String?
+        var destructiveHintArg: String?
+        var idempotentHintArg: String?
+        var openWorldHintArg: String?
+    }
+
+    /**
+     Expands the macro to provide peers for the declaration.
+     */
     public static func expansion(
-		of node: AttributeSyntax,
-		providingPeersOf declaration: some DeclSyntaxProtocol,
-		in context: some MacroExpansionContext
-	) throws -> [DeclSyntax] {
+        of node: AttributeSyntax,
+        providingPeersOf declaration: some DeclSyntaxProtocol,
+        in context: some MacroExpansionContext
+    ) throws -> [DeclSyntax] {
         guard let funcDecl = declaration.as(FunctionDeclSyntax.self) else {
             let diagnostic = Diagnostic(node: Syntax(node), message: MCPToolDiagnostic.onlyFunctions)
             context.diagnose(diagnostic)
@@ -74,71 +79,17 @@ public struct MCPToolMacro: PeerMacro {
         node: AttributeSyntax,
         context: some MacroExpansionContext
     ) throws -> [DeclSyntax] {
-
-        // Use the new extractor
         let extractor = FunctionMetadataExtractor(funcDecl: funcDecl, context: context)
         let commonMetadata = try extractor.extract()
-
         let functionName = commonMetadata.functionName
 
-        // Extract description from the attribute if provided, otherwise use from documentation
-        var descriptionArg = "nil"
-        var isConsequentialArg = "true"  // Default to true
+        var attrArgs = parseAttributeArguments(node: node)
 
-        // Hints from OptionSet API (preferred)
-        var hintsFromOptionSet: [String] = []
-
-        // Annotation hint arguments from legacy Bool? API (nil by default)
-        var readOnlyHintArg: String?
-        var destructiveHintArg: String?
-        var idempotentHintArg: String?
-        var openWorldHintArg: String?
-
-        var customName: String?
-
-        if let arguments = node.arguments?.as(LabeledExprListSyntax.self) {
-            for argument in arguments {
-                if argument.label?.text == "name",
-                   let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
-                    customName = stringLiteral.segments.description
-                } else if argument.label?.text == "description",
-                          let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
-                    let stringValue = stringLiteral.segments.description
-                    descriptionArg = "\"\(stringValue.escapedForSwiftString)\"" // Ensure proper escaping
-                } else if argument.label?.text == "hints" {
-                    // Parse hints: accept array literal ([.readOnly, .destructive])
-                    // or a single OptionSet member access (.readOnly).
-                    hintsFromOptionSet.append(contentsOf: parseHintsExpression(argument.expression))
-                } else if argument.label?.text == "isConsequential",
-                          let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
-                    isConsequentialArg = boolLiteral.literal.text
-                } else if argument.label?.text == "readOnlyHint",
-                          let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
-                    readOnlyHintArg = boolLiteral.literal.text
-                } else if argument.label?.text == "destructiveHint",
-                          let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
-                    destructiveHintArg = boolLiteral.literal.text
-                } else if argument.label?.text == "idempotentHint",
-                          let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
-                    idempotentHintArg = boolLiteral.literal.text
-                } else if argument.label?.text == "openWorldHint",
-                          let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
-                    openWorldHintArg = boolLiteral.literal.text
-                }
-            }
+        if attrArgs.descriptionArg == "nil" && !commonMetadata.documentation.description.isEmpty {
+            attrArgs.descriptionArg = "\"\(commonMetadata.documentation.description.escapedForSwiftString)\""
         }
 
-        // If no description was provided in the attribute, use from commonMetadata
-        if descriptionArg == "nil" {
-            if !commonMetadata.documentation.description.isEmpty {
-                descriptionArg = "\"\(commonMetadata.documentation.description.escapedForSwiftString)\""
-            }
-        }
-
-        // If no description was found (neither in attribute nor docs), emit a warning
-        // (The missingDescription test case might need adjustment or specific handling here if it relied on old logic)
-        if descriptionArg == "nil" && functionName != "missingDescription" { // Adjust condition if needed
-            // Use your project's actual diagnostic type
+        if attrArgs.descriptionArg == "nil" && functionName != "missingDescription" {
             let diagnostic = Diagnostic(
                 node: Syntax(funcDecl.name),
                 message: MCPToolDiagnostic.missingDescription(functionName: functionName)
@@ -146,32 +97,116 @@ public struct MCPToolMacro: PeerMacro {
             context.diagnose(diagnostic)
         }
 
-        // Generate parameter info strings using the new unified approach
-        var parameterInfoStrings: [String] = []
-        for parsedParam in commonMetadata.parameters {
-            parameterInfoStrings.append(parsedParam.toMCPParameterInfo())
-        }
+        let parameterInfoStrings = commonMetadata.parameters.map { $0.toMCPParameterInfo() }
+        let annotationsArg = buildAnnotationsArg(args: attrArgs)
+        let toolName = attrArgs.customName ?? functionName
 
-        // Use return type info from commonMetadata
-        let returnTypeString = commonMetadata.returnTypeString
-        // Assuming they are the same now, adjust if MCPTool had specific logic
-        let returnTypeForBlock = returnTypeString
-        let returnDescriptionString = commonMetadata.returnDescription ?? "nil"
-
-        // Build annotations argument string
-        let annotationsArg = buildAnnotationsArg(
-            hintsFromOptionSet: hintsFromOptionSet,
-            readOnlyHint: readOnlyHintArg,
-            destructiveHint: destructiveHintArg,
-            idempotentHint: idempotentHintArg,
-            openWorldHint: openWorldHintArg
+        let metadataDeclaration = makeMetadataDeclaration(
+            toolName: toolName,
+            functionName: functionName,
+            descriptionArg: attrArgs.descriptionArg,
+            parameterInfoStrings: parameterInfoStrings,
+            commonMetadata: commonMetadata,
+            isConsequentialArg: attrArgs.isConsequentialArg,
+            annotationsArg: annotationsArg
         )
 
-        // Apply custom name override if provided
-        let toolName = customName ?? functionName
+        let wrapperFuncString = makeWrapperFunction(
+            functionName: functionName,
+            commonMetadata: commonMetadata
+        )
 
-        // Generate the metadata variable
-        let metadataDeclaration = """
+        if let enclosing = MCPMacroContextDetection.enclosingExtension(in: context) {
+            if !MCPMacroContextDetection.hasMCPExtensionAttribute(enclosing) {
+                let diag = Diagnostic(
+                    node: Syntax(funcDecl.name),
+                    message: MCPToolDiagnostic.missingMCPExtensionAttribute(macroName: "MCPTool")
+                )
+                context.diagnose(diag)
+            }
+            return [DeclSyntax(stringLiteral: wrapperFuncString)]
+        }
+
+        return [
+            DeclSyntax(stringLiteral: metadataDeclaration),
+            DeclSyntax(stringLiteral: wrapperFuncString)
+        ]
+    }
+
+    /// Parses the `@MCPTool(...)` attribute arguments into a struct.
+    private static func parseAttributeArguments(node: AttributeSyntax) -> ToolAttributeArgs {
+        var args = ToolAttributeArgs()
+        guard let arguments = node.arguments?.as(LabeledExprListSyntax.self) else { return args }
+        for argument in arguments {
+            applyAttributeArgument(argument, to: &args)
+        }
+        return args
+    }
+
+    /// Applies a single labeled argument to the attribute args struct.
+    /// Pulled out of `parseAttributeArguments` so the cyclomatic complexity
+    /// stays bounded.
+    private static func applyAttributeArgument(
+        _ argument: LabeledExprListSyntax.Element,
+        to args: inout ToolAttributeArgs
+    ) {
+        guard let label = argument.label?.text else { return }
+        switch label {
+        case "name":
+            if let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
+                args.customName = stringLiteral.segments.description
+            }
+        case "description":
+            if let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
+                let stringValue = stringLiteral.segments.description
+                args.descriptionArg = "\"\(stringValue.escapedForSwiftString)\""
+            }
+        case "hints":
+            args.hintsFromOptionSet.append(contentsOf: parseHintsExpression(argument.expression))
+        case "isConsequential":
+            if let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
+                args.isConsequentialArg = boolLiteral.literal.text
+            }
+        default:
+            applyLegacyHintArgument(label: label, expression: argument.expression, to: &args)
+        }
+    }
+
+    /// Applies the legacy `*Hint:` boolean arguments. Kept separate from
+    /// `applyAttributeArgument` so each switch stays under the complexity
+    /// limit.
+    private static func applyLegacyHintArgument(
+        label: String,
+        expression: ExprSyntax,
+        to args: inout ToolAttributeArgs
+    ) {
+        guard let boolLiteral = expression.as(BooleanLiteralExprSyntax.self) else { return }
+        switch label {
+        case "readOnlyHint":
+            args.readOnlyHintArg = boolLiteral.literal.text
+        case "destructiveHint":
+            args.destructiveHintArg = boolLiteral.literal.text
+        case "idempotentHint":
+            args.idempotentHintArg = boolLiteral.literal.text
+        case "openWorldHint":
+            args.openWorldHintArg = boolLiteral.literal.text
+        default:
+            return
+        }
+    }
+
+    private static func makeMetadataDeclaration(
+        toolName: String,
+        functionName: String,
+        descriptionArg: String,
+        parameterInfoStrings: [String],
+        commonMetadata: ExtractedFunctionMetadata,
+        isConsequentialArg: String,
+        annotationsArg: String
+    ) -> String {
+        let returnTypeString = commonMetadata.returnTypeString
+        let returnDescriptionString = commonMetadata.returnDescription ?? "nil"
+        return """
 /// Metadata for the \(toolName) tool
 nonisolated private let __mcpMetadata_\(functionName) = MCPToolMetadata(
    name: "\(toolName)",
@@ -185,23 +220,24 @@ nonisolated private let __mcpMetadata_\(functionName) = MCPToolMetadata(
    annotations: \(annotationsArg)
 )
 """
+    }
 
-        // Create the wrapper function that takes a dictionary
+    private static func makeWrapperFunction(
+        functionName: String,
+        commonMetadata: ExtractedFunctionMetadata
+    ) -> String {
         var wrapperFuncString = """
 
 		/// Autogenerated wrapper for \(functionName) that takes a dictionary of parameters
 """
-        if !commonMetadata.propagatedAttributes.isEmpty {
-            for attribute in commonMetadata.propagatedAttributes {
-                wrapperFuncString += "\n\t\t\(attribute)"
-            }
+        for attribute in commonMetadata.propagatedAttributes {
+            wrapperFuncString += "\n\t\t\(attribute)"
         }
         wrapperFuncString += "\n\t\tfunc __mcpCall_\(functionName)"
             + "(_ enrichedArguments: JSONDictionary) "
             + "async throws -> (Encodable & Sendable) {\n"
 
         for detail in commonMetadata.parameters {
-            // Use the original parameter type string (detail.type), which includes optional markers.
             wrapperFuncString += """
 
 			   let \(detail.name): \(detail.typeString) = try enrichedArguments.extractValue(
@@ -211,18 +247,13 @@ nonisolated private let __mcpMetadata_\(functionName) = MCPToolMetadata(
 			"""
         }
 
-        // Add the function call
         let parameterList = commonMetadata.parameters.map { param in
-            if param.label == "_" {
-                return param.name
-            } else {
-                return "\(param.label): \(param.name)"
-            }
+            param.label == "_" ? param.name : "\(param.label): \(param.name)"
         }.joined(separator: ", ")
 
         let tryPrefix = commonMetadata.isThrowing ? "try " : ""
         let awaitPrefix = commonMetadata.isAsync ? "await " : ""
-        if returnTypeForBlock == "Void" {
+        if commonMetadata.returnTypeString == "Void" {
             wrapperFuncString += """
 				\(tryPrefix)\(awaitPrefix)\(functionName)(\(parameterList))
 				return ""  // return empty string for Void functions
@@ -234,63 +265,23 @@ nonisolated private let __mcpMetadata_\(functionName) = MCPToolMetadata(
 			}
 			"""
         }
-
-        // When the function lives inside an `extension`, we cannot emit the
-        // stored metadata `let` (Swift forbids stored properties in
-        // extensions). Emit only the wrapper; `@MCPExtension` regenerates
-        // the metadata literal at the extension level.
-        if let enclosing = MCPMacroContextDetection.enclosingExtension(in: context) {
-            if !MCPMacroContextDetection.hasMCPExtensionAttribute(enclosing) {
-                let diag = Diagnostic(
-                    node: Syntax(funcDecl.name),
-                    message: MCPToolDiagnostic.missingMCPExtensionAttribute(macroName: "MCPTool")
-                )
-                context.diagnose(diag)
-            }
-            return [DeclSyntax(stringLiteral: wrapperFuncString)]
-        }
-
-        return [
-			DeclSyntax(stringLiteral: metadataDeclaration),
-			DeclSyntax(stringLiteral: wrapperFuncString)
-		]
+        return wrapperFuncString
     }
 
     /// Builds the annotations argument string for MCPToolMetadata initialization
     /// Returns "nil" if no hints are provided, otherwise returns a MCPToolAnnotations initialization
     /// Supports both the new OptionSet API (hints: [.readOnly]) and legacy Bool? parameters
-    private static func buildAnnotationsArg(
-        hintsFromOptionSet: [String],
-        readOnlyHint: String?,
-        destructiveHint: String?,
-        idempotentHint: String?,
-        openWorldHint: String?
-    ) -> String {
-        // Collect all hints - start with OptionSet hints
-        var allHints = Set(hintsFromOptionSet)
+    private static func buildAnnotationsArg(args: ToolAttributeArgs) -> String {
+        var allHints = Set(args.hintsFromOptionSet)
 
-        // Add hints from legacy Bool? parameters (merge with OptionSet hints)
-        if readOnlyHint == "true" {
-            allHints.insert(".readOnly")
-        }
-        if destructiveHint == "true" {
-            allHints.insert(".destructive")
-        }
-        if idempotentHint == "true" {
-            allHints.insert(".idempotent")
-        }
-        if openWorldHint == "true" {
-            allHints.insert(".openWorld")
-        }
+        if args.readOnlyHintArg == "true" { allHints.insert(".readOnly") }
+        if args.destructiveHintArg == "true" { allHints.insert(".destructive") }
+        if args.idempotentHintArg == "true" { allHints.insert(".idempotent") }
+        if args.openWorldHintArg == "true" { allHints.insert(".openWorld") }
 
-        // If no hints, return nil
         if allHints.isEmpty {
             return "nil"
         }
-
-        // Sort for consistent output and build the MCPToolAnnotations initialization
-        let sortedHints = allHints.sorted()
-        return "MCPToolAnnotations(hints: [\(sortedHints.joined(separator: ", "))])"
+        return "MCPToolAnnotations(hints: [\(allHints.sorted().joined(separator: ", "))])"
     }
-
 }
