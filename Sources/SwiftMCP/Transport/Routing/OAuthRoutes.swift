@@ -257,7 +257,10 @@ extension HTTPSSETransport {
 			let (data, response) = try await session.data(for: proxyRequest)
 
 			guard let httpResponse = response as? HTTPURLResponse else {
-				let err = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32603, message: "Invalid response from auth server"))
+				let err = JSONRPCMessage.errorResponse(
+					id: nil,
+					error: .init(code: -32603, message: "Invalid response from auth server")
+				)
 				return .json(err, status: .internalServerError)
 			}
 

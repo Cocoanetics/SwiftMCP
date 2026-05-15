@@ -22,11 +22,19 @@ public struct JWTTokenValidator: Sendable {
     /// 
     /// - Parameters:
     ///   - expectedIssuer: The expected issuer (e.g., "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/")
-    ///   - expectedAudience: The expected audience (e.g., "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/api/v2/")
-    ///   - expectedAuthorizedParty: The expected authorized party / client ID (e.g., "n4vmrjiAhmoE1P1JvjvF1iU8m1RTq3yi")
+    ///   - expectedAudience: The expected audience
+    ///     (e.g., "https://dev-8ygj6eppnvjz8bm6.us.auth0.com/api/v2/")
+    ///   - expectedAuthorizedParty: The expected authorized party / client ID
+    ///     (e.g., "n4vmrjiAhmoE1P1JvjvF1iU8m1RTq3yi")
     ///   - allowedClockSkew: Clock skew tolerance in seconds (default: 60)
     ///   - cacheValidityDuration: How long to cache JWKS (default: 1 hour)
-    public init(expectedIssuer: String? = nil, expectedAudience: String? = nil, expectedAuthorizedParty: String? = nil, allowedClockSkew: TimeInterval = 60, cacheValidityDuration: TimeInterval = 3600) {
+    public init(
+        expectedIssuer: String? = nil,
+        expectedAudience: String? = nil,
+        expectedAuthorizedParty: String? = nil,
+        allowedClockSkew: TimeInterval = 60,
+        cacheValidityDuration: TimeInterval = 3600
+    ) {
         self.options = JWTValidationOptions(
             expectedIssuer: expectedIssuer,
             expectedAudience: expectedAudience,

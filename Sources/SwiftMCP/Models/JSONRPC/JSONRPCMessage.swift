@@ -81,9 +81,9 @@ public enum JSONRPCMessage: Codable, Sendable {
 
     /// Data structure for JSON-RPC error responses
     public struct JSONRPCErrorResponseData: Codable, Sendable {
-        // swiftlint:disable:next nesting
         /// Represents the error payload containing error details.
         /// Includes an error code and a descriptive message.
+        // swiftlint:disable:next nesting
         public struct ErrorPayload: Codable, Sendable {
             /// The numeric error code indicating the type of error
             public var code: Int
@@ -141,35 +141,70 @@ public enum JSONRPCMessage: Codable, Sendable {
 
     // MARK: - Convenience Initializers
 
-    public static func request(jsonrpc: String = "2.0", id: JSONRPCID, method: String, params: JSONDictionary? = nil) -> JSONRPCMessage {
+    public static func request(
+        jsonrpc: String = "2.0",
+        id: JSONRPCID,
+        method: String,
+        params: JSONDictionary? = nil
+    ) -> JSONRPCMessage {
         return .request(JSONRPCRequestData(jsonrpc: jsonrpc, id: id, method: method, params: params))
     }
 
-    public static func request(jsonrpc: String = "2.0", id: Int, method: String, params: JSONDictionary? = nil) -> JSONRPCMessage {
+    public static func request(
+        jsonrpc: String = "2.0",
+        id: Int,
+        method: String,
+        params: JSONDictionary? = nil
+    ) -> JSONRPCMessage {
         request(jsonrpc: jsonrpc, id: .int(id), method: method, params: params)
     }
 
-    public static func request(jsonrpc: String = "2.0", id: String, method: String, params: JSONDictionary? = nil) -> JSONRPCMessage {
+    public static func request(
+        jsonrpc: String = "2.0",
+        id: String,
+        method: String,
+        params: JSONDictionary? = nil
+    ) -> JSONRPCMessage {
         request(jsonrpc: jsonrpc, id: .string(id), method: method, params: params)
     }
 
-    public static func response(jsonrpc: String = "2.0", id: JSONRPCID, result: JSONDictionary? = nil) -> JSONRPCMessage {
+    public static func response(
+        jsonrpc: String = "2.0",
+        id: JSONRPCID,
+        result: JSONDictionary? = nil
+    ) -> JSONRPCMessage {
         return .response(JSONRPCResponseData(jsonrpc: jsonrpc, id: id, result: result))
     }
 
-    public static func response(jsonrpc: String = "2.0", id: Int, result: JSONDictionary? = nil) -> JSONRPCMessage {
+    public static func response(
+        jsonrpc: String = "2.0",
+        id: Int,
+        result: JSONDictionary? = nil
+    ) -> JSONRPCMessage {
         response(jsonrpc: jsonrpc, id: .int(id), result: result)
     }
 
-    public static func response(jsonrpc: String = "2.0", id: String, result: JSONDictionary? = nil) -> JSONRPCMessage {
+    public static func response(
+        jsonrpc: String = "2.0",
+        id: String,
+        result: JSONDictionary? = nil
+    ) -> JSONRPCMessage {
         response(jsonrpc: jsonrpc, id: .string(id), result: result)
     }
 
-    public static func errorResponse(jsonrpc: String = "2.0", id: JSONRPCID?, error: JSONRPCErrorResponseData.ErrorPayload) -> JSONRPCMessage {
+    public static func errorResponse(
+        jsonrpc: String = "2.0",
+        id: JSONRPCID?,
+        error: JSONRPCErrorResponseData.ErrorPayload
+    ) -> JSONRPCMessage {
         return .errorResponse(JSONRPCErrorResponseData(jsonrpc: jsonrpc, id: id, error: error))
     }
 
-    public static func notification(jsonrpc: String = "2.0", method: String, params: JSONDictionary? = nil) -> JSONRPCMessage {
+    public static func notification(
+        jsonrpc: String = "2.0",
+        method: String,
+        params: JSONDictionary? = nil
+    ) -> JSONRPCMessage {
         return .notification(JSONRPCNotificationData(jsonrpc: jsonrpc, method: method, params: params))
     }
 
@@ -210,14 +245,20 @@ public enum JSONRPCMessage: Codable, Sendable {
         } else if container.contains(.result) {
             // This is a result response - must have ID
             guard let id = id else {
-                throw DecodingError.dataCorrupted(DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Response missing required id field"))
+                throw DecodingError.dataCorrupted(DecodingError.Context(
+                    codingPath: decoder.codingPath,
+                    debugDescription: "Response missing required id field"
+                ))
             }
 
             // Handle both empty and non-empty result dictionaries as regular responses
             let result = try container.decode(JSONDictionary.self, forKey: .result)
             self = .response(JSONRPCResponseData(jsonrpc: jsonrpc, id: id, result: result))
         } else {
-            throw DecodingError.dataCorrupted(DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Unable to determine JSON-RPC message type"))
+            throw DecodingError.dataCorrupted(DecodingError.Context(
+                codingPath: decoder.codingPath,
+                debugDescription: "Unable to determine JSON-RPC message type"
+            ))
         }
     }
 

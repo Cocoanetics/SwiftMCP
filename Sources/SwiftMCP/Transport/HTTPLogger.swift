@@ -65,7 +65,8 @@ final class HTTPLogger: ChannelDuplexHandler, @unchecked Sendable {
             case .head(let head):
                 // For SSE connections, only log the initial response headers
                 if isSSEConnection {
-                    var log = "HTTP/\(head.version.major).\(head.version.minor) \(head.status.code) \(head.status.reasonPhrase)\n"
+                    let httpVersion = "HTTP/\(head.version.major).\(head.version.minor)"
+                    var log = "\(httpVersion) \(head.status.code) \(head.status.reasonPhrase)\n"
                     head.headers.forEach { log += "\($0.name): \($0.value)\n" }
                     log += "\n"
                     sseLogger.info("Connection Established:\n\(log)")

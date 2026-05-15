@@ -45,7 +45,12 @@ public struct JWTValidationOptions: Sendable {
     ///   - expectedAudience: The expected audience (optional)
     ///   - expectedAuthorizedParty: The expected authorized party (optional)
     ///   - allowedClockSkew: Clock skew tolerance in seconds (default: 60)
-    public init(expectedIssuer: String? = nil, expectedAudience: String? = nil, expectedAuthorizedParty: String? = nil, allowedClockSkew: TimeInterval = 60) {
+    public init(
+        expectedIssuer: String? = nil,
+        expectedAudience: String? = nil,
+        expectedAuthorizedParty: String? = nil,
+        allowedClockSkew: TimeInterval = 60
+    ) {
         self.expectedIssuer = expectedIssuer
         self.expectedAudience = expectedAudience
         self.expectedAuthorizedParty = expectedAuthorizedParty

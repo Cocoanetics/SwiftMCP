@@ -230,7 +230,11 @@ public final actor TCPConnection: StdioConnection {
 
     public func lines() async -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
-            continuation.finish(throwing: MCPServerProxyError.unsupportedPlatform("TCP connections require the Network framework."))
+            continuation.finish(
+                throwing: MCPServerProxyError.unsupportedPlatform(
+                    "TCP connections require the Network framework."
+                )
+            )
         }
     }
 

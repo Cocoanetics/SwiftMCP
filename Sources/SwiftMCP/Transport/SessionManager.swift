@@ -123,7 +123,10 @@ actor SessionManager {
     }
 
     /// Resume an existing retained stream from the specified Last-Event-ID.
-    func resumeStream(sessionID: UUID, after lastEventID: String) async throws -> (AsyncStream<Data>, StreamRouteResponseInfo) {
+    func resumeStream(
+        sessionID: UUID,
+        after lastEventID: String
+    ) async throws -> (AsyncStream<Data>, StreamRouteResponseInfo) {
         await cleanupExpiredState()
 
         let parsed = try parseEventID(lastEventID)
@@ -587,7 +590,9 @@ actor SessionManager {
             .filter { $0.kind.isGeneral }
 
         let activeGeneral = generalStreams.filter(\.isActive)
-        if let replacement = activeGeneral.max(by: { ($0.lastConnectedAt ?? .distantPast) < ($1.lastConnectedAt ?? .distantPast) }) {
+        if let replacement = activeGeneral.max(by: {
+            ($0.lastConnectedAt ?? .distantPast) < ($1.lastConnectedAt ?? .distantPast)
+        }) {
             primaryGeneralStreamIDs[sessionID] = replacement.id
             return
         }

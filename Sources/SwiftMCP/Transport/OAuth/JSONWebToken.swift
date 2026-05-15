@@ -111,7 +111,13 @@ public struct JSONWebToken: Sendable {
             } else if let multiple = try? container.decode([String].self) {
                 self = .multiple(multiple)
             } else {
-                throw DecodingError.typeMismatch(AudienceValue.self, DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Expected String or [String]"))
+                throw DecodingError.typeMismatch(
+                    AudienceValue.self,
+                    DecodingError.Context(
+                        codingPath: decoder.codingPath,
+                        debugDescription: "Expected String or [String]"
+                    )
+                )
             }
         }
 
@@ -299,7 +305,11 @@ public struct JSONWebToken: Sendable {
     ///   - options: Additional validation options
     /// - Returns: True if both signature and claims are valid
     /// - Throws: JWTError if verification fails
-    public func verify(using jwks: JSONWebKeySet, at date: Date = Date(), options: JWTValidationOptions = JWTValidationOptions()) throws -> Bool {
+    public func verify(
+        using jwks: JSONWebKeySet,
+        at date: Date = Date(),
+        options: JWTValidationOptions = JWTValidationOptions()
+    ) throws -> Bool {
         // First validate claims
         try validateClaims(at: date, options: options)
 
@@ -315,7 +325,12 @@ public struct JSONWebToken: Sendable {
     ///   - jwksCache: Optional JWKS cache to use (creates new one if not provided)
     /// - Returns: True if the token is valid
     /// - Throws: JWTError if verification fails
-    public func verify(using issuer: URL, at date: Date = Date(), options: JWTValidationOptions = JWTValidationOptions(), jwksCache: JWKSCache? = nil) async throws -> Bool {
+    public func verify(
+        using issuer: URL,
+        at date: Date = Date(),
+        options: JWTValidationOptions = JWTValidationOptions(),
+        jwksCache: JWKSCache? = nil
+    ) async throws -> Bool {
         let cache = jwksCache ?? JWKSCache()
         let jwks = try await cache.getJWKS(for: issuer)
         return try verify(using: jwks, at: date, options: options)

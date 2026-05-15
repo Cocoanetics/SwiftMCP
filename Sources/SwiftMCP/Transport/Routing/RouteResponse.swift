@@ -17,7 +17,12 @@ struct RouteResponse: Sendable {
 		self.streamInfo = nil
 	}
 
-	init(status: HTTPStatus, headers: [(String, String)] = [], bodyStream: AsyncStream<Data>, streamInfo: StreamRouteResponseInfo? = nil) {
+	init(
+		status: HTTPStatus,
+		headers: [(String, String)] = [],
+		bodyStream: AsyncStream<Data>,
+		streamInfo: StreamRouteResponseInfo? = nil
+	) {
 		self.status = status
 		self.headers = headers
 		self.body = nil

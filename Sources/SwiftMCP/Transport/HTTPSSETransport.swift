@@ -86,7 +86,10 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
                 } else {
                     // In non-proxy mode, JWE tokens are not supported
                     let audience = oauthConfiguration?.audience ?? "your-api"
-                    return .jweNotSupported("Encrypted (JWE) tokens are not supported. Use a signed JWT (JWS) with audience=\(audience)")
+                    return .jweNotSupported(
+                        "Encrypted (JWE) tokens are not supported. "
+                            + "Use a signed JWT (JWS) with audience=\(audience)"
+                    )
                 }
             }
         }
@@ -269,7 +272,8 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
             let errorMessage: String
             switch error.errnoCode {
             case EADDRINUSE:
-                errorMessage = "Port \(port) is already in use. Please choose a different port or ensure no other service is using this port."
+                errorMessage = "Port \(port) is already in use. "
+                    + "Please choose a different port or ensure no other service is using this port."
             case EACCES:
                 errorMessage = "Permission denied to bind to port \(port). This port may require elevated privileges."
             case EADDRNOTAVAIL:
@@ -365,7 +369,10 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         await sessionManager.createStream(sessionID: sessionID, kind: kind)
     }
 
-    func resumeSSEStream(sessionID: UUID, lastEventID: String) async throws -> (AsyncStream<Data>, StreamRouteResponseInfo) {
+    func resumeSSEStream(
+        sessionID: UUID,
+        lastEventID: String
+    ) async throws -> (AsyncStream<Data>, StreamRouteResponseInfo) {
         try await sessionManager.resumeStream(sessionID: sessionID, after: lastEventID)
     }
 
@@ -373,7 +380,11 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     /// Called by `HTTPHandler` after the route handler returns a streaming response.
     func registerSSEChannel(_ channel: Channel, sessionID: UUID, streamID: UUID) {
         Task {
-            guard let connectionToken = await sessionManager.register(channel: channel, sessionID: sessionID, streamID: streamID) else {
+            guard let connectionToken = await sessionManager.register(
+                channel: channel,
+                sessionID: sessionID,
+                streamID: streamID
+            ) else {
                 return
             }
             let count = await sessionManager.channelCount
@@ -382,7 +393,10 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
             channel.closeFuture.whenComplete { [weak self] _ in
                 guard let self = self else { return }
                 Task {
-                    await self.sessionManager.markStreamDisconnected(streamID: streamID, connectionToken: connectionToken)
+                    await self.sessionManager.markStreamDisconnected(
+                        streamID: streamID,
+                        connectionToken: connectionToken
+                    )
                     let count = await self.sessionManager.channelCount
                     self.logger.info("SSE channel removed (remaining: \(count))")
                 }
@@ -473,9 +487,14 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         maxBodySize: Int? = nil,
         handler: @escaping @Sendable (HTTPRouteRequest<Data?>) async throws -> HTTPRouteResponse<Data?>
     ) {
-        customRoutes.append(HTTPRoute(method: method, pathPattern: path, maxBodySize: maxBodySize, handler: { _, request in
-            RouteResponse(try await handler(request))
-        }))
+        customRoutes.append(HTTPRoute(
+            method: method,
+            pathPattern: path,
+            maxBodySize: maxBodySize,
+            handler: { _, request in
+                RouteResponse(try await handler(request))
+            }
+        ))
     }
 
     /// Register a route with buffered input and streaming output.
@@ -490,9 +509,14 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         maxBodySize: Int? = nil,
         handler: @escaping @Sendable (HTTPRouteRequest<Data?>) async throws -> HTTPRouteResponse<AsyncStream<Data>>
     ) {
-        customRoutes.append(HTTPRoute(method: method, pathPattern: path, maxBodySize: maxBodySize, handler: { _, request in
-            RouteResponse(try await handler(request))
-        }))
+        customRoutes.append(HTTPRoute(
+            method: method,
+            pathPattern: path,
+            maxBodySize: maxBodySize,
+            handler: { _, request in
+                RouteResponse(try await handler(request))
+            }
+        ))
     }
 
     /// Register a route with streaming input and buffered output.
@@ -514,11 +538,17 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         _ method: RouteMethod,
         _ path: String,
         maxBodySize: Int? = nil,
-        streamingHandler: @escaping @Sendable (HTTPRouteRequest<AsyncStream<Data>>) async throws -> HTTPRouteResponse<Data?>
+        streamingHandler: @escaping @Sendable (HTTPRouteRequest<AsyncStream<Data>>) async throws
+            -> HTTPRouteResponse<Data?>
     ) {
-        customRoutes.append(HTTPRoute(method: method, pathPattern: path, maxBodySize: maxBodySize, handler: { _, request in
-            RouteResponse(try await streamingHandler(request))
-        }))
+        customRoutes.append(HTTPRoute(
+            method: method,
+            pathPattern: path,
+            maxBodySize: maxBodySize,
+            handler: { _, request in
+                RouteResponse(try await streamingHandler(request))
+            }
+        ))
     }
 
     /// Register a route with streaming input and streaming output.
@@ -533,11 +563,17 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         _ method: RouteMethod,
         _ path: String,
         maxBodySize: Int? = nil,
-        streamingHandler: @escaping @Sendable (HTTPRouteRequest<AsyncStream<Data>>) async throws -> HTTPRouteResponse<AsyncStream<Data>>
+        streamingHandler: @escaping @Sendable (HTTPRouteRequest<AsyncStream<Data>>) async throws
+            -> HTTPRouteResponse<AsyncStream<Data>>
     ) {
-        customRoutes.append(HTTPRoute(method: method, pathPattern: path, maxBodySize: maxBodySize, handler: { _, request in
-            RouteResponse(try await streamingHandler(request))
-        }))
+        customRoutes.append(HTTPRoute(
+            method: method,
+            pathPattern: path,
+            maxBodySize: maxBodySize,
+            handler: { _, request in
+                RouteResponse(try await streamingHandler(request))
+            }
+        ))
     }
 
     // MARK: - Router Assembly

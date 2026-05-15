@@ -318,7 +318,10 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
 
             do {
                 let newListener = try self.createListener()
-                guard let newGeneration = await self.state.replaceListener(newListener, expectedGeneration: failedGeneration) else {
+                guard let newGeneration = await self.state.replaceListener(
+                    newListener,
+                    expectedGeneration: failedGeneration
+                ) else {
                     // Transport was stopped or generation changed — discard
                     newListener.cancel()
                     return
@@ -419,7 +422,10 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
         connectionID: UUID,
         lineBuffer: LineBuffer
     ) {
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [weak self] data, _, isComplete, error in
+        connection.receive(
+            minimumIncompleteLength: 1,
+            maximumLength: 64 * 1024
+        ) { [weak self] data, _, isComplete, error in
             guard let self else { return }
 
             if let data, !data.isEmpty {
@@ -450,7 +456,12 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
                 return
             }
 
-            self.receiveNext(connection: connection, session: session, connectionID: connectionID, lineBuffer: lineBuffer)
+            self.receiveNext(
+                connection: connection,
+                session: session,
+                connectionID: connectionID,
+                lineBuffer: lineBuffer
+            )
         }
     }
 

@@ -33,7 +33,9 @@ extension HTTPSSETransport {
 
 		// Validate Accept header
 		let acceptHeader = request.header("accept") ?? request.header("Accept") ?? ""
-		if !acceptHeader.isEmpty && !("application/json".matchesAcceptHeader(acceptHeader) || "*/*".matchesAcceptHeader(acceptHeader)) {
+		let acceptsJSON = "application/json".matchesAcceptHeader(acceptHeader)
+		let acceptsAny = "*/*".matchesAcceptHeader(acceptHeader)
+		if !acceptHeader.isEmpty && !(acceptsJSON || acceptsAny) {
 			logger.warning("Rejected non-json request (Accept: \(acceptHeader))")
 			return textResponse(status: .badRequest, body: "Client must accept application/json.")
 		}
@@ -78,7 +80,10 @@ extension HTTPSSETransport {
 			let authResult = await authorize(token, sessionID: authSessionID)
 			switch authResult {
 			case .unauthorized(let message):
-				let errorMessage = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32000, message: "Unauthorized: \(message)"))
+				let errorMessage = JSONRPCMessage.errorResponse(
+					id: nil,
+					error: .init(code: -32000, message: "Unauthorized: \(message)")
+				)
 				return .json(errorMessage, status: .unauthorized, sessionId: authSessionID?.uuidString)
 			case .jweNotSupported(let message):
 				let errorMessage = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32000, message: message))

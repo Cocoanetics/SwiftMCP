@@ -142,7 +142,10 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
                 await self.writeRouteResponse(response, to: channel)
             } catch {
                 self.logger.error("Route handler error: \(error)")
-                let errorResponse = RouteResponse(status: .internalServerError, body: Data("Internal Server Error".utf8))
+                let errorResponse = RouteResponse(
+                    status: .internalServerError,
+                    body: Data("Internal Server Error".utf8)
+                )
                 await self.writeRouteResponse(errorResponse, to: channel)
             }
         }
@@ -270,7 +273,12 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         return responseHeaders.map { ($0.name, $0.value) }
     }
 
-    private func sendResponse(channel: Channel, status: HTTPResponseStatus, headers: HTTPHeaders? = nil, body: ByteBuffer? = nil) {
+    private func sendResponse(
+        channel: Channel,
+        status: HTTPResponseStatus,
+        headers: HTTPHeaders? = nil,
+        body: ByteBuffer? = nil
+    ) {
         let headerPairs = (headers ?? HTTPHeaders()).map { ($0.name, $0.value) }
         let resolvedHeaders = Self.responseHeadersApplyingDefaults(headerPairs, bodyLength: body?.readableBytes)
 

@@ -5,7 +5,8 @@ public struct Address: Codable, Sendable {
     /// Full mailing address, formatted for display or use with a mailing label
     public let formatted: String?
 
-    /// Full street address component, which may include house number, street name, Post Office Box, and multi-line extended street address information
+    /// Full street address component, which may include house number, street name,
+    /// Post Office Box, and multi-line extended street address information
     public let streetAddress: String?
 
     /// City or locality component
