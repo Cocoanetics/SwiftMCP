@@ -1,6 +1,9 @@
 import Foundation
 import SwiftMCP
 
+// swiftlint:disable identifier_name
+// Calculator test fixture: parameter names `a`, `b` mirror the canonical MCP tutorial example.
+
 /**
  A Calculator for simple math doing additionals, subtractions etc.
  */
@@ -93,3 +96,4 @@ class Calculator {
 		return Date()
 	}
 }
+// swiftlint:enable identifier_name

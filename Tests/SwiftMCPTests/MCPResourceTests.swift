@@ -23,6 +23,7 @@ actor ResourceTestServer {
     /// - Parameter user_id: The user's unique identifier
     /// - Returns: The user's profile data
     @MCPResource("users://{user_id}/profile")
+    // swiftlint:disable:next identifier_name
     func getUserProfile(user_id: Int) -> String {
         return "Profile data for user \(user_id)"
     }
@@ -33,6 +34,7 @@ actor ResourceTestServer {
     ///   - lang: The language locale
     /// - Returns: Localized profile data
     @MCPResource("users://{user_id}/profile/localized?locale={lang}")
+    // swiftlint:disable:next identifier_name
     func getLocalizedProfile(user_id: Int, lang: String = "en") -> String {
         return "Profile for user \(user_id) in \(lang)"
     }
@@ -60,6 +62,7 @@ actor ResourceTestServer {
 
     /// Test resource with multiple URI templates
     @MCPResource(["api://v1/users/{user_id}", "api://v2/users/{user_id}"])
+    // swiftlint:disable:next identifier_name
     func getMultiVersionUser(user_id: Int) -> String {
         return "User data for ID \(user_id)"
     }

@@ -86,9 +86,11 @@ struct PrototypeRunner {
         print("  \(name) → \(summary)")
     }
 
+    // swiftlint:disable identifier_name
     /// Compile-only check: every extension-contributed method is reachable
     /// on the typed `PrototypeServer.Client` thanks to the aggregator plugin's
     /// emitted Client extensions. Never invoked at runtime.
+    /// Leading underscore signals "compile-only smoke test, never call".
     @inline(never) static func _clientSurfaceSmokeTest(_ client: PrototypeServer.Client) throws {
         // Primary
         _ = try client.greet(name: "")
@@ -105,4 +107,5 @@ struct PrototypeRunner {
         _ = try client.schedulingPrompt(person: "")
         #endif
     }
+    // swiftlint:enable identifier_name
 }

@@ -25,6 +25,7 @@ final class DefaultValueFunctions {
     /// - Parameter a: First number
     /// - Parameter b: Second number with default value
     @MCPTool
+    // swiftlint:disable:next identifier_name
     func intDefault(a: Int, b: Int = 42) -> Int {
         return a + b
     }
@@ -62,6 +63,7 @@ final class DefaultValueFunctions {
     /// - Parameter b: Second parameter with default value
     /// - Parameter c: Third parameter with default value
     @MCPTool
+    // swiftlint:disable:next identifier_name
     func multipleDefaults(a: String, b: Int = 10, c: Bool = false) -> String {
         return "\(a), \(b), \(c)"
     }

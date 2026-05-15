@@ -1,5 +1,6 @@
 import Foundation
 
+// swiftlint:disable type_name
 /// Implement to receive notifications when a subscribed resource has been updated.
 public protocol MCPServerProxyResourceNotificationHandling: AnyObject, Sendable {
     /// Called when a subscribed resource has been updated on the server.
@@ -8,3 +9,4 @@ public protocol MCPServerProxyResourceNotificationHandling: AnyObject, Sendable 
     ///   - uri: The URI of the resource that was updated.
     func mcpServerProxy(_ proxy: MCPServerProxy, resourceUpdatedAt uri: URL) async
 }
+// swiftlint:enable type_name

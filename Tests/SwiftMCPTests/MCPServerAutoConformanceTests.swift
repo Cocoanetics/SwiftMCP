@@ -9,6 +9,7 @@ class AutoConformingCalculator {
     /// - Parameter b: Second number to add
     /// - Returns: The sum of a and b
     @MCPTool
+    // swiftlint:disable:next identifier_name
     func add(a: Int, b: Int) -> Int {
         return a + b
     }

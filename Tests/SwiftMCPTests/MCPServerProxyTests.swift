@@ -337,6 +337,7 @@ final class LocalStdioServer: Sendable {
     }
 
     @MCPResource("users://{user_id}/profile")
+    // swiftlint:disable:next identifier_name
     func userProfile(user_id: Int) -> String {
         "profile-\(user_id)"
     }

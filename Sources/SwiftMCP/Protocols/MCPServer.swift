@@ -517,7 +517,7 @@ public extension MCPServer {
 
             let result: JSONDictionary = [
                 "completion": .object([
-                    "values": try! JSONValue(encoding: comp.values),
+                    "values": .array(comp.values.map { .string($0) }),
                     "total": .integer(comp.total ?? comp.values.count),
                     "hasMore": .bool(comp.hasMore ?? false)
                 ])
@@ -542,7 +542,7 @@ public extension MCPServer {
 
             let result: JSONDictionary = [
                 "completion": .object([
-                    "values": try! JSONValue(encoding: comp.values),
+                    "values": .array(comp.values.map { .string($0) }),
                     "total": .integer(comp.total ?? comp.values.count),
                     "hasMore": .bool(comp.hasMore ?? false)
                 ])

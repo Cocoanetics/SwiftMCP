@@ -31,6 +31,7 @@ class TripleSlashDocumentation {
     /// - Parameter c: A boolean parameter
     /// - Returns: A string description
     @MCPTool
+    // swiftlint:disable:next identifier_name
     func basicTypes(a: Int, b: String, c: Bool) -> String {
         return "Basic types: \(a), \(b), \(c)"
     }
@@ -60,6 +61,7 @@ class MultiLineDocumentation {
      - Parameter b: Second parameter
      */
     @MCPTool
+    // swiftlint:disable:next identifier_name
     func multiLineDoc(a: Int, b: Int) -> Int {
         return a + b
     }

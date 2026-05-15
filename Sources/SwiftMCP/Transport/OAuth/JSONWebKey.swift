@@ -3,6 +3,9 @@ import Foundation
 import X509
 import _CryptoExtras
 
+// swiftlint:disable identifier_name
+// Field names (`n`, `e`, `kty`, `kid`, `use`, `alg`, `x5c`) match RFC 7517 JWK wire format.
+
 /// JSON Web Key (JWK) for signature verification according to RFC 7517
 public struct JSONWebKey: Codable, Sendable {
     /// The key type (e.g., "RSA", "EC", "oct")
@@ -36,7 +39,7 @@ public struct JSONWebKey: Codable, Sendable {
     ///   - e: Optional RSA exponent
     ///   - x5c: Optional X.509 certificate chain
     public init(kty: String, kid: String, use: String? = nil, alg: String? = nil,
-               n: String? = nil, e: String? = nil, x5c: [String]? = nil) {
+                n: String? = nil, e: String? = nil, x5c: [String]? = nil) {
         self.kty = kty
         self.kid = kid
         self.use = use
@@ -76,3 +79,4 @@ public struct JSONWebKey: Codable, Sendable {
         return try _RSA.Signing.PublicKey(n: modulusData, e: exponentData)
     }
 }
+// swiftlint:enable identifier_name

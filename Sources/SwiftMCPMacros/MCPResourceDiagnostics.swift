@@ -19,8 +19,8 @@ enum MCPResourceDiagnostic: DiagnosticMessage {
             return "The MCPResource macro can only be applied to functions"
         case .requiresStringLiteral:
             return "URI template must be string or string array"
-        case .missingParameterForPlaceholder(let ph):
-            return "Missing parameter for placeholder '{\(ph)}'"
+        case .missingParameterForPlaceholder(let placeholder):
+            return "Missing parameter for placeholder '{\(placeholder)}'"
         case .unknownPlaceholder(let name):
             return "Unknown placeholder '{\(name)}' – not present in template"
         case .optionalParameterNeedsDefault(let name):

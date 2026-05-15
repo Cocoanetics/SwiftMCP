@@ -33,20 +33,20 @@ func parseArgs(_ argv: [String]) -> ToolArgs {
     var moduleName = ""
     var outputPath = ""
     var inputs: [String] = []
-    var i = 1
-    while i < argv.count {
-        let arg = argv[i]
+    var index = 1
+    while index < argv.count {
+        let arg = argv[index]
         switch arg {
         case "--module":
-            i += 1
-            moduleName = argv[i]
+            index += 1
+            moduleName = argv[index]
         case "--output":
-            i += 1
-            outputPath = argv[i]
+            index += 1
+            outputPath = argv[index]
         default:
             inputs.append(arg)
         }
-        i += 1
+        index += 1
     }
     return ToolArgs(moduleName: moduleName, outputPath: outputPath, inputs: inputs)
 }
@@ -140,6 +140,7 @@ final class ExtensionFinder: SyntaxVisitor {
                 case "MCPTool":
                     var wire = funcDecl.name.text
                     if let argList = attrSyntax.arguments?.as(LabeledExprListSyntax.self) {
+                        // swiftlint:disable:next identifier_name
                         for a in argList where a.label?.text == "name" {
                             if let lit = a.expression.as(StringLiteralExprSyntax.self) {
                                 wire = lit.segments.description
@@ -150,12 +151,13 @@ final class ExtensionFinder: SyntaxVisitor {
                 case "MCPResource":
                     var templates: [String] = []
                     if let argList = attrSyntax.arguments?.as(LabeledExprListSyntax.self) {
+                        // swiftlint:disable:next identifier_name
                         for a in argList where a.label == nil {
                             if let lit = a.expression.as(StringLiteralExprSyntax.self) {
                                 templates.append(lit.segments.description)
                             } else if let arr = a.expression.as(ArrayExprSyntax.self) {
-                                for el in arr.elements {
-                                    if let lit = el.expression.as(StringLiteralExprSyntax.self) {
+                                for element in arr.elements {
+                                    if let lit = element.expression.as(StringLiteralExprSyntax.self) {
                                         templates.append(lit.segments.description)
                                     }
                                 }
@@ -263,16 +265,16 @@ func parseDocComment(trivia: Trivia) -> (description: String?, params: [String: 
 
 // MARK: - Codegen
 
-func sanitizeIdentifier(_ s: String) -> String {
-    guard !s.isEmpty else { return "Module" }
+func sanitizeIdentifier(_ raw: String) -> String {
+    guard !raw.isEmpty else { return "Module" }
     var out = ""
     var first = true
-    for ch in s {
+    for character in raw {
         if first {
-            if ch.isLetter || ch == "_" { out.append(ch) } else { out.append("_") }
+            if character.isLetter || character == "_" { out.append(character) } else { out.append("_") }
             first = false
         } else {
-            if ch.isLetter || ch.isNumber || ch == "_" { out.append(ch) } else { out.append("_") }
+            if character.isLetter || character.isNumber || character == "_" { out.append(character) } else { out.append("_") }
         }
     }
     return out.isEmpty ? "Module" : out
@@ -491,17 +493,17 @@ func emitPromptClientMethod(_ method: DiscoveredMethod) -> String {
 
 // MARK: - Codegen helpers
 
-func parameterSignature(_ p: DiscoveredParameter) -> String {
+func parameterSignature(_ param: DiscoveredParameter) -> String {
     let label: String
-    if p.label == "_" {
-        label = "_ \(p.name)"
-    } else if p.label != p.name {
-        label = "\(p.label) \(p.name)"
+    if param.label == "_" {
+        label = "_ \(param.name)"
+    } else if param.label != param.name {
+        label = "\(param.label) \(param.name)"
     } else {
-        label = p.name
+        label = param.name
     }
-    var sig = "\(label): \(p.typeString)"
-    if let dv = p.defaultValue, !dv.isEmpty { sig += " = \(dv)" }
+    var sig = "\(label): \(param.typeString)"
+    if let defaultValue = param.defaultValue, !defaultValue.isEmpty { sig += " = \(defaultValue)" }
     return sig
 }
 
@@ -515,12 +517,12 @@ func effectSpecifiers(isAsync: Bool, throwsKeyword: String) -> String {
 func encodedArgumentsLines(parameters: [DiscoveredParameter], indent: String) -> String {
     guard !parameters.isEmpty else { return "" }
     var out = "\(indent)var arguments: JSONDictionary = [:]\n"
-    for p in parameters {
-        let encode = "try MCPClientArgumentEncoder.encode(\(p.name))"
-        if p.isOptional {
-            out.append("\(indent)if let \(p.name) { arguments[\"\(p.name)\"] = \(encode) }\n")
+    for param in parameters {
+        let encode = "try MCPClientArgumentEncoder.encode(\(param.name))"
+        if param.isOptional {
+            out.append("\(indent)if let \(param.name) { arguments[\"\(param.name)\"] = \(encode) }\n")
         } else {
-            out.append("\(indent)arguments[\"\(p.name)\"] = \(encode)\n")
+            out.append("\(indent)arguments[\"\(param.name)\"] = \(encode)\n")
         }
     }
     return out
@@ -533,17 +535,17 @@ func docCommentBlock(_ method: DiscoveredMethod) -> String {
             lines.append(String(line))
         }
     }
-    for p in method.parameters {
-        if let pd = method.paramDocs[p.name], !pd.isEmpty {
-            lines.append("- Parameter \(p.name): \(pd)")
+    for param in method.parameters {
+        if let paramDoc = method.paramDocs[param.name], !paramDoc.isEmpty {
+            lines.append("- Parameter \(param.name): \(paramDoc)")
         }
     }
-    if let r = method.returnsDoc, !r.isEmpty {
-        lines.append("- Returns: \(r)")
+    if let returnsDoc = method.returnsDoc, !returnsDoc.isEmpty {
+        lines.append("- Returns: \(returnsDoc)")
     }
     guard !lines.isEmpty else { return "" }
     var out = "    /**\n"
-    for l in lines { out.append("     \(l)\n") }
+    for line in lines { out.append("     \(line)\n") }
     out.append("     */\n")
     return out
 }

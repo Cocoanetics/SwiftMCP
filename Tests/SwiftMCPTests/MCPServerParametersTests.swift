@@ -5,6 +5,7 @@ import Foundation
 @MCPServer(name: "CustomCalculator", version: "2.0")
 final class CustomNameCalculator: MCPServer {
     @MCPTool(description: "Simple addition")
+    // swiftlint:disable:next identifier_name
     func add(a: Int, b: Int) -> Int {
         return a + b
     }
@@ -13,6 +14,7 @@ final class CustomNameCalculator: MCPServer {
 @MCPServer
 final class DefaultNameCalculator: MCPServer {
     @MCPTool(description: "Simple addition")
+    // swiftlint:disable:next identifier_name
     func add(a: Int, b: Int) -> Int {
         return a + b
     }

@@ -128,6 +128,9 @@ public struct OAuthConfiguration: Sendable {
 
     // MARK: - Metadata helpers
 
+    // swiftlint:disable identifier_name
+    // Field names match RFC 8414 / OAuth 2.0 Protected Resource Metadata JSON wire format.
+
     /// Metadata for the `/.well-known/oauth-authorization-server` endpoint.
     public struct AuthorizationServerMetadata: Encodable {
         public let issuer: String
@@ -150,6 +153,8 @@ public struct OAuthConfiguration: Sendable {
         public let jwks_uri: String?
         public let scopes_supported: [String]
     }
+
+    // swiftlint:enable identifier_name
 
     public func authorizationServerMetadata() -> AuthorizationServerMetadata {
         let regEndpoint = registrationEndpoint?.absoluteString

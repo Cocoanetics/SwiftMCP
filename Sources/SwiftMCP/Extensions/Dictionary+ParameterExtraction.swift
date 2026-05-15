@@ -1,5 +1,9 @@
 import Foundation
 
+// swiftlint:disable force_cast
+// File-wide: force casts here are generic type-dispatch (each `as! T` is preceded
+// by a `T.self == X.self` guard, making the cast provably safe).
+
 // MARK: - String to Decodable Conversion
 extension String {
     func decode<T: Decodable>(_ type: T.Type, using decoder: JSONDecoder = MCPJSONCoding.makeDecoder()) throws -> T {
@@ -515,3 +519,4 @@ private func jsonTypeDescription(_ value: JSONValue) -> String {
         return "Object"
     }
 }
+// swiftlint:enable force_cast

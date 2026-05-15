@@ -323,8 +323,8 @@ struct RFC6570ExtractionTests {
         #expect(variables != nil)
         #expect(variables?.count == 20)
 
-        for i in 1...20 {
-            #expect(variables?["var\(i)"] == "\(i)")
+        for index in 1...20 {
+            #expect(variables?["var\(index)"] == "\(index)")
         }
     }
 }

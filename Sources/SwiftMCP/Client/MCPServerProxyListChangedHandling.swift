@@ -8,6 +8,7 @@ public protocol MCPServerProxyToolsListChangedHandling: AnyObject, Sendable {
     func mcpServerProxyToolsListDidChange(_ proxy: MCPServerProxy) async
 }
 
+// swiftlint:disable type_name
 /// Implement to receive notifications when the server's resource list changes.
 public protocol MCPServerProxyResourcesListChangedHandling: AnyObject, Sendable {
     /// Called when the server notifies that its resource list has changed.
@@ -15,6 +16,7 @@ public protocol MCPServerProxyResourcesListChangedHandling: AnyObject, Sendable 
     ///   - proxy: The proxy that received the notification.
     func mcpServerProxyResourcesListDidChange(_ proxy: MCPServerProxy) async
 }
+// swiftlint:enable type_name
 
 /// Implement to receive notifications when the server's prompt list changes.
 public protocol MCPServerProxyPromptsListChangedHandling: AnyObject, Sendable {

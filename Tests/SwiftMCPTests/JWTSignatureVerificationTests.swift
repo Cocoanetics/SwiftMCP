@@ -21,6 +21,8 @@ struct JWTSignatureVerificationTests {
         let keys: [JWK]
     }
 
+    // swiftlint:disable identifier_name
+    // Field names match RFC 7517 JWK wire format.
     struct JWK: Codable {
         let kty: String
         let kid: String
@@ -30,6 +32,7 @@ struct JWTSignatureVerificationTests {
         let e: String  // RSA exponent
         let x5c: [String]?  // X.509 certificate chain
     }
+    // swiftlint:enable identifier_name
 
     @Test("Verify JWT signature using CryptoKit framework")
     func testJWTSignatureVerification() async throws {

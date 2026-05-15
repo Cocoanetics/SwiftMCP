@@ -105,6 +105,7 @@ func testPascalCaseExplicitOverride() {
 func testSnakeCaseCallTool() async throws {
     let server = SnakeCaseServer()
     let result = try await server.callTool("list_windows", arguments: [:])
+    // swiftlint:disable:next force_cast
     let array = result as! [String]
     #expect(array == [])
 }
@@ -113,6 +114,7 @@ func testSnakeCaseCallTool() async throws {
 func testSnakeCaseCallToolExplicitOverride() async throws {
     let server = SnakeCaseServer()
     let result = try await server.callTool("healthcheck", arguments: [:])
+    // swiftlint:disable:next force_cast
     let str = result as! String
     #expect(str == "ok")
 }

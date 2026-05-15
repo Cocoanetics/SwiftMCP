@@ -33,6 +33,7 @@ actor ClientTestServer {
     /// - Parameter b: Second value.
     /// - Returns: The sum.
     @MCPTool
+    // swiftlint:disable:next identifier_name
     func addInts(a: Int, b: Int) -> Int {
         a + b
     }
@@ -42,6 +43,7 @@ actor ClientTestServer {
     /// - Parameter b: Second value.
     /// - Returns: The sum.
     @MCPTool
+    // swiftlint:disable:next identifier_name
     func addDoubles(a: Double, b: Double) async -> Double {
         a + b
     }
@@ -51,6 +53,7 @@ actor ClientTestServer {
     /// - Parameter b: Multiplier.
     /// - Returns: The product.
     @MCPTool
+    // swiftlint:disable:next identifier_name
     func multiply(a: Int, b: Int = 2) -> Int {
         a * b
     }
@@ -113,6 +116,7 @@ actor ClientTestServer {
     /// - Parameter user_id: The user identifier.
     /// - Returns: A user profile summary.
     @MCPResource("users://{user_id}/profile")
+    // swiftlint:disable:next identifier_name
     func userProfile(user_id: Int) async -> String {
         "Profile \(user_id)"
     }
@@ -129,6 +133,7 @@ actor ClientTestServer {
     /// - Parameter lang: Optional language code.
     /// - Returns: A localized user profile summary.
     @MCPResource(["users://{user_id}/profile", "users://{user_id}/profile/localized?lang={lang}"])
+    // swiftlint:disable:next identifier_name
     func versionedUserProfile(user_id: Int, lang: String? = nil) async -> String {
         if let lang {
             return "Profile \(user_id) [\(lang)]"

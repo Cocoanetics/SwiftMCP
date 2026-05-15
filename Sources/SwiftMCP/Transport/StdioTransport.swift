@@ -158,8 +158,8 @@ public final class StdioTransport: Transport, @unchecked Sendable {
         precondition(Session.current != nil)
         let currentSession = Session.current!
         let sameTransport: Bool
-        if let t = await currentSession.transport {
-            sameTransport = t === self
+        if let transport = await currentSession.transport {
+            sameTransport = transport === self
         } else {
             sameTransport = false
         }
@@ -169,8 +169,7 @@ public final class StdioTransport: Transport, @unchecked Sendable {
         logger.trace("STDOUT:\n\n\(string)")
 
         var out = data
-        let nl = "\n".data(using: .utf8)!
-        out.append(nl)
+        out.append(Data("\n".utf8))
 
         try FileHandle.standardOutput.write(contentsOf: out)
     }

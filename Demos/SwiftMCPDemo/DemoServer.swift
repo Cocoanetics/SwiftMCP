@@ -140,6 +140,7 @@ actor DemoServer {
     /// - Parameter b: Second number to add
     /// - Returns: The sum of a and b
     @MCPTool(description: "Custom description: Performs addition of two numbers", hints: [.readOnly, .idempotent])
+    // swiftlint:disable:next identifier_name
     func add(a: Int, b: Int) async -> Int {
         await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
             "function": "add",
@@ -154,6 +155,7 @@ actor DemoServer {
     /// - Parameter b: Number to subtract
     /// - Returns: The difference between a and b
     @MCPTool(hints: [.readOnly, .idempotent])
+    // swiftlint:disable:next identifier_name
     func subtract(a: Int = 5, b: Int = 3) async -> Int {
         await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
             "function": "subtract",
@@ -169,6 +171,7 @@ actor DemoServer {
      - Returns: A string representation of the array
      */
     @MCPTool(description: "Custom description: Tests array processing", hints: [.readOnly, .idempotent])
+    // swiftlint:disable:next identifier_name
     func testArray(a: [Int] = [1, 2, 3]) async -> String {
         await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
             "function": "testArray",
@@ -185,6 +188,7 @@ actor DemoServer {
      - Returns: The product of a and b
      */
     @MCPTool(hints: [.readOnly, .idempotent])
+    // swiftlint:disable:next identifier_name
     func multiply(a: Int, b: Int) async -> Int {
         await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
             "function": "multiply",
@@ -311,6 +315,7 @@ actor DemoServer {
     /// Returns a greeting for a user by ID
     /// - Parameter user_id: The user's unique identifier
     @MCPResource("users://{user_id}/greeting")
+    // swiftlint:disable:next identifier_name
     func getUserGreeting(user_id: Int) async -> String {
         await Session.current?.sendLogNotification(LogMessage(level: .info, data: [
             "function": "getUserGreeting",

@@ -161,6 +161,7 @@ extension JSONSchema {
 }
 
 // Extension to add additionalProperties:false to all objects, for use with structured results
+// swiftlint:disable identifier_name
 extension JSONSchema {
     /// Returns a new schema with all required fields removed
     public var addingAdditionalPropertiesRestrictionToObjects: JSONSchema {
@@ -184,3 +185,4 @@ extension JSONSchema {
         }
     }
 }
+// swiftlint:enable identifier_name

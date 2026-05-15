@@ -107,8 +107,8 @@ public enum NamingConverter {
         var current = ""
         let chars = Array(string)
 
-        for i in 0..<chars.count {
-            let char = chars[i]
+        for index in 0..<chars.count {
+            let char = chars[index]
 
             if char.isUppercase {
                 if current.isEmpty {
@@ -117,7 +117,7 @@ public enum NamingConverter {
                 } else if current.last?.isUppercase == true {
                     // Continuing an uppercase run (acronym)
                     // Check if this is the last uppercase before a lowercase transition
-                    let nextIsLower = (i + 1 < chars.count) && chars[i + 1].isLowercase
+                    let nextIsLower = (index + 1 < chars.count) && chars[index + 1].isLowercase
                     if nextIsLower {
                         // This uppercase starts a new word (end of acronym)
                         words.append(current.lowercased())

@@ -370,6 +370,8 @@ public extension Array where Element == JSONValue {
     }
 }
 
+// Leading underscore marks this as an internal, unstable type-erasing wrapper.
+// swiftlint:disable:next type_name
 struct _JSONValueOpaqueEncodable: Encodable {
     private let encodeImpl: (Encoder) throws -> Void
 

@@ -313,8 +313,8 @@ MCPPromptMetadata(
 
         var path = ""
         for segment in stringLit.segments {
-            if let s = segment.as(StringSegmentSyntax.self) {
-                path.append(s.content.text)
+            if let stringSegment = segment.as(StringSegmentSyntax.self) {
+                path.append(stringSegment.content.text)
             }
         }
         guard !path.isEmpty else { return nil }
@@ -349,21 +349,21 @@ enum MCPExtensionNaming {
         return sanitizeIdentifier(stem)
     }
 
-    private static func sanitizeIdentifier(_ s: String) -> String {
-        guard !s.isEmpty else { return "Extension" }
+    private static func sanitizeIdentifier(_ raw: String) -> String {
+        guard !raw.isEmpty else { return "Extension" }
         var out = ""
         var first = true
-        for ch in s {
+        for character in raw {
             if first {
-                if ch.isLetter || ch == "_" {
-                    out.append(ch)
+                if character.isLetter || character == "_" {
+                    out.append(character)
                 } else {
                     out.append("_")
                 }
                 first = false
             } else {
-                if ch.isLetter || ch.isNumber || ch == "_" {
-                    out.append(ch)
+                if character.isLetter || character.isNumber || character == "_" {
+                    out.append(character)
                 } else {
                     out.append("_")
                 }

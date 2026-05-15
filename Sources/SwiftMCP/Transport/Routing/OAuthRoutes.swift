@@ -110,8 +110,8 @@ extension HTTPSSETransport {
 			scheme = "http"
 		}
 
-		if let forwardedPort = request.header("X-Forwarded-Port"), let p = Int(forwardedPort) {
-			port = p
+		if let forwardedPort = request.header("X-Forwarded-Port"), let parsedPort = Int(forwardedPort) {
+			port = parsedPort
 		} else {
 			port = self.port
 		}
@@ -280,10 +280,10 @@ extension HTTPSSETransport {
 
 					let expiresIn = tokenResponse.expiresIn ?? (24 * 60 * 60)
 
-					await sessionManager.session(id: sessionUUID).work { s in
-						await s.setAccessToken(tokenResponse.accessToken)
-						await s.setAccessTokenExpiry(Date().addingTimeInterval(TimeInterval(expiresIn)))
-						await s.setIDToken(tokenResponse.idToken)
+					await sessionManager.session(id: sessionUUID).work { session in
+						await session.setAccessToken(tokenResponse.accessToken)
+						await session.setAccessTokenExpiry(Date().addingTimeInterval(TimeInterval(expiresIn)))
+						await session.setIDToken(tokenResponse.idToken)
 					}
 
 					if let oauthConfiguration {

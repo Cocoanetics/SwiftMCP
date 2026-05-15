@@ -653,17 +653,17 @@ private struct RFC6570TemplateExtractor {
         if variables.count == 1, let first = variables.first, case .explode = first.modifier {
             var segValue = ""
             while currentIndex < url.endIndex {
-                let ch = url[currentIndex]
-                if ch == "/" || ch == "?" || ch == "#" {
-                    segValue.append(ch == "/" ? "," : "")
-                    if ch == "/" {
+                let character = url[currentIndex]
+                if character == "/" || character == "?" || character == "#" {
+                    segValue.append(character == "/" ? "," : "")
+                    if character == "/" {
                         currentIndex = url.index(after: currentIndex)
                         consumedLength += 1
                         continue
                     }
                     break
                 }
-                segValue.append(ch)
+                segValue.append(character)
                 currentIndex = url.index(after: currentIndex)
                 consumedLength += 1
             }

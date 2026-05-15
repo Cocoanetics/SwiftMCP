@@ -16,9 +16,9 @@ extension Data {
         var padded = source.replacingOccurrences(of: "-", with: "+")
                            .replacingOccurrences(of: "_", with: "/")
         padded += String(repeating: "=", count: (4 - padded.count % 4) % 4)
-        guard let d = Data(base64Encoded: padded) else {
+        guard let decoded = Data(base64Encoded: padded) else {
             throw JWTError.invalidBase64
         }
-        self = d
+        self = decoded
     }
 }

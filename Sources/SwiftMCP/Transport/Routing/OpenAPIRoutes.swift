@@ -113,7 +113,7 @@ extension HTTPSSETransport {
 
 		if case .unauthorized(let message) = await authorize(token, sessionID: sessionID) {
 			let err = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32000, message: "Unauthorized: \(message)"))
-			let data = try! JSONEncoder().encode(err)
+			let data = (try? JSONEncoder().encode(err)) ?? Data()
 			return RouteResponse(status: .unauthorized, headers: [("Content-Type", "application/json")], body: data)
 		}
 
@@ -207,7 +207,7 @@ extension HTTPSSETransport {
 				error: .init(code: -32000, message: localizedDescription, data: errorData)
 			)
 
-			let data = try! JSONEncoder().encode(err)
+			let data = (try? JSONEncoder().encode(err)) ?? Data()
 
 			var status: HTTPStatus = .badRequest
 			if let mcpError = error as? MCPToolError, case .unknownTool = mcpError {

@@ -116,9 +116,9 @@ public struct MCPResourceMacro: PeerMacro {
             wrapperParamDetails.append((name: parsedParam.name, label: parsedParam.label, type: parsedParam.typeString))
         }
 
-        for ph in allPlaceholders {
-            if !functionParamNames.contains(ph) {
-                let diag = Diagnostic(node: Syntax(node), message: MCPResourceDiagnostic.missingParameterForPlaceholder(placeholder: ph))
+        for placeholder in allPlaceholders {
+            if !functionParamNames.contains(placeholder) {
+                let diag = Diagnostic(node: Syntax(node), message: MCPResourceDiagnostic.missingParameterForPlaceholder(placeholder: placeholder))
                 context.diagnose(diag)
             }
         }

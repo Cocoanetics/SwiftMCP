@@ -19,6 +19,7 @@ import PrototypeServerLib
 extension PrototypeServer {
     /// Subtract b from a.
     @MCPTool
+    // swiftlint:disable:next identifier_name
     public func subtract(a: Int, b: Int) -> Int {
         a - b
     }

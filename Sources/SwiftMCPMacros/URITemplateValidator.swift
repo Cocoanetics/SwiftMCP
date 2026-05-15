@@ -129,11 +129,11 @@ struct URITemplateValidator {
     private static func validateExpressions(in template: String) -> URITemplateValidationResult {
         var level = 1
         var braceDepth = 0
-        var i = template.startIndex
+        var cursor = template.startIndex
         var allVariables: [String] = []
 
-        while i < template.endIndex {
-            let char = template[i]
+        while cursor < template.endIndex {
+            let char = template[cursor]
 
             if char == "{" {
                 braceDepth += 1
@@ -147,11 +147,11 @@ struct URITemplateValidator {
                 }
 
                 // Find the closing brace
-                let expressionStart = template.index(after: i)
+                let expressionStart = template.index(after: cursor)
                 guard let closingBrace = template[expressionStart...].firstIndex(of: "}") else {
                     return URITemplateValidationResult(
                         isValid: false,
-                        error: .invalidURITemplate(reason: "Unclosed expression - missing '}' for expression starting at position \(template.distance(from: template.startIndex, to: i))"),
+                        error: .invalidURITemplate(reason: "Unclosed expression - missing '}' for expression starting at position \(template.distance(from: template.startIndex, to: cursor))"),
                         level: 0,
                         variables: allVariables
                     )
@@ -170,7 +170,7 @@ struct URITemplateValidator {
 
                 level = max(level, expressionValidation.level)
                 allVariables.append(contentsOf: expressionValidation.variables)
-                i = template.index(after: closingBrace)
+                cursor = template.index(after: closingBrace)
                 braceDepth = 0
 
             } else if char == "}" {
@@ -181,7 +181,7 @@ struct URITemplateValidator {
                     variables: allVariables
                 )
             } else {
-                i = template.index(after: i)
+                cursor = template.index(after: cursor)
             }
         }
 

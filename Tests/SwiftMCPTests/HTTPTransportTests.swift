@@ -1,3 +1,7 @@
+// swiftlint:disable force_cast
+// Test-only: HTTP responses are known to be `HTTPURLResponse` and decoded JSON
+// payloads are known shapes. Force casts keep test code direct and readable.
+
 import Testing
 import Foundation
 #if canImport(FoundationNetworking)
@@ -899,3 +903,4 @@ private final class Box<T: Sendable>: @unchecked Sendable {
 	var value: T
 	init(_ value: T) { self.value = value }
 }
+// swiftlint:enable force_cast

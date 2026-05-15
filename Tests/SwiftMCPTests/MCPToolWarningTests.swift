@@ -19,6 +19,7 @@ final class MissingDescriptions {
     // Has documentation but no description line
     /// - Parameter a: A parameter
     @MCPTool
+    // swiftlint:disable:next identifier_name
     func missingDescription(a: Int) {}
 
     // Has description parameter

@@ -18,6 +18,7 @@ actor DemoResourceTestServer {
 
     /// Get user information by ID
     @MCPResource("users://profile/{user_id}", mimeType: "application/json")
+    // swiftlint:disable:next identifier_name
     func getUser(user_id: Int) -> String {
         return """
         {
@@ -53,6 +54,7 @@ actor DemoResourceTestServer {
 
     /// Check if a feature is enabled
     @MCPResource("features://{feature_name}/enabled")
+    // swiftlint:disable:next identifier_name
     func isFeatureEnabled(feature_name: String) -> Bool {
         let enabledFeatures = ["dark_mode", "beta_ui", "advanced_search"]
         return enabledFeatures.contains(feature_name.lowercased())
