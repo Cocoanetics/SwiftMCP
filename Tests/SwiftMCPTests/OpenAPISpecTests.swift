@@ -213,7 +213,7 @@ func testComplexFunctionSpec() {
 
     // Check request body
     guard let requestBody = operation.requestBody,
-          let _ = requestBody.content["application/json"] else {
+          requestBody.content["application/json"] != nil else {
         #expect(Bool(false), "Request body or JSON content not found")
         return
     }

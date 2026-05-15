@@ -40,6 +40,7 @@ struct OSLogHandler: LogHandler {
     }
 
     // Required method for LogHandler protocol
+    // swiftlint:disable:next function_parameter_count
     func log(level: Logging.Logger.Level, message: Logging.Logger.Message, metadata: Logging.Logger.Metadata?, source: String, file: String, function: String, line: UInt) {
         // Map Swift Logging levels to OSLog types
         let type: OSLogType

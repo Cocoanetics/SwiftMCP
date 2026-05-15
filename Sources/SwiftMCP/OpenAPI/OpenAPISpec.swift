@@ -57,6 +57,7 @@ struct OpenAPISpec: Codable {
         /// If the method requires extra confirmation
         let isConsequential: Bool
 
+        // swiftlint:disable:next nesting
         private enum CodingKeys: String, CodingKey {
             case summary
             case operationId

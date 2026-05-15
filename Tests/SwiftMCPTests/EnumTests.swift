@@ -19,8 +19,8 @@ enum Status: String, CaseIterable {
 
 // Enum with custom string representation
 enum SortOrder: String, CaseIterable, CustomStringConvertible {
-    case ascending = "ascending"
-    case descending = "descending"
+    case ascending
+    case descending
 
 	var description: String {
         switch self {

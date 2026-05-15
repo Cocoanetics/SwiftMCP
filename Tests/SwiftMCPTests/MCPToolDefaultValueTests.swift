@@ -1,14 +1,12 @@
 import Testing
 @testable import SwiftMCP
 
-/**
- This test suite verifies that the MCPTool macro correctly handles default values for parameters.
- 
- It tests:
- 1. Parameters with default values are correctly marked as optional (not required)
- 2. Parameters with default values are stored in the JSON schema
- 3. Multiple parameters with default values in the same function are handled correctly
- */
+// This test suite verifies that the MCPTool macro correctly handles default values for parameters.
+//
+// It tests:
+// 1. Parameters with default values are correctly marked as optional (not required)
+// 2. Parameters with default values are stored in the JSON schema
+// 3. Multiple parameters with default values in the same function are handled correctly
 
 // MARK: - Test Classes
 

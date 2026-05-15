@@ -1217,6 +1217,7 @@ public final actor MCPServerProxy {
         }
 
         @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, macCatalyst 15.0, *)
+        // swiftlint:disable:next function_parameter_count
         private func streamableRequestResponseApple(
             endpointURL: URL,
             sseConfig: MCPServerSseConfig,
@@ -1291,6 +1292,7 @@ public final actor MCPServerProxy {
         }
 
         @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, macCatalyst 15.0, *)
+        // swiftlint:disable:next function_parameter_count
         private func readStreamableSSEApple(
             asyncBytes: URLSession.AsyncBytes,
             endpointURL: URL,
@@ -1384,6 +1386,7 @@ public final actor MCPServerProxy {
             )
         }
 
+        // swiftlint:disable:next function_parameter_count
         private func streamableRequestResponseLinux(
             endpointURL: URL,
             sseConfig: MCPServerSseConfig,
@@ -1461,6 +1464,7 @@ public final actor MCPServerProxy {
             }
         }
 
+        // swiftlint:disable:next function_parameter_count
         private func readStreamableSSELinux(
             delegate: SSEStreamingDelegate,
             endpointURL: URL,

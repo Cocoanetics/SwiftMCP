@@ -231,10 +231,8 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
             return false
         }
 
-        for binding in property.bindings {
-            if binding.accessorBlock != nil {
-                return false
-            }
+        for binding in property.bindings where binding.accessorBlock != nil {
+            return false
         }
 
         return true
@@ -292,19 +290,17 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
                     for member in enumDecl.memberBlock.members {
                         guard let enumCase = member.decl.as(EnumCaseDeclSyntax.self) else { continue }
 
-                        for element in enumCase.elements {
-                            if element.name.text == propertyName {
-                                // Found matching case, check for raw value
-                                if let rawValue = element.rawValue?.value {
-                                    // Handle string literal
-                                    if let stringLiteral = rawValue.as(StringLiteralExprSyntax.self) {
-                                        return stringLiteral.segments.description
-                                            .trimmingCharacters(in: .init(charactersIn: "\""))
-                                    }
+                        for element in enumCase.elements where element.name.text == propertyName {
+                            // Found matching case, check for raw value
+                            if let rawValue = element.rawValue?.value {
+                                // Handle string literal
+                                if let stringLiteral = rawValue.as(StringLiteralExprSyntax.self) {
+                                    return stringLiteral.segments.description
+                                        .trimmingCharacters(in: .init(charactersIn: "\""))
                                 }
-                                // If no raw value, use the case name
-                                return element.name.text
                             }
+                            // If no raw value, use the case name
+                            return element.name.text
                         }
                     }
                 }

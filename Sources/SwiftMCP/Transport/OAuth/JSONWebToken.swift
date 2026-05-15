@@ -81,8 +81,8 @@ public struct JSONWebToken: Sendable {
         ///   - scope: Optional OAuth scopes
         ///   - azp: Optional authorized party
         public init(iss: String? = nil, sub: String? = nil, aud: AudienceValue? = nil,
-                   exp: Date? = nil, nbf: Date? = nil, iat: Date? = nil,
-                   scope: String? = nil, azp: String? = nil) {
+                    exp: Date? = nil, nbf: Date? = nil, iat: Date? = nil,
+                    scope: String? = nil, azp: String? = nil) {
             self.iss = iss
             self.sub = sub
             self.aud = aud

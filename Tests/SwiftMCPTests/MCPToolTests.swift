@@ -2,16 +2,14 @@ import Foundation
 import Testing
 @testable import SwiftMCP
 
-/**
- This test suite verifies that the MCPTool macro correctly extracts documentation and parameter information.
- 
- It tests:
- 1. Extraction of function descriptions from documentation comments
- 2. Extraction of parameter descriptions from documentation comments
- 3. Handling of different documentation styles (triple-slash, multi-line)
- 4. Explicit description overrides
- 5. Handling of different parameter types (basic, complex, optional)
- */
+// This test suite verifies that the MCPTool macro correctly extracts documentation and parameter information.
+//
+// It tests:
+// 1. Extraction of function descriptions from documentation comments
+// 2. Extraction of parameter descriptions from documentation comments
+// 3. Handling of different documentation styles (triple-slash, multi-line)
+// 4. Explicit description overrides
+// 5. Handling of different parameter types (basic, complex, optional)
 
 // MARK: - Test Classes
 

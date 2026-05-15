@@ -81,6 +81,7 @@ public enum JSONRPCMessage: Codable, Sendable {
 
     /// Data structure for JSON-RPC error responses
     public struct JSONRPCErrorResponseData: Codable, Sendable {
+        // swiftlint:disable:next nesting
         /// Represents the error payload containing error details.
         /// Includes an error code and a descriptive message.
         public struct ErrorPayload: Codable, Sendable {

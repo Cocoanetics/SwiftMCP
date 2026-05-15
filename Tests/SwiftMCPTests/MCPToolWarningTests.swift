@@ -1,14 +1,12 @@
 import Testing
 @testable import SwiftMCP
 
-/**
- This test suite verifies that the MCPTool macro correctly handles functions with missing descriptions.
- 
- It tests:
- 1. Functions with parameter documentation but no function description
- 2. Functions with an explicit description parameter
- 3. Functions with a documentation comment containing a description
- */
+// This test suite verifies that the MCPTool macro correctly handles functions with missing descriptions.
+//
+// It tests:
+// 1. Functions with parameter documentation but no function description
+// 2. Functions with an explicit description parameter
+// 3. Functions with a documentation comment containing a description
 
 // MARK: - Test Classes
 

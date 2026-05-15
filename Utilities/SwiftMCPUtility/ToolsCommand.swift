@@ -8,7 +8,7 @@ struct ToolsCommand: AsyncParsableCommand {
         abstract: "List tools from an MCP server",
         discussion: """
           Connect to an MCP server using either HTTP+SSE or stdio and list tools.
-        
+
           Examples:
             SwiftMCPUtility tools --sse http://localhost:8080/sse
             SwiftMCPUtility tools --command "npx -y @modelcontextprotocol/server-filesystem"

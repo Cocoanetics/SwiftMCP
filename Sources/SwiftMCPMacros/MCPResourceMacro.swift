@@ -47,18 +47,16 @@ public struct MCPResourceMacro: PeerMacro {
         }
 
         // Process all unlabeled arguments as templates
-        for arg in argList {
-            if arg.label == nil {
-                if let stringLiteral = arg.expression.as(StringLiteralExprSyntax.self) {
-                    let template = stringLiteral.segments.description
-                    templates.append(template)
-                } else if let arrayExpr = arg.expression.as(ArrayExprSyntax.self) {
-                    // Handle array of templates
-                    for element in arrayExpr.elements {
-                        if let stringLiteral = element.expression.as(StringLiteralExprSyntax.self) {
-                            let template = stringLiteral.segments.description
-                            templates.append(template)
-                        }
+        for arg in argList where arg.label == nil {
+            if let stringLiteral = arg.expression.as(StringLiteralExprSyntax.self) {
+                let template = stringLiteral.segments.description
+                templates.append(template)
+            } else if let arrayExpr = arg.expression.as(ArrayExprSyntax.self) {
+                // Handle array of templates
+                for element in arrayExpr.elements {
+                    if let stringLiteral = element.expression.as(StringLiteralExprSyntax.self) {
+                        let template = stringLiteral.segments.description
+                        templates.append(template)
                     }
                 }
             }
@@ -122,11 +120,9 @@ public struct MCPResourceMacro: PeerMacro {
             wrapperParamDetails.append(WrapperParamDetail(name: parsedParam.name, label: parsedParam.label, type: parsedParam.typeString))
         }
 
-        for placeholder in allPlaceholders {
-            if !functionParamNames.contains(placeholder) {
-                let diag = Diagnostic(node: Syntax(node), message: MCPResourceDiagnostic.missingParameterForPlaceholder(placeholder: placeholder))
-                context.diagnose(diag)
-            }
+        for placeholder in allPlaceholders where !functionParamNames.contains(placeholder) {
+            let diag = Diagnostic(node: Syntax(node), message: MCPResourceDiagnostic.missingParameterForPlaceholder(placeholder: placeholder))
+            context.diagnose(diag)
         }
 
         for funcParamName in functionParamNames {

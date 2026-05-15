@@ -4,28 +4,28 @@ import Foundation
 /// These follow the standard syslog severity levels specified in RFC 5424.
 public enum LogLevel: String, CaseIterable, Codable, Sendable {
     /// Detailed debugging information (function entry/exit points)
-    case debug = "debug"
+    case debug
 
     /// General informational messages (operation progress updates)
-    case info = "info"
+    case info
 
     /// Normal but significant events (configuration changes)
-    case notice = "notice"
+    case notice
 
     /// Warning conditions (deprecated feature usage)
-    case warning = "warning"
+    case warning
 
     /// Error conditions (operation failures)
-    case error = "error"
+    case error
 
     /// Critical conditions (system component failures)
-    case critical = "critical"
+    case critical
 
     /// Action must be taken immediately (data corruption detected)
-    case alert = "alert"
+    case alert
 
     /// System is unusable (complete system failure)
-    case emergency = "emergency"
+    case emergency
 
     /// Returns the numeric priority value for this log level (RFC 5424)
     public var priority: Int {

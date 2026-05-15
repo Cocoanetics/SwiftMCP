@@ -45,6 +45,7 @@ struct AIPluginManifest: Codable {
         /// Instructions for authentication (only for user_http)
         let instructions: String?
 
+        // swiftlint:disable:next nesting
         enum CodingKeys: String, CodingKey {
             case type
             case authorizationType = "authorization_type"

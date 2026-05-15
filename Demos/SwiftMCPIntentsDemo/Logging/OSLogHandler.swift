@@ -22,6 +22,7 @@ struct OSLogHandler: LogHandler {
         self.log = log
     }
 
+    // swiftlint:disable:next function_parameter_count
     func log(level: Logging.Logger.Level, message: Logging.Logger.Message, metadata: Logging.Logger.Metadata?, source: String, file: String, function: String, line: UInt) {
         let type: OSLogType
         switch level {

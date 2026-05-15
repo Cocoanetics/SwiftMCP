@@ -100,6 +100,7 @@ public enum ProxyGenerator {
         serverName.flatMap { pascalCase($0) } ?? "MCPServer"
     }
 
+    // swiftlint:disable:next function_parameter_count
     private static func makeActorSource(
         typeName: String,
         tools: [MCPTool],
@@ -1179,10 +1180,8 @@ public enum ProxyGenerator {
         guard first.isLetter || first == "_" else {
             return false
         }
-        for character in value.dropFirst() {
-            if !(character.isLetter || character.isNumber || character == "_") {
-                return false
-            }
+        for character in value.dropFirst() where !(character.isLetter || character.isNumber || character == "_") {
+            return false
         }
         return true
     }

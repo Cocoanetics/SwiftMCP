@@ -514,10 +514,8 @@ private struct RFC6570TemplateExtractor {
         // Handle multiple variables (comma-separated)
         if variables.count > 1 && value.contains(",") {
             let values = value.split(separator: ",").map(String.init)
-            for (index, variable) in variables.enumerated() {
-                if index < values.count {
-                    result[variable.name] = values[index]
-                }
+            for (index, variable) in variables.enumerated() where index < values.count {
+                result[variable.name] = values[index]
             }
         } else if let firstVariable = variables.first {
             result[firstVariable.name] = value
@@ -579,10 +577,8 @@ private struct RFC6570TemplateExtractor {
         // Handle multiple variables (comma-separated)
         if variables.count > 1 && value.contains(",") {
             let values = value.split(separator: ",").map(String.init)
-            for (index, variable) in variables.enumerated() {
-                if index < values.count {
-                    result[variable.name] = values[index]
-                }
+            for (index, variable) in variables.enumerated() where index < values.count {
+                result[variable.name] = values[index]
             }
         } else if let firstVariable = variables.first {
             result[firstVariable.name] = value
@@ -629,10 +625,8 @@ private struct RFC6570TemplateExtractor {
         // Handle multiple variables (dot-separated)
         if variables.count > 1 && value.contains(".") {
             let values = value.split(separator: ".").map(String.init)
-            for (index, variable) in variables.enumerated() {
-                if index < values.count {
-                    result[variable.name] = values[index]
-                }
+            for (index, variable) in variables.enumerated() where index < values.count {
+                result[variable.name] = values[index]
             }
         } else if let firstVariable = variables.first {
             result[firstVariable.name] = value

@@ -18,6 +18,7 @@ public struct CompleteRequest: Codable, Sendable {
         case prompt(name: String)
         case resource(uri: String)
 
+        // swiftlint:disable:next nesting
         private enum CodingKeys: String, CodingKey { case type, name, uri }
 
         public init(from decoder: Decoder) throws {
