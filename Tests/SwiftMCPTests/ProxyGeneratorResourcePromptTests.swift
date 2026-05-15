@@ -5,45 +5,58 @@ import SwiftMCPUtilityCore
 
 @Suite("Proxy Generator Resource/Prompt Tests", .tags(.proxyGenerator))
 struct ProxyGeneratorResourcePromptTests {
+
+    private func makeDemoResources() -> [SimpleResource] {
+        [
+            SimpleResource(
+                uri: URL(string: "config://app")!,
+                name: "config",
+                description: "Reads the app configuration"
+            )
+        ]
+    }
+
+    private func makeDemoResourceTemplates() -> [SimpleResourceTemplate] {
+        [
+            SimpleResourceTemplate(
+                uriTemplate: "users://{user_id}/profile/localized?locale={lang}",
+                name: "userProfile",
+                description: "Reads a user profile"
+            )
+        ]
+    }
+
+    private func makeDemoPrompts() -> [Prompt] {
+        [
+            Prompt(
+                name: "helloPrompt",
+                description: "Greets the user",
+                arguments: [
+                    MCPParameterInfo(
+                        name: "name",
+                        type: String.self,
+                        description: "Name to greet",
+                        isRequired: true
+                    ),
+                    MCPParameterInfo(
+                        name: "excited",
+                        type: Bool.self,
+                        description: "Whether to add emphasis",
+                        isRequired: false
+                    )
+                ]
+            )
+        ]
+    }
+
     @Test("Generator emits standard resource and prompt helpers only")
     func generatorEmitsStandardResourceAndPromptHelpers() throws {
         let source = ProxyGenerator.generate(
             typeName: "DemoProxy",
             tools: [],
-            resources: [
-                SimpleResource(
-                    uri: URL(string: "config://app")!,
-                    name: "config",
-                    description: "Reads the app configuration"
-                )
-            ],
-            resourceTemplates: [
-                SimpleResourceTemplate(
-                    uriTemplate: "users://{user_id}/profile/localized?locale={lang}",
-                    name: "userProfile",
-                    description: "Reads a user profile"
-                )
-            ],
-            prompts: [
-                Prompt(
-                    name: "helloPrompt",
-                    description: "Greets the user",
-                    arguments: [
-                        MCPParameterInfo(
-                            name: "name",
-                            type: String.self,
-                            description: "Name to greet",
-                            isRequired: true
-                        ),
-                        MCPParameterInfo(
-                            name: "excited",
-                            type: Bool.self,
-                            description: "Whether to add emphasis",
-                            isRequired: false
-                        )
-                    ]
-                )
-            ]
+            resources: makeDemoResources(),
+            resourceTemplates: makeDemoResourceTemplates(),
+            prompts: makeDemoPrompts()
         ).description
 
         #expect(source.contains("public func listResources() async throws -> [SimpleResource]"))

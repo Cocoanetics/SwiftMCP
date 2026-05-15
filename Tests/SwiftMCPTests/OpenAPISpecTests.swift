@@ -95,12 +95,46 @@ func testSimpleFunctionSpec() {
     #expect(response.content?["application/json"] != nil)
 }
 
+private func assertThrowingFunctionRequestBody(_ schema: JSONSchema) {
+    guard case .object(let object, _) = schema else {
+        #expect(Bool(false), "Request body should be an object")
+        return
+    }
+    #expect(object.description == "A function that takes parameters and can throw")
+    #expect(object.required.contains("name"))
+    #expect(object.required.contains("count"))
+
+    guard case let .string(
+        title: _,
+        description: nameDesc,
+        format: _,
+        minLength: _,
+        maxLength: _,
+        defaultValue: _
+    ) = object.properties["name"] else {
+        #expect(Bool(false), "name parameter should be a string")
+        return
+    }
+    #expect(nameDesc == "The name to greet")
+
+    guard case let .number(
+        title: _,
+        description: countDesc,
+        minimum: _,
+        maximum: _,
+        defaultValue: _
+    ) = object.properties["count"] else {
+        #expect(Bool(false), "count parameter should be a number")
+        return
+    }
+    #expect(countDesc == "Number of times to repeat")
+}
+
 @Test("OpenAPI spec correctly describes throwing function")
 func testThrowingFunctionSpec() {
     let server = TestAPIServer()
     let spec = OpenAPISpec(server: server, scheme: "http", host: "localhost:8080")
 
-    // Get the path for throwingFunction
     let path = "/test_server/throwingFunction"
     guard let pathItem = spec.paths[path] else {
         #expect(Bool(false), "Path \(path) not found in spec")
@@ -112,7 +146,6 @@ func testThrowingFunctionSpec() {
         return
     }
 
-    // Check parameters
     guard let requestBody = operation.requestBody else {
         #expect(Bool(false), "Request body not found")
         return
@@ -123,43 +156,8 @@ func testThrowingFunctionSpec() {
         return
     }
 
-    // Verify request body schema
-    if case .object(let object, _) = content.schema {
-		#expect(object.description == "A function that takes parameters and can throw")
-		#expect(object.required.contains("name"))
-		#expect(object.required.contains("count"))
+    assertThrowingFunctionRequestBody(content.schema)
 
-        // Check name parameter
-        guard case let .string(
-            title: _,
-            description: nameDesc,
-            format: _,
-            minLength: _,
-            maxLength: _,
-            defaultValue: _
-        ) = object.properties["name"] else {
-            #expect(Bool(false), "name parameter should be a string")
-            return
-        }
-        #expect(nameDesc == "The name to greet")
-
-        // Check count parameter
-        guard case let .number(
-            title: _,
-            description: countDesc,
-            minimum: _,
-            maximum: _,
-            defaultValue: _
-        ) = object.properties["count"] else {
-            #expect(Bool(false), "count parameter should be a number")
-            return
-        }
-        #expect(countDesc == "Number of times to repeat")
-    } else {
-        #expect(Bool(false), "Request body should be an object")
-    }
-
-    // Check responses
     #expect(operation.responses["200"] != nil, "200 response should exist")
     #expect(operation.responses["400"] != nil, "400 response should exist for throwing function")
 
@@ -313,95 +311,15 @@ func testOpenAPISpecGeneration() throws {
     let server = TestServer()
     let spec = OpenAPISpec(server: server, scheme: "http", host: "localhost:8080")
 
-    // Test paths exist
     #expect(spec.paths["/testserver/getSingleForecast"] != nil, "Missing path for getSingleForecast")
     #expect(spec.paths["/testserver/getMultipleForecasts"] != nil, "Missing path for getMultipleForecasts")
     #expect(spec.paths["/testserver/getSingleCondition"] != nil, "Missing path for getSingleCondition")
     #expect(spec.paths["/testserver/getMultipleConditions"] != nil, "Missing path for getMultipleConditions")
     #expect(spec.paths["/testserver/getBasicArray"] != nil, "Missing path for getBasicArray")
 
-    // Test single SchemaRepresentable response
-    guard let singleForecastOp = spec.paths["/testserver/getSingleForecast"]?.post,
-          let singleForecastSchema = singleForecastOp.responses["200"]?.content?["application/json"]?.schema else {
-        #expect(Bool(false), "Failed to get schema for getSingleForecast")
-        return
-    }
-    #expect(singleForecastSchema.type == "object", "Expected object schema for single forecast")
-
-    // Test array of SchemaRepresentable response
-    guard let multipleForecastsOp = spec.paths["/testserver/getMultipleForecasts"]?.post,
-          let multipleForecastsSchema =
-            multipleForecastsOp.responses["200"]?.content?["application/json"]?.schema else {
-        #expect(Bool(false), "Failed to get schema for getMultipleForecasts")
-        return
-    }
-    #expect(multipleForecastsSchema.type == "array", "Expected array schema for multiple forecasts")
-    if case .array(let items, title: _, description: _, defaultValue: _) = multipleForecastsSchema {
-        #expect(items.type == "object", "Expected object schema for array items")
-    } else {
-        #expect(Bool(false), "Expected array schema")
-    }
-
-    // Test single CaseIterable response
-    guard let singleConditionOp = spec.paths["/testserver/getSingleCondition"]?.post,
-          let singleConditionSchema = singleConditionOp.responses["200"]?.content?["application/json"]?.schema else {
-        #expect(Bool(false), "Failed to get schema for getSingleCondition")
-        return
-    }
-
-    #expect(singleConditionSchema.type == "string", "Expected string schema for single condition")
-    if case .enum(let enumValues, title: _, description: _, enumNames: _, defaultValue: _) = singleConditionSchema {
-        #expect(enumValues == ["sunny", "cloudy", "rainy", "snowy"],
-               "Enum values don't match expected values")
-    } else {
-        #expect(Bool(false), "Expected string schema with enum values")
-    }
-
-    // Test array of CaseIterable response
-    guard let multipleConditionsOp = spec.paths["/testserver/getMultipleConditions"]?.post,
-          let multipleConditionsSchema =
-            multipleConditionsOp.responses["200"]?.content?["application/json"]?.schema else {
-        #expect(Bool(false), "Failed to get schema for getMultipleConditions")
-        return
-    }
-    #expect(multipleConditionsSchema.type == "array", "Expected array schema for multiple conditions")
-    if case .array(let items, title: _, description: _, defaultValue: _) = multipleConditionsSchema {
-        #expect(items.type == "string", "Expected string schema for array items")
-        if case .enum(let enumValues, title: _, description: _, enumNames: _, defaultValue: _) = items {
-            #expect(Set(enumValues) == Set(["sunny", "cloudy", "rainy", "snowy"]),
-                   "Array items enum values don't match expected values")
-        } else {
-            #expect(Bool(false), "Expected string schema with enum values for array items")
-        }
-    } else {
-        #expect(Bool(false), "Expected array schema")
-    }
-
-    // Test basic array response
-    guard let basicArrayOp = spec.paths["/testserver/getBasicArray"]?.post,
-          let basicArraySchema = basicArrayOp.responses["200"]?.content?["application/json"]?.schema else {
-        #expect(Bool(false), "Failed to get schema for getBasicArray")
-        return
-    }
-
-    #expect(basicArraySchema.type == "array", "Expected array schema for basic array")
-    if case .array(let items, title: _, description: _, defaultValue: _) = basicArraySchema {
-        #expect(items.type == "string", "Expected string schema for array items")
-    } else {
-        #expect(Bool(false), "Expected array schema")
-    }
-}
-
-private extension JSONSchema {
-    var type: String {
-        switch self {
-        case .string: return "string"
-        case .number: return "number"
-        case .boolean: return "boolean"
-        case .array: return "array"
-        case .object: return "object"
-        case .enum: return "string"
-        case .oneOf: return "oneOf"
-        }
-    }
+    assertSingleForecastSchema(spec)
+    assertMultipleForecastsSchema(spec)
+    assertSingleConditionSchema(spec)
+    assertMultipleConditionsSchema(spec)
+    assertBasicArraySchema(spec)
 }

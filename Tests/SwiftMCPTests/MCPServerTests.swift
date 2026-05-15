@@ -2,12 +2,8 @@ import Foundation
 import Testing
 @testable import SwiftMCP
 
-@Test
-func testInitializeRequest() async throws {
-    let calculator = Calculator()
-
-    // Create a request
-    let request = JSONRPCMessage.request(
+private func makeInitializeRequest() -> JSONRPCMessage {
+    JSONRPCMessage.request(
         id: 1,
         method: "initialize",
         params: [
@@ -23,43 +19,26 @@ func testInitializeRequest() async throws {
             ])
         ]
     )
+}
 
-    // Handle the request
-    guard let message = await calculator.handleMessage(request) else {
-        #expect(Bool(false), "Expected a response message")
-        return
-    }
-
+private func extractInitializeResponseResult(_ message: JSONRPCMessage) throws -> [String: JSONValue] {
     guard case .response(let response) = message else {
-        #expect(Bool(false), "Expected response case")
-        return
+        throw TestError("Expected response case")
     }
-
     #expect(response.jsonrpc == "2.0")
     #expect(response.id == .int(1))
-    #expect(response.result != nil)
-
-    // Check result contents
     guard let result = response.result else {
         throw TestError("Result is missing")
     }
+    return result
+}
 
-    // Extract protocolVersion from the dictionary
-    guard let protocolVersion = result["protocolVersion"]?.value as? String else {
-        throw TestError("protocolVersion not found")
-    }
-    #expect(protocolVersion == "2025-11-25")
-
-    // Extract the server capabilities
+private func assertInitializeCapabilities(_ result: [String: JSONValue]) throws {
     guard let capabilitiesDict = result["capabilities"]?.value as? [String: Any] else {
         throw TestError("capabilities not found")
     }
-
-    // Verify the capabilities - check if experimental is empty or doesn't exist
     let experimental = capabilitiesDict["experimental"] as? [String: Any] ?? [:]
     #expect(experimental.isEmpty, "Experimental should be empty")
-
-    // Check tools capabilities
     guard let toolsDict = capabilitiesDict["tools"] as? [String: Any] else {
         throw TestError("Tools capabilities not found")
     }
@@ -67,11 +46,10 @@ func testInitializeRequest() async throws {
         throw TestError("listChanged not found in tools capabilities")
     }
     #expect(listChanged == true, "Tools listChanged should be true")
-
-    // Ensure completion capability is advertised
     #expect(capabilitiesDict["completions"] != nil)
+}
 
-    // Check server info
+private func assertServerInfo(_ result: [String: JSONValue]) throws {
     guard let serverInfoDict = result["serverInfo"]?.value as? [String: Any] else {
         throw TestError("serverInfo not found")
     }
@@ -83,6 +61,26 @@ func testInitializeRequest() async throws {
     }
     #expect(!name.isEmpty)
     #expect(!version.isEmpty)
+}
+
+@Test
+func testInitializeRequest() async throws {
+    let calculator = Calculator()
+    let request = makeInitializeRequest()
+
+    guard let message = await calculator.handleMessage(request) else {
+        #expect(Bool(false), "Expected a response message")
+        return
+    }
+
+    let result = try extractInitializeResponseResult(message)
+    guard let protocolVersion = result["protocolVersion"]?.value as? String else {
+        throw TestError("protocolVersion not found")
+    }
+    #expect(protocolVersion == "2025-11-25")
+
+    try assertInitializeCapabilities(result)
+    try assertServerInfo(result)
 }
 
 @Test
