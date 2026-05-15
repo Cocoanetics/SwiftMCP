@@ -36,7 +36,10 @@ public struct MCPPromptMacro: PeerMacro {
             }
         }
         if descriptionArg == "nil" && functionName != "missingDescription" {
-            let diagnostic = Diagnostic(node: Syntax(funcDecl.name), message: MCPToolDiagnostic.missingDescription(functionName: functionName))
+            let diagnostic = Diagnostic(
+                node: Syntax(funcDecl.name),
+                message: MCPToolDiagnostic.missingDescription(functionName: functionName)
+            )
             context.diagnose(diagnostic)
         }
 
@@ -64,11 +67,15 @@ nonisolated private let __mcpPromptMetadata_\(functionName) = MCPPromptMetadata(
                 wrapperFunc += "\n\(attribute)"
             }
         }
-        wrapperFunc += "\nfunc __mcpPromptCall_\(functionName)(_ enrichedArguments: JSONDictionary) async throws -> [PromptMessage] {\n"
+        wrapperFunc += "\nfunc __mcpPromptCall_\(functionName)"
+            + "(_ enrichedArguments: JSONDictionary) async throws -> [PromptMessage] {\n"
 
         for detail in metadata.parameters {
             wrapperFunc += """
-        let \(detail.name): \(detail.typeString) = try enrichedArguments.extractValue(named: \"\(detail.name)\", as: \(detail.typeString).self)
+        let \(detail.name): \(detail.typeString) = try enrichedArguments.extractValue(
+            named: \"\(detail.name)\",
+            as: \(detail.typeString).self
+        )
 """
         }
 
@@ -76,8 +83,10 @@ nonisolated private let __mcpPromptMetadata_\(functionName) = MCPPromptMetadata(
             param.label == "_" ? param.name : "\(param.label): \(param.name)"
         }.joined(separator: ", ")
 
+        let tryPrefix = metadata.isThrowing ? "try " : ""
+        let awaitPrefix = metadata.isAsync ? "await " : ""
         wrapperFunc += """
-        let result = \(metadata.isThrowing ? "try " : "")\(metadata.isAsync ? "await " : "")\(functionName)(\(parameterList))
+        let result = \(tryPrefix)\(awaitPrefix)\(functionName)(\(parameterList))
         return PromptMessage.fromResult(result)
     }
     """

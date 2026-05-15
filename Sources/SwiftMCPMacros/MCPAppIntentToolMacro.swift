@@ -20,7 +20,10 @@ public struct MCPAppIntentToolMacro: MemberMacro, ExtensionMacro {
     ) throws -> [DeclSyntax] {
         guard let typeName = typeName(from: declaration) else { return [] }
         guard isAppIntentDeclaration(declaration) else {
-            let diagnostic = Diagnostic(node: Syntax(node), message: MCPToolDiagnostic.requiresAppIntentConformance(typeName: typeName))
+            let diagnostic = Diagnostic(
+                node: Syntax(node),
+                message: MCPToolDiagnostic.requiresAppIntentConformance(typeName: typeName)
+            )
             context.diagnose(diagnostic)
             return []
         }
@@ -110,7 +113,10 @@ public static func mcpPerform(arguments: JSONDictionary) async throws -> (Encoda
             performMethod += """
 
    let result = try await intent.perform()
-   if let value: \(returnValueType!) = MCPAppIntentTools.extractReturnValue(from: result, as: \(returnValueType!).self) {
+   if let value: \(returnValueType!) = MCPAppIntentTools.extractReturnValue(
+      from: result,
+      as: \(returnValueType!).self
+   ) {
       return value
    }
    return ""
@@ -161,7 +167,10 @@ public static func mcpPerform(arguments: JSONDictionary) async throws -> (Encoda
         func toMCPParameterInfo() -> String {
             let descriptionString = description ?? "nil"
             let isRequired = defaultValueForMetadata == "nil" && !isOptionalType
-            return "MCPParameterInfo(name: \"\(name)\", type: \(baseTypeString).self, description: \(descriptionString), defaultValue: \(defaultValueForMetadata), isRequired: \(isRequired))"
+            return "MCPParameterInfo(name: \"\(name)\", type: \(baseTypeString).self, "
+                + "description: \(descriptionString), "
+                + "defaultValue: \(defaultValueForMetadata), "
+                + "isRequired: \(isRequired))"
         }
     }
 

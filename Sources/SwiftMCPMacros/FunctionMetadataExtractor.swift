@@ -38,7 +38,10 @@ struct ParsedParameter {
         let descriptionString = description ?? "nil"
         // A parameter is required if it has no default value AND is not optional
         let isRequired = defaultValueClause == nil && !isOptionalType
-        return "MCPParameterInfo(name: \"\(name)\", type: \(baseTypeString).self, description: \(descriptionString), defaultValue: \(defaultValueForMetadata), isRequired: \(isRequired))"
+        return "MCPParameterInfo(name: \"\(name)\", type: \(baseTypeString).self, "
+            + "description: \(descriptionString), "
+            + "defaultValue: \(defaultValueForMetadata), "
+            + "isRequired: \(isRequired))"
     }
 }
 
@@ -76,7 +79,11 @@ struct FunctionMetadataExtractor {
             let attributeName = attribute.attributeName.description.trimmingCharacters(in: .whitespacesAndNewlines)
             if attributeName.isEmpty { continue }
             // Skip the MCP macros themselves to avoid recursive generation.
-            if ["MCPTool", "MCPResource", "MCPPrompt", "MCPServer", "MCPToolProvider", "Schema", "MCPExtension"].contains(attributeName) {
+            let mcpMacroNames = [
+                "MCPTool", "MCPResource", "MCPPrompt",
+                "MCPServer", "MCPToolProvider", "Schema", "MCPExtension"
+            ]
+            if mcpMacroNames.contains(attributeName) {
                 continue
             }
             let trimmedDescription = attribute.description.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -132,7 +139,10 @@ struct FunctionMetadataExtractor {
                 let diagnostic = Diagnostic(
                     node: Syntax(paramTypeSyntax),
                     // Using a generic diagnostic message here, specific macros might want to customize
-                    message: MCPToolDiagnostic.optionalParameterNeedsDefault(paramName: paramName, typeName: paramTypeString),
+                    message: MCPToolDiagnostic.optionalParameterNeedsDefault(
+                        paramName: paramName,
+                        typeName: paramTypeString
+                    ),
                     fixIts: [
                         FixIt(message: MCPToolFixItMessage.addDefaultValue(paramName: paramName),
                               changes: [
@@ -185,7 +195,11 @@ struct FunctionMetadataExtractor {
         )
     }
 
-    private func processDefaultValue(_ defaultExpr: ExprSyntax?, paramTypeString: String, isArray: Bool) throws -> String {
+    private func processDefaultValue(
+        _ defaultExpr: ExprSyntax?,
+        paramTypeString: String,
+        isArray: Bool
+    ) throws -> String {
         guard let expr = defaultExpr else { return "nil" }
 
         let rawValue = expr.description.trimmingCharacters(in: .whitespaces)

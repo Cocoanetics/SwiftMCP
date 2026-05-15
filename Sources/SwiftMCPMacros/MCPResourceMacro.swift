@@ -117,11 +117,18 @@ public struct MCPResourceMacro: PeerMacro {
         for parsedParam in commonMetadata.parameters {
             functionParamNames.append(parsedParam.name)
             parameterInfoStrings.append(parsedParam.toMCPParameterInfo())
-            wrapperParamDetails.append(WrapperParamDetail(name: parsedParam.name, label: parsedParam.label, type: parsedParam.typeString))
+            wrapperParamDetails.append(WrapperParamDetail(
+                name: parsedParam.name,
+                label: parsedParam.label,
+                type: parsedParam.typeString
+            ))
         }
 
         for placeholder in allPlaceholders where !functionParamNames.contains(placeholder) {
-            let diag = Diagnostic(node: Syntax(node), message: MCPResourceDiagnostic.missingParameterForPlaceholder(placeholder: placeholder))
+            let diag = Diagnostic(
+                node: Syntax(node),
+                message: MCPResourceDiagnostic.missingParameterForPlaceholder(placeholder: placeholder)
+            )
             context.diagnose(diag)
         }
 
@@ -179,34 +186,51 @@ nonisolated private let __mcpResourceMetadata_\(functionName) = MCPResourceMetad
                 wrapperMethod += "\n        \(attribute)"
             }
         }
-        wrapperMethod += "\n        private func __mcpResourceCall_\(functionName)(_ params: JSONDictionary, requestedUri: URL, overrideMimeType: String?) async throws -> [MCPResourceContent] {\n"
+        wrapperMethod += "\n        private func __mcpResourceCall_\(functionName)"
+            + "(_ params: JSONDictionary, "
+            + "requestedUri: URL, "
+            + "overrideMimeType: String?) async throws -> [MCPResourceContent] {\n"
 
         for detail in wrapperParamDetails {
             wrapperMethod += """
-                let \(detail.name): \(detail.type) = try params.extractValue(named: "\(detail.name)", as: \(detail.type).self)
+                let \(detail.name): \(detail.type) = try params.extractValue(
+                    named: "\(detail.name)",
+                    as: \(detail.type).self
+                )
             """
         }
 
-        let concreteFunctionCall = "\(commonMetadata.isThrowing ? "try " : "")\(commonMetadata.isAsync ? "await " : "")\(functionName)(\(callParameterList))"
+        let tryPrefix = commonMetadata.isThrowing ? "try " : ""
+        let awaitPrefix = commonMetadata.isAsync ? "await " : ""
+        let concreteFunctionCall = "\(tryPrefix)\(awaitPrefix)\(functionName)(\(callParameterList))"
         let concreteResourceContentTypeName = "GenericResourceContent"
 
         var returnHandlingCode: String
         if returnTypeString == "String" {
             returnHandlingCode = """
                 let result = \(concreteFunctionCall)
-                return [\(concreteResourceContentTypeName)(uri: requestedUri, mimeType: overrideMimeType ?? "text/plain", text: result)]
+                return [\(concreteResourceContentTypeName)(
+                    uri: requestedUri,
+                    mimeType: overrideMimeType ?? "text/plain",
+                    text: result
+                )]
             """
         } else if returnTypeString == "Data" {
             returnHandlingCode = """
                 let result = \(concreteFunctionCall)
-                return [\(concreteResourceContentTypeName)(uri: requestedUri, mimeType: overrideMimeType ?? "application/octet-stream", blob: result)]
+                return [\(concreteResourceContentTypeName)(
+                    uri: requestedUri,
+                    mimeType: overrideMimeType ?? "application/octet-stream",
+                    blob: result
+                )]
             """
         } else if returnTypeString == "MCPResourceContent" {
             returnHandlingCode = """
                 let result = \(concreteFunctionCall)
                 return [result]
             """
-        } else if returnTypeString == "[MCPResourceContent]" || returnTypeString == "[\(concreteResourceContentTypeName)]" {
+        } else if returnTypeString == "[MCPResourceContent]"
+            || returnTypeString == "[\(concreteResourceContentTypeName)]" {
             returnHandlingCode = """
                 let result = \(concreteFunctionCall)
                 return result
@@ -214,7 +238,11 @@ nonisolated private let __mcpResourceMetadata_\(functionName) = MCPResourceMetad
         } else {
             returnHandlingCode = """
                 let result = \(concreteFunctionCall)
-                return GenericResourceContent.fromResult(result, uri: requestedUri, mimeType: overrideMimeType)
+                return GenericResourceContent.fromResult(
+                    result,
+                    uri: requestedUri,
+                    mimeType: overrideMimeType
+                )
             """
         }
 

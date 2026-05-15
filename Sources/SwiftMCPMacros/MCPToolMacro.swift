@@ -98,24 +98,31 @@ public struct MCPToolMacro: PeerMacro {
 
         if let arguments = node.arguments?.as(LabeledExprListSyntax.self) {
             for argument in arguments {
-                if argument.label?.text == "name", let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
+                if argument.label?.text == "name",
+                   let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
                     customName = stringLiteral.segments.description
-                } else if argument.label?.text == "description", let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
+                } else if argument.label?.text == "description",
+                          let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
                     let stringValue = stringLiteral.segments.description
                     descriptionArg = "\"\(stringValue.escapedForSwiftString)\"" // Ensure proper escaping
                 } else if argument.label?.text == "hints" {
                     // Parse hints: accept array literal ([.readOnly, .destructive])
                     // or a single OptionSet member access (.readOnly).
                     hintsFromOptionSet.append(contentsOf: parseHintsExpression(argument.expression))
-                } else if argument.label?.text == "isConsequential", let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
+                } else if argument.label?.text == "isConsequential",
+                          let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
                     isConsequentialArg = boolLiteral.literal.text
-                } else if argument.label?.text == "readOnlyHint", let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
+                } else if argument.label?.text == "readOnlyHint",
+                          let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
                     readOnlyHintArg = boolLiteral.literal.text
-                } else if argument.label?.text == "destructiveHint", let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
+                } else if argument.label?.text == "destructiveHint",
+                          let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
                     destructiveHintArg = boolLiteral.literal.text
-                } else if argument.label?.text == "idempotentHint", let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
+                } else if argument.label?.text == "idempotentHint",
+                          let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
                     idempotentHintArg = boolLiteral.literal.text
-                } else if argument.label?.text == "openWorldHint", let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
+                } else if argument.label?.text == "openWorldHint",
+                          let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
                     openWorldHintArg = boolLiteral.literal.text
                 }
             }
@@ -132,7 +139,10 @@ public struct MCPToolMacro: PeerMacro {
         // (The missingDescription test case might need adjustment or specific handling here if it relied on old logic)
         if descriptionArg == "nil" && functionName != "missingDescription" { // Adjust condition if needed
             // Use your project's actual diagnostic type
-            let diagnostic = Diagnostic(node: Syntax(funcDecl.name), message: MCPToolDiagnostic.missingDescription(functionName: functionName))
+            let diagnostic = Diagnostic(
+                node: Syntax(funcDecl.name),
+                message: MCPToolDiagnostic.missingDescription(functionName: functionName)
+            )
             context.diagnose(diagnostic)
         }
 
@@ -144,7 +154,8 @@ public struct MCPToolMacro: PeerMacro {
 
         // Use return type info from commonMetadata
         let returnTypeString = commonMetadata.returnTypeString
-        let returnTypeForBlock = returnTypeString // Assuming they are the same now, adjust if MCPTool had specific logic
+        // Assuming they are the same now, adjust if MCPTool had specific logic
+        let returnTypeForBlock = returnTypeString
         let returnDescriptionString = commonMetadata.returnDescription ?? "nil"
 
         // Build annotations argument string
@@ -185,13 +196,18 @@ nonisolated private let __mcpMetadata_\(functionName) = MCPToolMetadata(
                 wrapperFuncString += "\n\t\t\(attribute)"
             }
         }
-        wrapperFuncString += "\n\t\tfunc __mcpCall_\(functionName)(_ enrichedArguments: JSONDictionary) async throws -> (Encodable & Sendable) {\n"
+        wrapperFuncString += "\n\t\tfunc __mcpCall_\(functionName)"
+            + "(_ enrichedArguments: JSONDictionary) "
+            + "async throws -> (Encodable & Sendable) {\n"
 
         for detail in commonMetadata.parameters {
             // Use the original parameter type string (detail.type), which includes optional markers.
             wrapperFuncString += """
 
-			   let \(detail.name): \(detail.typeString) = try enrichedArguments.extractValue(named: "\(detail.name)", as: \(detail.typeString).self)
+			   let \(detail.name): \(detail.typeString) = try enrichedArguments.extractValue(
+			       named: "\(detail.name)",
+			       as: \(detail.typeString).self
+			   )
 			"""
         }
 
@@ -204,15 +220,17 @@ nonisolated private let __mcpMetadata_\(functionName) = MCPToolMetadata(
             }
         }.joined(separator: ", ")
 
+        let tryPrefix = commonMetadata.isThrowing ? "try " : ""
+        let awaitPrefix = commonMetadata.isAsync ? "await " : ""
         if returnTypeForBlock == "Void" {
             wrapperFuncString += """
-				\(commonMetadata.isThrowing ? "try " : "")\(commonMetadata.isAsync ? "await " : "")\(functionName)(\(parameterList))
+				\(tryPrefix)\(awaitPrefix)\(functionName)(\(parameterList))
 				return ""  // return empty string for Void functions
 			}
 			"""
         } else {
             wrapperFuncString += """
-				return \(commonMetadata.isThrowing ? "try " : "")\(commonMetadata.isAsync ? "await " : "")\(functionName)(\(parameterList))
+				return \(tryPrefix)\(awaitPrefix)\(functionName)(\(parameterList))
 			}
 			"""
         }

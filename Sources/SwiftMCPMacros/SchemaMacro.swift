@@ -120,9 +120,16 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
         }
 
         // Create a registration statement
+        let descriptionArg = documentation.description.isEmpty
+            ? "nil"
+            : "\"\(documentation.description.escapedForSwiftString)\""
         let registrationDecl = """
         /// generated
-        public static let schemaMetadata = SchemaMetadata(name: "\(structName)", description: \(documentation.description.isEmpty ? "nil" : "\"\(documentation.description.escapedForSwiftString)\""), parameters: [\(propertyString)])
+        public static let schemaMetadata = SchemaMetadata(
+            name: "\(structName)",
+            description: \(descriptionArg),
+            parameters: [\(propertyString)]
+        )
         """
 
         var declarations = [DeclSyntax(stringLiteral: registrationDecl)]
@@ -133,10 +140,16 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
         // array type. All other structs resolve to Self (identity).
         if propertyInfos.count == 1,
            let onlyProp = propertyInfos.first,
-           let elementType = Self.arrayElementType(from: onlyProp.type.trimmingCharacters(in: .whitespacesAndNewlines)) {
-            declarations.append(DeclSyntax(stringLiteral: "public typealias MCPClientReturn = [\(elementType)]"))
+           let elementType = Self.arrayElementType(
+               from: onlyProp.type.trimmingCharacters(in: .whitespacesAndNewlines)
+           ) {
+            declarations.append(DeclSyntax(
+                stringLiteral: "public typealias MCPClientReturn = [\(elementType)]"
+            ))
         } else {
-            declarations.append(DeclSyntax(stringLiteral: "public typealias MCPClientReturn = \(structName)"))
+            declarations.append(DeclSyntax(
+                stringLiteral: "public typealias MCPClientReturn = \(structName)"
+            ))
         }
 
         return declarations
@@ -178,8 +191,11 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
         context: MacroExpansionContext
     ) throws -> (String, PropertyInfo) {
         // Get the property name and type
-        let propertyName = property.bindings.first?.pattern.as(IdentifierPatternSyntax.self)?.identifier.text ?? ""
-        let propertyType = property.bindings.first?.typeAnnotation?.type.description.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) ?? ""
+        let propertyName = property.bindings.first?
+            .pattern.as(IdentifierPatternSyntax.self)?.identifier.text ?? ""
+        let propertyType = property.bindings.first?
+            .typeAnnotation?.type.description
+            .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) ?? ""
 
         // Get property description from property's documentation
         var propertyDescription = "nil"
@@ -220,9 +236,15 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
         let schemaName = getCodingKeyRawValue(for: propertyName, in: Syntax(property)) ?? propertyName
 
         // Create parameter info with the type directly
-        let propertyStr = "SchemaPropertyInfo(name: \"\(schemaName)\", type: \(baseType).self, description: \(propertyDescription), defaultValue: \(defaultValue) as Sendable?, isRequired: \(isRequired))"
+        let propertyStr = "SchemaPropertyInfo(name: \"\(schemaName)\", type: \(baseType).self, "
+            + "description: \(propertyDescription), "
+            + "defaultValue: \(defaultValue) as Sendable?, "
+            + "isRequired: \(isRequired))"
 
-        return (propertyStr, PropertyInfo(name: propertyName, type: propertyType, defaultValue: defaultValue))
+        return (
+            propertyStr,
+            PropertyInfo(name: propertyName, type: propertyType, defaultValue: defaultValue)
+        )
     }
 
     private static func shouldIncludeProperty(_ property: VariableDeclSyntax) -> Bool {

@@ -144,7 +144,8 @@ struct Documentation {
                     let name = trimmedLine[nameStart..<colonIndex].trimmingCharacters(in: .whitespaces)
 
                     // Extract description (after the colon)
-                    let description = trimmedLine[trimmedLine.index(after: colonIndex)...].trimmingCharacters(in: .whitespaces)
+                    let afterColon = trimmedLine[trimmedLine.index(after: colonIndex)...]
+                    let description = afterColon.trimmingCharacters(in: .whitespaces)
 
                     return (name: name, description: description)
                 }

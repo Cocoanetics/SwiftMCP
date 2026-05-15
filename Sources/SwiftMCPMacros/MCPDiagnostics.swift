@@ -47,21 +47,30 @@ enum MCPToolDiagnostic: DiagnosticMessage {
         case .requiresAppIntentConformance(let typeName):
             return "Type '\(typeName)' must conform to AppIntent to use the MCPAppIntentTool macro."
         case .missingDescription(let functionName):
+            // swiftlint:disable:next line_length
             return "Function '\(functionName)' is missing a description. Add a documentation comment or provide a description parameter."
         case .invalidDefaultValueType(let paramName, let typeName):
+            // swiftlint:disable:next line_length
             return "Parameter '\(paramName)' has an unsupported default value type '\(typeName)'. Only numbers, booleans, and strings are supported."
         case .closureTypeNotSupported(let paramName, let typeName):
+            // swiftlint:disable:next line_length
             return "Parameter '\(paramName)' has an unsupported closure type '\(typeName)'. Closures are not supported in MCP tools."
         case .optionalParameterNeedsDefault(let paramName, let typeName):
             return "Optional parameter '\(paramName)' of type '\(typeName)' requires a default value (e.g. = nil)."
         case .missingMCPExtensionAttribute(let macroName):
+            // swiftlint:disable:next line_length
             return "@\(macroName) inside an extension requires @MCPExtension on the enclosing extension. Add @MCPExtension(\"<Name>\") (or @MCPExtension to derive the name from the filename) to surface this declaration at runtime."
         }
     }
 
     var severity: DiagnosticSeverity {
         switch self {
-        case .onlyFunctions, .requiresAppIntentConformance, .invalidDefaultValueType, .closureTypeNotSupported, .optionalParameterNeedsDefault, .missingMCPExtensionAttribute:
+        case .onlyFunctions,
+             .requiresAppIntentConformance,
+             .invalidDefaultValueType,
+             .closureTypeNotSupported,
+             .optionalParameterNeedsDefault,
+             .missingMCPExtensionAttribute:
             return .error
         case .missingDescription:
             return .warning

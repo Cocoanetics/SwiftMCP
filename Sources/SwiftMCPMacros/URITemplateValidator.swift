@@ -32,9 +32,11 @@ struct URITemplateValidator {
 
         // Check for basic URI structure - must have a scheme or be relative
         if !hasValidURIStructure(template) {
+            let reason = "URI template must have a valid scheme "
+                + "(e.g., 'http:', 'https:') or be a valid relative URI"
             return URITemplateValidationResult(
                 isValid: false,
-                error: .invalidURITemplate(reason: "URI template must have a valid scheme (e.g., 'http:', 'https:') or be a valid relative URI"),
+                error: .invalidURITemplate(reason: reason),
                 level: 0,
                 variables: []
             )
@@ -138,9 +140,11 @@ struct URITemplateValidator {
             if char == "{" {
                 braceDepth += 1
                 if braceDepth > 1 {
+                    let reason = "Nested expressions are not allowed - "
+                        + "expressions cannot contain '{' or '}'"
                     return URITemplateValidationResult(
                         isValid: false,
-                        error: .invalidURITemplate(reason: "Nested expressions are not allowed - expressions cannot contain '{' or '}'"),
+                        error: .invalidURITemplate(reason: reason),
                         level: 0,
                         variables: allVariables
                     )
@@ -149,9 +153,12 @@ struct URITemplateValidator {
                 // Find the closing brace
                 let expressionStart = template.index(after: cursor)
                 guard let closingBrace = template[expressionStart...].firstIndex(of: "}") else {
+                    let position = template.distance(from: template.startIndex, to: cursor)
+                    let reason = "Unclosed expression - missing '}' for "
+                        + "expression starting at position \(position)"
                     return URITemplateValidationResult(
                         isValid: false,
-                        error: .invalidURITemplate(reason: "Unclosed expression - missing '}' for expression starting at position \(template.distance(from: template.startIndex, to: cursor))"),
+                        error: .invalidURITemplate(reason: reason),
                         level: 0,
                         variables: allVariables
                     )
@@ -221,9 +228,11 @@ struct URITemplateValidator {
 
         if let opLevel = operators[firstChar] {
             if opLevel >= 4 {
+                let reason = "Operator '\(firstChar)' is reserved for "
+                    + "future extensions and not currently supported"
                 return URITemplateValidationResult(
                     isValid: false,
-                    error: .invalidURITemplate(reason: "Operator '\(firstChar)' is reserved for future extensions and not currently supported"),
+                    error: .invalidURITemplate(reason: reason),
                     level: opLevel,
                     variables: []
                 )
@@ -299,9 +308,11 @@ struct URITemplateValidator {
             }
 
             guard let prefixLength = Int(prefixPart), prefixLength > 0, prefixLength < 10000 else {
+                let reason = "Prefix length must be a positive integer "
+                    + "less than 10000, got '\(prefixPart)'"
                 return URITemplateValidationResult(
                     isValid: false,
-                    error: .invalidURITemplate(reason: "Prefix length must be a positive integer less than 10000, got '\(prefixPart)'"),
+                    error: .invalidURITemplate(reason: reason),
                     level: 0,
                     variables: []
                 )
@@ -313,9 +324,11 @@ struct URITemplateValidator {
 
         // Validate variable name characters
         if !isValidVariableName(varName) {
+            let reason = "Invalid variable name '\(varName)' - must contain only letters, "
+                + "digits, underscore, dots, and percent-encoded characters"
             return URITemplateValidationResult(
                 isValid: false,
-                error: .invalidURITemplate(reason: "Invalid variable name '\(varName)' - must contain only letters, digits, underscore, dots, and percent-encoded characters"),
+                error: .invalidURITemplate(reason: reason),
                 level: 0,
                 variables: []
             )
@@ -348,12 +361,17 @@ struct URITemplateValidator {
 
         for char in literalsOnly {
             if disallowedChars.contains(char) {
-                return .invalidURITemplate(reason: "Invalid character '\(char)' in URI template - characters like <, >, \\, ^, `, {, }, |, \", ' are not allowed outside expressions")
+                let reason = "Invalid character '\(char)' in URI template - "
+                    + "characters like <, >, \\, ^, `, {, }, |, \", ' are not allowed "
+                    + "outside expressions"
+                return .invalidURITemplate(reason: reason)
             }
 
             // Check for control characters and spaces
             if char.isASCII && (char.asciiValue! < 0x21 || char.asciiValue == 0x7F) && char != " " {
-                return .invalidURITemplate(reason: "Control character (ASCII \(char.asciiValue!)) is not allowed in URI template")
+                let reason = "Control character (ASCII \(char.asciiValue!)) "
+                    + "is not allowed in URI template"
+                return .invalidURITemplate(reason: reason)
             }
         }
 

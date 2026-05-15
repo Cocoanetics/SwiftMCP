@@ -220,7 +220,11 @@ MCPResourceMetadata(
 """)
             cases.append("""
       case "\(extracted.functionName)":
-         return try await server.__mcpResourceCall_\(extracted.functionName)(arguments, requestedUri: requestedUri, overrideMimeType: overrideMimeType)
+         return try await server.__mcpResourceCall_\(extracted.functionName)(
+            arguments,
+            requestedUri: requestedUri,
+            overrideMimeType: overrideMimeType
+         )
 """)
         }
 
@@ -419,13 +423,21 @@ extension MCPExtensionMacro {
                         isConsequentialArg = lit.literal.text
                     }
                 case "readOnlyHint":
-                    if let lit = arg.expression.as(BooleanLiteralExprSyntax.self) { readOnlyHintArg = lit.literal.text }
+                    if let lit = arg.expression.as(BooleanLiteralExprSyntax.self) {
+                        readOnlyHintArg = lit.literal.text
+                    }
                 case "destructiveHint":
-                    if let lit = arg.expression.as(BooleanLiteralExprSyntax.self) { destructiveHintArg = lit.literal.text }
+                    if let lit = arg.expression.as(BooleanLiteralExprSyntax.self) {
+                        destructiveHintArg = lit.literal.text
+                    }
                 case "idempotentHint":
-                    if let lit = arg.expression.as(BooleanLiteralExprSyntax.self) { idempotentHintArg = lit.literal.text }
+                    if let lit = arg.expression.as(BooleanLiteralExprSyntax.self) {
+                        idempotentHintArg = lit.literal.text
+                    }
                 case "openWorldHint":
-                    if let lit = arg.expression.as(BooleanLiteralExprSyntax.self) { openWorldHintArg = lit.literal.text }
+                    if let lit = arg.expression.as(BooleanLiteralExprSyntax.self) {
+                        openWorldHintArg = lit.literal.text
+                    }
                 default: continue
                 }
             }
@@ -463,7 +475,10 @@ extension MCPExtensionMacro {
         var mimeTypeArg: String
     }
 
-    private static func parseResourceArgs(attribute: AttributeSyntax, defaults: ExtractedFunctionMetadata) -> ResourceArgs {
+    private static func parseResourceArgs(
+        attribute: AttributeSyntax,
+        defaults: ExtractedFunctionMetadata
+    ) -> ResourceArgs {
         var templates: [String] = []
         var resourceName = defaults.functionName
         var descriptionArg = "nil"
@@ -509,7 +524,10 @@ extension MCPExtensionMacro {
         )
     }
 
-    private static func parsePromptDescription(attribute: AttributeSyntax, defaults: ExtractedFunctionMetadata) -> String {
+    private static func parsePromptDescription(
+        attribute: AttributeSyntax,
+        defaults: ExtractedFunctionMetadata
+    ) -> String {
         var descriptionArg = "nil"
         if let argList = attribute.arguments?.as(LabeledExprListSyntax.self) {
             for arg in argList where arg.label?.text == "description" {
