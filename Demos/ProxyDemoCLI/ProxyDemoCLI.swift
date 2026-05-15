@@ -352,7 +352,9 @@ struct ProxyDemoRunner {
         }
         var lines: [String] = ["["]
         for (index, item) in items.enumerated() {
-            let indented = indentMultiline(item, indent: "  ").split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+            let indented = indentMultiline(item, indent: "  ")
+                .split(separator: "\n", omittingEmptySubsequences: false)
+                .map(String.init)
             if let last = indented.indices.last {
                 var linesWithComma = indented
                 if index < items.count - 1 {

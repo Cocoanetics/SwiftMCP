@@ -192,7 +192,13 @@ func extractMethod(funcDecl: FunctionDeclSyntax, kind: ContributionKind) -> Disc
             || param.type.is(ImplicitlyUnwrappedOptionalTypeSyntax.self)
             || typeString.hasSuffix("?")
             || typeString.hasSuffix("!")
-        return DiscoveredParameter(name: name, label: label, typeString: typeString, defaultValue: defaultValue, isOptional: isOptional)
+        return DiscoveredParameter(
+            name: name,
+            label: label,
+            typeString: typeString,
+            defaultValue: defaultValue,
+            isOptional: isOptional
+        )
     }
     let returnType = funcDecl.signature.returnClause?.type.trimmedDescription
     let isAsync = funcDecl.signature.effectSpecifiers?.asyncSpecifier != nil
@@ -284,7 +290,11 @@ func sanitizeIdentifier(_ raw: String) -> String {
             if character.isLetter || character == "_" { out.append(character) } else { out.append("_") }
             first = false
         } else {
-            if character.isLetter || character.isNumber || character == "_" { out.append(character) } else { out.append("_") }
+            if character.isLetter || character.isNumber || character == "_" {
+                out.append(character)
+            } else {
+                out.append("_")
+            }
         }
     }
     return out.isEmpty ? "Module" : out
@@ -421,19 +431,24 @@ func emitResourceClientMethod(_ method: DiscoveredMethod, templates: [String]) -
 
     if ordered.count <= 1 {
         let template = ordered.first ?? ""
-        out.append("        let uri = try \"\(template.replacingOccurrences(of: "\"", with: "\\\""))\".constructURI(with: \(argumentsName))\n")
+        let escaped = template.replacingOccurrences(of: "\"", with: "\\\"")
+        out.append("        let uri = try \"\(escaped)\".constructURI(with: \(argumentsName))\n")
     } else {
         out.append("        let uri: URL\n")
         for (idx, template) in ordered.enumerated() {
             let vars = resourceTemplateVariables(in: template)
-            let cond = vars.isEmpty ? "true" : vars.map { "\(argumentsName)[\"\($0)\"] != nil" }.joined(separator: " && ")
+            let cond = vars.isEmpty
+                ? "true"
+                : vars.map { "\(argumentsName)[\"\($0)\"] != nil" }.joined(separator: " && ")
             let keyword = idx == 0 ? "if" : "else if"
+            let escaped = template.replacingOccurrences(of: "\"", with: "\\\"")
             out.append("        \(keyword) \(cond) {\n")
-            out.append("            uri = try \"\(template.replacingOccurrences(of: "\"", with: "\\\""))\".constructURI(with: \(argumentsName))\n")
+            out.append("            uri = try \"\(escaped)\".constructURI(with: \(argumentsName))\n")
             out.append("        }\n")
         }
         out.append("        else {\n")
-        out.append("            throw MCPServerProxyError.communicationError(\"No resource template matched for \(method.functionName)\")\n")
+        out.append("            throw MCPServerProxyError.communicationError("
+            + "\"No resource template matched for \(method.functionName)\")\n")
         out.append("        }\n")
     }
 
@@ -447,7 +462,8 @@ func emitResourceClientMethod(_ method: DiscoveredMethod, templates: [String]) -
         out.append("        return\n")
     } else if returnType == "MCPResourceContent" || returnType == "GenericResourceContent" {
         out.append("        guard let content = contents.first else {\n")
-        out.append("            throw MCPServerProxyError.communicationError(\"Resource \(method.functionName) returned no content\")\n")
+        out.append("            throw MCPServerProxyError.communicationError("
+            + "\"Resource \(method.functionName) returned no content\")\n")
         out.append("        }\n")
         out.append("        return content\n")
     } else if returnType == "[MCPResourceContent]" || returnType == "[GenericResourceContent]" {
@@ -457,12 +473,15 @@ func emitResourceClientMethod(_ method: DiscoveredMethod, templates: [String]) -
         out.append("        if let text = contents.first?.text {\n")
         out.append("            return try MCPClientResultDecoder.decode(Data.self, from: text)\n")
         out.append("        }\n")
-        out.append("        throw MCPServerProxyError.communicationError(\"Resource \(method.functionName) returned no blob content\")\n")
+        out.append("        throw MCPServerProxyError.communicationError("
+            + "\"Resource \(method.functionName) returned no blob content\")\n")
     } else {
         out.append("        guard let text = contents.first?.text else {\n")
-        out.append("            throw MCPServerProxyError.communicationError(\"Resource \(method.functionName) returned no text content\")\n")
+        out.append("            throw MCPServerProxyError.communicationError("
+            + "\"Resource \(method.functionName) returned no text content\")\n")
         out.append("        }\n")
-        out.append("        return try MCPClientResultDecoder.decode(\(returnText!).self, from: text)\n")
+        out.append("        return try MCPClientResultDecoder.decode("
+            + "\(returnText!).self, from: text)\n")
     }
 
     out.append("    }\n")

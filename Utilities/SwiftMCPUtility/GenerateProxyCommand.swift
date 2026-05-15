@@ -13,7 +13,8 @@ struct GenerateProxyCommand: AsyncParsableCommand {
 
   Examples:
     SwiftMCPUtility generate-proxy --sse http://localhost:8080/sse -o ToolsProxy.swift
-    SwiftMCPUtility generate-proxy --sse http://localhost:8080/sse --openapi http://localhost:8080/openapi.json -o ToolsProxy.swift
+    SwiftMCPUtility generate-proxy --sse http://localhost:8080/sse \\
+        --openapi http://localhost:8080/openapi.json -o ToolsProxy.swift
     SwiftMCPUtility generate-proxy --command "npx -y @modelcontextprotocol/server-filesystem"
     SwiftMCPUtility generate-proxy --config mcp.json --name FileToolsProxy
 """
@@ -25,12 +26,16 @@ struct GenerateProxyCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Override the namespace type name (mutually exclusive with -o)")
     var name: String?
 
-    @Option(name: [.customShort("o"), .long], help: "Output file path (default: inferred from server name, mutually exclusive with --name)")
+    @Option(
+        name: [.customShort("o"), .long],
+        help: "Output file path (default: inferred from server name, mutually exclusive with --name)"
+    )
     var output: String?
 
     @Option(name: .long, help: "OpenAPI JSON URL or file path to infer return types")
     var openapi: String?
 
+    // swiftlint:disable:next line_length
     @Option(name: .long, help: "Naming style for generated Swift functions: verbatim, lowerCamelCase (default), snakeCase")
     var functionNaming: String?
 

@@ -80,7 +80,11 @@ public struct SamplingContent: Codable, Sendable {
         // Handle base64 encoded data
         if let base64String = try container.decodeIfPresent(String.self, forKey: .data) {
             guard let data = Data(base64Encoded: base64String) else {
-                throw DecodingError.dataCorruptedError(forKey: .data, in: container, debugDescription: "Invalid base64 data")
+                throw DecodingError.dataCorruptedError(
+                    forKey: .data,
+                    in: container,
+                    debugDescription: "Invalid base64 data"
+                )
             }
             self.data = data
         } else {

@@ -67,11 +67,24 @@ extension MCPParameterInfo {
         // Handle basic types
         switch type {
         case is Int.Type, is Double.Type:
-            return JSONSchema.number(title: nil, description: description, minimum: nil, maximum: nil, defaultValue: defaultValue)
+            return JSONSchema.number(
+                title: nil,
+                description: description,
+                minimum: nil,
+                maximum: nil,
+                defaultValue: defaultValue
+            )
         case is Bool.Type:
             return JSONSchema.boolean(title: nil, description: description, defaultValue: defaultValue)
         default:
-            return JSONSchema.string(title: nil, description: description, format: nil, minLength: nil, maxLength: nil, defaultValue: defaultValue)
+            return JSONSchema.string(
+                title: nil,
+                description: description,
+                format: nil,
+                minLength: nil,
+                maxLength: nil,
+                defaultValue: defaultValue
+            )
         }
     }
 }

@@ -95,19 +95,38 @@ extension JSONSchema: Codable {
             let defaultValue = try container.decodeIfPresent(JSONValue.self, forKey: .default)
             if let enumValues = try container.decodeIfPresent([String].self, forKey: .enumValues) {
                 let enumNames = try container.decodeIfPresent([String].self, forKey: .enumNames)
-                self = .enum(values: enumValues, title: title, description: description, enumNames: enumNames, defaultValue: defaultValue)
+                self = .enum(
+                    values: enumValues,
+                    title: title,
+                    description: description,
+                    enumNames: enumNames,
+                    defaultValue: defaultValue
+                )
             } else {
                 let format = try container.decodeIfPresent(String.self, forKey: .format)
                 let minLength = try container.decodeIfPresent(Int.self, forKey: .minLength)
                 let maxLength = try container.decodeIfPresent(Int.self, forKey: .maxLength)
-                self = .string(title: title, description: description, format: format, minLength: minLength, maxLength: maxLength, defaultValue: defaultValue)
+                self = .string(
+                    title: title,
+                    description: description,
+                    format: format,
+                    minLength: minLength,
+                    maxLength: maxLength,
+                    defaultValue: defaultValue
+                )
             }
 
         case "number", "integer":
             let minimum = try container.decodeIfPresent(Double.self, forKey: .minimum)
             let maximum = try container.decodeIfPresent(Double.self, forKey: .maximum)
             let defaultValue = try container.decodeIfPresent(JSONValue.self, forKey: .default)
-            self = .number(title: title, description: description, minimum: minimum, maximum: maximum, defaultValue: defaultValue)
+            self = .number(
+                title: title,
+                description: description,
+                minimum: minimum,
+                maximum: maximum,
+                defaultValue: defaultValue
+            )
         case "boolean":
             let defaultValue = try container.decodeIfPresent(JSONValue.self, forKey: .default)
             self = .boolean(title: title, description: description, defaultValue: defaultValue)
@@ -117,7 +136,10 @@ extension JSONSchema: Codable {
             self = .array(items: items, title: title, description: description, defaultValue: defaultValue)
         case "object":
             var properties: [String: JSONSchema] = [:]
-            if let propertiesContainer = try? container.nestedContainer(keyedBy: AnyCodingKey.self, forKey: .properties) {
+            if let propertiesContainer = try? container.nestedContainer(
+                keyedBy: AnyCodingKey.self,
+                forKey: .properties
+            ) {
                 for key in propertiesContainer.allKeys {
                     properties[key.stringValue] = try propertiesContainer.decode(JSONSchema.self, forKey: key)
                 }
@@ -138,7 +160,16 @@ extension JSONSchema: Codable {
 
             let defaultValue = try container.decodeIfPresent(JSONValue.self, forKey: .default)
 
-            self = .object(JSONSchema.Object(properties: properties, required: required, title: title, description: description, additionalProperties: additionalProperties), defaultValue: defaultValue)
+            self = .object(
+                JSONSchema.Object(
+                    properties: properties,
+                    required: required,
+                    title: title,
+                    description: description,
+                    additionalProperties: additionalProperties
+                ),
+                defaultValue: defaultValue
+            )
         default:
             throw DecodingError.dataCorruptedError(
                 forKey: .type,

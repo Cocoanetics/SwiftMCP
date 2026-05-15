@@ -32,7 +32,11 @@ public struct CompleteRequest: Codable, Sendable {
                 let uri = try container.decode(String.self, forKey: .uri)
                 self = .resource(uri: uri)
             default:
-                throw DecodingError.dataCorruptedError(forKey: .type, in: container, debugDescription: "Unknown reference type")
+                throw DecodingError.dataCorruptedError(
+                    forKey: .type,
+                    in: container,
+                    debugDescription: "Unknown reference type"
+                )
             }
         }
 

@@ -53,7 +53,9 @@ extension DemoServer {
                     let formatter = DateFormatter()
                     formatter.dateStyle = .medium
                     formatter.timeStyle = .short
-                    fileAttributes = "Size: \(ByteCountFormatter.string(fromByteCount: fileSize, countStyle: .file)), Modified: \(formatter.string(from: modificationDate))"
+                    let sizeString = ByteCountFormatter.string(fromByteCount: fileSize, countStyle: .file)
+                    let modifiedString = formatter.string(from: modificationDate)
+                    fileAttributes = "Size: \(sizeString), Modified: \(modifiedString)"
                 } catch {
                     fileAttributes = "File in Downloads folder"
                 }

@@ -428,7 +428,10 @@ actor DemoServer {
             "arguments": ["prompt": prompt, "has_model_preferences": modelPreferences != nil]
         ]))
 
-        return try await RequestContext.current?.sample(prompt: prompt, modelPreferences: modelPreferences) ?? "No response from client"
+        return try await RequestContext.current?.sample(
+            prompt: prompt,
+            modelPreferences: modelPreferences
+        ) ?? "No response from client"
     }
 
     // MARK: - Elicitation
@@ -447,8 +450,20 @@ actor DemoServer {
         // Create a schema for contact information
         let schema = JSONSchema.object(JSONSchema.Object(
             properties: [
-                "name": .string(title: "Full Name", description: "Your full name", format: nil, minLength: 2, maxLength: 50),
-                "email": .string(title: "Email Address", description: "Your email address", format: "email", minLength: nil, maxLength: nil),
+                "name": .string(
+                    title: "Full Name",
+                    description: "Your full name",
+                    format: nil,
+                    minLength: 2,
+                    maxLength: 50
+                ),
+                "email": .string(
+                    title: "Email Address",
+                    description: "Your email address",
+                    format: "email",
+                    minLength: nil,
+                    maxLength: nil
+                ),
                 "age": .number(title: "Age", description: "Your age", minimum: 13, maximum: 120)
             ],
             required: ["name", "email"],
@@ -522,8 +537,9 @@ actor DemoServer {
                 let priority = content["priority"]?.value as? String ?? "unspecified"
                 let hasDeadline = content["hasDeadline"]?.value as? Bool ?? false
 
-                return "Project preferences received: \(projectType) project using \(framework), prioritizing \(priority)" +
-                    (hasDeadline ? " with a deadline" : " without a specific deadline")
+                let base = "Project preferences received: \(projectType) project using "
+                    + "\(framework), prioritizing \(priority)"
+                return base + (hasDeadline ? " with a deadline" : " without a specific deadline")
             } else {
                 return "User accepted but no content was provided"
             }
@@ -548,12 +564,44 @@ actor DemoServer {
         // Create a schema with string length constraints and boolean defaults
         let schema = JSONSchema.object(JSONSchema.Object(
             properties: [
-                "username": .string(title: "Username", description: "Username (3-20 characters)", format: nil, minLength: 3, maxLength: 20),
-                "password": .string(title: "Password", description: "Password (8-50 characters)", format: nil, minLength: 8, maxLength: 50),
-                "confirmPassword": .string(title: "Confirm Password", description: "Confirm password", format: nil, minLength: 8, maxLength: 50),
-                "email": .string(title: "Email", description: "Email address", format: "email", minLength: 5, maxLength: 100),
-                "agreeToTerms": .boolean(title: "Terms & Conditions", description: "I agree to the terms and conditions", defaultValue: false),
-                "receiveNewsletter": .boolean(title: "Newsletter", description: "Receive newsletter updates", defaultValue: true)
+                "username": .string(
+                    title: "Username",
+                    description: "Username (3-20 characters)",
+                    format: nil,
+                    minLength: 3,
+                    maxLength: 20
+                ),
+                "password": .string(
+                    title: "Password",
+                    description: "Password (8-50 characters)",
+                    format: nil,
+                    minLength: 8,
+                    maxLength: 50
+                ),
+                "confirmPassword": .string(
+                    title: "Confirm Password",
+                    description: "Confirm password",
+                    format: nil,
+                    minLength: 8,
+                    maxLength: 50
+                ),
+                "email": .string(
+                    title: "Email",
+                    description: "Email address",
+                    format: "email",
+                    minLength: 5,
+                    maxLength: 100
+                ),
+                "agreeToTerms": .boolean(
+                    title: "Terms & Conditions",
+                    description: "I agree to the terms and conditions",
+                    defaultValue: false
+                ),
+                "receiveNewsletter": .boolean(
+                    title: "Newsletter",
+                    description: "Receive newsletter updates",
+                    defaultValue: true
+                )
             ],
             required: ["username", "password", "confirmPassword", "email", "agreeToTerms"],
             title: "Account Registration",
@@ -653,7 +701,8 @@ actor DemoServer {
                 let notifications = content["notifications"]?.value as? Bool ?? false
                 let maxItems = content["maxItems"]?.value as? Double ?? 25.0
 
-                return "Preferences saved! Theme: \(theme), Language: \(language), Notifications: \(notifications), Max items: \(Int(maxItems))"
+                return "Preferences saved! Theme: \(theme), Language: \(language), "
+                    + "Notifications: \(notifications), Max items: \(Int(maxItems))"
             } else {
                 return "User accepted but no content was provided"
             }

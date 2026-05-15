@@ -270,12 +270,18 @@ public enum MCPJSONCoding {
         }
     }
 
-    public func decoded<T: Decodable>(_ type: T.Type = T.self, using decoder: JSONDecoder = MCPJSONCoding.makeDecoder()) throws -> T {
+    public func decoded<T: Decodable>(
+        _ type: T.Type = T.self,
+        using decoder: JSONDecoder = MCPJSONCoding.makeDecoder()
+    ) throws -> T {
         let data = try MCPJSONCoding.makeWireEncoder().encode(self)
         return try decoder.decode(T.self, from: data)
     }
 
-    func decodeDynamically(_ type: any Decodable.Type, using decoder: JSONDecoder = MCPJSONCoding.makeDecoder()) throws -> any Decodable {
+    func decodeDynamically(
+        _ type: any Decodable.Type,
+        using decoder: JSONDecoder = MCPJSONCoding.makeDecoder()
+    ) throws -> any Decodable {
         let data = try MCPJSONCoding.makeWireEncoder().encode(self)
         return try decoder.decode(type, from: data)
     }
@@ -359,13 +365,19 @@ public extension Dictionary where Key == String, Value == JSONValue {
         self = object
     }
 
-    func decoded<T: Decodable>(_ type: T.Type = T.self, using decoder: JSONDecoder = MCPJSONCoding.makeDecoder()) throws -> T {
+    func decoded<T: Decodable>(
+        _ type: T.Type = T.self,
+        using decoder: JSONDecoder = MCPJSONCoding.makeDecoder()
+    ) throws -> T {
         try JSONValue.object(self).decoded(type, using: decoder)
     }
 }
 
 public extension Array where Element == JSONValue {
-    func decoded<T: Decodable>(_ type: T.Type = T.self, using decoder: JSONDecoder = MCPJSONCoding.makeDecoder()) throws -> T {
+    func decoded<T: Decodable>(
+        _ type: T.Type = T.self,
+        using decoder: JSONDecoder = MCPJSONCoding.makeDecoder()
+    ) throws -> T {
         try JSONValue.array(self).decoded(type, using: decoder)
     }
 }

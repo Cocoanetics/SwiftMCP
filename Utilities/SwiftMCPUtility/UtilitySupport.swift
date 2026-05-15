@@ -25,8 +25,16 @@ struct ConnectionOptions: ParsableArguments {
 enum UtilitySupport {
     static func makeConfig(from options: ConnectionOptions) throws -> MCPServerConfig {
         if let configPath = options.config {
-            if options.sse != nil || options.command != nil || !options.header.isEmpty || options.cwd != nil || !options.env.isEmpty {
-                throw ValidationError("Use --config by itself; do not combine it with --sse, --command, --header, --cwd, or --env.")
+            let hasOther = options.sse != nil
+                || options.command != nil
+                || !options.header.isEmpty
+                || options.cwd != nil
+                || !options.env.isEmpty
+            if hasOther {
+                throw ValidationError(
+                    "Use --config by itself; do not combine it with "
+                    + "--sse, --command, --header, --cwd, or --env."
+                )
             }
             let config = try loadConfig(from: configPath)
             return try makeConfig(from: config)

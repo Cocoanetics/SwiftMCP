@@ -14,11 +14,11 @@ import OSLog
  
  This is the main entry point for the SwiftMCP demo application. It provides two modes of operation:
  
- - `stdio`: The default mode that processes JSON-RPC requests from standard input and writes responses to standard output.
-   Perfect for integration with other tools via pipes.
- 
- - `httpsse`: Starts an HTTP server with Server-Sent Events (SSE) support, optionally with authentication and OpenAPI endpoints.
-   Ideal for long-running services and AI plugin integration.
+ - `stdio`: The default mode that processes JSON-RPC requests from standard input and writes
+   responses to standard output. Perfect for integration with other tools via pipes.
+
+ - `httpsse`: Starts an HTTP server with Server-Sent Events (SSE) support, optionally with
+   authentication and OpenAPI endpoints. Ideal for long-running services and AI plugin integration.
  
  - `tcp`: Starts a TCP server with Bonjour discovery (_mcp._tcp) for local MCP clients.
  

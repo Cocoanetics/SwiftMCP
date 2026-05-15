@@ -46,7 +46,12 @@ public struct ClientCapabilities: Codable, Sendable {
         public init() {}
     }
 
-    public init(experimental: JSONDictionary? = nil, roots: RootsCapabilities? = nil, sampling: SamplingCapabilities? = nil, elicitation: ElicitationCapabilities? = nil) {
+    public init(
+        experimental: JSONDictionary? = nil,
+        roots: RootsCapabilities? = nil,
+        sampling: SamplingCapabilities? = nil,
+        elicitation: ElicitationCapabilities? = nil
+    ) {
         self.experimental = experimental
         self.roots = roots
         self.sampling = sampling

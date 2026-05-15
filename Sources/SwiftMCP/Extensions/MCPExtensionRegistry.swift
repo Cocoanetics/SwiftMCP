@@ -18,7 +18,9 @@ import Foundation
 /// between the server and its installed extensions.
 public struct MCPExtensionContribution<Server> {
     public typealias ToolDispatcher = (String, Server, JSONDictionary) async throws -> Encodable & Sendable
-    public typealias ResourceDispatcher = (String, Server, JSONDictionary, URL, String?) async throws -> [MCPResourceContent]
+    public typealias ResourceDispatcher = (
+        String, Server, JSONDictionary, URL, String?
+    ) async throws -> [MCPResourceContent]
     public typealias PromptDispatcher = (String, Server, JSONDictionary) async throws -> [PromptMessage]
 
     public let toolMetadata: [MCPToolMetadata]

@@ -9,7 +9,11 @@ import SwiftMCP
 
 extension DemoServer: MCPCompletionProviding {
 
-    func completion(for parameter: MCPParameterInfo, in context: MCPCompletionContext, prefix: String) async -> CompleteResult.Completion {
+    func completion(
+        for parameter: MCPParameterInfo,
+        in context: MCPCompletionContext,
+        prefix: String
+    ) async -> CompleteResult.Completion {
         // provide completion for any query
         if parameter.name == "query" {
             let values = ["Oliver", "Sylvia", "Max"].sortedByBestCompletion(prefix: prefix)

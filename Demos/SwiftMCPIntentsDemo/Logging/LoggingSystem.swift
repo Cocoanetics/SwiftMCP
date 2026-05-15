@@ -11,7 +11,8 @@ extension LoggingSystem {
     ///   - logLevel: The default log level to use (default: .info)
     static func bootstrapWithOSLog(
         subsystem: String = "com.cocoanetics.SwiftMCP",
-        logLevel: Logging.Logger.Level = ProcessInfo.processInfo.environment["ENABLE_DEBUG_OUTPUT"] == "1" ? .trace : .info
+        logLevel: Logging.Logger.Level = ProcessInfo.processInfo
+            .environment["ENABLE_DEBUG_OUTPUT"] == "1" ? .trace : .info
     ) {
         bootstrap { label in
             let category = label.split(separator: ".").last?.description ?? "default"

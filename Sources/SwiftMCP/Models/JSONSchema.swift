@@ -29,7 +29,13 @@ public indirect enum JSONSchema: Sendable {
         public var additionalProperties: Bool? = false
 
         /// public initializer
-        public init(properties: [String: JSONSchema], required: [String], title: String? = nil, description: String? = nil, additionalProperties: Bool? = nil) {
+        public init(
+            properties: [String: JSONSchema],
+            required: [String],
+            title: String? = nil,
+            description: String? = nil,
+            additionalProperties: Bool? = nil
+        ) {
             self.properties = properties
             self.required = required
             self.title = title
@@ -61,7 +67,12 @@ public indirect enum JSONSchema: Sendable {
     case boolean(title: String? = nil, description: String? = nil, defaultValue: JSONValue? = nil)
 
     /// An array schema
-    case array(items: JSONSchema, title: String? = nil, description: String? = nil, defaultValue: JSONValue? = nil)
+    case array(
+        items: JSONSchema,
+        title: String? = nil,
+        description: String? = nil,
+        defaultValue: JSONValue? = nil
+    )
 
     /// An object schema
     case object(Object, defaultValue: JSONValue? = nil)
@@ -98,7 +109,12 @@ extension JSONSchema {
 
         case .array(let items, let title, let description, let defaultValue):
             // For array schemas, recursively apply to items
-            return .array(items: items.withoutRequired, title: title, description: description, defaultValue: defaultValue)
+            return .array(
+                items: items.withoutRequired,
+                title: title,
+                description: description,
+                defaultValue: defaultValue
+            )
 
         // For other schema types, return as is since they don't have required fields
         case .string, .number, .boolean, .enum:
@@ -167,19 +183,35 @@ extension JSONSchema {
     public var addingAdditionalPropertiesRestrictionToObjects: JSONSchema {
         switch self {
         case .object(let object, let defaultValue):
-            return .object(Object(properties: object.properties.mapValues { $0.addingAdditionalPropertiesRestrictionToObjects },
-                                  required: object.required,
-                                  description: object.description,
-                                  additionalProperties: false),
-                           defaultValue: defaultValue)
+            let updatedProperties = object.properties.mapValues {
+                $0.addingAdditionalPropertiesRestrictionToObjects
+            }
+            return .object(
+                Object(
+                    properties: updatedProperties,
+                    required: object.required,
+                    description: object.description,
+                    additionalProperties: false
+                ),
+                defaultValue: defaultValue
+            )
 
         case .array(let items, let title, let description, let defaultValue):
             // For array schemas, recursively apply to items
-            return .array(items: items.addingAdditionalPropertiesRestrictionToObjects, title: title, description: description, defaultValue: defaultValue)
+            return .array(
+                items: items.addingAdditionalPropertiesRestrictionToObjects,
+                title: title,
+                description: description,
+                defaultValue: defaultValue
+            )
 
         // For other schema types, return as is since they don't have required fields
         case .oneOf(let schemas, let title, let description):
-            return .oneOf(schemas.map { $0.addingAdditionalPropertiesRestrictionToObjects }, title: title, description: description)
+            return .oneOf(
+                schemas.map { $0.addingAdditionalPropertiesRestrictionToObjects },
+                title: title,
+                description: description
+            )
         default:
             return self
         }

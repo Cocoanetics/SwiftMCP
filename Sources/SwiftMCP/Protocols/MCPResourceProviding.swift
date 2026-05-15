@@ -101,7 +101,12 @@ extension MCPResourceProviding {
         return array.flatMap { metadata in
             metadata.uriTemplates.compactMap { template in
                 guard let url = URL(string: template) else { return nil }
-                return SimpleResource(uri: url, name: metadata.name, description: metadata.description, mimeType: metadata.mimeType)
+                return SimpleResource(
+                    uri: url,
+                    name: metadata.name,
+                    description: metadata.description,
+                    mimeType: metadata.mimeType
+                )
             }
         }
     }

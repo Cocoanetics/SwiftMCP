@@ -140,7 +140,10 @@ public extension MCPServer {
 
         default:
             // Respond with JSON-RPC error for method not found
-            return JSONRPCMessage.errorResponse(id: requestData.id, error: .init(code: -32601, message: "Method not found"))
+            return JSONRPCMessage.errorResponse(
+                id: requestData.id,
+                error: .init(code: -32601, message: "Method not found")
+            )
         }
     }
 
@@ -150,7 +153,9 @@ public extension MCPServer {
      - Parameter notificationData: The notification data
      - Returns: Always returns nil since notifications don't expect responses
      */
-    private func handleNotification(_ notificationData: JSONRPCMessage.JSONRPCNotificationData) async -> JSONRPCMessage? {
+    private func handleNotification(
+        _ notificationData: JSONRPCMessage.JSONRPCNotificationData
+    ) async -> JSONRPCMessage? {
         switch notificationData.method {
         case "notifications/initialized":
             // Client has completed initialization
@@ -195,7 +200,9 @@ public extension MCPServer {
      - Parameter errorResponseData: The error response data
      - Returns: Always returns nil since we don't currently respond to error responses
      */
-    private func handleErrorResponse(_ errorResponseData: JSONRPCMessage.JSONRPCErrorResponseData) async -> JSONRPCMessage? {
+    private func handleErrorResponse(
+        _ errorResponseData: JSONRPCMessage.JSONRPCErrorResponseData
+    ) async -> JSONRPCMessage? {
         // Route the error response to the current session for request/response matching
         let response = JSONRPCMessage.errorResponse(errorResponseData)
         if let session = Session.current {
@@ -215,7 +222,8 @@ public extension MCPServer {
      */
     private func handleInitializeRequest(_ request: JSONRPCMessage.JSONRPCRequestData) async -> JSONRPCMessage? {
         await Session.current?.markInitializeRequestReceived()
-        let negotiatedProtocolVersion = request.params?["protocolVersion"]?.stringValue ?? HTTPSSETransport.latestProtocolVersion
+        let negotiatedProtocolVersion = request.params?["protocolVersion"]?.stringValue
+            ?? HTTPSSETransport.latestProtocolVersion
         guard HTTPSSETransport.supportedProtocolVersions.contains(negotiatedProtocolVersion) else {
             return JSONRPCMessage.errorResponse(
                 id: request.id,
@@ -469,7 +477,10 @@ public extension MCPServer {
 
         guard let params = request.params,
               let name = params["name"]?.stringValue else {
-            return JSONRPCMessage.errorResponse(id: request.id, error: .init(code: -32602, message: "Missing prompt name"))
+            return JSONRPCMessage.errorResponse(
+                id: request.id,
+                error: .init(code: -32602, message: "Missing prompt name")
+            )
         }
 
         let arguments = params["arguments"]?.dictionaryValue ?? [:]
@@ -484,7 +495,10 @@ public extension MCPServer {
                 ]
             )
         } catch {
-            return JSONRPCMessage.errorResponse(id: request.id, error: .init(code: -32000, message: error.localizedDescription))
+            return JSONRPCMessage.errorResponse(
+                id: request.id,
+                error: .init(code: -32000, message: error.localizedDescription)
+            )
         }
     }
 
@@ -495,7 +509,10 @@ public extension MCPServer {
               let refDict = params["ref"]?.dictionaryValue,
               let argDict = params["argument"]?.dictionaryValue,
               let argName = argDict["name"]?.stringValue else {
-            return JSONRPCMessage.response(id: request.id, result: ["completion": .object(["values": .array([])])])
+            return JSONRPCMessage.response(
+                id: request.id,
+                result: ["completion": .object(["values": .array([])])]
+            )
         }
 
         let prefix = argDict["value"]?.stringValue ?? ""
@@ -504,12 +521,18 @@ public extension MCPServer {
            refType == "ref/resource",
            let uri = refDict["uri"]?.stringValue,
            let resourceProvider = self as? MCPResourceProviding,
-           let metadata = resourceProvider.mcpResourceMetadata.first(where: { $0.uriTemplates.contains(uri) }),
+           let metadata = resourceProvider.mcpResourceMetadata.first(
+                where: { $0.uriTemplates.contains(uri) }
+           ),
            let parameter = metadata.parameters.first(where: { $0.name == argName }) {
 
             let comp: CompleteResult.Completion
             if let completionProvider = self as? MCPCompletionProviding {
-                comp = await completionProvider.completion(for: parameter, in: .resource(metadata), prefix: prefix)
+                comp = await completionProvider.completion(
+                    for: parameter,
+                    in: .resource(metadata),
+                    prefix: prefix
+                )
             } else {
                 let completions = parameter.defaultCompletions.sortedByBestCompletion(prefix: prefix)
                 comp = CompleteResult.Completion(values: completions, total: completions.count, hasMore: false)
@@ -534,7 +557,11 @@ public extension MCPServer {
 
             let comp: CompleteResult.Completion
             if let completionProvider = self as? MCPCompletionProviding {
-                comp = await completionProvider.completion(for: parameter, in: .prompt(metadata), prefix: prefix)
+                comp = await completionProvider.completion(
+                    for: parameter,
+                    in: .prompt(metadata),
+                    prefix: prefix
+                )
             } else {
                 let completions = parameter.defaultCompletions.sortedByBestCompletion(prefix: prefix)
                 comp = CompleteResult.Completion(values: completions, total: completions.count, hasMore: false)
@@ -551,28 +578,34 @@ public extension MCPServer {
         }
 
         // Fallback empty response
-        return JSONRPCMessage.response(id: request.id, result: ["completion": .object(["values": .array([])])])
+        return JSONRPCMessage.response(
+            id: request.id,
+            result: ["completion": .object(["values": .array([])])]
+        )
     }
 
     /**
      The server's name, derived from the `@MCPServer` macro.
      */
     var serverName: String {
-        Mirror(reflecting: self).children.first(where: { $0.label == "__mcpServerName" })?.value as? String ?? "UnknownServer"
+        Mirror(reflecting: self).children
+            .first(where: { $0.label == "__mcpServerName" })?.value as? String ?? "UnknownServer"
     }
 
     /**
      The server's version, derived from the `@MCPServer` macro.
      */
     var serverVersion: String {
-        Mirror(reflecting: self).children.first(where: { $0.label == "__mcpServerVersion" })?.value as? String ?? "UnknownVersion"
+        Mirror(reflecting: self).children
+            .first(where: { $0.label == "__mcpServerVersion" })?.value as? String ?? "UnknownVersion"
     }
 
     /**
      The server's description, derived from the `@MCPServer` macro.
      */
     var serverDescription: String? {
-        Mirror(reflecting: self).children.first(where: { $0.label == "__mcpServerDescription" })?.value as? String
+        Mirror(reflecting: self).children
+            .first(where: { $0.label == "__mcpServerDescription" })?.value as? String
     }
 
     // MARK: - List Responses
@@ -597,7 +630,10 @@ public extension MCPServer {
         if let tools = try? JSONValue(encoding: toolProvider.mcpToolMetadata.convertedToTools()) {
             return JSONRPCMessage.response(id: id, result: ["tools": tools])
         }
-        return JSONRPCMessage.errorResponse(id: id, error: .init(code: -32603, message: "Failed to encode tools list"))
+        return JSONRPCMessage.errorResponse(
+            id: id,
+            error: .init(code: -32603, message: "Failed to encode tools list")
+        )
     }
 
     /// Creates a response listing all available prompts.
@@ -613,7 +649,10 @@ public extension MCPServer {
         if let promptsValue = try? JSONValue(encoding: prompts) {
             return JSONRPCMessage.response(id: id, result: ["prompts": promptsValue])
         }
-        return JSONRPCMessage.errorResponse(id: id, error: .init(code: -32603, message: "Failed to encode prompts list"))
+        return JSONRPCMessage.errorResponse(
+            id: id,
+            error: .init(code: -32603, message: "Failed to encode prompts list")
+        )
     }
 
     /**
@@ -646,7 +685,10 @@ public extension MCPServer {
         }) {
             return JSONRPCMessage.response(id: id, result: ["resources": resourcesValue])
         }
-        return JSONRPCMessage.errorResponse(id: id, error: .init(code: -32603, message: "Failed to encode resources list"))
+        return JSONRPCMessage.errorResponse(
+            id: id,
+            error: .init(code: -32603, message: "Failed to encode resources list")
+        )
     }
 
     /**
@@ -657,7 +699,10 @@ public extension MCPServer {
        - request: The original JSON-RPC request
      - Returns: A JSON-RPC message containing the resource content or an error
      */
-    func createResourcesReadResponse(id: JSONRPCID, request: JSONRPCMessage.JSONRPCRequestData) async -> JSONRPCMessage {
+    func createResourcesReadResponse(
+        id: JSONRPCID,
+        request: JSONRPCMessage.JSONRPCRequestData
+    ) async -> JSONRPCMessage {
 
         guard let resourceProvider = self as? MCPResourceProviding else {
             return JSONRPCMessage.response(id: id, result: [
@@ -671,7 +716,10 @@ public extension MCPServer {
         // Extract the URI from the request params
         guard let uriString = request.params?["uri"]?.stringValue,
               let uri = URL(string: uriString) else {
-            return JSONRPCMessage.errorResponse(id: id, error: .init(code: -32602, message: "Invalid or missing URI parameter"))
+            return JSONRPCMessage.errorResponse(
+                id: id,
+                error: .init(code: -32602, message: "Invalid or missing URI parameter")
+            )
         }
 
         do {
@@ -682,10 +730,19 @@ public extension MCPServer {
                 let contents = try resourceContentArray.map { try JSONValue(encoding: $0) }
                 return JSONRPCMessage.response(id: id, result: ["contents": .array(contents)])
             } else {
-                return JSONRPCMessage.errorResponse(id: id, error: .init(code: -32001, message: "Resource not found: \(uri.absoluteString)"))
+                return JSONRPCMessage.errorResponse(
+                    id: id,
+                    error: .init(code: -32001, message: "Resource not found: \(uri.absoluteString)")
+                )
             }
         } catch {
-            return JSONRPCMessage.errorResponse(id: id, error: .init(code: -32000, message: "Error getting resource: \(error.localizedDescription)"))
+            return JSONRPCMessage.errorResponse(
+                id: id,
+                error: .init(
+                    code: -32000,
+                    message: "Error getting resource: \(error.localizedDescription)"
+                )
+            )
         }
     }
 
@@ -718,7 +775,10 @@ public extension MCPServer {
         }) {
             return JSONRPCMessage.response(id: id, result: ["resourceTemplates": templatesValue])
         }
-        return JSONRPCMessage.errorResponse(id: id, error: .init(code: -32603, message: "Failed to encode resource templates list"))
+        return JSONRPCMessage.errorResponse(
+            id: id,
+            error: .init(code: -32603, message: "Failed to encode resource templates list")
+        )
     }
 
     /**
@@ -754,9 +814,13 @@ public extension MCPServer {
         }
 
         guard let level = LogLevel(string: levelString) else {
+            let validLevels = LogLevel.allCases.map(\.rawValue).joined(separator: ", ")
             return JSONRPCMessage.errorResponse(
                 id: request.id,
-                error: .init(code: -32602, message: "Invalid log level: '\(levelString)'. Valid levels are: \(LogLevel.allCases.map(\.rawValue).joined(separator: ", "))")
+                error: .init(
+                    code: -32602,
+                    message: "Invalid log level: '\(levelString)'. Valid levels are: \(validLevels)"
+                )
             )
         }
 

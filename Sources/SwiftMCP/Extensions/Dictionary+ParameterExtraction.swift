@@ -17,7 +17,10 @@ extension String {
         return try decoder.decode(type, from: data)
     }
 
-    func decode(_ type: any Decodable.Type, using decoder: JSONDecoder = MCPJSONCoding.makeDecoder()) throws -> any Decodable {
+    func decode(
+        _ type: any Decodable.Type,
+        using decoder: JSONDecoder = MCPJSONCoding.makeDecoder()
+    ) throws -> any Decodable {
         guard let data = self.data(using: .utf8) else {
             throw MCPToolError.invalidArgumentType(
                 parameterName: "jsonString",
@@ -65,7 +68,11 @@ public extension Dictionary where Key == String, Value == JSONValue {
 
             let caseLabels = caseType.caseLabels
             guard let index = caseLabels.firstIndex(of: string) else {
-                throw MCPToolError.invalidEnumValue(parameterName: name, expectedValues: caseLabels, actualValue: string)
+                throw MCPToolError.invalidEnumValue(
+                    parameterName: name,
+                    expectedValues: caseLabels,
+                    actualValue: string
+                )
             }
             guard let allCases = caseType.allCases as? [T] else {
                 preconditionFailure()
@@ -120,7 +127,11 @@ public extension Dictionary where Key == String, Value == JSONValue {
         if let caseIterableType = elementType as? any CaseIterable.Type {
             return try values.map { element in
                 guard let stringValue = element.stringValue else {
-                    throw invalidArgumentType(parameterName: name, expectedType: "Array of Strings", actualValue: element)
+                    throw invalidArgumentType(
+                        parameterName: name,
+                        expectedType: "Array of Strings",
+                        actualValue: element
+                    )
                 }
 
                 let caseLabels = caseIterableType.caseLabels
@@ -266,7 +277,10 @@ public extension Dictionary where Key == String, Value == JSONValue {
         return try extractNumberArray(named: name, as: type)
     }
 
-    func extractOptionalNumberArray<N: BinaryFloatingPoint>(named name: String, as type: N.Type = N.self) throws -> [N]? {
+    func extractOptionalNumberArray<N: BinaryFloatingPoint>(
+        named name: String,
+        as type: N.Type = N.self
+    ) throws -> [N]? {
         guard self[name] != nil else { return nil }
         return try extractNumberArray(named: name, as: type)
     }
@@ -429,7 +443,11 @@ extension Dictionary where Key == String, Value == String {
 
         if let losslessType = T.self as? LosslessStringConvertible.Type {
             guard let value = losslessType.init(stringValue) as? T else {
-                throw MCPResourceError.typeMismatch(parameter: name, expectedType: String(describing: T.self), actualValue: stringValue)
+                throw MCPResourceError.typeMismatch(
+                    parameter: name,
+                    expectedType: String(describing: T.self),
+                    actualValue: stringValue
+                )
             }
             return value
         } else if T.self == String.self {
@@ -451,11 +469,19 @@ extension Dictionary where Key == String, Value == String {
             }
             return url as! T
         } else {
-            throw MCPResourceError.typeMismatch(parameter: name, expectedType: String(describing: T.self), actualValue: stringValue)
+            throw MCPResourceError.typeMismatch(
+                parameter: name,
+                expectedType: String(describing: T.self),
+                actualValue: stringValue
+            )
         }
     }
 
-    public func extractValueFromString<T>(named name: String, as type: T.Type = T.self, defaultValue: T) throws -> T {
+    public func extractValueFromString<T>(
+        named name: String,
+        as type: T.Type = T.self,
+        defaultValue: T
+    ) throws -> T {
         if self[name] == nil {
             return defaultValue
         }
@@ -486,7 +512,11 @@ extension Dictionary where Key == String, Value == String {
                 return value
             } as! [Element]
         } else {
-            throw MCPResourceError.typeMismatch(parameter: name, expectedType: String(describing: [Element].self), actualValue: stringValue)
+            throw MCPResourceError.typeMismatch(
+                parameter: name,
+                expectedType: String(describing: [Element].self),
+                actualValue: stringValue
+            )
         }
     }
 }

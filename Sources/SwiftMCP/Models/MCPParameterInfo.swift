@@ -32,7 +32,13 @@ public struct MCPParameterInfo: Sendable {
        - defaultValue: An optional default value for the parameter
        - isRequired: Whether the parameter is required (no default value)
      */
-    public init(name: String, type: Sendable.Type, description: String? = nil, defaultValue: Sendable? = nil, isRequired: Bool) {
+    public init(
+        name: String,
+        type: Sendable.Type,
+        description: String? = nil,
+        defaultValue: Sendable? = nil,
+        isRequired: Bool
+    ) {
         self.name = name
         self.type = type
         self.description = description
