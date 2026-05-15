@@ -15,6 +15,12 @@ import SwiftSyntaxMacros
 /// func getUserProfile(user_id: Int, lang: String = "en") -> ProfileResource
 /// ```
 public struct MCPResourceMacro: PeerMacro {
+    struct WrapperParamDetail {
+        let name: String
+        let label: String
+        let type: String
+    }
+
     public static func expansion(
         of node: AttributeSyntax,
         providingPeersOf declaration: some DeclSyntaxProtocol,
@@ -108,12 +114,12 @@ public struct MCPResourceMacro: PeerMacro {
         // Generate parameter info strings using the new unified approach
         var parameterInfoStrings: [String] = []
         var functionParamNames: [String] = []
-        var wrapperParamDetails: [(name: String, label: String, type: String)] = []
+        var wrapperParamDetails: [WrapperParamDetail] = []
 
         for parsedParam in commonMetadata.parameters {
             functionParamNames.append(parsedParam.name)
             parameterInfoStrings.append(parsedParam.toMCPParameterInfo())
-            wrapperParamDetails.append((name: parsedParam.name, label: parsedParam.label, type: parsedParam.typeString))
+            wrapperParamDetails.append(WrapperParamDetail(name: parsedParam.name, label: parsedParam.label, type: parsedParam.typeString))
         }
 
         for placeholder in allPlaceholders {

@@ -199,7 +199,7 @@ func extractMethod(funcDecl: FunctionDeclSyntax, kind: ContributionKind) -> Disc
     let throwsClause = funcDecl.signature.effectSpecifiers?.throwsClause
     let throwsKeyword = throwsClause?.trimmedDescription
     let isThrowing = throwsClause != nil
-    let (doc, paramDocs, returnsDoc) = parseDocComment(trivia: funcDecl.leadingTrivia)
+    let parsedDoc = parseDocComment(trivia: funcDecl.leadingTrivia)
     return DiscoveredMethod(
         kind: kind,
         functionName: funcDecl.name.text,
@@ -208,16 +208,22 @@ func extractMethod(funcDecl: FunctionDeclSyntax, kind: ContributionKind) -> Disc
         isAsync: isAsync,
         isThrowing: isThrowing,
         throwsKeyword: throwsKeyword,
-        docComment: doc,
-        paramDocs: paramDocs,
-        returnsDoc: returnsDoc,
+        docComment: parsedDoc.description,
+        paramDocs: parsedDoc.params,
+        returnsDoc: parsedDoc.returns,
         ifConfigCondition: ""
     )
 }
 
 // MARK: - Doc-comment parsing
 
-func parseDocComment(trivia: Trivia) -> (description: String?, params: [String: String], returns: String?) {
+struct ParsedDocComment {
+    let description: String?
+    let params: [String: String]
+    let returns: String?
+}
+
+func parseDocComment(trivia: Trivia) -> ParsedDocComment {
     var lines: [String] = []
     for piece in trivia.pieces {
         switch piece {
@@ -260,7 +266,11 @@ func parseDocComment(trivia: Trivia) -> (description: String?, params: [String: 
     }
 
     let descText = description.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-    return (descText.isEmpty ? nil : descText, params, returns)
+    return ParsedDocComment(
+        description: descText.isEmpty ? nil : descText,
+        params: params,
+        returns: returns
+    )
 }
 
 // MARK: - Codegen

@@ -357,8 +357,7 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
         logger.trace("TCP OUT:\n\n\(string)")
 
         var out = data
-        let newline = "\n".data(using: .utf8) ?? Data()
-        out.append(newline)
+        out.append(Data("\n".utf8))
 
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             connection.send(content: out, completion: .contentProcessed { error in

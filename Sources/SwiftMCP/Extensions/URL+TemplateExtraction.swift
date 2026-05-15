@@ -320,6 +320,13 @@ private struct RFC6570TemplateConstructor {
 
 /// RFC 6570 compliant URI template extractor
 private struct RFC6570TemplateExtractor {
+    /// Result of extracting a single variable from a URL slice.
+    struct ExtractedVariable {
+        let variableName: String
+        let value: String
+        let consumedLength: Int
+    }
+
     let template: String
     let url: URL
 
@@ -776,7 +783,7 @@ private struct RFC6570TemplateExtractor {
         expression: String,
         fromURL url: String,
         startingAt startIndex: String.Index
-    ) -> (variableName: String, value: String, consumedLength: Int)? {
+    ) -> ExtractedVariable? {
 
         // Parse the expression
         let (operatorType, variables) = parseExpression(expression)
@@ -806,7 +813,7 @@ private struct RFC6570TemplateExtractor {
         variables: [VariableSpec],
         fromURL url: String,
         startingAt startIndex: String.Index
-    ) -> (variableName: String, value: String, consumedLength: Int)? {
+    ) -> ExtractedVariable? {
 
         let allowedChars = CharacterSet(charactersIn: "/?#").inverted
         var currentIndex = startIndex
@@ -828,19 +835,19 @@ private struct RFC6570TemplateExtractor {
             // For now, return the first variable with the first value
             // In a complete implementation, we'd need to return all variables
             if let firstVariable = variables.first, !values.isEmpty {
-                return (firstVariable.name, values[0], value.count)
+                return ExtractedVariable(variableName: firstVariable.name, value: values[0], consumedLength: value.count)
             }
         }
 
         guard let firstVariable = variables.first else { return nil }
-        return (firstVariable.name, value, value.count)
+        return ExtractedVariable(variableName: firstVariable.name, value: value, consumedLength: value.count)
     }
 
     private func extractReservedVariable(
         variables: [VariableSpec],
         fromURL url: String,
         startingAt startIndex: String.Index
-    ) -> (variableName: String, value: String, consumedLength: Int)? {
+    ) -> ExtractedVariable? {
 
         let allowedChars = CharacterSet(charactersIn: "#").inverted
         var currentIndex = startIndex
@@ -864,14 +871,14 @@ private struct RFC6570TemplateExtractor {
         }
 
         guard let firstVariable = variables.first else { return nil }
-        return (firstVariable.name, value, consumedLength)
+        return ExtractedVariable(variableName: firstVariable.name, value: value, consumedLength: consumedLength)
     }
 
     private func extractLabelVariable(
         variables: [VariableSpec],
         fromURL url: String,
         startingAt startIndex: String.Index
-    ) -> (variableName: String, value: String, consumedLength: Int)? {
+    ) -> ExtractedVariable? {
 
         // Label expansion starts with a dot
         guard startIndex < url.endIndex && url[startIndex] == "." else {
@@ -904,19 +911,19 @@ private struct RFC6570TemplateExtractor {
         if variables.count > 1 && value.contains(".") {
             let values = value.split(separator: ".").map(String.init)
             if let firstVariable = variables.first, !values.isEmpty {
-                return (firstVariable.name, values[0], consumedLength)
+                return ExtractedVariable(variableName: firstVariable.name, value: values[0], consumedLength: consumedLength)
             }
         }
 
         guard let firstVariable = variables.first else { return nil }
-        return (firstVariable.name, value, consumedLength)
+        return ExtractedVariable(variableName: firstVariable.name, value: value, consumedLength: consumedLength)
     }
 
     private func extractPathSegmentVariable(
         variables: [VariableSpec],
         fromURL url: String,
         startingAt startIndex: String.Index
-    ) -> (variableName: String, value: String, consumedLength: Int)? {
+    ) -> ExtractedVariable? {
 
         // Path segment expansion starts with a slash
         guard startIndex < url.endIndex && url[startIndex] == "/" else {
@@ -944,19 +951,19 @@ private struct RFC6570TemplateExtractor {
         if variables.count > 1 && value.contains("/") {
             let values = value.split(separator: "/").map(String.init)
             if let firstVariable = variables.first, !values.isEmpty {
-                return (firstVariable.name, values[0], consumedLength)
+                return ExtractedVariable(variableName: firstVariable.name, value: values[0], consumedLength: consumedLength)
             }
         }
 
         guard let firstVariable = variables.first else { return nil }
-        return (firstVariable.name, value, consumedLength)
+        return ExtractedVariable(variableName: firstVariable.name, value: value, consumedLength: consumedLength)
     }
 
     private func extractPathStyleVariable(
         variables: [VariableSpec],
         fromURL url: String,
         startingAt startIndex: String.Index
-    ) -> (variableName: String, value: String, consumedLength: Int)? {
+    ) -> ExtractedVariable? {
 
         // Path style parameters start with ; and are in format ;name=value
         guard startIndex < url.endIndex && url[startIndex] == ";" else {
@@ -992,14 +999,14 @@ private struct RFC6570TemplateExtractor {
             }
         }
 
-        return (paramName, value, consumedLength)
+        return ExtractedVariable(variableName: paramName, value: value, consumedLength: consumedLength)
     }
 
     private func extractQueryVariable(
         variables: [VariableSpec],
         fromURL url: String,
         startingAt startIndex: String.Index
-    ) -> (variableName: String, value: String, consumedLength: Int)? {
+    ) -> ExtractedVariable? {
 
         // Query parameters are in format ?name=value or &name=value
         var currentIndex = startIndex
@@ -1040,7 +1047,7 @@ private struct RFC6570TemplateExtractor {
         // URL decode the value
         let decodedValue = value.removingPercentEncoding ?? value
 
-        return (paramName, decodedValue, consumedLength)
+        return ExtractedVariable(variableName: paramName, value: decodedValue, consumedLength: consumedLength)
     }
 
     private func extractFromQuery(urlQuery: String?, templateQuery: String, variables: inout [String: String]) -> Bool {

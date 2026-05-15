@@ -78,7 +78,7 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
 
         // Extract property information
         var propertyString = ""
-        var propertyInfos: [(name: String, type: String, defaultValue: String?)] = []
+        var propertyInfos: [PropertyInfo] = []
 
         // Process all members, but only properties (ignore nested structs)
         for member in structDecl.memberBlock.members {
@@ -166,11 +166,17 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
         return [extensionDecl]
     }
 
+    struct PropertyInfo {
+        let name: String
+        let type: String
+        let defaultValue: String?
+    }
+
     private static func processProperty(
         property: VariableDeclSyntax,
         documentation: Documentation,
         context: MacroExpansionContext
-    ) throws -> (String, (name: String, type: String, defaultValue: String?)) {
+    ) throws -> (String, PropertyInfo) {
         // Get the property name and type
         let propertyName = property.bindings.first?.pattern.as(IdentifierPatternSyntax.self)?.identifier.text ?? ""
         let propertyType = property.bindings.first?.typeAnnotation?.type.description.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) ?? ""
@@ -216,7 +222,7 @@ public struct SchemaMacro: MemberMacro, ExtensionMacro {
         // Create parameter info with the type directly
         let propertyStr = "SchemaPropertyInfo(name: \"\(schemaName)\", type: \(baseType).self, description: \(propertyDescription), defaultValue: \(defaultValue) as Sendable?, isRequired: \(isRequired))"
 
-        return (propertyStr, (name: propertyName, type: propertyType, defaultValue: defaultValue))
+        return (propertyStr, PropertyInfo(name: propertyName, type: propertyType, defaultValue: defaultValue))
     }
 
     private static func shouldIncludeProperty(_ property: VariableDeclSyntax) -> Bool {

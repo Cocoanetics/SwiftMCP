@@ -160,7 +160,10 @@ struct MCPClientGenerationTests {
 
     @Test("Preserves Int results and default parameters", .enabled(if: false))
     func preservesIntAndDefaults() async throws {
-        let (server, client, proxy) = try await makeClient()
+        let harness = try await makeClient()
+        let server = harness.server
+        let client = harness.client
+        let proxy = harness.proxy
         defer { Task { await proxy.disconnect() } }
 
         #expect(try client.addInts(a: 1, b: 2) == 3)
@@ -170,7 +173,9 @@ struct MCPClientGenerationTests {
 
     @Test("Preserves Double results for async tools", .enabled(if: false))
     func preservesDoubleAsync() async throws {
-        let (_, client, proxy) = try await makeClient()
+        let harness = try await makeClient()
+        let client = harness.client
+        let proxy = harness.proxy
         defer { Task { await proxy.disconnect() } }
 
         let result = try await client.addDoubles(a: 1.5, b: 2.25)
@@ -179,7 +184,9 @@ struct MCPClientGenerationTests {
 
     @Test("Encodes enum inputs and arrays", .enabled(if: false))
     func encodesEnumInputs() async throws {
-        let (_, client, proxy) = try await makeClient()
+        let harness = try await makeClient()
+        let client = harness.client
+        let proxy = harness.proxy
         defer { Task { await proxy.disconnect() } }
 
         #expect(try client.echoEnum(value: .beta) == "beta")
@@ -190,7 +197,9 @@ struct MCPClientGenerationTests {
 
     @Test("Decodes enum outputs", .enabled(if: false))
     func decodesEnumOutputs() async throws {
-        let (_, client, proxy) = try await makeClient()
+        let harness = try await makeClient()
+        let client = harness.client
+        let proxy = harness.proxy
         defer { Task { await proxy.disconnect() } }
 
         let output = try client.makeEnum(flag: true)
@@ -199,7 +208,9 @@ struct MCPClientGenerationTests {
 
     @Test("Round-trips schema types", .enabled(if: false))
     func roundTripsSchemaTypes() async throws {
-        let (_, client, proxy) = try await makeClient()
+        let harness = try await makeClient()
+        let client = harness.client
+        let proxy = harness.proxy
         defer { Task { await proxy.disconnect() } }
 
         let payload = ClientPayload(count: 5, label: "ok")
@@ -210,7 +221,9 @@ struct MCPClientGenerationTests {
 
     @Test("Round-trips Data tool results")
     func roundTripsDataToolResults() async throws {
-        let (_, client, proxy) = try await makeClient()
+        let harness = try await makeClient()
+        let client = harness.client
+        let proxy = harness.proxy
         defer { Task { await proxy.disconnect() } }
 
         let expected = Data([0x00, 0x01, 0x02, 0x03, 0x2B, 0x2F, 0x3D, 0xFE, 0xFF])
@@ -223,7 +236,10 @@ struct MCPClientGenerationTests {
 
     @Test("Handles void tool calls", .enabled(if: false))
     func handlesVoidToolCalls() async throws {
-        let (server, client, proxy) = try await makeClient()
+        let harness = try await makeClient()
+        let server = harness.server
+        let client = harness.client
+        let proxy = harness.proxy
         defer { Task { await proxy.disconnect() } }
 
         try client.record(message: "hello")
@@ -232,7 +248,9 @@ struct MCPClientGenerationTests {
 
     @Test("Generated client exposes standard resource APIs")
     func generatedClientUsesStandardResourceAPIs() async throws {
-        let (_, client, proxy) = try await makeClient()
+        let harness = try await makeClient()
+        let client = harness.client
+        let proxy = harness.proxy
         defer { Task { await proxy.disconnect() } }
 
         let resources = try await client.listResources()
@@ -251,7 +269,9 @@ struct MCPClientGenerationTests {
 
     @Test("Generated client exposes standard prompt APIs")
     func generatedClientUsesStandardPromptAPIs() async throws {
-        let (_, client, proxy) = try await makeClient()
+        let harness = try await makeClient()
+        let client = harness.client
+        let proxy = harness.proxy
         defer { Task { await proxy.disconnect() } }
 
         let prompts = try await client.listPrompts()
@@ -264,13 +284,19 @@ struct MCPClientGenerationTests {
     }
 }
 
-private func makeClient() async throws -> (ClientTestServer, ClientTestServer.Client, MCPServerProxy) {
+private struct TestClientHarness {
+    let server: ClientTestServer
+    let client: ClientTestServer.Client
+    let proxy: MCPServerProxy
+}
+
+private func makeClient() async throws -> TestClientHarness {
     let server = ClientTestServer()
     let config = MCPServerConfig.stdioHandles(server: server)
     let proxy = MCPServerProxy(config: config)
     try await proxy.connect()
     let client = ClientTestServer.Client(proxy: proxy)
-    return (server, client, proxy)
+    return TestClientHarness(server: server, client: client, proxy: proxy)
 }
 
 extension Tag {

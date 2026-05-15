@@ -407,7 +407,7 @@ public final actor MCPServerProxy {
             encoder.outputFormatting = [.sortedKeys]
             let data = try encoder.encode(message)
 
-            let messageWithNewline = data + "\n".data(using: .utf8)!
+            let messageWithNewline = data + Data("\n".utf8)
             guard let lineConnection else {
                 throw MCPServerProxyError.communicationError("Not connected to line-based server")
             }
@@ -642,7 +642,7 @@ public final actor MCPServerProxy {
             guard let lineConnection else {
                 throw MCPServerProxyError.communicationError("Not connected to line-based server")
             }
-            await lineConnection.write(data + "\n".data(using: .utf8)!)
+            await lineConnection.write(data + Data("\n".utf8))
 
         case .sse(let sseConfig):
             guard let url = endpointURL ?? (isStreamableMCPURL(sseConfig.url) ? sseConfig.url : nil) else {

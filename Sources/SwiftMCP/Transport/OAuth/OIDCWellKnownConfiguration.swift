@@ -67,7 +67,7 @@ public struct OAuthConfiguration: Sendable {
             var request = URLRequest(url: introspectionEndpoint)
             request.httpMethod = "POST"
             request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-            request.httpBody = "token=\(token)".data(using: .utf8)
+            request.httpBody = Data("token=\(token)".utf8)
 
             do {
                 let (data, response) = try await URLSession.shared.data(for: request)
