@@ -96,7 +96,39 @@ extension MCPParameterInfo {
         if let jsonValue = value as? JSONValue {
             return jsonValue
         }
+        if let scalar = scalarDefaultJSONValue(for: value) {
+            return scalar
+        }
+        if let collection = collectionDefaultJSONValue(for: value) {
+            return collection
+        }
+        if Mirror(reflecting: value).displayStyle == .enum {
+            return .string(String(describing: value))
+        }
+        if let encodable = value as? any Encodable {
+            return try? JSONValue(encoding: encodable)
+        }
+        if let value = value as? CustomStringConvertible {
+            return .string(value.description)
+        }
 
+        return nil
+    }
+
+    /// Builds a `JSONValue` for one of the well-known scalar default-value types
+    /// (`String`, integers, floating point, `Date`, `URL`, `UUID`, `Data`).
+    private func scalarDefaultJSONValue(for value: Any) -> JSONValue? {
+        if let numeric = numericScalarDefaultJSONValue(for: value) {
+            return numeric
+        }
+        if let identifier = identifierScalarDefaultJSONValue(for: value) {
+            return identifier
+        }
+        return nil
+    }
+
+    /// Handles `Bool`, `String` and all numeric scalar default-value types.
+    private func numericScalarDefaultJSONValue(for value: Any) -> JSONValue? {
         if let string = value as? String {
             return .string(string)
         }
@@ -121,11 +153,14 @@ extension MCPParameterInfo {
         if let decimal = value as? Decimal {
             return .double(NSDecimalNumber(decimal: decimal).doubleValue)
         }
+        return nil
+    }
+
+    /// Handles identifier-like scalar default types (`Date`, `URL`, `UUID`, `Data`),
+    /// each encoded as a string.
+    private func identifierScalarDefaultJSONValue(for value: Any) -> JSONValue? {
         if let date = value as? Date {
-            let formatter = ISO8601DateFormatter()
-            formatter.timeZone = TimeZone.current
-            formatter.formatOptions = [.withInternetDateTime, .withTimeZone]
-            return .string(formatter.string(from: date))
+            return .string(Self.iso8601DefaultFormatter.string(from: date))
         }
         if let url = value as? URL {
             return .string(url.absoluteString)
@@ -136,6 +171,22 @@ extension MCPParameterInfo {
         if let data = value as? Data {
             return .string(data.base64EncodedString())
         }
+        return nil
+    }
+
+    /// Builds a `JSONValue` for the supported homogeneous array default-value types.
+    private func collectionDefaultJSONValue(for value: Any) -> JSONValue? {
+        if let primitive = primitiveArrayDefaultJSONValue(for: value) {
+            return primitive
+        }
+        if let identifierArray = identifierArrayDefaultJSONValue(for: value) {
+            return identifierArray
+        }
+        return nil
+    }
+
+    /// Builds a `JSONValue` for arrays of `String` / `Int` / `Double` / `Bool` defaults.
+    private func primitiveArrayDefaultJSONValue(for value: Any) -> JSONValue? {
         if let values = value as? [String] {
             return .array(values.map(JSONValue.string))
         }
@@ -148,10 +199,14 @@ extension MCPParameterInfo {
         if let values = value as? [Bool] {
             return .array(values.map(JSONValue.bool))
         }
+        return nil
+    }
+
+    /// Builds a `JSONValue` for arrays of `Date` / `URL` / `UUID` / `Data` defaults,
+    /// each rendered as a string in the same way the scalar overload does.
+    private func identifierArrayDefaultJSONValue(for value: Any) -> JSONValue? {
         if let values = value as? [Date] {
-            let formatter = ISO8601DateFormatter()
-            formatter.timeZone = TimeZone.current
-            formatter.formatOptions = [.withInternetDateTime, .withTimeZone]
+            let formatter = Self.iso8601DefaultFormatter
             return .array(values.map { .string(formatter.string(from: $0)) })
         }
         if let values = value as? [URL] {
@@ -163,16 +218,14 @@ extension MCPParameterInfo {
         if let values = value as? [Data] {
             return .array(values.map { .string($0.base64EncodedString()) })
         }
-        if Mirror(reflecting: value).displayStyle == .enum {
-            return .string(String(describing: value))
-        }
-        if let encodable = value as? any Encodable {
-            return try? JSONValue(encoding: encodable)
-        }
-        if let value = value as? CustomStringConvertible {
-            return .string(value.description)
-        }
-
         return nil
+    }
+
+    /// Shared ISO 8601 formatter used for `Date` defaults and arrays of `Date` defaults.
+    private static var iso8601DefaultFormatter: ISO8601DateFormatter {
+        let formatter = ISO8601DateFormatter()
+        formatter.timeZone = TimeZone.current
+        formatter.formatOptions = [.withInternetDateTime, .withTimeZone]
+        return formatter
     }
 }
