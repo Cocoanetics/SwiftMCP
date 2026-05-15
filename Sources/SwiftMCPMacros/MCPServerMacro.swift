@@ -13,10 +13,10 @@ import SwiftDiagnostics
 
 /**
  Implementation of the MCPServer macro.
- 
+
  This macro adds MCPServer protocol conformance and generates the necessary
  infrastructure for handling MCP tools.
- 
+
  Example usage:
  ```swift
  /// A server that provides calculator functionality
@@ -28,7 +28,7 @@ import SwiftDiagnostics
      // MCP tool functions go here
  }
  ```
- 
+
  Or with an actor:
  ```swift
  /// A server that provides calculator functionality
@@ -40,16 +40,16 @@ import SwiftDiagnostics
      // MCP tool functions go here
  }
  ```
- 
+
  - Note: The server description is automatically extracted from the documentation comment unless overridden via the `description` parameter.
 
  - Parameters:
    - name: The name of the server. Defaults to the declaration name.
    - version: The version of the server. Defaults to "1.0".
    - description: Optional override for the documentation-derived description.
- 
+
  - Throws: MCPToolError if a tool cannot be found or called
- 
+
  - Attention: This macro can only be applied to reference types (classes or actors).
              Using it on a struct will result in a diagnostic with a fix-it to convert to a class.
  */
@@ -63,12 +63,7 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro, MemberAttributeMacro 
         _ = node
         _ = context
 
-        let inheritedTypes = declaration.inheritanceClause?.inheritedTypes ?? []
-        let hasAppShortcutsProvider = inheritedTypes.contains { type in
-            let name = type.type.trimmedDescription
-            return name == "AppShortcutsProvider" || name.hasSuffix(".AppShortcutsProvider")
-        }
-        guard hasAppShortcutsProvider else { return [] }
+        guard hasAppShortcutsProvider(declaration: declaration) else { return [] }
 
         guard let varDecl = member.as(VariableDeclSyntax.self) else { return [] }
         guard varDecl.bindings.count == 1, let binding = varDecl.bindings.first else { return [] }
@@ -86,561 +81,59 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro, MemberAttributeMacro 
             AttributeSyntax(attributeName: IdentifierTypeSyntax(name: .identifier("AppShortcutsBuilder")))
         ]
     }
-/**
-	 Expands the macro to provide additional members for the declaration.
-	 
-	 - Parameters:
-	   node: The attribute syntax node
-	   declaration: The declaration syntax
-	   context: The macro expansion context
-	 
-	 - Returns: An array of member declaration syntax nodes
-	 */
+
+    /// Expands the macro to provide additional members for the declaration.
     public static func expansion(
-		of node: AttributeSyntax,
-		providingMembersOf declaration: some DeclGroupSyntax,
-		in context: some MacroExpansionContext
-	) throws -> [DeclSyntax] {
-        // Check if the declaration is a class or actor
+        of node: AttributeSyntax,
+        providingMembersOf declaration: some DeclGroupSyntax,
+        in context: some MacroExpansionContext
+    ) throws -> [DeclSyntax] {
         if let structDecl = declaration.as(StructDeclSyntax.self) {
-            let diagnostic = SwiftDiagnostics.Diagnostic(
-				node: Syntax(structDecl.structKeyword),
-				message: MCPServerDiagnostic.requiresReferenceType(typeName: structDecl.name.text),
-				fixIts: [
-					FixIt(
-						message: MCPServerFixItMessage.replaceWithClass(keyword: "struct"),
-						changes: [
-							.replace(
-								oldNode: Syntax(structDecl.structKeyword),
-								newNode: Syntax(TokenSyntax.keyword(.class))
-							)
-						]
-					)
-				]
-			)
-            context.diagnose(diagnostic)
+            diagnoseStructDecl(structDecl, in: context)
             return []
         }
 
-        let arguments = node.arguments?.as(LabeledExprListSyntax.self)
-        let nameArg = arguments?.first(where: { $0.label?.text == "name" })?.expression.description.trimmingCharacters(in: .punctuationCharacters)
-        let versionArg = arguments?.first(where: { $0.label?.text == "version" })?.expression.description.trimmingCharacters(in: .punctuationCharacters)
-        var generateClient = false
-        var toolNaming: String? = nil  // nil or "snakeCase" or "pascalCase"
+        let serverArgs = parseServerArguments(node: node, declaration: declaration)
+        let hasAppShortcutsProvider = hasAppShortcutsProvider(declaration: declaration)
 
-        var descriptionArg: String? = nil
-        var serverDescriptionText: String? = nil
-        if let arguments {
-            for argument in arguments {
-                if argument.label?.text == "description",
-                   let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
-                    let stringValue = stringLiteral.segments.description
-                    descriptionArg = "\"\(stringValue.escapedForSwiftString)\""
-                    serverDescriptionText = stringValue
-                } else if argument.label?.text == "generateClient",
-                          let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
-                    generateClient = boolLiteral.literal.text == "true"
-                } else if argument.label?.text == "toolNaming",
-                          let memberAccess = argument.expression.as(MemberAccessExprSyntax.self) {
-                    let convention = memberAccess.declName.baseName.text
-                    if convention != "functionName" {
-                        toolNaming = convention
-                    }
-                }
-            }
-        }
-
-        let serverName = nameArg ?? declaration.as(ClassDeclSyntax.self)?.name.text ?? declaration.as(StructDeclSyntax.self)?.name.text ?? "UnnamedServer"
-
-        let serverVersion = versionArg ?? "1.0"
-
-        // Extract description from leading documentation and allow override via macro argument
-        let leadingTrivia = declaration.leadingTrivia.description
-        let documentation = Documentation(from: leadingTrivia)
-        if serverDescriptionText == nil, !documentation.description.isEmpty {
-            serverDescriptionText = documentation.description
-        }
-
-        let serverDescription: String
-        if let descriptionArg {
-            serverDescription = descriptionArg
-        } else if documentation.description.isEmpty {
-            serverDescription = "nil"
-        } else {
-            serverDescription = "\"\(documentation.description.escapedForSwiftString)\""
-        }
-
-        let inheritedTypes = declaration.inheritanceClause?.inheritedTypes ?? []
-        let hasAppShortcutsProvider = inheritedTypes.contains { type in
-            let name = type.type.trimmedDescription
-            return name == "AppShortcutsProvider" || name.hasSuffix(".AppShortcutsProvider")
-        }
-
-        let nameProperty = "private let __mcpServerName = \"\(serverName)\""
-        let versionProperty = "private let __mcpServerVersion = \"\(serverVersion)\""
-        let descriptionProperty = "private let __mcpServerDescription: String? = \(serverDescription)"
-
-        // Find all functions with the MCPTool macro
-        var mcpTools: [(functionName: String, toolName: String)] = []
-        var toolFunctions: [FunctionDeclSyntax] = []
-
-        for member in declaration.memberBlock.members {
-            if let funcDecl = member.decl.as(FunctionDeclSyntax.self) {
-                for attribute in funcDecl.attributes {
-                    if let identifierAttr = attribute.as(AttributeSyntax.self),
-					   let identifier = identifierAttr.attributeName.as(IdentifierTypeSyntax.self),
-					   identifier.name.text == "MCPTool" {
-                        let functionName = funcDecl.name.text
-                        // Check for name: override in @MCPTool arguments
-                        var toolName = functionName
-                        if let arguments = identifierAttr.arguments?.as(LabeledExprListSyntax.self) {
-                            for argument in arguments {
-                                if argument.label?.text == "name",
-                                   let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
-                                    toolName = stringLiteral.segments.description
-                                    break
-                                }
-                            }
-                        }
-                        // Apply server-level toolNaming if no explicit name: override
-                        let hasExplicitName = toolName != functionName
-                        let finalToolName: String
-                        if hasExplicitName {
-                            finalToolName = toolName
-                        } else if let toolNaming {
-                            switch toolNaming {
-                            case "snakeCase":
-                                finalToolName = ToolNamingConverter.toSnakeCase(functionName)
-                            case "pascalCase":
-                                finalToolName = ToolNamingConverter.toPascalCase(functionName)
-                            default:
-                                finalToolName = functionName
-                            }
-                        } else {
-                            finalToolName = functionName
-                        }
-                        mcpTools.append((functionName: functionName, toolName: finalToolName))
-                        toolFunctions.append(funcDecl)
-                        break
-                    }
-                }
-            }
-        }
-
-        // Find all functions with the MCPResource macro
-        var mcpResources: [String] = []
-        var resourceFunctions: [FunctionDeclSyntax] = []
-
-        for member in declaration.memberBlock.members {
-            if let funcDecl = member.decl.as(FunctionDeclSyntax.self) {
-                // Check if the function has the MCPResource macro
-                for attribute in funcDecl.attributes {
-                    if let identifierAttr = attribute.as(AttributeSyntax.self),
-					   let identifier = identifierAttr.attributeName.as(IdentifierTypeSyntax.self),
-					   identifier.name.text == "MCPResource" {
-                        mcpResources.append(funcDecl.name.text)
-                        resourceFunctions.append(funcDecl)
-                        break
-                    }
-                }
-            }
-        }
-
-        // Find all functions with the MCPPrompt macro
-        var mcpPrompts: [String] = []
-        var promptFunctions: [FunctionDeclSyntax] = []
-
-        for member in declaration.memberBlock.members {
-            if let funcDecl = member.decl.as(FunctionDeclSyntax.self) {
-                for attribute in funcDecl.attributes {
-                    if let identifierAttr = attribute.as(AttributeSyntax.self),
-                       let identifier = identifierAttr.attributeName.as(IdentifierTypeSyntax.self),
-                       identifier.name.text == "MCPPrompt" {
-                        mcpPrompts.append(funcDecl.name.text)
-                        promptFunctions.append(funcDecl)
-                        break
-                    }
-                }
-            }
-        }
+        let (mcpTools, toolFunctions) = collectToolFunctions(
+            declaration: declaration,
+            toolNaming: serverArgs.toolNaming
+        )
+        let (mcpResources, resourceFunctions) = collectResourceFunctions(declaration: declaration)
+        let (mcpPrompts, promptFunctions) = collectPromptFunctions(declaration: declaration)
 
         // Extract the class/actor name for typing the per-instance contributions storage.
         let serverTypeName = declaration.as(ClassDeclSyntax.self)?.name.text
             ?? declaration.as(ActorDeclSyntax.self)?.name.text
             ?? "Self"
 
-        var declarations: [DeclSyntax] = [
-			DeclSyntax(stringLiteral: nameProperty),
-			DeclSyntax(stringLiteral: versionProperty),
-			DeclSyntax(stringLiteral: descriptionProperty),
-		]
-
-        // Per-instance storage for contributions from `@MCPExtension`-annotated
-        // extensions. Each `MyServer.<Name>.register(in: server)` call appends
-        // one entry. Stored properties are legal here because we're in the
-        // primary class declaration.
-        let contributionsStorage = """
-/// Contributions from `@MCPExtension`-annotated extensions.
-/// Populated by `MyServer.<Name>.register(in:)` calls at startup.
-nonisolated(unsafe) private var __mcpExtensionContributions: [MCPExtensionContribution<\(serverTypeName)>] = []
-"""
-        declarations.append(DeclSyntax(stringLiteral: contributionsStorage))
-
-        // Set of metatype identities (one per `@MCPExtension`-emitted nested
-        // type) that have already been registered on this instance. Used to
-        // make `register(in:)` idempotent — calling it twice for the same
-        // extension is a no-op.
-        let registeredIDsStorage = """
-/// IDs of `@MCPExtension` nested types already registered on this instance.
-nonisolated(unsafe) private var __mcpRegisteredExtensionIDs: Set<ObjectIdentifier> = []
-"""
-        declarations.append(DeclSyntax(stringLiteral: registeredIDsStorage))
-
-        let registerExtensionMethod = """
-/// Installs an extension's contribution on this server instance.
-/// Called by `register(in:)` emitted by `@MCPExtension`. Idempotent on the
-/// extension's metatype identity — registering the same extension twice
-/// has no effect.
-public func __mcpRegisterExtension(_ contribution: MCPExtensionContribution<\(serverTypeName)>, byID id: ObjectIdentifier) {
-   guard !__mcpRegisteredExtensionIDs.contains(id) else { return }
-   __mcpRegisteredExtensionIDs.insert(id)
-   __mcpExtensionContributions.append(contribution)
-}
-"""
-        declarations.append(DeclSyntax(stringLiteral: registerExtensionMethod))
+        var declarations: [DeclSyntax] = makeBaseDeclarations(serverArgs: serverArgs)
+        declarations.append(contentsOf: makeExtensionStorageDeclarations(serverTypeName: serverTypeName)
+            .map { DeclSyntax(stringLiteral: $0) })
 
         // Always emit the tool machinery: even if no `@MCPTool` is declared
         // in the primary type, `@MCPExtension`-annotated extensions in this
         // or downstream targets may contribute tools at runtime.
-        do {
-            // Create a callTool method that uses a switch statement to call the appropriate wrapper function
-            var switchCases = ""
-            for (index, tool) in mcpTools.enumerated() {
-                switchCases += "      case \"\(tool.toolName)\":\n"
-                switchCases += "         return try await __mcpCall_\(tool.functionName)(enrichedArguments)"
-                if index < mcpTools.count - 1 {
-                    switchCases += "\n"
-                }
-            }
-
-            var defaultCase = """
-      default:
-"""
-            if hasAppShortcutsProvider {
-                defaultCase += """
-         let providerType: MCPAppShortcutsProvider.Type = Self.self
-         if let result = try await MCPAppIntentTools.callTool(named: name, providerType: providerType, arguments: enrichedArguments) {
-            return result
-         }
-         throw MCPToolError.unknownTool(name: name)
-"""
-            } else {
-                defaultCase += "         throw MCPToolError.unknownTool(name: name)\n"
-            }
-            defaultCase += """
-   }
-}
-"""
-
-            // The default case consults this instance's __mcpExtensionContributions
-            // before falling through to AppShortcuts / unknownTool. Each contribution's
-            // dispatcher is the corresponding `Type.<Name>.callTool(_:on:arguments:)`
-            // — an unbound static function reference, so no retain cycle.
-            let extensionFallback = """
-         for contribution in __mcpExtensionContributions {
-            if contribution.toolMetadata.contains(where: { $0.name == name }),
-               let dispatcher = contribution.toolDispatcher {
-               return try await dispatcher(name, self, enrichedArguments)
-            }
-         }
-"""
-
-            var defaultCaseV2 = """
-      default:
-\(extensionFallback)
-"""
-            if hasAppShortcutsProvider {
-                defaultCaseV2 += """
-         let providerType: MCPAppShortcutsProvider.Type = Self.self
-         if let result = try await MCPAppIntentTools.callTool(named: name, providerType: providerType, arguments: enrichedArguments) {
-            return result
-         }
-         throw MCPToolError.unknownTool(name: name)
-"""
-            } else {
-                defaultCaseV2 += "         throw MCPToolError.unknownTool(name: name)\n"
-            }
-            defaultCaseV2 += """
-   }
-}
-"""
-
-            let callToolMethod = """
-/// Calls a tool by name with the provided arguments
-/// - Parameters:
-///   - name: The name of the tool to call
-///   - arguments: A dictionary of arguments to pass to the tool
-/// - Returns: The result of the tool call
-/// - Throws: MCPToolError if the tool doesn't exist or cannot be called
-public func callTool(_ name: String, arguments: JSONDictionary) async throws -> (Encodable & Sendable) {
-   // Find the tool metadata by name (use the property which reflects any toolNaming transforms)
-   guard let metadata = mcpToolMetadata.first(where: { $0.name == name }) ?? mcpToolMetadata(for: name) else {
-      throw MCPToolError.unknownTool(name: name)
-   }
-
-   // Enrich arguments with default values
-   let enrichedArguments = try metadata.enrichArguments(arguments)
-
-   // Call the appropriate wrapper method based on the tool name
-   switch name {
-\(switchCases)
-
-\(defaultCaseV2)
-"""
-
-            declarations.append(DeclSyntax(stringLiteral: callToolMethod))
-            _ = defaultCase  // keep variable usage; intentionally unused
-        }
-
-        // Always emit `mcpToolMetadata`: extensions may contribute tools.
-        do {
-            let metadataArray = mcpTools.map { tool -> String in
-                // When server-level toolNaming changes the name, use .renamed() to
-                // produce metadata whose .name matches the switch-case strings.
-                if tool.toolName != tool.functionName {
-                    return "__mcpMetadata_\(tool.functionName).renamed(\"\(tool.toolName)\")"
-                }
-                return "__mcpMetadata_\(tool.functionName)"
-            }.joined(separator: ", ")
-            let metadataSeed = mcpTools.isEmpty ? "[]" : "[\(metadataArray)]"
-            let metadataDeclaration = hasAppShortcutsProvider ? "var" : "let"
-            let appShortcutsBlock: String
-            if hasAppShortcutsProvider {
-                appShortcutsBlock = """
-   let providerType: MCPAppShortcutsProvider.Type = Self.self
-   let shortcutMetadata = MCPAppIntentTools.toolMetadata(for: providerType)
-   for toolMetadata in shortcutMetadata where !metadata.contains(where: { $0.name == toolMetadata.name }) {
-      metadata.append(toolMetadata)
-   }
-"""
-            } else {
-                appShortcutsBlock = ""
-            }
-
-            let metadataProperty = """
-/// Returns an array of all available tool metadata
-nonisolated public var mcpToolMetadata: [MCPToolMetadata] {
-   var metadata: [MCPToolMetadata] = \(metadataSeed)
-\(appShortcutsBlock)
-   for contribution in __mcpExtensionContributions {
-      for m in contribution.toolMetadata where !metadata.contains(where: { $0.name == m.name }) {
-         metadata.append(m)
-      }
-   }
-   return metadata
-}
-"""
-            declarations.append(DeclSyntax(stringLiteral: metadataProperty))
-            _ = metadataDeclaration  // intentionally unused after refactor
-        }
+        declarations.append(DeclSyntax(stringLiteral: makeCallToolMethod(
+            mcpTools: mcpTools,
+            hasAppShortcutsProvider: hasAppShortcutsProvider
+        )))
+        declarations.append(DeclSyntax(stringLiteral: makeToolMetadataProperty(
+            mcpTools: mcpTools,
+            hasAppShortcutsProvider: hasAppShortcutsProvider
+        )))
 
         // Always emit resource-related machinery: extensions may contribute
         // resources even when the primary type declares none.
-        do {
-            // Add mcpResourceMetadata property
-            let resourceMetadataArray = mcpResources.map { "__mcpResourceMetadata_\($0)" }.joined(separator: ", ")
-            let resourceMetadataSeed = mcpResources.isEmpty ? "[]" : "[\(resourceMetadataArray)]"
-            let resourceMetadataProperty = """
-/// Returns an array of all available resource metadata, including contributions from `@MCPExtension`-annotated extensions.
-nonisolated public var mcpResourceMetadata: [MCPResourceMetadata] {
-   var metadata: [MCPResourceMetadata] = \(resourceMetadataSeed)
-   for contribution in __mcpExtensionContributions {
-      for m in contribution.resourceMetadata where !metadata.contains(where: { $0.name == m.name }) {
-         metadata.append(m)
-      }
-   }
-   return metadata
-}
-"""
-            declarations.append(DeclSyntax(stringLiteral: resourceMetadataProperty))
-
-            // Note: mcpResources should be implemented by the developer to combine
-            // mcpStaticResources with any dynamic resources they want to provide
-
-            // Add mcpResourceTemplates property (only for resources with parameters)
-            let mcpResourceTemplatesProperty = """
-/// Returns resource templates (resources with parameters)
-public var mcpResourceTemplates: [MCPResourceTemplate] {
-   get async {
-      return mcpResourceMetadata.filter { !$0.parameters.isEmpty }.flatMap { $0.toResourceTemplates() }
-   }
-}
-"""
-            declarations.append(DeclSyntax(stringLiteral: mcpResourceTemplatesProperty))
-
-            // Add internal helper method for calling resource functions
-            var resourceFunctionSwitchCases = ""
-            for (index, funcName) in mcpResources.enumerated() {
-                resourceFunctionSwitchCases += "      case \"\(funcName)\":\n"
-                resourceFunctionSwitchCases += "         return try await __mcpResourceCall_\(funcName)(enrichedArguments, requestedUri: requestedUri, overrideMimeType: overrideMimeType)"
-                if index < mcpResources.count - 1 {
-                    resourceFunctionSwitchCases += "\n"
-                }
-            }
-
-            let internalCallResourceMethod = """
-/// Internal helper method for calling resource functions directly
-/// - Parameters:
-///   - name: The name of the resource function to call
-///   - enrichedArguments: Pre-enriched arguments to pass to the resource function
-///   - requestedUri: The URI that was requested (for context)
-///   - overrideMimeType: Optional MIME type override
-/// - Returns: The resource content from the function call
-/// - Throws: MCPResourceError if the resource function doesn't exist or cannot be called
-internal func __callResourceFunction(_ name: String, enrichedArguments: JSONDictionary, requestedUri: URL, overrideMimeType: String?) async throws -> [MCPResourceContent] {
-   // Call the appropriate wrapper method based on the resource name
-   switch name {
-\(resourceFunctionSwitchCases)
-      default:
-         for contribution in __mcpExtensionContributions {
-            if contribution.resourceMetadata.contains(where: { $0.functionMetadata.name == name }),
-               let dispatcher = contribution.resourceDispatcher {
-               return try await dispatcher(name, self, enrichedArguments, requestedUri, overrideMimeType)
-            }
-         }
-         throw MCPResourceError.notFound(uri: requestedUri.absoluteString)
-   }
-}
-"""
-            declarations.append(DeclSyntax(stringLiteral: internalCallResourceMethod))
-
-            let callResourceAsFunctionMethod = """
-/// Calls a resource function by name with the provided arguments (for OpenAPI support)
-/// - Parameters:
-///   - name: The name of the resource function to call
-///   - arguments: The arguments to pass to the resource function
-/// - Returns: The result of the resource function execution
-/// - Throws: An error if the resource function doesn't exist or cannot be called
-public func callResourceAsFunction(_ name: String, arguments: JSONDictionary) async throws -> Encodable & Sendable {
-   // Find the resource metadata by name
-   guard let metadata = mcpResourceMetadata.first(where: { $0.functionMetadata.name == name }) else {
-      throw MCPResourceError.notFound(uri: "function://\\(name)")
-   }
-   
-   // Enrich arguments with default values using the same logic as tools
-   let enrichedArguments = try metadata.enrichArguments(arguments)
-   
-   // Get the first template (we know there's at least one since this is a function resource)
-   guard let template = metadata.uriTemplates.first else {
-      throw MCPResourceError.notFound(uri: "function://\\(name)")
-   }
-   
-   // Construct URI from template and parameters
-   let constructedUri = try template.constructURI(with: enrichedArguments)
-   
-   // Call the existing resource wrapper method
-   let resourceContents = try await __callResourceFunction(metadata.functionMetadata.name, enrichedArguments: enrichedArguments, requestedUri: constructedUri, overrideMimeType: metadata.mimeType)
-   
-   // Return the first content's text or an empty string if no content
-   return resourceContents.first?.text ?? ""
-}
-"""
-            declarations.append(DeclSyntax(stringLiteral: callResourceAsFunctionMethod))
-
-            let getResourceMethod = """
-/// Retrieves a resource by its URI
-/// - Parameter uri: The URI of the resource to retrieve
-/// - Returns: The resource content if found
-/// - Throws: An error if the resource cannot be accessed or is not found
-public func getResource(uri: URL) async throws -> [MCPResourceContent] {
-   // Find the best matching template across all resources
-   var bestMatch: (metadata: MCPResourceMetadata, template: String, paramCount: Int)?
-   
-   for metadata in mcpResourceMetadata {
-      for template in metadata.uriTemplates {
-         if let params = uri.extractTemplateVariables(from: template) {
-            let paramCount = params.count
-            if bestMatch == nil || paramCount > bestMatch!.paramCount {
-               bestMatch = (metadata, template, paramCount)
-            }
-         }
-      }
-   }
-   
-   // If we found a match, use it
-   if let match = bestMatch {
-      let params = uri.extractTemplateVariables(from: match.template) ?? [:]
-      // Convert [String: String] to JSONDictionary
-      let sendableParams: JSONDictionary = params.reduce(into: [:]) { result, pair in
-         result[pair.key] = .string(pair.value)
-      }
-      // Enrich arguments. This can throw if required params are missing or types are wrong for a TEMPLATE.
-      let enrichedParams = try match.metadata.enrichArguments(sendableParams)
-      
-      // Call the internal helper method
-      return try await __callResourceFunction(match.metadata.functionMetadata.name, enrichedArguments: enrichedParams, requestedUri: uri, overrideMimeType: match.metadata.mimeType)
-   }
-   
-   // If no template matched. Calling getNonTemplateResource for URI
-   let nonTemplateContents = try await getNonTemplateResource(uri: uri)
-   if !nonTemplateContents.isEmpty {
-      return nonTemplateContents
-   }
-
-   // If getNonTemplateResource returned empty. THROWING notFound for URI
-   throw MCPResourceError.notFound(uri: uri.absoluteString)
-}
-"""
-            declarations.append(DeclSyntax(stringLiteral: getResourceMethod))
+        for resourceDecl in makeResourceDeclarations(mcpResources: mcpResources) {
+            declarations.append(DeclSyntax(stringLiteral: resourceDecl))
         }
 
         // Always emit prompt-related machinery: extensions may contribute
         // prompts even when the primary type declares none.
-        do {
-            let promptMetadataArray = mcpPrompts.map { "__mcpPromptMetadata_\($0)" }.joined(separator: ", ")
-            let promptMetadataSeed = mcpPrompts.isEmpty ? "[]" : "[\(promptMetadataArray)]"
-            let promptMetadataProperty = """
-/// Returns an array of all available prompt metadata, including contributions from `@MCPExtension`-annotated extensions.
-nonisolated public var mcpPromptMetadata: [MCPPromptMetadata] {
-   var metadata: [MCPPromptMetadata] = \(promptMetadataSeed)
-   for contribution in __mcpExtensionContributions {
-      for m in contribution.promptMetadata where !metadata.contains(where: { $0.name == m.name }) {
-         metadata.append(m)
-      }
-   }
-   return metadata
-}
-"""
-            declarations.append(DeclSyntax(stringLiteral: promptMetadataProperty))
-
-            var promptSwitchCases = ""
-            for (idx, funcName) in mcpPrompts.enumerated() {
-                promptSwitchCases += "      case \"\(funcName)\":\n"
-                promptSwitchCases += "         return try await __mcpPromptCall_\(funcName)(enrichedArguments)"
-                if idx < mcpPrompts.count - 1 { promptSwitchCases += "\n" }
-            }
-
-            let callPromptMethod = """
-/// Calls a prompt by name with the provided arguments
-public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -> [PromptMessage] {
-   guard let metadata = mcpPromptMetadata.first(where: { $0.name == name }) else {
-      throw MCPToolError.unknownTool(name: name)
-   }
-   let enrichedArguments = try metadata.enrichArguments(arguments)
-   switch name {
-\(promptSwitchCases)
-      default:
-         for contribution in __mcpExtensionContributions {
-            if contribution.promptMetadata.contains(where: { $0.name == name }),
-               let dispatcher = contribution.promptDispatcher {
-               return try await dispatcher(name, self, enrichedArguments)
-            }
-         }
-         throw MCPToolError.unknownTool(name: name)
-   }
-}
-"""
-            declarations.append(DeclSyntax(stringLiteral: callPromptMethod))
+        for promptDecl in makePromptDeclarations(mcpPrompts: mcpPrompts) {
+            declarations.append(DeclSyntax(stringLiteral: promptDecl))
         }
 
         // Always emit the nested `Client` type. `@MCPExtension` peer
@@ -648,660 +141,60 @@ public func callPrompt(_ name: String, arguments: JSONDictionary) async throws -
         // methods, so Client must exist for any `@MCPServer` type.
         // The `generateClient:` parameter is retained on the public API
         // for source-compat with earlier code but is now a no-op.
-        _ = generateClient
+        _ = serverArgs.generateClient
         let clientType = makeClientType(
             toolFunctions: toolFunctions,
             mcpTools: mcpTools,
             resourceFunctions: resourceFunctions,
             promptFunctions: promptFunctions,
-            serverDescription: serverDescriptionText
+            serverDescription: serverArgs.serverDescriptionText
         )
         declarations.append(DeclSyntax(stringLiteral: clientType))
 
         return declarations
     }
 
-/**
-	 Expands the macro to provide protocol conformances for the declaration.
-	 
-	 - Parameters:
-	 - node: The attribute syntax node
-	 - declaration: The declaration syntax
-	 - type: The type to extend
-	 - protocols: The protocols to conform to
-	 - context: The macro expansion context
-	 
-	 - Returns: An array of extension declarations
-	 */
     public static func expansion(
-		of node: AttributeSyntax,
-		attachedTo declaration: some DeclGroupSyntax,
-		providingExtensionsOf type: some TypeSyntaxProtocol,
-		conformingTo protocols: [TypeSyntax],
-		in context: some MacroExpansionContext
-	) throws -> [ExtensionDeclSyntax] {
-        // Check if the declaration already conforms to MCPServer
-        let inheritedTypes = declaration.inheritanceClause?.inheritedTypes ?? []
-        let hasAppShortcutsProvider = inheritedTypes.contains { type in
-            let name = type.type.trimmedDescription
-            return name == "AppShortcutsProvider" || name.hasSuffix(".AppShortcutsProvider")
-        }
-        let alreadyConformsToMCPServer = inheritedTypes.contains { type in
-            type.type.trimmedDescription == "MCPServer"
-        }
-
-        // Check if the declaration has any MCPTool functions
-        var hasMCPTools = false
-        for member in declaration.memberBlock.members {
-            if let funcDecl = member.decl.as(FunctionDeclSyntax.self) {
-                for attribute in funcDecl.attributes {
-                    if let identifierAttr = attribute.as(AttributeSyntax.self),
-					   let identifier = identifierAttr.attributeName.as(IdentifierTypeSyntax.self),
-					   identifier.name.text == "MCPTool" {
-                        hasMCPTools = true
-                        break
-                    }
-                }
-                if hasMCPTools { break }
-            }
-        }
-
-        // Check if the declaration has any MCPResource functions
-        var hasMCPResources = false
-        for member in declaration.memberBlock.members {
-            if let funcDecl = member.decl.as(FunctionDeclSyntax.self) {
-                for attribute in funcDecl.attributes {
-                    if let identifierAttr = attribute.as(AttributeSyntax.self),
-					   let identifier = identifierAttr.attributeName.as(IdentifierTypeSyntax.self),
-					   identifier.name.text == "MCPResource" {
-                        hasMCPResources = true
-                        break
-                    }
-                }
-                if hasMCPResources { break }
-            }
-        }
-
-        // Check if the declaration has any MCPPrompt functions
-        var hasMCPPrompts = false
-        for member in declaration.memberBlock.members {
-            if let funcDecl = member.decl.as(FunctionDeclSyntax.self) {
-                for attribute in funcDecl.attributes {
-                    if let identifierAttr = attribute.as(AttributeSyntax.self),
-                       let identifier = identifierAttr.attributeName.as(IdentifierTypeSyntax.self),
-                       identifier.name.text == "MCPPrompt" {
-                        hasMCPPrompts = true
-                        break
-                    }
-                }
-                if hasMCPPrompts { break }
-            }
-        }
-
-        // Check if the declaration already conforms to MCPToolProviding
-        let alreadyConformsToToolProviding = inheritedTypes.contains { type in
-            type.type.trimmedDescription == "MCPToolProviding"
-        }
-
-        // Check if the declaration already conforms to MCPResourceProviding
-        let alreadyConformsToResourceProviding = inheritedTypes.contains { type in
-            type.type.trimmedDescription == "MCPResourceProviding"
-        }
-
-        // Check if already conforms to MCPPromptProviding
-        let alreadyConformsToPromptProviding = inheritedTypes.contains { type in
-            type.type.trimmedDescription == "MCPPromptProviding"
-        }
-
-        // Determine which protocols need to be added
-        var protocolsToAdd: [String] = []
-
-        if !alreadyConformsToMCPServer {
-            protocolsToAdd.append("MCPServer")
-        }
-
-        // Always conform to MCPToolProviding / MCPResourceProviding /
-        // MCPPromptProviding so `@MCPExtension`-contributed tools, resources,
-        // and prompts can surface at runtime even when the primary type
-        // declares none. The macro can't see other files; the safe default
-        // is to assume any kind might come from an extension.
-        _ = hasMCPTools
-        _ = hasMCPResources
-        _ = hasMCPPrompts
-        _ = hasAppShortcutsProvider
-        if !alreadyConformsToToolProviding {
-            protocolsToAdd.append("MCPToolProviding")
-        }
-        if !alreadyConformsToResourceProviding {
-            protocolsToAdd.append("MCPResourceProviding")
-        }
-        if !alreadyConformsToPromptProviding {
-            protocolsToAdd.append("MCPPromptProviding")
-        }
-
-        // If we have protocols to add, create a single extension with all needed conformances
-        if !protocolsToAdd.isEmpty {
-            let protocolList = protocolsToAdd.joined(separator: ", ")
-            let extensionDecl = try ExtensionDeclSyntax("extension \(type): \(raw: protocolList) {}")
-            return [extensionDecl]
-        }
-
-        return []
-    }
-
-    public static func expansion(
-		of node: AttributeSyntax,
-		providingMembersOf declaration: some DeclGroupSyntax,
-		conformingTo protocols: [TypeSyntax],
-		in context: some MacroExpansionContext
-	) throws -> [DeclSyntax] {
+        of node: AttributeSyntax,
+        providingMembersOf declaration: some DeclGroupSyntax,
+        conformingTo protocols: [TypeSyntax],
+        in context: some MacroExpansionContext
+    ) throws -> [DeclSyntax] {
         try expansion(of: node, providingMembersOf: declaration, in: context)
     }
 
-    struct ClientParameter {
-        let name: String
-        let label: String
-        let typeString: String
-        let defaultValue: String?
-        let isOptional: Bool
-    }
+    // MARK: - Helpers used by the main expansion
 
-    struct ClientFunctionMetadata {
-        let kind: ClientFunctionKind
-        let name: String
-        let documentation: Documentation
-        let parameters: [ClientParameter]
-        let returnTypeString: String
-        let hasReturnClause: Bool
-        let isAsync: Bool
-        let isThrowing: Bool
-        let throwsKeyword: String?
-        let propagatedAttributes: [String]
-    }
-
-    enum ClientFunctionKind {
-        case tool
-        case resource(templates: [String])
-        case prompt
-    }
-
-    static func makeClientType(
-        toolFunctions: [FunctionDeclSyntax],
-        mcpTools: [(functionName: String, toolName: String)] = [],
-        resourceFunctions: [FunctionDeclSyntax],
-        promptFunctions: [FunctionDeclSyntax],
-        serverDescription: String?
-    ) -> String {
-        // Build a lookup from function name → wire tool name
-        let toolNameMap = Dictionary(mcpTools.map { ($0.functionName, $0.toolName) }, uniquingKeysWith: { _, last in last })
-        var lines: [String] = []
-        lines.append(contentsOf: clientTypeDocCommentLines(description: serverDescription))
-        lines.append("public struct Client: Sendable {")
-        lines.append("    public let proxy: MCPServerProxy")
-        lines.append("")
-        lines.append(contentsOf: initDocCommentLines())
-        lines.append("    public init(proxy: MCPServerProxy) {")
-        lines.append("        self.proxy = proxy")
-        lines.append("    }")
-
-        if !toolFunctions.isEmpty {
-            lines.append("")
-            lines.append("    // MARK: - Tools")
-        }
-        for funcDecl in toolFunctions {
-            let funcName = funcDecl.name.text
-            let wireToolName = toolNameMap[funcName]
-            let metadata = clientFunctionMetadata(from: funcDecl, kind: .tool)
-            lines.append("")
-            lines.append(contentsOf: makeClientMethodLines(metadata: metadata, wireToolName: wireToolName))
-        }
-
-        if !resourceFunctions.isEmpty {
-            lines.append("")
-            lines.append("    // MARK: - Resources")
-            lines.append("")
-            lines.append("    public func listResources() async throws -> [SimpleResource] {")
-            lines.append("        try await proxy.listResources()")
-            lines.append("    }")
-            lines.append("")
-            lines.append("    public func listResourceTemplates() async throws -> [SimpleResourceTemplate] {")
-            lines.append("        try await proxy.listResourceTemplates()")
-            lines.append("    }")
-            lines.append("")
-            lines.append("    public func readResource(uri: URL) async throws -> [GenericResourceContent] {")
-            lines.append("        try await proxy.readResource(uri: uri)")
-            lines.append("    }")
-        }
-
-        if !promptFunctions.isEmpty {
-            lines.append("")
-            lines.append("    // MARK: - Prompts")
-            lines.append("")
-            lines.append("    public func listPrompts() async throws -> [Prompt] {")
-            lines.append("        try await proxy.listPrompts()")
-            lines.append("    }")
-            lines.append("")
-            lines.append("    public func getPrompt(name: String, arguments: JSONDictionary = [:]) async throws -> PromptResult {")
-            lines.append("        try await proxy.getPrompt(name: name, arguments: arguments)")
-            lines.append("    }")
-        }
-
-        lines.append("}")
-        return lines.joined(separator: "\n")
-    }
-
-    static func clientFunctionMetadata(
-        from funcDecl: FunctionDeclSyntax,
-        kind: ClientFunctionKind,
-        generatedName: String? = nil
-    ) -> ClientFunctionMetadata {
-        let documentation = Documentation(from: funcDecl.leadingTrivia.description)
-        let parameters = funcDecl.signature.parameterClause.parameters.map { param -> ClientParameter in
-            let name = param.secondName?.text ?? param.firstName.text
-            let label = param.firstName.text
-            let typeString = param.type.description.trimmingCharacters(in: .whitespacesAndNewlines)
-            let defaultValue = param.defaultValue?.value.description.trimmingCharacters(in: .whitespacesAndNewlines)
-            let isOptional = param.type.is(OptionalTypeSyntax.self)
-                || param.type.is(ImplicitlyUnwrappedOptionalTypeSyntax.self)
-                || typeString.hasSuffix("?")
-                || typeString.hasSuffix("!")
-            return ClientParameter(
-                name: name,
-                label: label,
-                typeString: typeString,
-                defaultValue: defaultValue,
-                isOptional: isOptional
-            )
-        }
-
-        let returnClause = funcDecl.signature.returnClause
-        let returnTypeString = returnClause?.type.description.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Void"
-        let effectSpecifiers = funcDecl.signature.effectSpecifiers
-        let isAsync = effectSpecifiers?.asyncSpecifier != nil
-        let throwsClause = effectSpecifiers?.throwsClause
-        let throwsKeyword = throwsClause?.description.trimmingCharacters(in: .whitespacesAndNewlines)
-        let isThrowing = true
-
-        return ClientFunctionMetadata(
-            kind: kind,
-            name: generatedName ?? funcDecl.name.text,
-            documentation: documentation,
-            parameters: parameters,
-            returnTypeString: returnTypeString,
-            hasReturnClause: returnClause != nil,
-            isAsync: isAsync,
-            isThrowing: isThrowing,
-            throwsKeyword: throwsKeyword ?? "throws",
-            propagatedAttributes: propagatedAttributes(for: funcDecl)
+    static func diagnoseStructDecl(
+        _ structDecl: StructDeclSyntax,
+        in context: some MacroExpansionContext
+    ) {
+        let diagnostic = SwiftDiagnostics.Diagnostic(
+            node: Syntax(structDecl.structKeyword),
+            message: MCPServerDiagnostic.requiresReferenceType(typeName: structDecl.name.text),
+            fixIts: [
+                FixIt(
+                    message: MCPServerFixItMessage.replaceWithClass(keyword: "struct"),
+                    changes: [
+                        .replace(
+                            oldNode: Syntax(structDecl.structKeyword),
+                            newNode: Syntax(TokenSyntax.keyword(.class))
+                        )
+                    ]
+                )
+            ]
         )
+        context.diagnose(diagnostic)
     }
 
-    static func propagatedAttributes(for funcDecl: FunctionDeclSyntax) -> [String] {
-        var attributes: [String] = []
-        for attr in funcDecl.attributes {
-            guard let attribute = attr.as(AttributeSyntax.self) else { continue }
-            let attributeName = attribute.attributeName.description.trimmingCharacters(in: .whitespacesAndNewlines)
-            if attributeName.isEmpty { continue }
-            if ["MCPTool", "MCPResource", "MCPPrompt", "MCPServer", "MCPToolProvider", "Schema", "MCPExtension"].contains(attributeName) {
-                continue
-            }
-            let trimmed = attribute.description.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty {
-                attributes.append(trimmed)
-            }
-        }
-        return attributes
-    }
-
-    static func makeClientMethodLines(metadata: ClientFunctionMetadata, wireToolName: String? = nil) -> [String] {
-        var lines: [String] = []
-        lines.append(contentsOf: docCommentLines(for: metadata))
-
-        for attribute in metadata.propagatedAttributes {
-            lines.append("    \(attribute)")
-        }
-
-        let signature = metadata.parameters.map { parameterSignature($0) }.joined(separator: ", ")
-        let effectSpecifiers = effectSpecifiersString(isAsync: metadata.isAsync, throwsKeyword: metadata.throwsKeyword)
-        let hasParameters = !metadata.parameters.isEmpty
-
-        switch metadata.kind {
-        case .tool:
-            // Use .MCPClientReturn for all return types. For most types this resolves to Self
-            // (via extension Decodable). For @Schema single-array wrapper structs it resolves
-            // to [Element], so the generated proxy returns the unwrapped array automatically.
-            let clientReturnType = metadata.hasReturnClause ? "\(metadata.returnTypeString).MCPClientReturn" : nil
-            let returnClause = clientReturnType.map { " -> \($0)" } ?? ""
-
-            lines.append("    public func \(metadata.name)(\(signature))\(effectSpecifiers)\(returnClause) {")
-            lines.append(contentsOf: encodedArgumentLines(for: metadata.parameters, variableName: "arguments", indent: "        "))
-
-            let argumentsName = (hasParameters && !metadata.isAsync) ? "capturedArguments" : "arguments"
-            if hasParameters && !metadata.isAsync {
-                lines.append("        let capturedArguments = arguments")
-            }
-
-            let callExpression = toolCallExpression(
-                toolName: wireToolName ?? metadata.name,
-                hasParameters: hasParameters,
-                argumentsName: argumentsName,
-                isAsync: metadata.isAsync,
-                isThrowing: metadata.isThrowing
-            )
-            lines.append("        let text = \(callExpression)")
-
-            if metadata.hasReturnClause, let clientReturnType {
-                lines.append("        return try MCPClientResultDecoder.decode(\(clientReturnType).self, from: text)")
-            } else if metadata.hasReturnClause {
-                lines.append("        return try MCPClientResultDecoder.decode(\(metadata.returnTypeString).self, from: text)")
-            } else {
-                lines.append("        _ = try MCPClientResultDecoder.decode(Void.self, from: text)")
-                lines.append("        return")
-            }
-
-        case .resource(let templates):
-            let clientReturnType = metadata.hasReturnClause ? "\(metadata.returnTypeString).MCPClientReturn" : nil
-            let returnClause = clientReturnType.map { " -> \($0)" } ?? ""
-
-            lines.append("    public func \(metadata.name)(\(signature))\(effectSpecifiers)\(returnClause) {")
-            lines.append(contentsOf: encodedArgumentLines(for: metadata.parameters, variableName: "arguments", indent: "        "))
-
-            let argumentsName = hasParameters ? ((metadata.isAsync ? "arguments" : "capturedArguments")) : "[:]"
-            if hasParameters && !metadata.isAsync {
-                lines.append("        let capturedArguments = arguments")
-            }
-
-            let orderedTemplates = templates.sorted {
-                let lhsCount = resourceTemplateVariables(in: $0).count
-                let rhsCount = resourceTemplateVariables(in: $1).count
-                if lhsCount == rhsCount { return $0 < $1 }
-                return lhsCount > rhsCount
-            }
-
-            if orderedTemplates.count == 1, let template = orderedTemplates.first {
-                lines.append("        let uri = try \"\(template.escapedForSwiftString)\".constructURI(with: \(argumentsName))")
-            } else {
-                lines.append("        let uri: URL")
-                for (index, template) in orderedTemplates.enumerated() {
-                    let variables = resourceTemplateVariables(in: template)
-                    let condition = variables.isEmpty
-                        ? "true"
-                        : variables.map { "\(argumentsName)[\"\($0)\"] != nil" }.joined(separator: " && ")
-                    let keyword = index == 0 ? "if" : "else if"
-                    lines.append("        \(keyword) \(condition) {")
-                    lines.append("            uri = try \"\(template.escapedForSwiftString)\".constructURI(with: \(argumentsName))")
-                    lines.append("        }")
-                }
-                lines.append("        else {")
-                lines.append("            throw MCPServerProxyError.communicationError(\"No resource template matched for \(metadata.name)\")")
-                lines.append("        }")
-            }
-            lines.append("        let contents = \(resourceReadExpression(isAsync: metadata.isAsync, isThrowing: metadata.isThrowing))")
-
-            if !metadata.hasReturnClause || metadata.returnTypeString == "Void" {
-                lines.append("        return")
-            } else if metadata.returnTypeString == "MCPResourceContent" || metadata.returnTypeString == "GenericResourceContent" {
-                lines.append("        guard let content = contents.first else {")
-                lines.append("            throw MCPServerProxyError.communicationError(\"Resource \(metadata.name) returned no content\")")
-                lines.append("        }")
-                lines.append("        return content")
-            } else if metadata.returnTypeString == "[MCPResourceContent]" || metadata.returnTypeString == "[GenericResourceContent]" {
-                lines.append("        return contents")
-            } else if metadata.returnTypeString == "Data" {
-                lines.append("        if let blob = contents.first?.blob {")
-                lines.append("            return blob")
-                lines.append("        }")
-                lines.append("        if let text = contents.first?.text {")
-                lines.append("            return try MCPClientResultDecoder.decode(Data.self, from: text)")
-                lines.append("        }")
-                lines.append("        throw MCPServerProxyError.communicationError(\"Resource \(metadata.name) returned no blob content\")")
-            } else {
-                lines.append("        guard let text = contents.first?.text else {")
-                lines.append("            throw MCPServerProxyError.communicationError(\"Resource \(metadata.name) returned no text content\")")
-                lines.append("        }")
-                if let clientReturnType {
-                    lines.append("        return try MCPClientResultDecoder.decode(\(clientReturnType).self, from: text)")
-                } else {
-                    lines.append("        return try MCPClientResultDecoder.decode(\(metadata.returnTypeString).self, from: text)")
-                }
-            }
-
-        case .prompt:
-            lines.append("    public func \(metadata.name)(\(signature))\(effectSpecifiers) -> PromptResult {")
-            lines.append(contentsOf: encodedArgumentLines(for: metadata.parameters, variableName: "arguments", indent: "        "))
-
-            let argumentsName = (hasParameters && !metadata.isAsync) ? "capturedArguments" : "arguments"
-            if hasParameters && !metadata.isAsync {
-                lines.append("        let capturedArguments = arguments")
-            }
-
-            let callExpression = promptCallExpression(
-                promptName: metadata.name,
-                hasParameters: hasParameters,
-                argumentsName: argumentsName,
-                isAsync: metadata.isAsync,
-                isThrowing: metadata.isThrowing
-            )
-            lines.append("        return \(callExpression)")
-        }
-
-        lines.append("    }")
-        return lines
-    }
-
-    static func docCommentLines(for metadata: ClientFunctionMetadata) -> [String] {
-        var bodyLines: [String] = []
-        if !metadata.documentation.description.isEmpty {
-            for line in metadata.documentation.description.split(separator: "\n") {
-                bodyLines.append(String(line))
-            }
-        }
-
-        for parameter in metadata.parameters {
-            if let description = metadata.documentation.parameters[parameter.name], !description.isEmpty {
-                bodyLines.append("- Parameter \(parameter.name): \(description)")
-            }
-        }
-
-        if let returns = metadata.documentation.returns, !returns.isEmpty {
-            bodyLines.append("- Returns: \(returns)")
-        }
-
-        guard !bodyLines.isEmpty else { return [] }
-
-        var lines: [String] = []
-        lines.append("    /**")
-        for bodyLine in bodyLines {
-            lines.append("     \(bodyLine)")
-        }
-        lines.append("     */")
-        return lines
-    }
-
-    static func clientTypeDocCommentLines(description: String?) -> [String] {
-        guard let description, !description.isEmpty else { return [] }
-        let bodyLines = description.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-        return blockDocCommentLines(bodyLines, indent: "")
-    }
-
-    static func initDocCommentLines() -> [String] {
-        let bodyLines = [
-            "Creates a client using the provided proxy.",
-            "- Parameter proxy: The proxy used to call server tools, resources, and prompts."
+    static func makeBaseDeclarations(serverArgs: ServerArguments) -> [DeclSyntax] {
+        let nameProperty = "private let __mcpServerName = \"\(serverArgs.name)\""
+        let versionProperty = "private let __mcpServerVersion = \"\(serverArgs.version)\""
+        let descriptionProperty = "private let __mcpServerDescription: String? = \(serverArgs.descriptionLiteral)"
+        return [
+            DeclSyntax(stringLiteral: nameProperty),
+            DeclSyntax(stringLiteral: versionProperty),
+            DeclSyntax(stringLiteral: descriptionProperty)
         ]
-        return blockDocCommentLines(bodyLines, indent: "    ")
-    }
-
-    static func encodedArgumentLines(
-        for parameters: [ClientParameter],
-        variableName: String,
-        indent: String
-    ) -> [String] {
-        guard !parameters.isEmpty else { return [] }
-        var lines = ["\(indent)var \(variableName): JSONDictionary = [:]"]
-        for parameter in parameters {
-            let encodeCall = "try MCPClientArgumentEncoder.encode(\(parameter.name))"
-            if parameter.isOptional {
-                lines.append("\(indent)if let \(parameter.name) { \(variableName)[\"\(parameter.name)\"] = \(encodeCall) }")
-            } else {
-                lines.append("\(indent)\(variableName)[\"\(parameter.name)\"] = \(encodeCall)")
-            }
-        }
-        return lines
-    }
-
-    static func blockDocCommentLines(_ bodyLines: [String], indent: String) -> [String] {
-        guard !bodyLines.isEmpty else { return [] }
-        var lines: [String] = []
-        lines.append("\(indent)/**")
-        for line in bodyLines {
-            lines.append("\(indent) \(line)")
-        }
-        lines.append("\(indent) */")
-        return lines
-    }
-
-    static func parameterSignature(_ parameter: ClientParameter) -> String {
-        let label: String
-        if parameter.label == "_" {
-            label = "_ \(parameter.name)"
-        } else if parameter.label != parameter.name {
-            label = "\(parameter.label) \(parameter.name)"
-        } else {
-            label = parameter.name
-        }
-
-        var signature = "\(label): \(parameter.typeString)"
-        if let defaultValue = parameter.defaultValue, !defaultValue.isEmpty {
-            signature += " = \(defaultValue)"
-        }
-        return signature
-    }
-
-    static func effectSpecifiersString(isAsync: Bool, throwsKeyword: String?) -> String {
-        var parts: [String] = []
-        if isAsync {
-            parts.append("async")
-        }
-        if let throwsKeyword {
-            parts.append(throwsKeyword)
-        }
-        guard !parts.isEmpty else { return "" }
-        return " " + parts.joined(separator: " ")
-    }
-
-    static func toolCallExpression(
-        toolName: String,
-        hasParameters: Bool,
-        argumentsName: String,
-        isAsync: Bool,
-        isThrowing: Bool
-    ) -> String {
-        let call = hasParameters
-            ? "proxy.callTool(\"\(toolName)\", arguments: \(argumentsName))"
-            : "proxy.callTool(\"\(toolName)\")"
-
-        let tryPrefix = isThrowing ? "try " : "try! "
-
-        if isAsync {
-            return "\(tryPrefix)await \(call)"
-        }
-
-        return "\(tryPrefix)MCPClientBlocking.call { try await \(call) }"
-    }
-
-    static func resourceReadExpression(
-        isAsync: Bool,
-        isThrowing: Bool
-    ) -> String {
-        let call = "proxy.readResource(uri: uri)"
-        let tryPrefix = isThrowing ? "try " : "try! "
-
-        if isAsync {
-            return "\(tryPrefix)await \(call)"
-        }
-
-        return "\(tryPrefix)MCPClientBlocking.call { try await \(call) }"
-    }
-
-    static func promptCallExpression(
-        promptName: String,
-        hasParameters: Bool,
-        argumentsName: String,
-        isAsync: Bool,
-        isThrowing: Bool
-    ) -> String {
-        let call = hasParameters
-            ? "proxy.getPrompt(name: \"\(promptName)\", arguments: \(argumentsName))"
-            : "proxy.getPrompt(name: \"\(promptName)\")"
-
-        let tryPrefix = isThrowing ? "try " : "try! "
-
-        if isAsync {
-            return "\(tryPrefix)await \(call)"
-        }
-
-        return "\(tryPrefix)MCPClientBlocking.call { try await \(call) }"
-    }
-
-    static func resourceTemplates(from funcDecl: FunctionDeclSyntax) -> [String] {
-        for attribute in funcDecl.attributes {
-            guard let identifierAttr = attribute.as(AttributeSyntax.self),
-                  let identifier = identifierAttr.attributeName.as(IdentifierTypeSyntax.self),
-                  identifier.name.text == "MCPResource",
-                  let argList = identifierAttr.arguments?.as(LabeledExprListSyntax.self) else {
-                continue
-            }
-
-            var templates: [String] = []
-            for arg in argList where arg.label == nil {
-                if let stringLiteral = arg.expression.as(StringLiteralExprSyntax.self) {
-                    templates.append(stringLiteral.segments.description)
-                } else if let arrayExpr = arg.expression.as(ArrayExprSyntax.self) {
-                    for element in arrayExpr.elements {
-                        if let stringLiteral = element.expression.as(StringLiteralExprSyntax.self) {
-                            templates.append(stringLiteral.segments.description)
-                        }
-                    }
-                }
-            }
-            return templates
-        }
-
-        return []
-    }
-
-    static func resourceTemplateVariables(in template: String) -> [String] {
-        guard let regex = try? NSRegularExpression(pattern: #"\{[^}]+\}"#) else {
-            return []
-        }
-
-        let nsRange = NSRange(template.startIndex..., in: template)
-        let matches = regex.matches(in: template, range: nsRange)
-        var variables: [String] = []
-
-        for match in matches {
-            guard let range = Range(match.range, in: template) else { continue }
-            var expression = String(template[range].dropFirst().dropLast())
-
-            if let first = expression.first, "+#./;?&".contains(first) {
-                expression.removeFirst()
-            }
-
-            for spec in expression.split(separator: ",") {
-                var name = String(spec)
-                if let starIndex = name.firstIndex(of: "*") {
-                    name = String(name[..<starIndex])
-                }
-                if let colonIndex = name.firstIndex(of: ":") {
-                    name = String(name[..<colonIndex])
-                }
-                if !name.isEmpty, !variables.contains(name) {
-                    variables.append(name)
-                }
-            }
-        }
-
-        return variables
     }
 }
