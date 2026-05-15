@@ -102,13 +102,15 @@ public struct MCPToolMacro: PeerMacro {
         let toolName = attrArgs.customName ?? functionName
 
         let metadataDeclaration = makeMetadataDeclaration(
-            toolName: toolName,
-            functionName: functionName,
-            descriptionArg: attrArgs.descriptionArg,
-            parameterInfoStrings: parameterInfoStrings,
-            commonMetadata: commonMetadata,
-            isConsequentialArg: attrArgs.isConsequentialArg,
-            annotationsArg: annotationsArg
+            inputs: MetadataDeclarationInputs(
+                toolName: toolName,
+                functionName: functionName,
+                descriptionArg: attrArgs.descriptionArg,
+                parameterInfoStrings: parameterInfoStrings,
+                commonMetadata: commonMetadata,
+                isConsequentialArg: attrArgs.isConsequentialArg,
+                annotationsArg: annotationsArg
+            )
         )
 
         let wrapperFuncString = makeWrapperFunction(
@@ -195,29 +197,36 @@ public struct MCPToolMacro: PeerMacro {
         }
     }
 
+    /// Bundles the arguments needed to render the `__mcpMetadata_*`
+    /// declaration. Grouped into a struct so the call site stays under the
+    /// function-parameter-count limit.
+    private struct MetadataDeclarationInputs {
+        let toolName: String
+        let functionName: String
+        let descriptionArg: String
+        let parameterInfoStrings: [String]
+        let commonMetadata: ExtractedFunctionMetadata
+        let isConsequentialArg: String
+        let annotationsArg: String
+    }
+
     private static func makeMetadataDeclaration(
-        toolName: String,
-        functionName: String,
-        descriptionArg: String,
-        parameterInfoStrings: [String],
-        commonMetadata: ExtractedFunctionMetadata,
-        isConsequentialArg: String,
-        annotationsArg: String
+        inputs: MetadataDeclarationInputs
     ) -> String {
-        let returnTypeString = commonMetadata.returnTypeString
-        let returnDescriptionString = commonMetadata.returnDescription ?? "nil"
+        let returnTypeString = inputs.commonMetadata.returnTypeString
+        let returnDescriptionString = inputs.commonMetadata.returnDescription ?? "nil"
         return """
-/// Metadata for the \(toolName) tool
-nonisolated private let __mcpMetadata_\(functionName) = MCPToolMetadata(
-   name: "\(toolName)",
-   description: \(descriptionArg),
-   parameters: [\(parameterInfoStrings.joined(separator: ", "))],
+/// Metadata for the \(inputs.toolName) tool
+nonisolated private let __mcpMetadata_\(inputs.functionName) = MCPToolMetadata(
+   name: "\(inputs.toolName)",
+   description: \(inputs.descriptionArg),
+   parameters: [\(inputs.parameterInfoStrings.joined(separator: ", "))],
    returnType: \(returnTypeString).self,
    returnTypeDescription: \(returnDescriptionString),
-   isAsync: \(commonMetadata.isAsync),
-   isThrowing: \(commonMetadata.isThrowing),
-   isConsequential: \(isConsequentialArg),
-   annotations: \(annotationsArg)
+   isAsync: \(inputs.commonMetadata.isAsync),
+   isThrowing: \(inputs.commonMetadata.isThrowing),
+   isConsequential: \(inputs.isConsequentialArg),
+   annotations: \(inputs.annotationsArg)
 )
 """
     }

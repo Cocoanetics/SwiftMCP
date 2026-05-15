@@ -150,8 +150,10 @@ extension URITemplateValidator {
             )
         }
 
-        var (expr, level, operatorResult) = stripOperator(expression)
-        if let failure = operatorResult { return failure }
+        let operatorStripResult = stripOperator(expression)
+        if let failure = operatorStripResult.failure { return failure }
+        var expr = operatorStripResult.expr
+        var level = operatorStripResult.level
 
         let variables = expr.split(separator: ",")
         if variables.isEmpty {
@@ -186,12 +188,21 @@ extension URITemplateValidator {
         return URITemplateValidationResult(isValid: true, error: nil, level: level, variables: extractedVariables)
     }
 
+    /// Result of inspecting the leading operator of an expression: the
+    /// remaining expression text, the inferred level, and an optional
+    /// failure result for reserved operators.
+    private struct OperatorStripResult {
+        let expr: String
+        let level: Int
+        let failure: URITemplateValidationResult?
+    }
+
     /// Inspects the leading operator (if any) and returns the remaining
     /// expression text, the inferred level, and an optional failure result
     /// for reserved operators.
     private static func stripOperator(
         _ expression: String
-    ) -> (expr: String, level: Int, failure: URITemplateValidationResult?) {
+    ) -> OperatorStripResult {
         var level = 1
         var expr = expression
 
@@ -212,13 +223,13 @@ extension URITemplateValidator {
                     level: opLevel,
                     variables: []
                 )
-                return (expr, level, failure)
+                return OperatorStripResult(expr: expr, level: level, failure: failure)
             }
             level = max(level, opLevel)
             expr = String(expr.dropFirst())
         }
 
-        return (expr, level, nil)
+        return OperatorStripResult(expr: expr, level: level, failure: nil)
     }
 
     /// Validates a single variable specification
