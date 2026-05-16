@@ -210,19 +210,13 @@ extension MCPServerMacro {
 
         guard !bodyLines.isEmpty else { return [] }
 
-        var lines: [String] = []
-        lines.append("    /**")
-        for bodyLine in bodyLines {
-            lines.append("     \(bodyLine)")
-        }
-        lines.append("     */")
-        return lines
+        return lineDocCommentLines(bodyLines, indent: "    ")
     }
 
     static func clientTypeDocCommentLines(description: String?) -> [String] {
         guard let description, !description.isEmpty else { return [] }
         let bodyLines = description.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-        return blockDocCommentLines(bodyLines, indent: "")
+        return lineDocCommentLines(bodyLines, indent: "")
     }
 
     static func initDocCommentLines() -> [String] {
@@ -230,7 +224,7 @@ extension MCPServerMacro {
             "Creates a client using the provided proxy.",
             "- Parameter proxy: The proxy used to call server tools, resources, and prompts."
         ]
-        return blockDocCommentLines(bodyLines, indent: "    ")
+        return lineDocCommentLines(bodyLines, indent: "    ")
     }
 
     static func encodedArgumentLines(
@@ -254,15 +248,18 @@ extension MCPServerMacro {
         return lines
     }
 
-    static func blockDocCommentLines(_ bodyLines: [String], indent: String) -> [String] {
+    /// Emits the given body lines as `///` line doc comments.
+    ///
+    /// We deliberately avoid the `/** … */` block form here: doc-comment text
+    /// for tools/resources/prompts is taken verbatim from user source, and a
+    /// `*/` substring inside that text (e.g. `"**/*"` in a glob example) would
+    /// close the block comment early and let the rest of the line spill into
+    /// the generated Swift source — see issue #121.
+    static func lineDocCommentLines(_ bodyLines: [String], indent: String) -> [String] {
         guard !bodyLines.isEmpty else { return [] }
-        var lines: [String] = []
-        lines.append("\(indent)/**")
-        for line in bodyLines {
-            lines.append("\(indent) \(line)")
+        return bodyLines.map { line in
+            line.isEmpty ? "\(indent)///" : "\(indent)/// \(line)"
         }
-        lines.append("\(indent) */")
-        return lines
     }
 
 }
