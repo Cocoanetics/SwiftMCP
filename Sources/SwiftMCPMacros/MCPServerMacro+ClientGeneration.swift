@@ -255,10 +255,21 @@ extension MCPServerMacro {
     /// `*/` substring inside that text (e.g. `"**/*"` in a glob example) would
     /// close the block comment early and let the rest of the line spill into
     /// the generated Swift source — see issue #121.
+    ///
+    /// Each body element is further split on any embedded `\n` so multi-line
+    /// content (e.g. a multi-paragraph `- Returns:` produced by
+    /// `Documentation.combineLines`) is emitted one `///` line per physical
+    /// line — `///` comments terminate at the newline, so an unsplit element
+    /// would leak its continuation into the generated source.
     static func lineDocCommentLines(_ bodyLines: [String], indent: String) -> [String] {
         guard !bodyLines.isEmpty else { return [] }
-        return bodyLines.map { line in
-            line.isEmpty ? "\(indent)///" : "\(indent)/// \(line)"
+        return bodyLines.flatMap { bodyLine -> [String] in
+            let physicalLines = bodyLine
+                .split(separator: "\n", omittingEmptySubsequences: false)
+                .map(String.init)
+            return physicalLines.map { line in
+                line.isEmpty ? "\(indent)///" : "\(indent)/// \(line)"
+            }
         }
     }
 
