@@ -56,7 +56,7 @@ let package = Package(
 		.package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.2.0"),
 		.package(url: "https://github.com/apple/swift-nio.git", from: "2.0.0"),
 		.package(url: "https://github.com/swiftlang/swift-docc-plugin.git", from: "1.0.0"),
-		.package(url: "https://github.com/swiftlang/swift-syntax.git", from: "602.0.0-latest"),
+		.package(url: "https://github.com/swiftlang/swift-syntax.git", "602.0.0-latest"..<"604.0.0"),
 		.package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
 		.package(url: "https://github.com/apple/swift-certificates.git", from: "1.1.0")
     ],
