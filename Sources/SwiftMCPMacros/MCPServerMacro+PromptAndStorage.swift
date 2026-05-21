@@ -87,7 +87,13 @@ nonisolated(unsafe) private var __mcpRegisteredExtensionIDs: Set<ObjectIdentifie
 /// Called by `register(in:)` emitted by `@MCPExtension`. Idempotent on the
 /// extension's metatype identity — registering the same extension twice
 /// has no effect.
-public func __mcpRegisterExtension(
+///
+/// `nonisolated` so this method is callable from `@MCPExtension`'s
+/// synchronous `register(in:)` static func when the server type is an
+/// `actor`. The state it touches (`__mcpRegisteredExtensionIDs`,
+/// `__mcpExtensionContributions`) is already declared
+/// `nonisolated(unsafe)`, so the body has no actor-isolated access.
+nonisolated public func __mcpRegisterExtension(
    _ contribution: MCPExtensionContribution<\(serverTypeName)>,
    byID id: ObjectIdentifier
 ) {
