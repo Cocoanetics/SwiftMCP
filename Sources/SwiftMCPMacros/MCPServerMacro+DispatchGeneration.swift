@@ -64,7 +64,7 @@ public func callTool(_ name: String, arguments: JSONDictionary) async throws -> 
         // dispatcher is the corresponding `Type.<Name>.callTool(_:on:arguments:)`
         // — an unbound static function reference, so no retain cycle.
         let extensionFallback = """
-         for contribution in __mcpExtensionContributions {
+         for contribution in __mcpExtensionContributionsSnapshot() {
             if contribution.toolMetadata.contains(where: { $0.name == name }),
                let dispatcher = contribution.toolDispatcher {
                return try await dispatcher(name, self, enrichedArguments)
@@ -129,7 +129,7 @@ public func callTool(_ name: String, arguments: JSONDictionary) async throws -> 
 nonisolated public var mcpToolMetadata: [MCPToolMetadata] {
    var metadata: [MCPToolMetadata] = \(metadataSeed)
 \(appShortcutsBlock)
-   for contribution in __mcpExtensionContributions {
+   for contribution in __mcpExtensionContributionsSnapshot() {
       for m in contribution.toolMetadata where !metadata.contains(where: { $0.name == m.name }) {
          metadata.append(m)
       }
@@ -154,7 +154,7 @@ nonisolated public var mcpToolMetadata: [MCPToolMetadata] {
 \(resourceMetadataDocLine)
 nonisolated public var mcpResourceMetadata: [MCPResourceMetadata] {
    var metadata: [MCPResourceMetadata] = \(resourceMetadataSeed)
-   for contribution in __mcpExtensionContributions {
+   for contribution in __mcpExtensionContributionsSnapshot() {
       for m in contribution.resourceMetadata where !metadata.contains(where: { $0.name == m.name }) {
          metadata.append(m)
       }
@@ -216,7 +216,7 @@ internal func __callResourceFunction(
    switch name {
 \(resourceFunctionSwitchCases)
       default:
-         for contribution in __mcpExtensionContributions {
+         for contribution in __mcpExtensionContributionsSnapshot() {
             if contribution.resourceMetadata.contains(where: { $0.functionMetadata.name == name }),
                let dispatcher = contribution.resourceDispatcher {
                return try await dispatcher(

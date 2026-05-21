@@ -5,6 +5,10 @@
 // type's source file to `import Foundation`.
 @_exported import struct Foundation.URL
 
+// Re-export Foundation.NSLock for the same reason: `@MCPServer` emits an
+// `NSLock` to serialize `__mcpRegisterExtension`/snapshot access.
+@_exported import class Foundation.NSLock
+
 /// SwiftMCP is a framework for building Model-Controller-Protocol (MCP) servers.
 ///
 /// The framework provides:

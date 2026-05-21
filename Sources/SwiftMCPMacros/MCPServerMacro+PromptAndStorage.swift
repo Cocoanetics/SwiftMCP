@@ -22,7 +22,7 @@ extension MCPServerMacro {
 \(promptMetadataDocLine)
 nonisolated public var mcpPromptMetadata: [MCPPromptMetadata] {
    var metadata: [MCPPromptMetadata] = \(promptMetadataSeed)
-   for contribution in __mcpExtensionContributions {
+   for contribution in __mcpExtensionContributionsSnapshot() {
       for m in contribution.promptMetadata where !metadata.contains(where: { $0.name == m.name }) {
          metadata.append(m)
       }
@@ -51,7 +51,7 @@ public func callPrompt(
    switch name {
 \(promptSwitchCases)
       default:
-         for contribution in __mcpExtensionContributions {
+         for contribution in __mcpExtensionContributionsSnapshot() {
             if contribution.promptMetadata.contains(where: { $0.name == name }),
                let dispatcher = contribution.promptDispatcher {
                return try await dispatcher(name, self, enrichedArguments)
@@ -82,6 +82,26 @@ public func callPrompt(
 nonisolated(unsafe) private var __mcpRegisteredExtensionIDs: Set<ObjectIdentifier> = []
 """
 
+        let lockStorage = """
+/// Serializes access to the extension storage above. Required because
+/// `@MCPExtension`'s `register(in:)` is synchronous and `nonisolated`,
+/// so on actor-backed servers it cannot rely on actor-executor
+/// serialization. Reads must use `__mcpExtensionContributionsSnapshot()`
+/// rather than iterating the array directly.
+private let __mcpExtensionLock = NSLock()
+"""
+
+        let snapshotHelper = """
+/// Returns a thread-safe copy of `__mcpExtensionContributions` for iteration.
+/// Use this rather than touching the array directly — concurrent calls to
+/// `__mcpRegisterExtension(_:byID:)` would otherwise race with read sites.
+nonisolated public func __mcpExtensionContributionsSnapshot() -> [MCPExtensionContribution<\(serverTypeName)>] {
+   __mcpExtensionLock.lock()
+   defer { __mcpExtensionLock.unlock() }
+   return __mcpExtensionContributions
+}
+"""
+
         let registerExtensionMethod = """
 /// Installs an extension's contribution on this server instance.
 /// Called by `register(in:)` emitted by `@MCPExtension`. Idempotent on the
@@ -90,18 +110,26 @@ nonisolated(unsafe) private var __mcpRegisteredExtensionIDs: Set<ObjectIdentifie
 ///
 /// `nonisolated` so this method is callable from `@MCPExtension`'s
 /// synchronous `register(in:)` static func when the server type is an
-/// `actor`. The state it touches (`__mcpRegisteredExtensionIDs`,
-/// `__mcpExtensionContributions`) is already declared
-/// `nonisolated(unsafe)`, so the body has no actor-isolated access.
+/// `actor`. Mutations are serialized by `__mcpExtensionLock` so concurrent
+/// registrations (or register-while-dispatch) cannot corrupt the
+/// underlying `Set`/`Array`.
 nonisolated public func __mcpRegisterExtension(
    _ contribution: MCPExtensionContribution<\(serverTypeName)>,
    byID id: ObjectIdentifier
 ) {
+   __mcpExtensionLock.lock()
+   defer { __mcpExtensionLock.unlock() }
    guard !__mcpRegisteredExtensionIDs.contains(id) else { return }
    __mcpRegisteredExtensionIDs.insert(id)
    __mcpExtensionContributions.append(contribution)
 }
 """
-        return [contributionsStorage, registeredIDsStorage, registerExtensionMethod]
+        return [
+            contributionsStorage,
+            registeredIDsStorage,
+            lockStorage,
+            snapshotHelper,
+            registerExtensionMethod
+        ]
     }
 }

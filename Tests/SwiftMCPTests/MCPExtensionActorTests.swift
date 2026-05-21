@@ -48,3 +48,27 @@ func testActorExtensionRegistration() async throws {
     let addCount = server.mcpToolMetadata.filter { $0.name == "add" }.count
     #expect(addCount == 1)
 }
+
+@Test("Concurrent register(in:) calls remain idempotent")
+func testConcurrentExtensionRegistration() async throws {
+    // Hammer `register(in:)` from many tasks at once. With `nonisolated`
+    // registration on an actor host, the storage no longer gets actor-
+    // executor serialization — `__mcpExtensionLock` must keep the
+    // Set/Array mutations safe and preserve the documented "registering
+    // twice is a no-op" guarantee.
+    let server = ActorBackedServer()
+
+    await withTaskGroup(of: Void.self) { group in
+        for _ in 0..<256 {
+            group.addTask {
+                ActorBackedServer.ActorMath.register(in: server)
+            }
+        }
+    }
+
+    let addCount = server.mcpToolMetadata.filter { $0.name == "add" }.count
+    #expect(addCount == 1)
+
+    let sum = try await server.callTool("add", arguments: ["a": 4, "b": 6])
+    #expect(sum as? Int == 10)
+}
