@@ -21,9 +21,9 @@ class OpenAPITestServer {
 struct OpenAPIResourceTests {
 
     @Test("OpenAPI spec includes both tools and resources")
-    func openAPISpecIncludesBothToolsAndResources() throws {
+    func openAPISpecIncludesBothToolsAndResources() async throws {
         let server = OpenAPITestServer()
-        let spec = OpenAPISpec(server: server, scheme: "https", host: "example.com")
+        let spec = await OpenAPISpec(server: server, scheme: "https", host: "example.com")
 
         // Should have 2 paths: one for the tool and one for the resource
         #expect(spec.paths.count == 2)

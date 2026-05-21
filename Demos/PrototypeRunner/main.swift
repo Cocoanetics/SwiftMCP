@@ -16,18 +16,20 @@ struct PrototypeRunner {
     static func main() async throws {
         let server = PrototypeServer()
 
-        // Same-target extensions.
-        PrototypeServer.Math.register(in: server)
-        PrototypeServer.Strings.register(in: server)
+        // Same-target extensions. `register(in:)` is `async` so the same
+        // call shape works on both class and actor hosts; on a class host
+        // (like `PrototypeServer`) the `await` runs the sync body inline.
+        await PrototypeServer.Math.register(in: server)
+        await PrototypeServer.Strings.register(in: server)
 
         // Cross-target extension (defined in PrototypeExtensionsLib).
         #if os(macOS) || os(Linux) || os(Windows) || os(iOS)
-        PrototypeServer.Calendar.register(in: server)
+        await PrototypeServer.Calendar.register(in: server)
         #endif
 
         // Demonstrate idempotence — these calls are no-ops.
-        PrototypeServer.Math.register(in: server)
-        PrototypeServer.Strings.register(in: server)
+        await PrototypeServer.Math.register(in: server)
+        await PrototypeServer.Strings.register(in: server)
 
         print("=== Tools ===")
         for tool in server.mcpToolMetadata.sorted(by: { $0.name < $1.name }) {

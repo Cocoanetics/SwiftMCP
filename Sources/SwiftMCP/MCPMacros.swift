@@ -153,8 +153,6 @@ public macro MCPAppIntentTool(
         named(callPrompt),
         named(Client),
         named(__mcpExtensionContributions),
-        named(__mcpExtensionContributionsSnapshot),
-        named(__mcpExtensionLock),
         named(__mcpRegisterExtension),
         named(__mcpRegisteredExtensionIDs)
 )

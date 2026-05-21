@@ -91,7 +91,7 @@ struct OpenAPISpec: Codable {
        - scheme: The URL scheme to use (e.g., "http" or "https")
        - host: The host where the server is running
      */
-    init(server: MCPServer, scheme: String, host: String) {
+    init(server: MCPServer, scheme: String, host: String) async {
         self.openapi = "3.1.0"
         self.info = Info(
             title: "\(server.serverName)",
@@ -107,7 +107,7 @@ struct OpenAPISpec: Codable {
         ]
 
         // Combine MCPTool, MCPResource, and MCPPrompt functions as tools
-        let allToolMetadata = Self.collectToolMetadata(for: server)
+        let allToolMetadata = await Self.collectToolMetadata(for: server)
 
         // Generate OpenAPI paths for all tools
         let rootPath = server.serverName.asModelName
@@ -122,17 +122,22 @@ struct OpenAPISpec: Codable {
 
     /// Collects the union of MCPTool / MCPResource / MCPPrompt metadata exposed by `server`,
     /// rewriting resource/prompt metadata into tool metadata so they can share a single output path.
-    private static func collectToolMetadata(for server: MCPServer) -> [MCPToolMetadata] {
+    ///
+    /// `async` because `mcpToolMetadata` / `mcpPromptMetadata` may be actor-isolated
+    /// when the host is an `actor`; the `await` hops onto the executor in that case
+    /// and is a no-op for class hosts.
+    private static func collectToolMetadata(for server: MCPServer) async -> [MCPToolMetadata] {
         var allToolMetadata: [MCPToolMetadata] = []
 
         // Add MCPTool functions
         if let toolProvider = server as? MCPToolProviding {
-            allToolMetadata.append(contentsOf: toolProvider.mcpToolMetadata)
+            allToolMetadata.append(contentsOf: await toolProvider.mcpToolMetadata)
         }
 
         // Add MCPResource functions converted to tools
         if let resourceProvider = server as? MCPResourceProviding {
-            let resourceAsTools = resourceProvider.mcpResourceMetadata.map { resourceMeta in
+            let resourceMetadata = await resourceProvider.mcpResourceMetadata
+            let resourceAsTools = resourceMetadata.map { resourceMeta in
                 MCPToolMetadata(
                     name: resourceMeta.functionMetadata.name,
                     description: resourceMeta.description,
@@ -149,7 +154,7 @@ struct OpenAPISpec: Codable {
 
         // Add MCPPrompt functions converted to tools
         if let promptProvider = server as? MCPPromptProviding {
-            let promptAsTools = promptProvider.mcpPromptMetadata.map { promptMeta in
+            let promptAsTools = await promptProvider.mcpPromptMetadata.map { promptMeta in
                 MCPToolMetadata(
                     name: promptMeta.name,
                     description: promptMeta.description,

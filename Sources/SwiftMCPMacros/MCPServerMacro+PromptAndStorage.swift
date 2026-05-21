@@ -11,18 +11,23 @@ import SwiftSyntax
 
 extension MCPServerMacro {
     // MARK: - Prompt dispatch
-    static func makePromptDeclarations(mcpPrompts: [String]) -> [String] {
+    static func makePromptDeclarations(mcpPrompts: [String], isActor: Bool) -> [String] {
         let promptMetadataArray = mcpPrompts
             .map { "__mcpPromptMetadata_\($0)" }
             .joined(separator: ", ")
         let promptMetadataSeed = mcpPrompts.isEmpty ? "[]" : "[\(promptMetadataArray)]"
         let promptMetadataDocLine = "/// Returns an array of all available prompt metadata, "
             + "including contributions from `@MCPExtension`-annotated extensions."
+        // Class hosts keep the original `nonisolated` getter (reads
+        // `nonisolated(unsafe)` storage). Actor hosts drop `nonisolated`
+        // so the getter is actor-isolated and can read actor-isolated
+        // storage — the executor handles serialization.
+        let metadataIsolation = isActor ? "" : "nonisolated "
         let promptMetadataProperty = """
 \(promptMetadataDocLine)
-nonisolated public var mcpPromptMetadata: [MCPPromptMetadata] {
+\(metadataIsolation)public var mcpPromptMetadata: [MCPPromptMetadata] {
    var metadata: [MCPPromptMetadata] = \(promptMetadataSeed)
-   for contribution in __mcpExtensionContributionsSnapshot() {
+   for contribution in __mcpExtensionContributions {
       for m in contribution.promptMetadata where !metadata.contains(where: { $0.name == m.name }) {
          metadata.append(m)
       }
@@ -51,7 +56,7 @@ public func callPrompt(
    switch name {
 \(promptSwitchCases)
       default:
-         for contribution in __mcpExtensionContributionsSnapshot() {
+         for contribution in __mcpExtensionContributions {
             if contribution.promptMetadata.contains(where: { $0.name == name }),
                let dispatcher = contribution.promptDispatcher {
                return try await dispatcher(name, self, enrichedArguments)
@@ -66,10 +71,27 @@ public func callPrompt(
     }
 
     // MARK: - Extension storage
-    static func makeExtensionStorageDeclarations(serverTypeName: String) -> [String] {
+    static func makeExtensionStorageDeclarations(serverTypeName: String, isActor: Bool) -> [String] {
+        // Two layouts:
+        //
+        // - Actor hosts: storage is actor-isolated (no `nonisolated(unsafe)`),
+        //   `__mcpRegisterExtension` is actor-isolated (so the executor
+        //   serializes register / register-while-dispatch automatically),
+        //   and the matching `register(in:)` emitted by `@MCPExtension` is
+        //   `async` so external callers `await` it.
+        //
+        // - Class hosts: storage stays `nonisolated(unsafe)`, the method is
+        //   declared `async` with a sync body so the same `await
+        //   server.__mcpRegisterExtension(...)` shape from `@MCPExtension`
+        //   compiles. There is no actor executor to serialize, but class
+        //   `@MCPServer` users have always treated registration as
+        //   setup-time work — same contract as before.
+        let storageIsolation = isActor ? "" : "nonisolated(unsafe) "
+        let methodAsync = isActor ? "" : "async "
+
         let contributionsStorageLine1 = "/// Contributions from `@MCPExtension`-annotated extensions."
         let contributionsStorageLine2 = "/// Populated by `MyServer.<Name>.register(in:)` calls at startup."
-        let contributionsStorageDecl = "nonisolated(unsafe) private var __mcpExtensionContributions: "
+        let contributionsStorageDecl = "\(storageIsolation)private var __mcpExtensionContributions: "
             + "[MCPExtensionContribution<\(serverTypeName)>] = []"
         let contributionsStorage = """
 \(contributionsStorageLine1)
@@ -79,27 +101,7 @@ public func callPrompt(
 
         let registeredIDsStorage = """
 /// IDs of `@MCPExtension` nested types already registered on this instance.
-nonisolated(unsafe) private var __mcpRegisteredExtensionIDs: Set<ObjectIdentifier> = []
-"""
-
-        let lockStorage = """
-/// Serializes access to the extension storage above. Required because
-/// `@MCPExtension`'s `register(in:)` is synchronous and `nonisolated`,
-/// so on actor-backed servers it cannot rely on actor-executor
-/// serialization. Reads must use `__mcpExtensionContributionsSnapshot()`
-/// rather than iterating the array directly.
-private let __mcpExtensionLock = NSLock()
-"""
-
-        let snapshotHelper = """
-/// Returns a thread-safe copy of `__mcpExtensionContributions` for iteration.
-/// Use this rather than touching the array directly — concurrent calls to
-/// `__mcpRegisterExtension(_:byID:)` would otherwise race with read sites.
-nonisolated public func __mcpExtensionContributionsSnapshot() -> [MCPExtensionContribution<\(serverTypeName)>] {
-   __mcpExtensionLock.lock()
-   defer { __mcpExtensionLock.unlock() }
-   return __mcpExtensionContributions
-}
+\(storageIsolation)private var __mcpRegisteredExtensionIDs: Set<ObjectIdentifier> = []
 """
 
         let registerExtensionMethod = """
@@ -107,18 +109,10 @@ nonisolated public func __mcpExtensionContributionsSnapshot() -> [MCPExtensionCo
 /// Called by `register(in:)` emitted by `@MCPExtension`. Idempotent on the
 /// extension's metatype identity — registering the same extension twice
 /// has no effect.
-///
-/// `nonisolated` so this method is callable from `@MCPExtension`'s
-/// synchronous `register(in:)` static func when the server type is an
-/// `actor`. Mutations are serialized by `__mcpExtensionLock` so concurrent
-/// registrations (or register-while-dispatch) cannot corrupt the
-/// underlying `Set`/`Array`.
-nonisolated public func __mcpRegisterExtension(
+public func __mcpRegisterExtension(
    _ contribution: MCPExtensionContribution<\(serverTypeName)>,
    byID id: ObjectIdentifier
-) {
-   __mcpExtensionLock.lock()
-   defer { __mcpExtensionLock.unlock() }
+) \(methodAsync){
    guard !__mcpRegisteredExtensionIDs.contains(id) else { return }
    __mcpRegisteredExtensionIDs.insert(id)
    __mcpExtensionContributions.append(contribution)
@@ -127,8 +121,6 @@ nonisolated public func __mcpRegisterExtension(
         return [
             contributionsStorage,
             registeredIDsStorage,
-            lockStorage,
-            snapshotHelper,
             registerExtensionMethod
         ]
     }

@@ -2,11 +2,11 @@ import Testing
 import SwiftMCP
 
 // Regression test: `@MCPExtension` must work when the host type is an
-// `actor`. The generated `register(in:)` is a synchronous static func that
-// calls `__mcpRegisterExtension` on the server instance — so that method
-// must be `nonisolated` on actor hosts, otherwise the registration site
-// fails to compile with "call to actor-isolated instance method ... in a
-// synchronous nonisolated context".
+// `actor`. The per-type design emits actor-isolated storage and
+// `__mcpRegisterExtension` on actor hosts (so the executor serializes
+// register and register-while-dispatch), and the macro-emitted
+// `register(in:)` is `async` so a single call shape works for both
+// class and actor hosts.
 
 @MCPServer
 actor ActorBackedServer {
@@ -32,41 +32,43 @@ func testActorExtensionRegistration() async throws {
     let server = ActorBackedServer()
 
     // Sanity: primary tool is visible before registering anything.
-    #expect(server.mcpToolMetadata.contains { $0.name == "greet" })
-    #expect(!server.mcpToolMetadata.contains { $0.name == "add" })
+    await #expect(server.mcpToolMetadata.contains { $0.name == "greet" })
+    await #expect(!server.mcpToolMetadata.contains { $0.name == "add" })
 
-    // The bug fix: this call must compile on an actor host.
-    ActorBackedServer.ActorMath.register(in: server)
+    // The bug fix: this call must compile on an actor host. `register(in:)`
+    // is `async`; `await` here hops onto the actor's executor.
+    await ActorBackedServer.ActorMath.register(in: server)
 
-    #expect(server.mcpToolMetadata.contains { $0.name == "add" })
+    await #expect(server.mcpToolMetadata.contains { $0.name == "add" })
 
     let sum = try await server.callTool("add", arguments: ["a": 7, "b": 5])
     #expect(sum as? Int == 12)
 
-    // Idempotence: registering twice is a no-op.
-    ActorBackedServer.ActorMath.register(in: server)
-    let addCount = server.mcpToolMetadata.filter { $0.name == "add" }.count
+    // Idempotence: registering twice is a no-op (executor serializes
+    // both calls; the second hits the `__mcpRegisteredExtensionIDs`
+    // guard and returns without re-appending).
+    await ActorBackedServer.ActorMath.register(in: server)
+    let addCount = await server.mcpToolMetadata.filter { $0.name == "add" }.count
     #expect(addCount == 1)
 }
 
 @Test("Concurrent register(in:) calls remain idempotent")
 func testConcurrentExtensionRegistration() async throws {
-    // Hammer `register(in:)` from many tasks at once. With `nonisolated`
-    // registration on an actor host, the storage no longer gets actor-
-    // executor serialization — `__mcpExtensionLock` must keep the
-    // Set/Array mutations safe and preserve the documented "registering
-    // twice is a no-op" guarantee.
+    // Hammer `register(in:)` from many tasks at once. The actor's
+    // executor serializes the mutations naturally — no lock, just the
+    // language semantics — so the documented "registering twice is a
+    // no-op" guarantee holds.
     let server = ActorBackedServer()
 
     await withTaskGroup(of: Void.self) { group in
         for _ in 0..<256 {
             group.addTask {
-                ActorBackedServer.ActorMath.register(in: server)
+                await ActorBackedServer.ActorMath.register(in: server)
             }
         }
     }
 
-    let addCount = server.mcpToolMetadata.filter { $0.name == "add" }.count
+    let addCount = await server.mcpToolMetadata.filter { $0.name == "add" }.count
     #expect(addCount == 1)
 
     let sum = try await server.callTool("add", arguments: ["a": 4, "b": 6])

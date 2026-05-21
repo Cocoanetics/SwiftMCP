@@ -3,7 +3,7 @@ import Foundation
 // MARK: - Prompts (list / get / completion)
 public extension MCPServer {
     /// Creates a response listing all available prompts.
-    internal func createPromptsListResponse(id: JSONRPCID) -> JSONRPCMessage {
+    internal func createPromptsListResponse(id: JSONRPCID) async -> JSONRPCMessage {
         guard let promptProvider = self as? MCPPromptProviding else {
             return JSONRPCMessage.response(id: id, result: [
                 "content": [["type": "text", "text": "Server does not provide any prompts"]],
@@ -11,7 +11,7 @@ public extension MCPServer {
             ])
         }
 
-        let prompts = promptProvider.mcpPromptMetadata.convertedToPrompts()
+        let prompts = await promptProvider.mcpPromptMetadata.convertedToPrompts()
         if let promptsValue = try? JSONValue(encoding: prompts) {
             return JSONRPCMessage.response(id: id, result: ["prompts": promptsValue])
         }
@@ -98,10 +98,11 @@ public extension MCPServer {
         parsed: ParsedCompletionRequest
     ) async -> JSONRPCMessage? {
         guard let uri = parsed.refDict["uri"]?.stringValue,
-              let resourceProvider = self as? MCPResourceProviding,
-              let metadata = resourceProvider.mcpResourceMetadata.first(
-                where: { $0.uriTemplates.contains(uri) }
-              ),
+              let resourceProvider = self as? MCPResourceProviding else {
+            return nil
+        }
+        let resourceMetadata = await resourceProvider.mcpResourceMetadata
+        guard let metadata = resourceMetadata.first(where: { $0.uriTemplates.contains(uri) }),
               let parameter = metadata.parameters.first(where: { $0.name == parsed.argName }) else {
             return nil
         }
@@ -116,8 +117,11 @@ public extension MCPServer {
         parsed: ParsedCompletionRequest
     ) async -> JSONRPCMessage? {
         guard let name = parsed.refDict["name"]?.stringValue,
-              let promptProvider = self as? MCPPromptProviding,
-              let metadata = promptProvider.mcpPromptMetadata.first(where: { $0.name == name }),
+              let promptProvider = self as? MCPPromptProviding else {
+            return nil
+        }
+        let promptMetadata = await promptProvider.mcpPromptMetadata
+        guard let metadata = promptMetadata.first(where: { $0.name == name }),
               let parameter = metadata.parameters.first(where: { $0.name == parsed.argName }) else {
             return nil
         }

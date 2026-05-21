@@ -109,9 +109,15 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro, MemberAttributeMacro 
             ?? declaration.as(ActorDeclSyntax.self)?.name.text
             ?? "Self"
 
+        // Branch the generated code on host kind. Actor hosts keep storage
+        // and metadata getters actor-isolated; class hosts keep the original
+        // non-isolated layout. See `makeExtensionStorageDeclarations`.
+        let isActor = declaration.is(ActorDeclSyntax.self)
+
         var declarations: [DeclSyntax] = makeBaseDeclarations(serverArgs: serverArgs)
-        declarations.append(contentsOf: makeExtensionStorageDeclarations(serverTypeName: serverTypeName)
-            .map { DeclSyntax(stringLiteral: $0) })
+        declarations.append(contentsOf:
+            makeExtensionStorageDeclarations(serverTypeName: serverTypeName, isActor: isActor)
+                .map { DeclSyntax(stringLiteral: $0) })
 
         // Always emit the tool machinery: even if no `@MCPTool` is declared
         // in the primary type, `@MCPExtension`-annotated extensions in this
@@ -122,18 +128,19 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro, MemberAttributeMacro 
         )))
         declarations.append(DeclSyntax(stringLiteral: makeToolMetadataProperty(
             mcpTools: mcpTools,
-            hasAppShortcutsProvider: hasAppShortcutsProvider
+            hasAppShortcutsProvider: hasAppShortcutsProvider,
+            isActor: isActor
         )))
 
         // Always emit resource-related machinery: extensions may contribute
         // resources even when the primary type declares none.
-        for resourceDecl in makeResourceDeclarations(mcpResources: mcpResources) {
+        for resourceDecl in makeResourceDeclarations(mcpResources: mcpResources, isActor: isActor) {
             declarations.append(DeclSyntax(stringLiteral: resourceDecl))
         }
 
         // Always emit prompt-related machinery: extensions may contribute
         // prompts even when the primary type declares none.
-        for promptDecl in makePromptDeclarations(mcpPrompts: mcpPrompts) {
+        for promptDecl in makePromptDeclarations(mcpPrompts: mcpPrompts, isActor: isActor) {
             declarations.append(DeclSyntax(stringLiteral: promptDecl))
         }
 

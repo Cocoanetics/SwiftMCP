@@ -326,9 +326,9 @@ func testComputedIsConsequentialIdempotent() {
 // MARK: - OpenAPI isConsequential Tests
 
 @Test("OpenAPI spec uses computedIsConsequential for readOnly tool")
-func testOpenAPIIsConsequentialReadOnly() {
+func testOpenAPIIsConsequentialReadOnly() async {
     let server = HintsTestServer()
-    let spec = OpenAPISpec(server: server, scheme: "http", host: "localhost:8080")
+    let spec = await OpenAPISpec(server: server, scheme: "http", host: "localhost:8080")
 
     // Get the searchItems path
     guard let pathItem = spec.paths["/hintstestserver/searchItems"],
@@ -342,9 +342,9 @@ func testOpenAPIIsConsequentialReadOnly() {
 }
 
 @Test("OpenAPI spec uses computedIsConsequential for destructive tool")
-func testOpenAPIIsConsequentialDestructive() {
+func testOpenAPIIsConsequentialDestructive() async {
     let server = HintsTestServer()
-    let spec = OpenAPISpec(server: server, scheme: "http", host: "localhost:8080")
+    let spec = await OpenAPISpec(server: server, scheme: "http", host: "localhost:8080")
 
     // Get the deleteAccount path
     guard let pathItem = spec.paths["/hintstestserver/deleteAccount"],
@@ -358,9 +358,9 @@ func testOpenAPIIsConsequentialDestructive() {
 }
 
 @Test("OpenAPI spec uses computedIsConsequential for combined readOnly+destructive")
-func testOpenAPIIsConsequentialCombined() {
+func testOpenAPIIsConsequentialCombined() async {
     let server = HintsTestServer()
-    let spec = OpenAPISpec(server: server, scheme: "http", host: "localhost:8080")
+    let spec = await OpenAPISpec(server: server, scheme: "http", host: "localhost:8080")
 
     // Get the readOnlyWithDestructive path
     guard let pathItem = spec.paths["/hintstestserver/readOnlyWithDestructive"],

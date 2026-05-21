@@ -82,7 +82,7 @@ extension HTTPSSETransport {
 			scheme = "http"
 		}
 
-		let spec = OpenAPISpec(server: server, scheme: scheme, host: host)
+		let spec = await OpenAPISpec(server: server, scheme: scheme, host: host)
 
 		let encoder = JSONEncoder()
 		encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -140,21 +140,27 @@ extension HTTPSSETransport {
 	/// Dispatch a tool / resource / prompt by name and return its result along with metadata (if a tool).
 	private func dispatchTool(toolName: String, arguments: JSONDictionary) async throws
 		-> (Encodable & Sendable, MCPToolMetadata?) {
-		if let toolProvider = server as? MCPToolProviding,
-		   toolProvider.mcpToolMetadata.contains(where: { $0.name == toolName }) {
-			let metadata = toolProvider.mcpToolMetadata.first(where: { $0.name == toolName })
-			let result = try await toolProvider.callTool(toolName, arguments: arguments)
-			return (result, metadata)
+		if let toolProvider = server as? MCPToolProviding {
+			let toolMetadata = await toolProvider.mcpToolMetadata
+			if toolMetadata.contains(where: { $0.name == toolName }) {
+				let metadata = toolMetadata.first(where: { $0.name == toolName })
+				let result = try await toolProvider.callTool(toolName, arguments: arguments)
+				return (result, metadata)
+			}
 		}
-		if let resourceProvider = server as? MCPResourceProviding,
-		   resourceProvider.mcpResourceMetadata.contains(where: { $0.functionMetadata.name == toolName }) {
-			let result = try await resourceProvider.callResourceAsFunction(toolName, arguments: arguments)
-			return (result, nil)
+		if let resourceProvider = server as? MCPResourceProviding {
+			let resourceMetadata = await resourceProvider.mcpResourceMetadata
+			if resourceMetadata.contains(where: { $0.functionMetadata.name == toolName }) {
+				let result = try await resourceProvider.callResourceAsFunction(toolName, arguments: arguments)
+				return (result, nil)
+			}
 		}
-		if let promptProvider = server as? MCPPromptProviding,
-		   promptProvider.mcpPromptMetadata.contains(where: { $0.name == toolName }) {
-			let messages = try await promptProvider.callPrompt(toolName, arguments: arguments)
-			return (messages, nil)
+		if let promptProvider = server as? MCPPromptProviding {
+			let promptMetadata = await promptProvider.mcpPromptMetadata
+			if promptMetadata.contains(where: { $0.name == toolName }) {
+				let messages = try await promptProvider.callPrompt(toolName, arguments: arguments)
+				return (messages, nil)
+			}
 		}
 		throw MCPToolError.unknownTool(name: toolName)
 	}

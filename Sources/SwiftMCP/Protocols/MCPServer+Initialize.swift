@@ -33,7 +33,7 @@ public extension MCPServer {
             }
         }
 
-        return createInitializeResponse(id: request.id, protocolVersion: negotiatedProtocolVersion)
+        return await createInitializeResponse(id: request.id, protocolVersion: negotiatedProtocolVersion)
     }
 
     internal func extractAndStoreCapabilities(_ request: JSONRPCMessage.JSONRPCRequestData) async {
@@ -70,8 +70,8 @@ public extension MCPServer {
     func createInitializeResponse(
         id: JSONRPCID,
         protocolVersion: String = "2025-11-25"
-    ) -> JSONRPCMessage {
-        let capabilities = buildServerCapabilities()
+    ) async -> JSONRPCMessage {
+        let capabilities = await buildServerCapabilities()
 
         let serverInfo = InitializeResult.ServerInfo(
             name: serverName,
@@ -96,7 +96,7 @@ public extension MCPServer {
 
     /// Builds the `ServerCapabilities` advertised in an initialize response, only
     /// flagging tools/resources/prompts when there is actual content to expose.
-    internal func buildServerCapabilities() -> ServerCapabilities {
+    internal func buildServerCapabilities() async -> ServerCapabilities {
         var capabilities = ServerCapabilities()
 
         // Advertise tools/resources/prompts capabilities only when there is
@@ -107,17 +107,17 @@ public extension MCPServer {
         // declarations and no registered extensions would otherwise claim
         // capabilities it can't actually fulfill.
         if let toolProvider = self as? MCPToolProviding,
-           !toolProvider.mcpToolMetadata.isEmpty {
+           !(await toolProvider.mcpToolMetadata).isEmpty {
             capabilities.tools = .init(listChanged: true)
         }
 
         if let resourceProvider = self as? MCPResourceProviding,
-           !resourceProvider.mcpResourceMetadata.isEmpty {
+           !(await resourceProvider.mcpResourceMetadata).isEmpty {
             capabilities.resources = .init(subscribe: true, listChanged: true)
         }
 
         if let promptProvider = self as? MCPPromptProviding,
-           !promptProvider.mcpPromptMetadata.isEmpty {
+           !(await promptProvider.mcpPromptMetadata).isEmpty {
             capabilities.prompts = .init(listChanged: true)
         }
 

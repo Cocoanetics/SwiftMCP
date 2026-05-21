@@ -26,11 +26,16 @@ public protocol MCPResourceProviding {
 
 /**
 	 The resource metadata available on this server.
-	 
+
 	 Resource metadata contains information about resource functions including their
 	 parameters, return types, and other metadata needed for OpenAPI generation.
+
+	 `get async` so actor-backed conformers can satisfy the requirement with an
+	 actor-isolated property. Class hosts emitted by `@MCPServer` still expose
+	 the property as `nonisolated`, so an `await` against a concrete class type
+	 is a no-op (and just emits a "no async operations" warning).
 	 */
-    var mcpResourceMetadata: [MCPResourceMetadata] { get }
+    var mcpResourceMetadata: [MCPResourceMetadata] { get async }
 
 /**
 	 Retrieves a resource by its URI.
@@ -114,7 +119,7 @@ extension MCPResourceProviding {
     /// Default implementation of mcpResourceMetadata - returns empty array
     /// This should be overridden by the MCPServerMacro
     public var mcpResourceMetadata: [MCPResourceMetadata] {
-        return []
+        get async { [] }
     }
 
     public func callResourceAsFunction(_ name: String, arguments: JSONDictionary) async throws -> Encodable & Sendable {

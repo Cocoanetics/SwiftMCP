@@ -274,7 +274,7 @@ func testCustomNameAndVersion() async throws {
     let calculator = CustomNameCalculator()
 
     // Get the response using our test method
-    let response = calculator.createInitializeResponse(id: .int(1))
+    let response = await calculator.createInitializeResponse(id: .int(1))
 
     // Extract server info from the response using pattern matching
     guard case .response(let responseData) = response else {
@@ -305,7 +305,7 @@ func testDefaultNameAndVersion() async throws {
     let calculator = DefaultNameCalculator()
 
     // Get the response using our test method
-    let response = calculator.createInitializeResponse(id: .int(1))
+    let response = await calculator.createInitializeResponse(id: .int(1))
 
     // Extract server info from the response using pattern matching
     guard case .response(let responseData) = response else {
