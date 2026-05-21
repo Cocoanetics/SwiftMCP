@@ -94,7 +94,7 @@ public extension MCPServer {
     ) async -> JSONRPCMessage? {
         switch requestData.method {
         case "tools/list":
-            return createToolsListResponse(id: requestData.id)
+            return await createToolsListResponse(id: requestData.id)
         case "tools/call":
             return await handleToolCall(requestData)
         default:
@@ -128,7 +128,7 @@ public extension MCPServer {
     ) async -> JSONRPCMessage? {
         switch requestData.method {
         case "prompts/list":
-            return createPromptsListResponse(id: requestData.id)
+            return await createPromptsListResponse(id: requestData.id)
         case "prompts/get":
             return await handlePromptGet(requestData)
         case "completion/complete":

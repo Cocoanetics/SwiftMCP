@@ -65,9 +65,9 @@ class TestAPIServer {
 }
 
 @Test("OpenAPI spec correctly describes simple function")
-func testSimpleFunctionSpec() {
+func testSimpleFunctionSpec() async {
     let server = TestAPIServer()
-    let spec = OpenAPISpec(server: server, scheme: "http", host: "localhost:8080")
+    let spec = await OpenAPISpec(server: server, scheme: "http", host: "localhost:8080")
 
     // Get the path for simpleFunction
     let path = "/test_server/simpleFunction"
@@ -131,9 +131,9 @@ private func assertThrowingFunctionRequestBody(_ schema: JSONSchema) {
 }
 
 @Test("OpenAPI spec correctly describes throwing function")
-func testThrowingFunctionSpec() {
+func testThrowingFunctionSpec() async {
     let server = TestAPIServer()
-    let spec = OpenAPISpec(server: server, scheme: "http", host: "localhost:8080")
+    let spec = await OpenAPISpec(server: server, scheme: "http", host: "localhost:8080")
 
     let path = "/test_server/throwingFunction"
     guard let pathItem = spec.paths[path] else {
@@ -168,9 +168,9 @@ func testThrowingFunctionSpec() {
 }
 
 @Test("OpenAPI spec correctly describes void function")
-func testVoidFunctionSpec() {
+func testVoidFunctionSpec() async {
     let server = TestAPIServer()
-    let spec = OpenAPISpec(server: server, scheme: "http", host: "localhost")
+    let spec = await OpenAPISpec(server: server, scheme: "http", host: "localhost")
 
     // Check if the path exists
     #expect(spec.paths["/test_server/voidFunction"] != nil)
@@ -222,9 +222,9 @@ func testVoidFunctionSpec() {
 }
 
 @Test("OpenAPI spec correctly describes complex function")
-func testComplexFunctionSpec() {
+func testComplexFunctionSpec() async {
     let server = TestAPIServer()
-    let spec = OpenAPISpec(server: server, scheme: "http", host: "localhost:8080")
+    let spec = await OpenAPISpec(server: server, scheme: "http", host: "localhost:8080")
 
     // Get the path for complexFunction
     let path = "/test_server/complexFunction"
@@ -307,9 +307,9 @@ class TestServer {
 }
 
 @Test("OpenAPI spec correctly handles various return types")
-func testOpenAPISpecGeneration() throws {
+func testOpenAPISpecGeneration() async throws {
     let server = TestServer()
-    let spec = OpenAPISpec(server: server, scheme: "http", host: "localhost:8080")
+    let spec = await OpenAPISpec(server: server, scheme: "http", host: "localhost:8080")
 
     #expect(spec.paths["/testserver/getSingleForecast"] != nil, "Missing path for getSingleForecast")
     #expect(spec.paths["/testserver/getMultipleForecasts"] != nil, "Missing path for getMultipleForecasts")

@@ -71,9 +71,9 @@ actor ResourceTestServer {
 @Suite("MCP Resource Tests", .tags(.unit))
 struct MCPResourceTests {
     @Test("Resource metadata includes generated values")
-    func resourceMetadata() {
+    func resourceMetadata() async {
         let server = ResourceTestServer()
-        let metadata = server.mcpResourceMetadata
+        let metadata = await server.mcpResourceMetadata
 
         // Should have 6 resources: getConfig, getUserProfile, getLocalizedProfile, getFileList,
         // getTemperatureStatus, getMultiVersionUser

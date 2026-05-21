@@ -93,9 +93,9 @@ actor DemoResourceTestServer {
 @Suite("MCP Resource Demo Tests", .tags(.unit))
 struct MCPResourceDemoTests {
     @Test("Demo server registers all resources")
-    func demoResourceMetadata() {
+    func demoResourceMetadata() async {
         let server = DemoResourceTestServer()
-        let metadata = server.mcpResourceMetadata
+        let metadata = await server.mcpResourceMetadata
 
         // Should have 6 resources
         #expect(metadata.count == 6)

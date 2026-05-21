@@ -8,7 +8,7 @@ public extension MCPServer {
      - Parameter id: The request ID to include in the response
      - Returns: A JSON-RPC message containing the tools list
      */
-    internal func createToolsListResponse(id: JSONRPCID) -> JSONRPCMessage {
+    internal func createToolsListResponse(id: JSONRPCID) async -> JSONRPCMessage {
         guard let toolProvider = self as? MCPToolProviding else {
             return JSONRPCMessage.response(id: id, result: [
                 "content": [
@@ -18,7 +18,8 @@ public extension MCPServer {
             ])
         }
 
-        if let tools = try? JSONValue(encoding: toolProvider.mcpToolMetadata.convertedToTools()) {
+        let toolMetadata = await toolProvider.mcpToolMetadata
+        if let tools = try? JSONValue(encoding: toolMetadata.convertedToTools()) {
             return JSONRPCMessage.response(id: id, result: ["tools": tools])
         }
         return JSONRPCMessage.errorResponse(

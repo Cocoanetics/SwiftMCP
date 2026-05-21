@@ -63,8 +63,13 @@ public enum \(extensionName) {
 \(promptSection)
    /// Installs this extension's contributions on `server`. Idempotent —
    /// calling more than once with the same server has no effect.
-   public static func register(in server: \(extendedType)) {
-      server.__mcpRegisterExtension(
+   ///
+   /// `async` so a single shape works for both host kinds: actor hosts
+   /// `await` onto the executor (the executor serializes register and
+   /// register-while-dispatch automatically); class hosts run the sync
+   /// body inline.
+   public static func register(in server: \(extendedType)) async {
+      await server.__mcpRegisterExtension(
          MCPExtensionContribution(\(initArgs)),
          byID: ObjectIdentifier(Self.self)
       )
