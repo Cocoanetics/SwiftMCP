@@ -68,7 +68,10 @@ extension MCPServerProxy {
         clientName: String,
         clientVersion: String
     ) async throws {
-        #if os(Linux)
+        // Capability gate, not OS name: Linux, Android and Windows all use
+        // FoundationNetworking's URLSession (no `URLSession.bytes`), so they
+        // share the delegate-based path; only Darwin takes the `bytes` path.
+        #if canImport(FoundationNetworking)
             try await connectSSELinux(
                 sseConfig: sseConfig,
                 clientName: clientName,

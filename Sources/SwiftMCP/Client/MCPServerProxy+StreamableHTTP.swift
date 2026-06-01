@@ -6,7 +6,7 @@ import Foundation
 extension MCPServerProxy {
     // MARK: - Streamable HTTP (Apple platforms)
 
-    #if !os(Linux)
+    #if !canImport(FoundationNetworking)
         @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, macCatalyst 15.0, *)
         internal func sendStreamableRequestApple(
             _ message: JSONRPCMessage,
@@ -194,9 +194,9 @@ extension MCPServerProxy {
         }
     #endif
 
-    // MARK: - Streamable HTTP (Linux)
+    // MARK: - Streamable HTTP (Linux, Android, Windows)
 
-    #if os(Linux)
+    #if canImport(FoundationNetworking)
         internal func sendStreamableRequestLinux(
             _ message: JSONRPCMessage,
             sseConfig: MCPServerSseConfig

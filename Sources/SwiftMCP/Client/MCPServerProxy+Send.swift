@@ -28,7 +28,7 @@ extension MCPServerProxy {
         _ message: JSONRPCMessage,
         sseConfig: MCPServerSseConfig
     ) async throws -> JSONRPCMessage {
-        #if os(Linux)
+        #if canImport(FoundationNetworking)
             return try await sendStreamableRequestLinux(message, sseConfig: sseConfig)
         #else
             if #available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, macCatalyst 15.0, *) {

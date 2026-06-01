@@ -69,7 +69,12 @@ extension MCPServerProxy {
 
     // MARK: - SSE Connection (Apple platforms)
 
-    #if !os(Linux)
+    // Gate on the capability, not the OS name: only Darwin's Foundation
+    // ships `URLSession.bytes` / `URLSession.AsyncBytes`. Linux, Android and
+    // Windows all source URLSession from FoundationNetworking and must use
+    // the delegate-based path below — `!os(Linux)` wrongly sent Android and
+    // Windows here.
+    #if !canImport(FoundationNetworking)
         @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, macCatalyst 15.0, *)
         internal func connectSSEApple(
             sseConfig: MCPServerSseConfig,
@@ -123,9 +128,9 @@ extension MCPServerProxy {
         }
     #endif
 
-    // MARK: - SSE Connection (Linux)
+    // MARK: - SSE Connection (Linux, Android, Windows)
 
-    #if os(Linux)
+    #if canImport(FoundationNetworking)
         internal func connectSSELinux(
             sseConfig: MCPServerSseConfig,
             clientName: String,
@@ -145,7 +150,7 @@ extension MCPServerProxy {
             request.httpMethod = "GET"
             configureSSEGETRequest(&request, sseConfig: sseConfig)
 
-            // Use a streaming delegate since URLSession.bytes is unavailable on Linux
+            // Use a streaming delegate since URLSession.bytes is unavailable outside Apple platforms
             let proxy = self
             let delegate = SSEStreamingDelegate { response in
                 Task {
@@ -190,7 +195,7 @@ extension MCPServerProxy {
 
     // MARK: - Streamable general SSE (Apple)
 
-    #if !os(Linux)
+    #if !canImport(FoundationNetworking)
         @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, macCatalyst 15.0, *)
         // swiftlint:disable:next function_body_length
         internal func startStreamableGeneralSSEApple(sseConfig: MCPServerSseConfig) {
@@ -255,9 +260,9 @@ extension MCPServerProxy {
         }
     #endif
 
-    // MARK: - Streamable general SSE (Linux)
+    // MARK: - Streamable general SSE (Linux, Android, Windows)
 
-    #if os(Linux)
+    #if canImport(FoundationNetworking)
         // swiftlint:disable:next function_body_length
         internal func startStreamableGeneralSSELinux(sseConfig: MCPServerSseConfig) {
             streamTask = Task {
