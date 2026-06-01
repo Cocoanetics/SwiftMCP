@@ -1,10 +1,7 @@
 // Test-only: HTTP responses are known to be HTTPURLResponse.
 
 import Testing
-import Foundation
-#if canImport(FoundationNetworking)
-import FoundationNetworking
-#endif
+import SwiftCross
 @testable import SwiftMCP
 
 @Suite("HTTP Transport Stream Resume and Routing")

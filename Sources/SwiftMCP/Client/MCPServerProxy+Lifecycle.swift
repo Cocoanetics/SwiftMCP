@@ -1,7 +1,4 @@
-import Foundation
-#if canImport(FoundationNetworking)
-    import FoundationNetworking
-#endif
+import SwiftCross
 
 extension MCPServerProxy {
     /// Connects to the MCP server and establishes an SSE, TCP, or stdio connection.
@@ -68,28 +65,11 @@ extension MCPServerProxy {
         clientName: String,
         clientVersion: String
     ) async throws {
-        // Capability gate, not OS name: Linux, Android and Windows all use
-        // FoundationNetworking's URLSession (no `URLSession.bytes`), so they
-        // share the delegate-based path; only Darwin takes the `bytes` path.
-        #if canImport(FoundationNetworking)
-            try await connectSSELinux(
-                sseConfig: sseConfig,
-                clientName: clientName,
-                clientVersion: clientVersion
-            )
-        #else
-            if #available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, macCatalyst 15.0, *) {
-                try await connectSSEApple(
-                    sseConfig: sseConfig,
-                    clientName: clientName,
-                    clientVersion: clientVersion
-                )
-            } else {
-                throw MCPServerProxyError.unsupportedPlatform(
-                    "SSE client connections require macOS 12.0 or newer."
-                )
-            }
-        #endif
+        try await connectSSEStream(
+            sseConfig: sseConfig,
+            clientName: clientName,
+            clientVersion: clientVersion
+        )
     }
 
     /// Disconnects from the MCP server.

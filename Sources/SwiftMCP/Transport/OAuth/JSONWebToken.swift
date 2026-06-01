@@ -1,10 +1,7 @@
-import Foundation
+import SwiftCross
 import Crypto
 import _CryptoExtras
 import X509
-#if canImport(FoundationNetworking)
-import FoundationNetworking
-#endif
 
 /// A comprehensive JSON Web Token (JWT) implementation with decoding, validation, and signature verification
 public struct JSONWebToken: Sendable {

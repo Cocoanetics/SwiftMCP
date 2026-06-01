@@ -106,7 +106,7 @@ public enum MCPJSONCoding {
         self = try MCPJSONCoding.makeDecoder().decode(JSONValue.self, from: data)
     }
 
-    init(jsonObject value: Any?) throws {
+    package init(jsonObject value: Any?) throws {
         guard let value else {
             self = .null
             return
@@ -244,7 +244,7 @@ public enum MCPJSONCoding {
         return try decoder.decode(T.self, from: data)
     }
 
-    func decodeDynamically(
+    package func decodeDynamically(
         _ type: any Decodable.Type,
         using decoder: JSONDecoder = MCPJSONCoding.makeDecoder()
     ) throws -> any Decodable {

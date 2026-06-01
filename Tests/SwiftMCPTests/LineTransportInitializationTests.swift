@@ -68,7 +68,7 @@ struct LineTransportInitializationTests {
         #expect(error.error.message == SessionInitializationGate.rejectionMessage)
     }
 
-    @Test("In-process stdio rejects ping before initialize")
+    @Test("In-process stdio rejects ping before initialize", .enabled(if: isStdioProcessSupported))
     func inProcessStdioRejectsPingBeforeInitialize() async throws {
         let bridge = InProcessStdioBridge(server: LocalStdioServer())
         try await bridge.start()
@@ -96,7 +96,7 @@ struct LineTransportInitializationTests {
         #expect(error.error.message == SessionInitializationGate.rejectionMessage)
     }
 
-    @Test("In-process stdio accepts batch when initialize comes first")
+    @Test("In-process stdio accepts batch when initialize comes first", .enabled(if: isStdioProcessSupported))
     func inProcessStdioAllowsInitializeFirstBatch() async throws {
         let bridge = InProcessStdioBridge(server: LocalStdioServer())
         try await bridge.start()

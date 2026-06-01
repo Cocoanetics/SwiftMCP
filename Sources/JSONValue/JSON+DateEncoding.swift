@@ -8,7 +8,7 @@
 import Foundation
 
 extension JSONEncoder.DateEncodingStrategy {
-    static let iso8601WithTimeZone = JSONEncoder.DateEncodingStrategy.custom { date, encoder in
+    public static let iso8601WithTimeZone = JSONEncoder.DateEncodingStrategy.custom { date, encoder in
         let formatter = ISO8601DateFormatter()
         formatter.timeZone = TimeZone.current
         formatter.formatOptions = [.withInternetDateTime, .withTimeZone]
@@ -19,7 +19,7 @@ extension JSONEncoder.DateEncodingStrategy {
 }
 
 extension JSONDecoder.DateDecodingStrategy {
-    static let iso8601WithTimeZone = JSONDecoder.DateDecodingStrategy.custom { decoder in
+    public static let iso8601WithTimeZone = JSONDecoder.DateDecodingStrategy.custom { decoder in
         let container = try decoder.singleValueContainer()
         let string = try container.decode(String.self)
         let formatter = ISO8601DateFormatter()

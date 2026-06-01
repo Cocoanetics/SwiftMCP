@@ -1,7 +1,4 @@
-import Foundation
-#if canImport(FoundationNetworking)
-import FoundationNetworking
-#endif
+import SwiftCross
 
 extension HTTPSSETransport {
 	/// Handle OAuth proxy requests: /authorize redirects, /oauth/* proxy, /userinfo, jwks, /u/* redirects.

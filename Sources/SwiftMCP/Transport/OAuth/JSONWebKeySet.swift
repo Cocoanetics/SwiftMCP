@@ -1,10 +1,7 @@
-import Foundation
+import SwiftCross
 import Crypto
 import _CryptoExtras
 import X509
-#if canImport(FoundationNetworking)
-import FoundationNetworking
-#endif
 
 /// JWKS cache manager to avoid repeated HTTP requests for the same issuer
 /// 

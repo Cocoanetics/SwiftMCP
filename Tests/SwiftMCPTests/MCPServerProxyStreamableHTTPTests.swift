@@ -1,8 +1,5 @@
 import Testing
-import Foundation
-#if canImport(FoundationNetworking)
-import FoundationNetworking
-#endif
+import SwiftCross
 @testable import SwiftMCP
 
 @Suite("MCPServerProxy Streamable HTTP")

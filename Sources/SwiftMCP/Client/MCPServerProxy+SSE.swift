@@ -1,9 +1,16 @@
-import Foundation
-#if canImport(FoundationNetworking)
-    import FoundationNetworking
-#endif
+import SwiftCross
 
 extension MCPServerProxy {
+    /// Effectively-unbounded timeout for long-lived SSE / streamable
+    /// connections, expressed as a large *finite* value rather than
+    /// `.infinity`: swift-corelibs-foundation traps (SIGILL) when converting
+    /// an infinite timeout while configuring libcurl (`configureEasyHandle`)
+    /// on Linux. Apple's Foundation tolerates `.infinity`, but a large finite
+    /// value behaves identically there and is portable. `2^53` is effectively
+    /// infinite (~285M years) yet keeps corelibs' `Int(seconds) * 1000` within
+    /// `Int`.
+    static let streamTimeout: TimeInterval = TimeInterval(1 << 53)
+
     // MARK: - URL helpers
 
     internal func isStreamableMCPURL(_ url: URL) -> Bool {
@@ -67,221 +74,77 @@ extension MCPServerProxy {
         }
     }
 
-    // MARK: - SSE Connection (Apple platforms)
+    // MARK: - SSE Connection
 
-    // Gate on the capability, not the OS name: only Darwin's Foundation
-    // ships `URLSession.bytes` / `URLSession.AsyncBytes`. Linux, Android and
-    // Windows all source URLSession from FoundationNetworking and must use
-    // the delegate-based path below — `!os(Linux)` wrongly sent Android and
-    // Windows here.
-    #if !canImport(FoundationNetworking)
-        @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, macCatalyst 15.0, *)
-        internal func connectSSEApple(
-            sseConfig: MCPServerSseConfig,
-            clientName: String,
-            clientVersion: String
-        ) async throws {
-            let isStreamableMCP = isStreamableMCPURL(sseConfig.url)
-            if isStreamableMCP {
-                endpointURL = sseConfig.url
-                try await initialize(clientName: clientName, clientVersion: clientVersion)
-                startStreamableGeneralSSEApple(sseConfig: sseConfig)
-                return
-            }
-
-            let sessionConfig = URLSessionConfiguration.default
-            sessionConfig.timeoutIntervalForRequest = .infinity
-            sessionConfig.timeoutIntervalForResource = .infinity
-
-            let session = URLSession(configuration: sessionConfig)
-            var request = URLRequest(url: sseConfig.url)
-            request.httpMethod = "GET"
-            configureSSEGETRequest(&request, sseConfig: sseConfig)
-
-            streamTask = Task {
-                do {
-                    let (asyncBytes, response) = try await session.bytes(for: request)
-                    self.handleSSEResponse(
-                        response,
-                        sseConfig: sseConfig,
-                        isStreamableMCP: isStreamableMCP
-                    )
-
-                    for try await message in asyncBytes.lines.sseMessages() {
-                        await self.processIncomingMessage(event: message.event, data: message.data)
-                    }
-                    self.handleStreamTermination(
-                        MCPServerProxyError.communicationError(
-                            "SSE stream closed by server before response was received"
-                        )
-                    )
-                } catch is CancellationError {
-                    // Pending requests are cancelled in disconnect().
-                } catch {
-                    self.logger.error("[MCP DEBUG] SSE stream error: \(error)")
-                    self.handleStreamTermination(error)
-                }
-            }
-
-            try await waitForEndpointIfNeeded(isStreamableMCP: isStreamableMCP)
+    // Uses `URLSession.bytes(for:)` on every platform: native on Apple
+    // (macOS 12 / iOS 15, the package floor) and via SwiftCross's shim on
+    // Linux / Windows / Android.
+    internal func connectSSEStream(
+        sseConfig: MCPServerSseConfig,
+        clientName: String,
+        clientVersion: String
+    ) async throws {
+        let isStreamableMCP = isStreamableMCPURL(sseConfig.url)
+        if isStreamableMCP {
+            endpointURL = sseConfig.url
             try await initialize(clientName: clientName, clientVersion: clientVersion)
+            startStreamableGeneralSSE(sseConfig: sseConfig)
+            return
         }
-    #endif
 
-    // MARK: - SSE Connection (Linux, Android, Windows)
+        let sessionConfig = URLSessionConfiguration.default
+        sessionConfig.timeoutIntervalForRequest = Self.streamTimeout
+        sessionConfig.timeoutIntervalForResource = Self.streamTimeout
 
-    #if canImport(FoundationNetworking)
-        internal func connectSSELinux(
-            sseConfig: MCPServerSseConfig,
-            clientName: String,
-            clientVersion: String
-        ) async throws {
-            let isStreamableMCP = isStreamableMCPURL(sseConfig.url)
-            if isStreamableMCP {
-                endpointURL = sseConfig.url
-                try await initialize(clientName: clientName, clientVersion: clientVersion)
-                startStreamableGeneralSSELinux(sseConfig: sseConfig)
-                return
-            }
+        let session = URLSession(configuration: sessionConfig)
+        var request = URLRequest(url: sseConfig.url)
+        request.httpMethod = "GET"
+        configureSSEGETRequest(&request, sseConfig: sseConfig)
 
-            let sessionConfig = URLSessionConfiguration.default
+        streamTask = Task {
+            do {
+                let (asyncBytes, response) = try await session.bytes(for: request)
+                self.handleSSEResponse(
+                    response,
+                    sseConfig: sseConfig,
+                    isStreamableMCP: isStreamableMCP
+                )
 
-            var request = URLRequest(url: sseConfig.url)
-            request.httpMethod = "GET"
-            configureSSEGETRequest(&request, sseConfig: sseConfig)
-
-            // Use a streaming delegate since URLSession.bytes is unavailable outside Apple platforms
-            let proxy = self
-            let delegate = SSEStreamingDelegate { response in
-                Task {
-                    await proxy.handleSSEResponse(
-                        response,
-                        sseConfig: sseConfig,
-                        isStreamableMCP: isStreamableMCP
-                    )
+                for try await message in asyncBytes.lines.sseMessages() {
+                    await self.processIncomingMessage(event: message.event, data: message.data)
                 }
+                self.handleStreamTermination(
+                    MCPServerProxyError.communicationError(
+                        "SSE stream closed by server before response was received"
+                    )
+                )
+            } catch is CancellationError {
+                // Pending requests are cancelled in disconnect().
+            } catch {
+                self.logger.error("[MCP DEBUG] SSE stream error: \(error)")
+                self.handleStreamTermination(error)
             }
+        }
 
-            let session = URLSession(
-                configuration: sessionConfig,
-                delegate: delegate,
-                delegateQueue: nil
-            )
-            let task = session.dataTask(with: request)
-            task.resume()
+        try await waitForEndpointIfNeeded(isStreamableMCP: isStreamableMCP)
+        try await initialize(clientName: clientName, clientVersion: clientVersion)
+    }
 
-            streamTask = Task {
+    // MARK: - Streamable general SSE
+
+    // swiftlint:disable:next function_body_length
+    internal func startStreamableGeneralSSE(sseConfig: MCPServerSseConfig) {
+        streamTask = Task {
+            var lastEventID: String?
+            var retryMilliseconds = 1000
+
+            while !self.isDisconnecting {
                 do {
-                    for try await message in delegate.lines.sseMessages() {
-                        await self.processIncomingMessage(event: message.event, data: message.data)
-                    }
-                    self.handleStreamTermination(
-                        MCPServerProxyError.communicationError(
-                            "SSE stream closed by server before response was received"
-                        )
-                    )
-                } catch is CancellationError {
-                    task.cancel()
-                } catch {
-                    self.logger.error("[MCP DEBUG] SSE stream error: \(error)")
-                    self.handleStreamTermination(error)
-                }
-            }
-
-            try await waitForEndpointIfNeeded(isStreamableMCP: isStreamableMCP)
-            try await initialize(clientName: clientName, clientVersion: clientVersion)
-        }
-    #endif
-
-    // MARK: - Streamable general SSE (Apple)
-
-    #if !canImport(FoundationNetworking)
-        @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, macCatalyst 15.0, *)
-        // swiftlint:disable:next function_body_length
-        internal func startStreamableGeneralSSEApple(sseConfig: MCPServerSseConfig) {
-            streamTask = Task {
-                var lastEventID: String?
-                var retryMilliseconds = 1000
-
-                while !self.isDisconnecting {
-                    do {
-                        let sessionConfig = URLSessionConfiguration.default
-                        sessionConfig.timeoutIntervalForRequest = .infinity
-                        sessionConfig.timeoutIntervalForResource = .infinity
-
-                        let session = URLSession(configuration: sessionConfig)
-                        var request = URLRequest(url: sseConfig.url)
-                        request.httpMethod = "GET"
-                        self.configureSSEGETRequest(
-                            &request,
-                            sseConfig: sseConfig,
-                            lastEventID: lastEventID
-                        )
-
-                        let (asyncBytes, response) = try await session.bytes(for: request)
-                        self.handleSSEResponse(
-                            response,
-                            sseConfig: sseConfig,
-                            isStreamableMCP: true
-                        )
-
-                        for try await message in asyncBytes.lines.sseMessages() {
-                            if let id = message.id {
-                                lastEventID = id
-                            }
-                            if let retry = message.retry {
-                                retryMilliseconds = retry
-                            }
-                            await self.processIncomingMessage(
-                                event: message.event,
-                                data: message.data
-                            )
-                        }
-                    } catch is CancellationError {
-                        return
-                    } catch {
-                        if self.isDisconnecting {
-                            return
-                        }
-                        self.logger.error("[MCP DEBUG] Streamable general SSE stream error: \(error)")
-                    }
-
-                    if self.isDisconnecting {
-                        return
-                    }
-
-                    do {
-                        try await Task.sleep(nanoseconds: UInt64(retryMilliseconds) * 1_000_000)
-                    } catch {
-                        return
-                    }
-                }
-            }
-        }
-    #endif
-
-    // MARK: - Streamable general SSE (Linux, Android, Windows)
-
-    #if canImport(FoundationNetworking)
-        // swiftlint:disable:next function_body_length
-        internal func startStreamableGeneralSSELinux(sseConfig: MCPServerSseConfig) {
-            streamTask = Task {
-                var lastEventID: String?
-                var retryMilliseconds = 1000
-
-                while !self.isDisconnecting {
                     let sessionConfig = URLSessionConfiguration.default
-                    let proxy = self
-                    let delegate = SSEStreamingDelegate { response in
-                        Task {
-                            await proxy.handleSSEResponse(
-                                response,
-                                sseConfig: sseConfig,
-                                isStreamableMCP: true
-                            )
-                        }
-                    }
+                    sessionConfig.timeoutIntervalForRequest = Self.streamTimeout
+                    sessionConfig.timeoutIntervalForResource = Self.streamTimeout
 
+                    let session = URLSession(configuration: sessionConfig)
                     var request = URLRequest(url: sseConfig.url)
                     request.httpMethod = "GET"
                     self.configureSSEGETRequest(
@@ -290,53 +153,46 @@ extension MCPServerProxy {
                         lastEventID: lastEventID
                     )
 
-                    let session = URLSession(
-                        configuration: sessionConfig,
-                        delegate: delegate,
-                        delegateQueue: nil
+                    let (asyncBytes, response) = try await session.bytes(for: request)
+                    self.handleSSEResponse(
+                        response,
+                        sseConfig: sseConfig,
+                        isStreamableMCP: true
                     )
-                    let task = session.dataTask(with: request)
-                    task.resume()
 
-                    do {
-                        for try await message in delegate.lines.sseMessages() {
-                            if let id = message.id {
-                                lastEventID = id
-                            }
-                            if let retry = message.retry {
-                                retryMilliseconds = retry
-                            }
-                            await self.processIncomingMessage(
-                                event: message.event,
-                                data: message.data
-                            )
+                    for try await message in asyncBytes.lines.sseMessages() {
+                        if let id = message.id {
+                            lastEventID = id
                         }
-                    } catch is CancellationError {
-                        task.cancel()
-                        return
-                    } catch {
-                        if self.isDisconnecting {
-                            task.cancel()
-                            return
+                        if let retry = message.retry {
+                            retryMilliseconds = retry
                         }
-                        self.logger.error("[MCP DEBUG] Streamable general SSE stream error: \(error)")
+                        await self.processIncomingMessage(
+                            event: message.event,
+                            data: message.data
+                        )
                     }
-
+                } catch is CancellationError {
+                    return
+                } catch {
                     if self.isDisconnecting {
-                        task.cancel()
                         return
                     }
+                    self.logger.error("[MCP DEBUG] Streamable general SSE stream error: \(error)")
+                }
 
-                    do {
-                        try await Task.sleep(nanoseconds: UInt64(retryMilliseconds) * 1_000_000)
-                    } catch {
-                        task.cancel()
-                        return
-                    }
+                if self.isDisconnecting {
+                    return
+                }
+
+                do {
+                    try await Task.sleep(nanoseconds: UInt64(retryMilliseconds) * 1_000_000)
+                } catch {
+                    return
                 }
             }
         }
-    #endif
+    }
 
     // MARK: - Shared SSE Helpers
 

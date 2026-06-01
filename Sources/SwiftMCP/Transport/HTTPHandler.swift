@@ -1,7 +1,4 @@
-import Foundation
-#if canImport(FoundationNetworking)
-import FoundationNetworking
-#endif
+import SwiftCross
 @preconcurrency import NIOCore
 import NIOHTTP1
 import Logging

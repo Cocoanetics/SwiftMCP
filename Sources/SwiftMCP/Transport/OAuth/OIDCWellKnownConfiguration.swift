@@ -1,7 +1,4 @@
-import Foundation
-#if canImport(FoundationNetworking)
-import FoundationNetworking
-#endif
+import SwiftCross
 
 /// Configuration for enabling OAuth validation on ``HTTPSSETransport``.
 public struct OAuthConfiguration: Sendable {
