@@ -219,7 +219,7 @@ struct MCPClientGenerationTests {
         #expect(result.status == "ok")
     }
 
-    @Test("Round-trips Data tool results")
+    @Test("Round-trips Data tool results", .enabled(if: isStdioProcessSupported))
     func roundTripsDataToolResults() async throws {
         let harness = try await makeClient()
         let client = harness.client
@@ -246,7 +246,7 @@ struct MCPClientGenerationTests {
         #expect(await server.lastMessage == "hello")
     }
 
-    @Test("Generated client exposes standard resource APIs")
+    @Test("Generated client exposes standard resource APIs", .enabled(if: isStdioProcessSupported))
     func generatedClientUsesStandardResourceAPIs() async throws {
         let harness = try await makeClient()
         let client = harness.client
@@ -270,7 +270,7 @@ struct MCPClientGenerationTests {
         })
     }
 
-    @Test("Generated client exposes standard prompt APIs")
+    @Test("Generated client exposes standard prompt APIs", .enabled(if: isStdioProcessSupported))
     func generatedClientUsesStandardPromptAPIs() async throws {
         let harness = try await makeClient()
         let client = harness.client

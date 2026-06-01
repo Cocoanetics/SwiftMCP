@@ -152,7 +152,7 @@ struct MCPServerProxyTests {
         await proxy.disconnect()
     }
 
-    @Test("STDIO in-process: connect")
+    @Test("STDIO in-process: connect", .enabled(if: isStdioProcessSupported))
     func testStdioConnectToSwiftMCPServer() async throws {
         let server = LocalStdioServer()
         let config = MCPServerConfig.stdioHandles(server: server)
@@ -174,7 +174,7 @@ struct MCPServerProxyTests {
         await proxy.disconnect()
     }
 
-    @Test("STDIO in-process: tool resource content")
+    @Test("STDIO in-process: tool resource content", .enabled(if: isStdioProcessSupported))
     func testStdioToolResourceContent() async throws {
         let server = LocalStdioServer()
         let config = MCPServerConfig.stdioHandles(server: server)
@@ -194,7 +194,7 @@ struct MCPServerProxyTests {
         await proxy.disconnect()
     }
 
-    @Test("STDIO in-process: list resources and templates")
+    @Test("STDIO in-process: list resources and templates", .enabled(if: isStdioProcessSupported))
     func testStdioListResourcesAndTemplates() async throws {
         let server = LocalStdioServer()
         let config = MCPServerConfig.stdioHandles(server: server)
@@ -210,7 +210,7 @@ struct MCPServerProxyTests {
         await proxy.disconnect()
     }
 
-    @Test("STDIO in-process: read resource")
+    @Test("STDIO in-process: read resource", .enabled(if: isStdioProcessSupported))
     func testStdioReadResource() async throws {
         let server = LocalStdioServer()
         let config = MCPServerConfig.stdioHandles(server: server)
@@ -224,7 +224,7 @@ struct MCPServerProxyTests {
         await proxy.disconnect()
     }
 
-    @Test("STDIO in-process: list prompts and get prompt")
+    @Test("STDIO in-process: list prompts and get prompt", .enabled(if: isStdioProcessSupported))
     func testStdioPrompts() async throws {
         let server = LocalStdioServer()
         let config = MCPServerConfig.stdioHandles(server: server)
