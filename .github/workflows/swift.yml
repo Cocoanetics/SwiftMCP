@@ -48,9 +48,15 @@ jobs:
       - name: Test (Linux)
         run: swift test -v --skip-build
 
+  # Non-blocking: swift-nio (NIOPosix) does not currently compile on Windows
+  # (IPPROTO / Sendable errors in System.swift, Thread.swift, ThreadWindows.swift).
+  # This is an upstream issue, not in SwiftMCP. Kept in CI so the job starts
+  # passing automatically once swift-nio gains Windows support; flip to required
+  # then. See https://github.com/apple/swift-nio for Windows status.
   build-windows:
     runs-on: windows-latest
     timeout-minutes: 45
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v6
       - name: Setup Swift
