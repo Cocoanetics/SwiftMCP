@@ -25,17 +25,7 @@ extension MCPServerProxy {
         _ message: JSONRPCMessage,
         sseConfig: MCPServerSseConfig
     ) async throws -> JSONRPCMessage {
-        #if os(Linux)
-            return try await sendStreamableRequestLinux(message, sseConfig: sseConfig)
-        #else
-            if #available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, macCatalyst 15.0, *) {
-                return try await sendStreamableRequestApple(message, sseConfig: sseConfig)
-            } else {
-                throw MCPServerProxyError.unsupportedPlatform(
-                    "Streamable HTTP requires macOS 12.0 or newer."
-                )
-            }
-        #endif
+        try await sendStreamableRequest(message, sseConfig: sseConfig)
     }
 
     private func sendLineMessage(

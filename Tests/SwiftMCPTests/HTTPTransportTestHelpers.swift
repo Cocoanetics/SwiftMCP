@@ -102,23 +102,6 @@ enum HTTPTransportTestHelpers {
     }
 
     static func readFiniteSSEResponse(_ request: URLRequest) async throws -> (HTTPURLResponse, [SSEClientMessage]) {
-        #if canImport(FoundationNetworking)
-        let delegate = SSEStreamingDelegate { _ in }
-        let session = URLSession(configuration: .ephemeral, delegate: delegate, delegateQueue: nil)
-        let task = session.dataTask(with: request)
-        task.resume()
-
-        var events: [SSEClientMessage] = []
-        for try await message in delegate.lines.sseMessages() {
-            events.append(message)
-        }
-
-        guard let httpResponse = delegate.response as? HTTPURLResponse else {
-            throw TestError("Expected HTTPURLResponse")
-        }
-
-        return (httpResponse, events)
-        #else
         let session = URLSession(configuration: .ephemeral)
         let (bytes, response) = try await session.bytes(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -131,7 +114,6 @@ enum HTTPTransportTestHelpers {
         }
 
         return (httpResponse, events)
-        #endif
     }
 
     static func openStreamingRequest(_ request: URLRequest) -> HTTPTransportStreamCapture {
@@ -139,24 +121,12 @@ enum HTTPTransportTestHelpers {
         let eventsBox = HTTPTransportBox<[SSEClientMessage]>([])
 
         let task = Task {
-            #if canImport(FoundationNetworking)
-            let delegate = SSEStreamingDelegate { response in
-                responseBox.value = response as? HTTPURLResponse
-            }
-            let session = URLSession(configuration: .ephemeral, delegate: delegate, delegateQueue: nil)
-            let dataTask = session.dataTask(with: request)
-            dataTask.resume()
-            for try await message in delegate.lines.sseMessages() {
-                eventsBox.value.append(message)
-            }
-            #else
             let session = URLSession(configuration: .ephemeral)
             let (bytes, response) = try await session.bytes(for: request)
             responseBox.value = response as? HTTPURLResponse
             for try await message in bytes.lines.sseMessages() {
                 eventsBox.value.append(message)
             }
-            #endif
         }
 
         return HTTPTransportStreamCapture(response: responseBox, events: eventsBox, task: task)

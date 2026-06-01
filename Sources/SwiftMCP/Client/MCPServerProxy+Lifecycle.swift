@@ -65,25 +65,11 @@ extension MCPServerProxy {
         clientName: String,
         clientVersion: String
     ) async throws {
-        #if os(Linux)
-            try await connectSSELinux(
-                sseConfig: sseConfig,
-                clientName: clientName,
-                clientVersion: clientVersion
-            )
-        #else
-            if #available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, macCatalyst 15.0, *) {
-                try await connectSSEApple(
-                    sseConfig: sseConfig,
-                    clientName: clientName,
-                    clientVersion: clientVersion
-                )
-            } else {
-                throw MCPServerProxyError.unsupportedPlatform(
-                    "SSE client connections require macOS 12.0 or newer."
-                )
-            }
-        #endif
+        try await connectSSEStream(
+            sseConfig: sseConfig,
+            clientName: clientName,
+            clientVersion: clientVersion
+        )
     }
 
     /// Disconnects from the MCP server.
