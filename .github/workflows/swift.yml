@@ -17,6 +17,13 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v6
+      # macos-latest's default Xcode ships Swift 6.1, which can't read the
+      # swift-tools-version:6.2 manifest of the SwiftCross dependency. Pin
+      # Xcode 26 (Swift 6.3) like the iOS job does.
+      - name: Select Xcode 26.0
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "26.0"
       - name: Verify Swift version
         run: swift --version
       - name: Build (macOS)
