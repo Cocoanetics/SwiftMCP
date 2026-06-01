@@ -18,6 +18,10 @@ let package = Package(
 			name: "SwiftMCP",
 			targets: ["SwiftMCP"]
 		),
+		.library(
+			name: "JSONValue",
+			targets: ["JSONValue"]
+		),
 		.executable(
 			name: "SwiftMCPDemo",
 			targets: ["SwiftMCPDemo"]
@@ -69,9 +73,13 @@ let package = Package(
 			]
 		),
 		.target(
+			name: "JSONValue"
+		),
+		.target(
 			name: "SwiftMCP",
 			dependencies: [
 				"SwiftMCPMacros",
+				"JSONValue",
 				.product(name: "NIOCore", package: "swift-nio"),
 				.product(name: "NIOHTTP1", package: "swift-nio"),
 				.product(name: "NIOPosix", package: "swift-nio"),
