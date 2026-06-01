@@ -1,7 +1,4 @@
-import Foundation
-#if canImport(FoundationNetworking)
-    import FoundationNetworking
-#endif
+import SwiftCross
 
 extension MCPServerProxy {
     /// Connects to the MCP server and establishes an SSE, TCP, or stdio connection.

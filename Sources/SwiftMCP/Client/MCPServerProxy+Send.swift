@@ -1,7 +1,4 @@
-import Foundation
-#if canImport(FoundationNetworking)
-    import FoundationNetworking
-#endif
+import SwiftCross
 
 extension MCPServerProxy {
     /// Sends a JSON-RPC message to the server and waits for the response.

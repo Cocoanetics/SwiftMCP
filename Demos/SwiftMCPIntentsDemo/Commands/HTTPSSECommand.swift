@@ -76,7 +76,7 @@ final class HTTPSSECommand: AsyncParsableCommand {
             throw ExitCode.failure
         }
 
-        let host = String.localHostname
+        let host = ProcessInfo.processInfo.hostName
         print(
             "MCP Server \(server.serverName) (\(server.serverVersion)) started "
             + "with HTTP+SSE transport on http://\(host):\(port)/sse"

@@ -1,11 +1,8 @@
-import Foundation
+import SwiftCross
 import Testing
 import Crypto
 import _CryptoExtras
 import X509
-#if canImport(FoundationNetworking)
-import FoundationNetworking
-#endif
 @testable import SwiftMCP
 
 @Suite("JWT Signature Verification", .tags(.unit))

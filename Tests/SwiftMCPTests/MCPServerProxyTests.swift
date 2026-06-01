@@ -1,12 +1,9 @@
 import Testing
 import SwiftMCP
-import Foundation
-#if canImport(FoundationNetworking)
-import FoundationNetworking
-#endif
+import SwiftCross
 
 struct MCPServerProxyTests {
-    static let mcpServerURL = URL(string: "http://\(String.localHostname):8080/sse")!
+    static let mcpServerURL = URL(string: "http://\(ProcessInfo.processInfo.hostName):8080/sse")!
 
     init() {
         TestLoggingBootstrap.install()

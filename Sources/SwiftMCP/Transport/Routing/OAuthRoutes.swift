@@ -1,7 +1,4 @@
-import Foundation
-#if canImport(FoundationNetworking)
-import FoundationNetworking
-#endif
+import SwiftCross
 
 /// OAuth route handlers: authorization server metadata, protected resource metadata,
 /// and transparent proxy to Auth0 endpoints.

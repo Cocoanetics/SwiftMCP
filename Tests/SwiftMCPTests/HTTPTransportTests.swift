@@ -3,10 +3,7 @@
 // payloads are known shapes. Force casts keep test code direct and readable.
 
 import Testing
-import Foundation
-#if canImport(FoundationNetworking)
-import FoundationNetworking
-#endif
+import SwiftCross
 @testable import SwiftMCP
 
 @Suite("HTTP Transport Streamable HTTP")

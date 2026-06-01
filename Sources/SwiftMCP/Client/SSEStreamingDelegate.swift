@@ -1,7 +1,4 @@
-import Foundation
-#if canImport(FoundationNetworking)
-import FoundationNetworking
-#endif
+import SwiftCross
 
 /// A `URLSession` delegate that feeds received bytes into an `AsyncStream`.
 /// Used on Linux where `URLSession.bytes(for:)` is unavailable.

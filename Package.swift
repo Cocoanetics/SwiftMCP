@@ -7,11 +7,11 @@ import PackageDescription
 let package = Package(
 	name: "SwiftMCP",
 	platforms: [
-		.macOS("11.0"),
-		.iOS("14.0"),
-		.tvOS("14.0"),
-		.watchOS("7.0"),
-		.macCatalyst("14.0")
+		.macOS("12.0"),
+		.iOS("15.0"),
+		.tvOS("15.0"),
+		.watchOS("8.0"),
+		.macCatalyst("15.0")
 	],
 	products: [
 		.library(
@@ -62,7 +62,8 @@ let package = Package(
 		.package(url: "https://github.com/swiftlang/swift-docc-plugin.git", from: "1.0.0"),
 		.package(url: "https://github.com/swiftlang/swift-syntax.git", "602.0.0-latest"..<"604.0.0"),
 		.package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
-		.package(url: "https://github.com/apple/swift-certificates.git", from: "1.1.0")
+		.package(url: "https://github.com/apple/swift-certificates.git", from: "1.1.0"),
+		.package(url: "https://github.com/Cocoanetics/SwiftCross.git", branch: "main")
     ],
 	targets: [
 		.macro(
@@ -80,6 +81,7 @@ let package = Package(
 			dependencies: [
 				"SwiftMCPMacros",
 				"JSONValue",
+				.product(name: "SwiftCross", package: "SwiftCross"),
 				.product(name: "NIOCore", package: "swift-nio"),
 				.product(name: "NIOHTTP1", package: "swift-nio"),
 				.product(name: "NIOPosix", package: "swift-nio"),
@@ -137,6 +139,7 @@ let package = Package(
 			dependencies: [
 				"SwiftMCP",
 				"SwiftMCPUtilityCore",
+				.product(name: "SwiftCross", package: "SwiftCross"),
 				.product(name: "Crypto", package: "swift-crypto"),
 				.product(name: "_CryptoExtras", package: "swift-crypto"),
 				.product(name: "X509", package: "swift-certificates")

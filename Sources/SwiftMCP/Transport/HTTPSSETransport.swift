@@ -108,7 +108,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
 
     // MARK: - Initialization
 
-    public init(server: MCPServer, host: String = String.localHostname, port: Int = 8080) {
+    public init(server: MCPServer, host: String = ProcessInfo.processInfo.hostName, port: Int = 8080) {
         self.server = server
         self.host = host
         self.port = port
@@ -116,7 +116,7 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     }
 
     public convenience init(server: MCPServer) {
-        self.init(server: server, host: String.localHostname, port: 8080)
+        self.init(server: server, host: ProcessInfo.processInfo.hostName, port: 8080)
     }
 
     // MARK: - Server Lifecycle

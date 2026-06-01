@@ -1,10 +1,7 @@
 // Shared HTTP transport test helpers.
 
 import Testing
-import Foundation
-#if canImport(FoundationNetworking)
-import FoundationNetworking
-#endif
+import SwiftCross
 @testable import SwiftMCP
 
 @MCPServer(name: "ResumableServer")
