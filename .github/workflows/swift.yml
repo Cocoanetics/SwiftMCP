@@ -49,7 +49,12 @@ jobs:
       - name: Build (Linux)
         run: swift build --build-tests -v
       - name: Test (Linux)
-        run: swift test -v --skip-build
+        # --no-parallel serialises execution to avoid a swift-foundation
+        # `_CalendarGregorian` type-metadata initialization race in
+        # libFoundationEssentials that can SIGILL during concurrent date
+        # decoding (an upstream flake, unrelated to SwiftMCP, that only
+        # surfaces under parallel test execution).
+        run: swift test -v --skip-build --no-parallel
 
   # Aspirational platform: swift-nio (NIOPosix) does not currently compile on
   # Windows (IPPROTO / Sendable errors in System.swift, Thread.swift,
