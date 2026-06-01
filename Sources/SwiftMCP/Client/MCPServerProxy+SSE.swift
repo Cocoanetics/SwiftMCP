@@ -1,6 +1,14 @@
 import SwiftCross
 
 extension MCPServerProxy {
+    /// Effectively-unbounded timeout for long-lived SSE / streamable
+    /// connections, expressed as a large *finite* value rather than
+    /// `.infinity`: swift-corelibs-foundation traps (SIGILL) when converting
+    /// an infinite timeout while configuring libcurl (`configureEasyHandle`)
+    /// on Linux. Apple's Foundation tolerates `.infinity`, but a large finite
+    /// value behaves identically there and is portable.
+    static let streamTimeout: TimeInterval = 60 * 60 * 24 * 7  // 7 days
+
     // MARK: - URL helpers
 
     internal func isStreamableMCPURL(_ url: URL) -> Bool {
@@ -83,8 +91,8 @@ extension MCPServerProxy {
         }
 
         let sessionConfig = URLSessionConfiguration.default
-        sessionConfig.timeoutIntervalForRequest = .infinity
-        sessionConfig.timeoutIntervalForResource = .infinity
+        sessionConfig.timeoutIntervalForRequest = Self.streamTimeout
+        sessionConfig.timeoutIntervalForResource = Self.streamTimeout
 
         let session = URLSession(configuration: sessionConfig)
         var request = URLRequest(url: sseConfig.url)
@@ -131,8 +139,8 @@ extension MCPServerProxy {
             while !self.isDisconnecting {
                 do {
                     let sessionConfig = URLSessionConfiguration.default
-                    sessionConfig.timeoutIntervalForRequest = .infinity
-                    sessionConfig.timeoutIntervalForResource = .infinity
+                    sessionConfig.timeoutIntervalForRequest = Self.streamTimeout
+                    sessionConfig.timeoutIntervalForResource = Self.streamTimeout
 
                     let session = URLSession(configuration: sessionConfig)
                     var request = URLRequest(url: sseConfig.url)

@@ -42,8 +42,8 @@ extension MCPServerProxy {
         retryMilliseconds: Int
     ) async throws -> JSONRPCMessage {
         let sessionConfig = URLSessionConfiguration.default
-        sessionConfig.timeoutIntervalForRequest = .infinity
-        sessionConfig.timeoutIntervalForResource = .infinity
+        sessionConfig.timeoutIntervalForRequest = Self.streamTimeout
+        sessionConfig.timeoutIntervalForResource = Self.streamTimeout
 
         let session = URLSession(configuration: sessionConfig)
         var request = URLRequest(url: endpointURL)
