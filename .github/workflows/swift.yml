@@ -55,15 +55,17 @@ jobs:
       - name: Test (Linux)
         run: swift test -v --skip-build
 
-  # Non-blocking: swift-nio (NIOPosix) does not currently compile on Windows
-  # (IPPROTO / Sendable errors in System.swift, Thread.swift, ThreadWindows.swift).
-  # This is an upstream issue, not in SwiftMCP. Kept in CI so the job starts
-  # passing automatically once swift-nio gains Windows support; flip to required
-  # then. See https://github.com/apple/swift-nio for Windows status.
+  # Aspirational platform: swift-nio (NIOPosix) does not currently compile on
+  # Windows (IPPROTO / Sendable errors in System.swift, Thread.swift,
+  # ThreadWindows.swift) — an upstream issue, not in SwiftMCP. The Build/Test
+  # steps use step-level `continue-on-error` so the job's *check* reports green
+  # and does not block merges (a job-level flag leaves the check red, which
+  # branch protection still blocks on). Unexpected failures in other steps
+  # (e.g. toolchain setup) still surface. Remove the per-step flags once
+  # swift-nio builds on Windows. See https://github.com/apple/swift-nio.
   build-windows:
     runs-on: windows-latest
     timeout-minutes: 45
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v6
       - name: Setup Swift
@@ -74,8 +76,10 @@ jobs:
         run: swift --version
       - name: Build (Windows)
         run: swift build --build-tests -v
+        continue-on-error: true
       - name: Test (Windows)
         run: swift test -v --skip-build
+        continue-on-error: true
 
   build-android:
     runs-on: ubuntu-latest
