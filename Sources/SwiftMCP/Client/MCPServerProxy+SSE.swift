@@ -6,8 +6,10 @@ extension MCPServerProxy {
     /// `.infinity`: swift-corelibs-foundation traps (SIGILL) when converting
     /// an infinite timeout while configuring libcurl (`configureEasyHandle`)
     /// on Linux. Apple's Foundation tolerates `.infinity`, but a large finite
-    /// value behaves identically there and is portable.
-    static let streamTimeout: TimeInterval = 60 * 60 * 24 * 7  // 7 days
+    /// value behaves identically there and is portable. `2^53` is effectively
+    /// infinite (~285M years) yet keeps corelibs' `Int(seconds) * 1000` within
+    /// `Int`.
+    static let streamTimeout: TimeInterval = TimeInterval(1 << 53)
 
     // MARK: - URL helpers
 
