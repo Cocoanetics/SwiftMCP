@@ -1,3 +1,4 @@
+#if Server
 import Testing
 import SwiftCross
 @testable import SwiftMCP
@@ -47,3 +48,4 @@ struct HTTPHandlerHeaderTests {
         #expect(values(named: "Content-Type", in: headers).isEmpty)
     }
 }
+#endif

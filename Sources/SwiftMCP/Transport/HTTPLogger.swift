@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 import Logging
 import NIOConcurrencyHelpers
@@ -160,3 +161,4 @@ final class HTTPLogger: ChannelDuplexHandler, @unchecked Sendable {
         }
     }
 }
+#endif

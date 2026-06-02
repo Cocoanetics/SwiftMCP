@@ -1,3 +1,4 @@
+#if Server
 //
 //  Data+base64URLEncoded.swift
 //  SwiftMCP
@@ -22,3 +23,4 @@ extension Data {
         self = decoded
     }
 }
+#endif

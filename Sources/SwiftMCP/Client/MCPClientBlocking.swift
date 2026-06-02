@@ -1,3 +1,4 @@
+#if Client
 import Dispatch
 import Foundation
 
@@ -42,3 +43,4 @@ private final class ResultBox<T>: @unchecked Sendable {
         return value
     }
 }
+#endif

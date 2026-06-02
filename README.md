@@ -38,6 +38,30 @@ dependencies: [
 ]
 ```
 
+### Package traits
+
+SwiftMCP exposes its optional feature areas as [SwiftPM package traits](https://docs.swift.org/swiftpm/documentation/packagemanagerdocs/packagetraits/), **all enabled by default** — existing consumers and a plain `swift build` are unaffected. The single `import SwiftMCP` module is unchanged.
+
+| Trait | Enables | Extra dependencies |
+| --- | --- | --- |
+| `Server` | HTTP/SSE + TCP server transports | swift-nio, swift-crypto, swift-certificates |
+| `Client` | The MCP client (`MCPServerProxy`) | — |
+| `OpenAPI` | OpenAPI / AI-plugin manifest models and routes | — |
+
+The tool/schema foundation — `JSONValue`, `JSONSchema`, `MCPToolProviding`, the `@MCPTool` / `@MCPServer` macros, errors — is always-on core and needs no trait.
+
+Disabling `Server` drops swift-nio (and swift-crypto/swift-certificates) entirely, which makes the package **build on Windows** and gives client/tools-only consumers a lighter graph. A consumer that only talks to remote MCP servers selects just what it needs (your manifest must be `swift-tools-version: 6.1` or newer to choose traits):
+
+```swift
+.package(
+    url: "https://github.com/Cocoanetics/SwiftMCP.git",
+    branch: "main",
+    traits: ["Client"]   // tool/schema core + client, no swift-nio
+)
+```
+
+> AppIntents bridging (`@MCPAppIntentTool`, AppShortcuts discovery) is not a trait: it is already gated by `#if canImport(AppIntents)`, so it is automatically excluded on platforms without AppIntents (Linux, Windows, Android).
+
 ## Usage
 
 ### Command Line Demo

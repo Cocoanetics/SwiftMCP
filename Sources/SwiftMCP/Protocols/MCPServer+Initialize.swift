@@ -16,8 +16,8 @@ public extension MCPServer {
     ) async -> JSONRPCMessage? {
         await Session.current?.markInitializeRequestReceived()
         let negotiatedProtocolVersion = request.params?["protocolVersion"]?.stringValue
-            ?? HTTPSSETransport.latestProtocolVersion
-        guard HTTPSSETransport.supportedProtocolVersions.contains(negotiatedProtocolVersion) else {
+            ?? MCPProtocolVersion.latest
+        guard MCPProtocolVersion.supported.contains(negotiatedProtocolVersion) else {
             return JSONRPCMessage.errorResponse(
                 id: request.id,
                 error: .init(code: -32602, message: "Unsupported protocol version: \(negotiatedProtocolVersion)")
@@ -69,7 +69,7 @@ public extension MCPServer {
      */
     func createInitializeResponse(
         id: JSONRPCID,
-        protocolVersion: String = "2025-11-25"
+        protocolVersion: String = MCPProtocolVersion.latest
     ) async -> JSONRPCMessage {
         let capabilities = await buildServerCapabilities()
 

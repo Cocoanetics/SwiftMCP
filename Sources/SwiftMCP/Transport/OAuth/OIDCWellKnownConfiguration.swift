@@ -1,3 +1,4 @@
+#if Server
 import SwiftCross
 
 /// Configuration for enabling OAuth validation on ``HTTPSSETransport``.
@@ -218,3 +219,4 @@ public struct OAuthConfiguration: Sendable {
         )
     }
 }
+#endif

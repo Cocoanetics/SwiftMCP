@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 
 extension HTTPSSETransport {
@@ -115,7 +116,9 @@ extension HTTPSSETransport {
         router.addRoutes(corsRoutes())
         router.addRoutes(mcpRoutes())
         router.addRoutes(legacySSERoutes())
+        #if OpenAPI
         router.addRoutes(openAPIRoutes())
+        #endif
         router.addRoutes(oauthRoutes())
 
         // Custom routes registered by the user
@@ -123,3 +126,4 @@ extension HTTPSSETransport {
         return router
     }
 }
+#endif

@@ -1,6 +1,10 @@
 import Foundation
 
 /// Buffers bytes to return full newline-delimited lines.
+///
+/// Shared by both the client connections (`Client`) and the TCP server
+/// transport (`Server`), so it lives in the always-on core rather than behind
+/// a feature trait.
 actor LineBuffer {
     private var buffer = Data()
 

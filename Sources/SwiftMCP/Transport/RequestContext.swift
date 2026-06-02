@@ -1,3 +1,12 @@
+//
+//  RequestContext.swift
+//  SwiftMCP
+//
+//  Part of the always-on server runtime (not behind the `Server` trait). The
+//  core `MCPServer` request-dispatch layer binds and reads
+//  `RequestContext.current`, so this type must compile without swift-nio.
+//
+
 import Foundation
 
 /// Represents the context of a single JSON-RPC message.

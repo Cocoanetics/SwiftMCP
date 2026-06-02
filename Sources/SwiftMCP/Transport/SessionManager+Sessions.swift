@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 
 extension SessionManager {
@@ -157,3 +158,4 @@ extension SessionManager {
         }
     }
 }
+#endif

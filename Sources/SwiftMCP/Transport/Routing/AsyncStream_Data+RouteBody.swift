@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 
 extension AsyncStream<Data>: RouteBody {
@@ -6,3 +7,4 @@ extension AsyncStream<Data>: RouteBody {
 		stream
 	}
 }
+#endif

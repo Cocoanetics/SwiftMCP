@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 import NIO
 
@@ -259,3 +260,4 @@ extension SessionManager {
         }
     }
 }
+#endif

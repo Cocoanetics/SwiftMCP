@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 
 extension Optional: RouteBody where Wrapped == Data {
@@ -10,3 +11,4 @@ extension Optional: RouteBody where Wrapped == Data {
 		return collected.isEmpty ? nil : collected
 	}
 }
+#endif

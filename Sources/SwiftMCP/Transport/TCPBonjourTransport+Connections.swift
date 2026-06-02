@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 
 #if canImport(Network)
@@ -123,4 +124,5 @@ extension TCPBonjourTransport {
         }
     }
 }
+#endif
 #endif

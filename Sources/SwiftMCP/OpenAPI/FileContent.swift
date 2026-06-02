@@ -1,3 +1,4 @@
+#if OpenAPI
 //
 //  FileContent.swift
 //  SwiftMCP
@@ -41,3 +42,4 @@ public struct FileContent: Codable, Sendable {
         case content
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if Server
 import Testing
 import Foundation
 @testable import SwiftMCP
@@ -192,3 +193,4 @@ struct RouterTests {
 		#expect(router.match(method: .POST, path: "/mcp/downloads/abc") == nil)
 	}
 }
+#endif

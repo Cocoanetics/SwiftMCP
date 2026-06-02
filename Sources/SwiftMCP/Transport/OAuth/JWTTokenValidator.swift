@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 
 // MARK: - Convenience Token Validator
@@ -76,3 +77,4 @@ public struct JWTTokenValidator: Sendable {
         }
     }
 }
+#endif

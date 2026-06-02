@@ -1,3 +1,4 @@
+#if Client
 import Foundation
 
 extension MCPServerProxy {
@@ -66,3 +67,4 @@ extension MCPServerProxy {
         notificationHandlers.removeValue(forKey: method)
     }
 }
+#endif

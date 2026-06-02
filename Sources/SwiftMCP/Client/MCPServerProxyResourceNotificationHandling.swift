@@ -1,3 +1,4 @@
+#if Client
 import Foundation
 
 // swiftlint:disable type_name
@@ -10,3 +11,4 @@ public protocol MCPServerProxyResourceNotificationHandling: AnyObject, Sendable 
     func mcpServerProxy(_ proxy: MCPServerProxy, resourceUpdatedAt uri: URL) async
 }
 // swiftlint:enable type_name
+#endif

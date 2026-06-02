@@ -22,6 +22,9 @@ let package = Package(
 			name: "JSONValue",
 			targets: ["JSONValue"]
 		),
+		// The server demo CLIs run the swift-nio-backed transports under the
+		// `Server` trait; their transport code is gated `#if Server`, so with
+		// `Server` disabled they build as a no-op stub (no swift-nio).
 		.executable(
 			name: "SwiftMCPDemo",
 			targets: ["SwiftMCPDemo"]
@@ -55,6 +58,25 @@ let package = Package(
 			targets: ["SwiftMCPAggregator"]
 		)
 	],
+	traits: [
+		// All feature traits are enabled by default, so existing consumers
+		// (and `swift build` / `swift test` without flags) are unaffected.
+		.default(enabledTraits: ["Server", "Client", "OpenAPI"]),
+		// The HTTP/SSE + TCP server transports. The only feature that links
+		// swift-nio, swift-crypto and swift-certificates. Disable it (e.g. on
+		// Windows, or for client/tools-only consumers) to drop those deps.
+		.trait(name: "Server"),
+		// The MCP client (`MCPServerProxy`).
+		.trait(name: "Client"),
+		// OpenAPI / AI-plugin manifest models and the matching HTTP routes.
+		.trait(name: "OpenAPI")
+		// NOTE: AppIntents bridging is intentionally NOT a trait. The
+		// `@MCPServer`/`@MCPAppIntentTool` macros expand to code in the
+		// *consumer's* module that references the AppIntents glue under
+		// `#if canImport(AppIntents)`. Package-trait conditions are not visible
+		// in consumer modules, so a trait cannot gate that surface — and
+		// `canImport(AppIntents)` already excludes it on non-Apple platforms.
+	],
 	dependencies: [
 		.package(url: "https://github.com/apple/swift-log.git", from: "1.0.0"),
 		.package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.2.0"),
@@ -82,14 +104,16 @@ let package = Package(
 				"SwiftMCPMacros",
 				"JSONValue",
 				.product(name: "SwiftCross", package: "SwiftCross"),
-				.product(name: "NIOCore", package: "swift-nio"),
-				.product(name: "NIOHTTP1", package: "swift-nio"),
-				.product(name: "NIOPosix", package: "swift-nio"),
 				.product(name: "Logging", package: "swift-log"),
-				.product(name: "NIOFoundationCompat", package: "swift-nio"),
-				.product(name: "Crypto", package: "swift-crypto"),
-				.product(name: "_CryptoExtras", package: "swift-crypto"),
-				.product(name: "X509", package: "swift-certificates")
+				// swift-nio + swift-crypto + swift-certificates are linked ONLY
+				// when the `Server` trait is enabled (the HTTP/SSE transport).
+				.product(name: "NIOCore", package: "swift-nio", condition: .when(traits: ["Server"])),
+				.product(name: "NIOHTTP1", package: "swift-nio", condition: .when(traits: ["Server"])),
+				.product(name: "NIOPosix", package: "swift-nio", condition: .when(traits: ["Server"])),
+				.product(name: "NIOFoundationCompat", package: "swift-nio", condition: .when(traits: ["Server"])),
+				.product(name: "Crypto", package: "swift-crypto", condition: .when(traits: ["Server"])),
+				.product(name: "_CryptoExtras", package: "swift-crypto", condition: .when(traits: ["Server"])),
+				.product(name: "X509", package: "swift-certificates", condition: .when(traits: ["Server"]))
 			]
 		),
 		.executableTarget(
@@ -140,9 +164,9 @@ let package = Package(
 				"SwiftMCP",
 				"SwiftMCPUtilityCore",
 				.product(name: "SwiftCross", package: "SwiftCross"),
-				.product(name: "Crypto", package: "swift-crypto"),
-				.product(name: "_CryptoExtras", package: "swift-crypto"),
-				.product(name: "X509", package: "swift-certificates")
+				.product(name: "Crypto", package: "swift-crypto", condition: .when(traits: ["Server"])),
+				.product(name: "_CryptoExtras", package: "swift-crypto", condition: .when(traits: ["Server"])),
+				.product(name: "X509", package: "swift-certificates", condition: .when(traits: ["Server"]))
 			]
 		),
 		// MARK: - Prototype: per-instance @MCPExtension contributions

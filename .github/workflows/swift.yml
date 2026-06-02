@@ -77,6 +77,52 @@ jobs:
         run: swift test -v --skip-build
         continue-on-error: true
 
+  # Trait matrix: the tool/schema core and the `Client` feature must build
+  # WITHOUT the `Server` trait, i.e. without swift-nio / swift-crypto /
+  # swift-certificates. This keeps the NIO-free configuration green so a
+  # client/tools-only consumer (and Windows, below) never regresses. The whole
+  # package builds NIO-free too — the server demo CLIs are gated `#if Server`
+  # and compile to a no-op stub — so a plain `swift build`/`swift test` with
+  # `Server` disabled works, not just `--target SwiftMCP`.
+  build-traits:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+      - name: Verify Swift version
+        run: swift --version
+      - name: Build SwiftMCP library — core only (all traits disabled)
+        run: swift build --target SwiftMCP --disable-default-traits
+      - name: Build SwiftMCP library — Client trait only (no swift-nio)
+        run: swift build --target SwiftMCP --traits Client
+      - name: Build whole package — Client + OpenAPI (no swift-nio)
+        run: swift build --traits "Client,OpenAPI"
+      - name: Test — non-server suite (Client + OpenAPI, no swift-nio)
+        run: swift test --traits "Client,OpenAPI"
+
+  # Windows DOES build AND test the NIO-free configuration. With the `Server`
+  # trait disabled there is no swift-nio in the graph (the server demo CLIs are
+  # gated `#if Server` and compile to a no-op stub), so `swift test` builds the
+  # library plus the non-server test suite. These are real (non continue-on-error)
+  # checks: if swift-nio ever leaks back into the core/client, or a non-server
+  # test regresses, this job goes red. The full `build-windows` job above stays
+  # aspirational until swift-nio itself builds on Windows.
+  windows-client:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup Swift
+        uses: SwiftyLab/setup-swift@latest
+        with:
+          swift-version: "6.3.1"
+      - name: Verify Swift version
+        run: swift --version
+      - name: Build SwiftMCP library — Client trait only (no swift-nio)
+        run: swift build --target SwiftMCP --traits Client
+      - name: Test — non-server suite (Client + OpenAPI, no swift-nio)
+        run: swift test --traits "Client,OpenAPI"
+
   build-android:
     runs-on: ubuntu-latest
     timeout-minutes: 60

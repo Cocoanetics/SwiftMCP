@@ -1,3 +1,4 @@
+#if Client
 import Foundation
 
 /// Configuration for an MCP server using Server-Sent Events (SSE).
@@ -12,3 +13,4 @@ public struct MCPServerSseConfig: Codable, Equatable, Sendable {
         self.headers = headers
     }
 }
+#endif

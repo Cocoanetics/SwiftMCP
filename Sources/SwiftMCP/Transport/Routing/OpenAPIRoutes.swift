@@ -1,3 +1,4 @@
+#if Server && OpenAPI
 import Foundation
 
 /// OpenAPI-related route handlers: AI plugin manifest, OpenAPI spec, and tool call endpoint.
@@ -245,3 +246,4 @@ extension HTTPSSETransport {
 		return RouteResponse(status: status, headers: [("Content-Type", "application/json")], body: data)
 	}
 }
+#endif

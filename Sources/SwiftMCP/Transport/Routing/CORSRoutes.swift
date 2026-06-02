@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 
 /// CORS preflight route handler.
@@ -23,3 +24,4 @@ extension HTTPSSETransport {
 		]
 	}
 }
+#endif

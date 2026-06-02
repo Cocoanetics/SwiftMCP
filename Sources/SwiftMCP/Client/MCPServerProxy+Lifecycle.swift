@@ -1,3 +1,4 @@
+#if Client
 import SwiftCross
 
 extension MCPServerProxy {
@@ -174,7 +175,7 @@ extension MCPServerProxy {
     internal func initialize(clientName: String, clientVersion: String) async throws {
         let requestId = nextRequestID()
         var params: JSONDictionary = [
-            "protocolVersion": .string(HTTPSSETransport.latestProtocolVersion),
+            "protocolVersion": .string(MCPProtocolVersion.latest),
             "clientInfo": .object([
                 "name": .string(clientName),
                 "version": .string(clientVersion)
@@ -274,3 +275,4 @@ extension MCPServerProxy {
         )
     }
 }
+#endif

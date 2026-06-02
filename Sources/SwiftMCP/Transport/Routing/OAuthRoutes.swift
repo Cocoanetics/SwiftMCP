@@ -1,3 +1,4 @@
+#if Server
 import SwiftCross
 
 /// OAuth route handlers: authorization server metadata, protected resource metadata,
@@ -166,3 +167,4 @@ extension HTTPSSETransport {
 		return "\(scheme)://\(host)"
 	}
 }
+#endif

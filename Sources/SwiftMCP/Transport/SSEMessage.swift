@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 
 /// A Server-Sent Events (SSE) message
@@ -116,3 +117,4 @@ struct SSEMessage: LosslessStringConvertible {
         }
     }
 }
+#endif

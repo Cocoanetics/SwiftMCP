@@ -1,3 +1,4 @@
+#if Client
 import SwiftCross
 
 extension MCPServerProxy {
@@ -168,3 +169,4 @@ extension MCPServerProxy {
         await handleNotification(notification)
     }
 }
+#endif

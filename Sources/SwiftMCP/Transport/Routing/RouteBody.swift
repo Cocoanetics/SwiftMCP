@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 
 /// Protocol for types that can serve as the body of an `HTTPRouteRequest`.
@@ -9,3 +10,4 @@ protocol RouteBody: Sendable {
 	/// Prepare the body value from the raw body chunk stream.
 	static func collect(from stream: AsyncStream<Data>) async -> Self
 }
+#endif

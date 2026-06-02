@@ -1,3 +1,4 @@
+#if Server
 import Crypto
 import Foundation
 import X509
@@ -80,3 +81,4 @@ public struct JSONWebKey: Codable, Sendable {
     }
 }
 // swiftlint:enable identifier_name
+#endif

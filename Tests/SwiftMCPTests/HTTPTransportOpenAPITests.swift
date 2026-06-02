@@ -1,3 +1,4 @@
+#if Server && OpenAPI
 // swiftlint:disable force_cast
 // Test-only: HTTP responses are known to be HTTPURLResponse.
 
@@ -240,3 +241,4 @@ struct HTTPTransportOpenAPITests {
     }
 }
 // swiftlint:enable force_cast
+#endif

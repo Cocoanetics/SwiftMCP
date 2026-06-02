@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 import Testing
 @testable import SwiftMCP
@@ -242,3 +243,4 @@ struct JSONWebTokenTests {
         #expect(jwt.payload.aud != nil)
     }
 }
+#endif

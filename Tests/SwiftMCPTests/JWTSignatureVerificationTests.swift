@@ -1,3 +1,4 @@
+#if Server
 import SwiftCross
 import Testing
 import Crypto
@@ -136,3 +137,4 @@ struct JWTSignatureVerificationTests {
         #expect(isValid == true)
     }
 }
+#endif

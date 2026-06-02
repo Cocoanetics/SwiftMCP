@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 
 extension HTTPSSETransport {
@@ -51,3 +52,4 @@ extension HTTPSSETransport {
         }
     }
 }
+#endif

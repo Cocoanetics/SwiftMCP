@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 
 /// OAuth token response from the token endpoint
@@ -46,3 +47,4 @@ public struct OAuthTokenResponse: Codable, Sendable {
         case idToken = "id_token"
     }
 }
+#endif

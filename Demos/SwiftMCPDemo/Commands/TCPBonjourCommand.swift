@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 import ArgumentParser
 import SwiftMCP
@@ -74,3 +75,4 @@ struct TCPBonjourCommand: AsyncParsableCommand {
 #endif
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 
 /// HTTP status code, transport-agnostic (no NIO dependency).
@@ -26,3 +27,4 @@ public struct HTTPStatus: RawRepresentable, Sendable, Equatable {
 	public static let payloadTooLarge = HTTPStatus(rawValue: 413)
 	public static let internalServerError = HTTPStatus(rawValue: 500)
 }
+#endif

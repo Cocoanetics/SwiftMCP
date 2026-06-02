@@ -1,6 +1,7 @@
-#if os(macOS) || os(Linux)
-
+#if Client
 import Foundation
+
+#if os(macOS) || os(Linux)
 
 /// Manages a stdio connection to an MCP server, optionally backed by a process.
 public final actor MCPServerProcess: StdioConnection {
@@ -120,8 +121,6 @@ public final actor MCPServerProcess: StdioConnection {
 
 #else
 
-import Foundation
-
 /// Stub implementation for platforms where Process is unavailable.
 public final actor MCPServerProcess: StdioConnection {
     public init(config: MCPServerStdioConfig) {
@@ -158,4 +157,5 @@ public final actor MCPServerProcess: StdioConnection {
     }
 }
 
+#endif
 #endif

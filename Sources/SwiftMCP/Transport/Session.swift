@@ -1,5 +1,18 @@
+//
+//  Session.swift
+//  SwiftMCP
+//
+//  Part of the always-on server *runtime* (not behind the `Server` trait): the
+//  `@MCPServer` macro is core, and the `MCPServer` request-dispatch layer it
+//  relies on accesses `Session.current`, so `Session` must compile without
+//  swift-nio. Only the HTTP/SSE-specific members (the NIO `channel`, SSE
+//  continuation, stream context) are gated behind `#if Server`.
+//
+
 import Foundation
+#if Server
 import NIO
+#endif
 
 /// Represents a connection session.
 ///
@@ -12,6 +25,7 @@ public actor Session {
     /// The transport associated with this session. Weak to avoid retain cycles.
     public weak var transport: (any Transport)?
 
+    #if Server
     /// The SSE channel associated with this session, if any.
     public var channel: Channel?
 
@@ -19,6 +33,7 @@ public actor Session {
     /// When set, `sendSSE` yields formatted event data into this stream
     /// instead of writing directly to the NIO channel.
     var sseContinuation: AsyncStream<Data>.Continuation?
+    #endif
 
     // MARK: - Request/Response Tracking
     /// Continuations for sent requests, to match up responses
@@ -70,28 +85,39 @@ public actor Session {
     /// Optional expiry deadline used for retained sessions after disconnect.
     public var expiresAt: Date?
 
+    #if Server
     /// Creates a new session.
     /// - Parameters:
     ///   - id: The unique session identifier.
+    ///   - channel: The SSE channel associated with this session, if any.
     public init(id: UUID, channel: Channel? = nil) {
         self.id = id
         self.channel = channel
     }
+    #else
+    /// Creates a new session.
+    /// - Parameter id: The unique session identifier.
+    public init(id: UUID) {
+        self.id = id
+    }
+    #endif
 
     @TaskLocal
     internal static var taskSession: Session?
-
-    @TaskLocal
-    internal static var taskStreamContext: OutboundStreamContext?
 
     /// Accessor for the current session stored in task local storage.
     public static var current: Session! {
         taskSession
     }
 
+    #if Server
+    @TaskLocal
+    internal static var taskStreamContext: OutboundStreamContext?
+
     internal static var currentStreamContext: OutboundStreamContext? {
         taskStreamContext
     }
+    #endif
 
     /// Runs `operation` with this session bound to `Session.current`.
     public func work<T: Sendable>(_ operation: @Sendable (Session) async throws -> T) async rethrows -> T {
@@ -100,6 +126,7 @@ public actor Session {
         }
     }
 
+    #if Server
     /// Runs `operation` with this session and an outbound stream context bound.
     internal func work<T: Sendable>(
         onStream streamContext: OutboundStreamContext?,
@@ -132,6 +159,7 @@ public actor Session {
     func setSSEContinuation(_ continuation: AsyncStream<Data>.Continuation?) {
         self.sseContinuation = continuation
     }
+    #endif
 
     // MARK: - Convenience Mutators
 
@@ -152,10 +180,12 @@ public actor Session {
         self.transport = transport
     }
 
+    #if Server
     /// Update the channel associated with this session.
     public func setChannel(_ channel: Channel?) {
         self.channel = channel
     }
+    #endif
 
     /// Update the userInfo stored for this session.
     public func setUserInfo(_ info: UserInfo?) {

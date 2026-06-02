@@ -1,3 +1,4 @@
+#if Server
 // Shared HTTP transport test helpers.
 
 import Testing
@@ -193,3 +194,4 @@ enum HTTPTransportTestHelpers {
         }
     }
 }
+#endif

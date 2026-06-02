@@ -1,3 +1,4 @@
+#if Client
 import Foundation
 
 @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, macCatalyst 15.0, *)
@@ -98,3 +99,4 @@ extension AsyncSequence where Element: StringProtocol {
         SSEMessageSequence(base: self)
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 
 public enum OAuthConfigurationError: Error, LocalizedError {
@@ -16,3 +17,4 @@ public enum OAuthConfigurationError: Error, LocalizedError {
         }
     }
 }
+#endif

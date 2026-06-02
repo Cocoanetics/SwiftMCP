@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 
 enum SSEStreamKind: Sendable {
@@ -24,3 +25,4 @@ struct StreamRouteResponseInfo: Sendable {
     let sessionID: UUID
     let streamID: UUID
 }
+#endif

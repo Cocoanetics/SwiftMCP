@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 
 /// Simple linear-scan HTTP router with path parameter extraction.
@@ -73,3 +74,4 @@ final class Router: @unchecked Sendable {
 		return params
 	}
 }
+#endif

@@ -1,3 +1,4 @@
+#if Server
 import SwiftCross
 @preconcurrency import NIOCore
 import NIOHTTP1
@@ -292,3 +293,4 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         channel.writeAndFlush(HTTPServerResponsePart.end(nil), promise: nil)
     }
 }
+#endif

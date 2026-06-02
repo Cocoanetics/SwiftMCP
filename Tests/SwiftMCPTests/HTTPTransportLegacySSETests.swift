@@ -1,3 +1,4 @@
+#if Server
 // swiftlint:disable force_cast
 // Test-only: HTTP responses are known to be HTTPURLResponse.
 
@@ -82,3 +83,4 @@ struct HTTPTransportLegacySSETests {
     }
 }
 // swiftlint:enable force_cast
+#endif

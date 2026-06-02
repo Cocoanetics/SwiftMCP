@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 import NIO
 
@@ -55,3 +56,4 @@ actor SessionManager {
         Array(sessions.keys)
     }
 }
+#endif

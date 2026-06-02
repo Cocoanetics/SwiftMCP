@@ -1,3 +1,4 @@
+#if Server
 import SwiftCross
 import Crypto
 import _CryptoExtras
@@ -333,3 +334,4 @@ public struct JSONWebToken: Sendable {
         return try verify(using: jwks, at: date, options: options)
     }
 }
+#endif

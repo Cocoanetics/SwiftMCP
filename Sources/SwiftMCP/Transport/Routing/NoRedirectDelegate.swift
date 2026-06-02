@@ -1,3 +1,4 @@
+#if Server
 import SwiftCross
 
 // MARK: - URLSession Delegate
@@ -15,3 +16,4 @@ final class NoRedirectDelegate: NSObject, URLSessionTaskDelegate {
 		completionHandler(nil) // Don't follow redirects
 	}
 }
+#endif

@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 
 extension SessionManager {
@@ -148,3 +149,4 @@ extension SessionManager {
         _ = await sendSSE(SSEMessage(data: "", id: eventID), to: streamID)
     }
 }
+#endif

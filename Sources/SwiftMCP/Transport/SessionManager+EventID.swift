@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 
 extension SessionManager {
@@ -22,3 +23,4 @@ extension SessionManager {
         "\(streamID.uuidString):\(sequence)"
     }
 }
+#endif
