@@ -1,6 +1,7 @@
 #if Client
-#if canImport(Network)
 import Foundation
+
+#if canImport(Network)
 import Network
 import Logging
 
@@ -218,7 +219,6 @@ public final actor TCPConnection: StdioConnection {
     }
 }
 #else
-import Foundation
 
 /// Stub implementation for platforms without Network framework.
 public final actor TCPConnection: StdioConnection {

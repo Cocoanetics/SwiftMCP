@@ -176,8 +176,6 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
     }
 }
 #else
-import Foundation
-import Logging
 
 /// Stub implementation for platforms without Network framework.
 public final class TCPBonjourTransport: Transport, @unchecked Sendable {
