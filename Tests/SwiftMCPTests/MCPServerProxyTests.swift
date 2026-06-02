@@ -290,7 +290,13 @@ private func repositoryRootPath() -> String {
 }
 
 private func isLocalSwiftMCPDemoAvailable() -> Bool {
-    localSwiftMCPDemoExecutable() != nil
+    #if Server
+    return localSwiftMCPDemoExecutable() != nil
+    #else
+    // Without the `Server` trait the SwiftMCPDemo executable is a no-op stub
+    // (no transport), so there is no local server to connect to.
+    return false
+    #endif
 }
 
 private func localSwiftMCPDemoExecutable() -> String? {

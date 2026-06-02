@@ -1,5 +1,6 @@
-import Foundation
 import ArgumentParser
+#if Server
+import Foundation
 import SwiftMCP
 import Logging
 import NIOCore
@@ -7,6 +8,7 @@ import Dispatch
 
 #if canImport(OSLog)
 import OSLog
+#endif
 #endif
 
 /**
@@ -36,6 +38,7 @@ import OSLog
  */
 @main
 struct MCPCommand: AsyncParsableCommand {
+#if Server
 #if canImport(Network)
     static let configuration = CommandConfiguration(
         commandName: "SwiftMCPDemo",
@@ -88,5 +91,15 @@ struct MCPCommand: AsyncParsableCommand {
         subcommands: [StdioCommand.self, HTTPSSECommand.self],
         defaultSubcommand: StdioCommand.self
     )
+#endif
+#else
+    static let configuration = CommandConfiguration(
+        commandName: "SwiftMCPDemo",
+        abstract: "Requires the SwiftMCP `Server` trait (HTTP/SSE, stdio, TCP transports)."
+    )
+
+    func run() async throws {
+        print("Built without the `Server` trait; rebuild with default traits to run this demo.")
+    }
 #endif
 }

@@ -1,3 +1,4 @@
+#if Server
 #if canImport(Darwin)
 import Darwin
 #elseif canImport(Glibc)
@@ -80,3 +81,4 @@ public final class SignalHandler {
         await state.setupHandler(on: signalQueue)
     }
 }
+#endif

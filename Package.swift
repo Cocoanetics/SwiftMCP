@@ -22,10 +22,17 @@ let package = Package(
 			name: "JSONValue",
 			targets: ["JSONValue"]
 		),
-		// NOTE: the server demo CLIs (SwiftMCPDemo, SwiftMCPIntentsDemo) link
-		// swift-nio via the `Server` trait and are appended below only where
-		// swift-nio builds (everywhere except Windows). Library consumers never
-		// build these demo products regardless.
+		// The server demo CLIs run the swift-nio-backed transports under the
+		// `Server` trait; their transport code is gated `#if Server`, so with
+		// `Server` disabled they build as a no-op stub (no swift-nio).
+		.executable(
+			name: "SwiftMCPDemo",
+			targets: ["SwiftMCPDemo"]
+		),
+		.executable(
+			name: "SwiftMCPIntentsDemo",
+			targets: ["SwiftMCPIntentsDemo"]
+		),
 		.executable(
 			name: "SwiftMCPUtility",
 			targets: ["SwiftMCPUtility"]
@@ -109,9 +116,22 @@ let package = Package(
 				.product(name: "X509", package: "swift-certificates", condition: .when(traits: ["Server"]))
 			]
 		),
-		// NOTE: SwiftMCPDemo and SwiftMCPIntentsDemo executable targets are
-		// appended after the Package initializer, guarded by `#if !os(Windows)`,
-		// because they require the swift-nio-backed `Server` transports.
+		.executableTarget(
+			name: "SwiftMCPDemo",
+			dependencies: [
+				"SwiftMCP",
+				.product(name: "ArgumentParser", package: "swift-argument-parser")
+			],
+			path: "Demos/SwiftMCPDemo"
+		),
+		.executableTarget(
+			name: "SwiftMCPIntentsDemo",
+			dependencies: [
+				"SwiftMCP",
+				.product(name: "ArgumentParser", package: "swift-argument-parser")
+			],
+			path: "Demos/SwiftMCPIntentsDemo"
+		),
 		.executableTarget(
 			name: "SwiftMCPUtility",
 			dependencies: [
@@ -182,35 +202,3 @@ let package = Package(
 		)
 	]
 )
-
-// The SwiftMCPDemo / SwiftMCPIntentsDemo command-line servers use the
-// swift-nio-backed HTTP/SSE, stdio and TCP transports (the `Server` trait), so
-// they only build where swift-nio is available. swift-nio does not currently
-// compile on Windows, so these demo executables are omitted there — which lets
-// the package itself (library + tests) build and run with `--traits Client` /
-// `--traits Client,OpenAPI` on Windows. Library consumers never build these
-// demo products. Remove this guard once swift-nio builds on Windows.
-#if !os(Windows)
-package.products += [
-	.executable(name: "SwiftMCPDemo", targets: ["SwiftMCPDemo"]),
-	.executable(name: "SwiftMCPIntentsDemo", targets: ["SwiftMCPIntentsDemo"])
-]
-package.targets += [
-	.executableTarget(
-		name: "SwiftMCPDemo",
-		dependencies: [
-			"SwiftMCP",
-			.product(name: "ArgumentParser", package: "swift-argument-parser")
-		],
-		path: "Demos/SwiftMCPDemo"
-	),
-	.executableTarget(
-		name: "SwiftMCPIntentsDemo",
-		dependencies: [
-			"SwiftMCP",
-			.product(name: "ArgumentParser", package: "swift-argument-parser")
-		],
-		path: "Demos/SwiftMCPIntentsDemo"
-	)
-]
-#endif

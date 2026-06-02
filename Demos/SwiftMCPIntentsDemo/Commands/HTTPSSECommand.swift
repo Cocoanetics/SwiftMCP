@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 import ArgumentParser
 import SwiftMCP
@@ -174,3 +175,4 @@ final class HTTPSSECommand: AsyncParsableCommand {
         await signalHandler?.setup()
     }
 }
+#endif

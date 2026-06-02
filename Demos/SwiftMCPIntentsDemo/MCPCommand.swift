@@ -11,6 +11,7 @@ import ArgumentParser
  */
 @main
 struct MCPCommand: AsyncParsableCommand {
+#if Server
 #if canImport(Network)
     static let configuration = CommandConfiguration(
         commandName: "SwiftMCPIntentsDemo",
@@ -59,5 +60,15 @@ struct MCPCommand: AsyncParsableCommand {
         subcommands: [StdioCommand.self, HTTPSSECommand.self],
         defaultSubcommand: StdioCommand.self
     )
+#endif
+#else
+    static let configuration = CommandConfiguration(
+        commandName: "SwiftMCPIntentsDemo",
+        abstract: "Requires the SwiftMCP `Server` trait (HTTP/SSE, stdio, TCP transports)."
+    )
+
+    func run() async throws {
+        print("Built without the `Server` trait; rebuild with default traits to run this demo.")
+    }
 #endif
 }

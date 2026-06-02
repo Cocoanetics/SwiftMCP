@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 import ArgumentParser
 import SwiftMCP
@@ -70,9 +71,4 @@ struct StdioCommand: AsyncParsableCommand {
         }
     }
 }
-
-/// Function to log a message to stderr
-func logToStderr(_ message: String) {
-	guard let data = (message + "\n").data(using: .utf8) else { return }
-	try? FileHandle.standardError.write(contentsOf: data)
-}
+#endif
