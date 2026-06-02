@@ -22,10 +22,11 @@ extension MCPServerProxy {
         // create a new one. (#125)
         sessionID = nil
 
-        // Cancel any stream left over from a previous connection so reconnecting
-        // on the same proxy doesn't leave a second general-SSE loop running.
-        streamTask?.cancel()
-        streamTask = nil
+        // Retire any stream left over from a previous connection: cancel it and
+        // advance the generation so reconnecting on the same proxy neither leaves
+        // a second general-SSE loop running nor lets that stale loop's eventual
+        // `handleStreamTermination` fail this connection's requests. (#125)
+        retireStream()
 
         switch config {
         case .stdio(let stdioConfig):
@@ -97,8 +98,7 @@ extension MCPServerProxy {
             endpointContinuation.resume(throwing: disconnectError)
         }
 
-        streamTask?.cancel()
-        streamTask = nil
+        retireStream()
         endpointURL = nil
 
         switch config {
@@ -118,6 +118,7 @@ extension MCPServerProxy {
         }
         try await lineConnection.start()
 
+        let generation = streamGeneration
         streamTask = Task {
             do {
                 let lines = await lineConnection.lines()
@@ -127,13 +128,14 @@ extension MCPServerProxy {
                 self.handleStreamTermination(
                     MCPServerProxyError.communicationError(
                         "Connection closed by server before response was received"
-                    )
+                    ),
+                    generation: generation
                 )
             } catch is CancellationError {
                 // Pending requests are cancelled in disconnect().
             } catch {
                 logger.error("[MCP DEBUG] Stream error: \(error.localizedDescription)")
-                self.handleStreamTermination(error)
+                self.handleStreamTermination(error, generation: generation)
             }
         }
     }
@@ -147,7 +149,22 @@ extension MCPServerProxy {
         }
     }
 
-    internal func handleStreamTermination(_ error: Error) {
+    /// Retire the active stream task: cancel it and advance the generation so a
+    /// late `handleStreamTermination` from the now-stale task is ignored.
+    internal func retireStream() {
+        streamTask?.cancel()
+        streamTask = nil
+        streamGeneration += 1
+    }
+
+    internal func handleStreamTermination(_ error: Error, generation: Int) {
+        // Ignore terminations from a stream that has since been retired by a
+        // reconnect or disconnect. Without this, a leftover general-SSE loop that
+        // hits the server's "unknown session" 404 would fail the requests of the
+        // connection that replaced it (e.g. a reconnect's `initialize`). (#125)
+        guard generation == streamGeneration else {
+            return
+        }
         guard !isDisconnecting else {
             return
         }

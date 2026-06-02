@@ -102,6 +102,7 @@ extension MCPServerProxy {
         request.httpMethod = "GET"
         configureSSEGETRequest(&request, sseConfig: sseConfig)
 
+        let generation = streamGeneration
         streamTask = Task {
             do {
                 let (asyncBytes, response) = try await session.bytes(for: request)
@@ -117,13 +118,14 @@ extension MCPServerProxy {
                 self.handleStreamTermination(
                     MCPServerProxyError.communicationError(
                         "SSE stream closed by server before response was received"
-                    )
+                    ),
+                    generation: generation
                 )
             } catch is CancellationError {
                 // Pending requests are cancelled in disconnect().
             } catch {
                 self.logger.error("[MCP DEBUG] SSE stream error: \(error)")
-                self.handleStreamTermination(error)
+                self.handleStreamTermination(error, generation: generation)
             }
         }
 
@@ -135,6 +137,7 @@ extension MCPServerProxy {
 
     // swiftlint:disable:next function_body_length
     internal func startStreamableGeneralSSE(sseConfig: MCPServerSseConfig) {
+        let generation = streamGeneration
         streamTask = Task {
             var lastEventID: String?
             var retryMilliseconds = 1000
@@ -180,7 +183,10 @@ extension MCPServerProxy {
                             self.logger.error(
                                 "[MCP DEBUG] Streamable general SSE session invalidated by server (HTTP 404)"
                             )
-                            self.handleStreamTermination(MCPServerProxyError.sessionInvalidated)
+                            self.handleStreamTermination(
+                                MCPServerProxyError.sessionInvalidated,
+                                generation: generation
+                            )
                             return
                         }
                     } else {
