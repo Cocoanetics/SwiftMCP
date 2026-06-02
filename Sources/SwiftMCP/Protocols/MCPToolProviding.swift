@@ -24,7 +24,7 @@
  Tools are discovered at runtime and can be called remotely through JSON-RPC,
  enabling flexible interaction between AI models and server capabilities.
  */
-public protocol MCPToolProviding: MCPService {
+public protocol MCPToolProviding: MCPService, Sendable {
 /**
 	 Provides metadata for all functions annotated with `@MCPTool`.
 
