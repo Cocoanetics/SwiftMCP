@@ -154,22 +154,39 @@ extension MCPServerProxy {
                     )
 
                     let (asyncBytes, response) = try await session.bytes(for: request)
-                    self.handleSSEResponse(
+                    let serverReturned404 = self.handleSSEResponse(
                         response,
                         sseConfig: sseConfig,
                         isStreamableMCP: true
                     )
 
-                    for try await message in asyncBytes.lines.sseMessages() {
-                        if let id = message.id {
-                            lastEventID = id
+                    if serverReturned404 {
+                        if lastEventID != nil {
+                            // A 404 while resuming may only mean our
+                            // `Last-Event-ID` resume point expired, not that the
+                            // session died. Drop it and reconnect from a fresh
+                            // general stream before concluding the session is
+                            // gone.
+                            self.logger.error(
+                                "[MCP DEBUG] Streamable general SSE resume rejected (HTTP 404); reconnecting fresh"
+                            )
+                            lastEventID = nil
+                        } else {
+                            // A fresh general GET still 404s — the server has
+                            // forgotten our session (e.g. it restarted). Stop
+                            // reconnecting with the dead ID and surface a typed
+                            // error so the application can reconnect. (#125)
+                            self.logger.error(
+                                "[MCP DEBUG] Streamable general SSE session invalidated by server (HTTP 404)"
+                            )
+                            self.handleStreamTermination(MCPServerProxyError.sessionInvalidated)
+                            return
                         }
-                        if let retry = message.retry {
-                            retryMilliseconds = retry
-                        }
-                        await self.processIncomingMessage(
-                            event: message.event,
-                            data: message.data
+                    } else {
+                        (lastEventID, retryMilliseconds) = try await self.consumeGeneralSSEStream(
+                            asyncBytes,
+                            lastEventID: lastEventID,
+                            retryMilliseconds: retryMilliseconds
                         )
                     }
                 } catch is CancellationError {
@@ -194,25 +211,75 @@ extension MCPServerProxy {
         }
     }
 
+    /// Reads a general SSE stream to completion, dispatching each message and
+    /// tracking the resume cursor. Returns the updated `Last-Event-ID` and retry
+    /// interval so the next reconnect can resume from where this stream ended.
+    private func consumeGeneralSSEStream(
+        _ asyncBytes: URLSession.AsyncBytes,
+        lastEventID: String?,
+        retryMilliseconds: Int
+    ) async throws -> (lastEventID: String?, retryMilliseconds: Int) {
+        var lastEventID = lastEventID
+        var retryMilliseconds = retryMilliseconds
+
+        for try await message in asyncBytes.lines.sseMessages() {
+            if let id = message.id {
+                lastEventID = id
+            }
+            if let retry = message.retry {
+                retryMilliseconds = retry
+            }
+            await processIncomingMessage(event: message.event, data: message.data)
+        }
+
+        return (lastEventID, retryMilliseconds)
+    }
+
     // MARK: - Shared SSE Helpers
 
+    /// Processes the HTTP response that opened an SSE stream, adopting any
+    /// server-issued session ID and resolving the endpoint URL.
+    ///
+    /// - Returns: `true` if the server returned HTTP 404 to our streamable
+    ///   request while a session ID was in effect. The caller decides how to
+    ///   react: a fresh reconnect that still 404s means the session is gone,
+    ///   whereas a 404 only while resuming (with a `Last-Event-ID`) may just be
+    ///   an expired resume point.
+    @discardableResult
     internal func handleSSEResponse(
         _ response: URLResponse,
         sseConfig: MCPServerSseConfig,
         isStreamableMCP: Bool
-    ) {
-        if let httpResponse = response as? HTTPURLResponse {
-            sessionID = httpResponse.value(forHTTPHeaderField: "Mcp-Session-Id")
-            if isStreamableMCP {
-                endpointURL = sseConfig.url
-            } else if let sessionID,
-                      let endpoint = messageEndpointURL(
-                        baseURL: sseConfig.url,
-                        sessionId: sessionID
-                      ) {
-                endpointURL = endpoint
-            }
+    ) -> Bool {
+        guard let httpResponse = response as? HTTPURLResponse else {
+            return false
         }
+
+        // Only adopt a session ID from a successful response that actually
+        // carries the header. Error responses (e.g. 404 "Unknown session"
+        // after a server restart) do not include `Mcp-Session-Id`; assigning
+        // the absent header here would wipe the existing ID and strip it from
+        // every subsequent request, trapping the retry loop forever. (#125)
+        if (200...299).contains(httpResponse.statusCode),
+           let newSessionID = httpResponse.value(forHTTPHeaderField: "Mcp-Session-Id") {
+            sessionID = newSessionID
+        }
+
+        if isStreamableMCP {
+            endpointURL = sseConfig.url
+        } else if let sessionID,
+                  let endpoint = messageEndpointURL(
+                    baseURL: sseConfig.url,
+                    sessionId: sessionID
+                  ) {
+            endpointURL = endpoint
+        }
+
+        // A 404 to a request that carried an `Mcp-Session-Id` signals the server
+        // rejected our session ID. Per the MCP streamable-HTTP spec this usually
+        // means the session was terminated, but it can also be a merely expired
+        // resume point — the caller disambiguates (see the doc comment).
+        return isStreamableMCP && sessionID != nil && httpResponse.statusCode == 404
     }
 
     internal func waitForEndpointIfNeeded(isStreamableMCP: Bool) async throws {
