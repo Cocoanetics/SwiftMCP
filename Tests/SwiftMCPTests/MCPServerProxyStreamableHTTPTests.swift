@@ -53,6 +53,69 @@ struct MCPServerProxyStreamableHTTPTests {
         #expect(delivered)
     }
 
+    @Test("Tool call after the server forgets the session throws sessionInvalidated and keeps the session ID")
+    func sessionInvalidationSurfacesTypedError() async throws {
+        let (transport, url) = try await startTransport()
+        defer { Task { try? await transport.stop() } }
+
+        let proxy = MCPServerProxy(config: .sse(config: MCPServerSseConfig(url: url)))
+        defer { Task { await proxy.disconnect() } }
+
+        try await proxy.connect()
+        let sessionID = try #require(await proxy.sessionID)
+        let sessionUUID = try #require(UUID(uuidString: sessionID))
+
+        // Simulate a server restart wiping its in-memory session table: the
+        // session UUID the client still holds is no longer known to the server.
+        await transport.sessionManager.removeSession(id: sessionUUID)
+
+        // A subsequent request must surface a typed `.sessionInvalidated` error
+        // rather than spinning or returning a generic communication error. (#125)
+        do {
+            try await proxy.ping()
+            Issue.record("Expected ping to throw after the session was invalidated")
+        } catch let error as MCPServerProxyError {
+            guard case .sessionInvalidated = error else {
+                Issue.record("Expected .sessionInvalidated, got \(error)")
+                return
+            }
+        }
+
+        // The 404 must NOT have wiped the stale-but-present session ID, so the
+        // header keeps being attached and the application retains the context it
+        // needs to decide how to reconnect.
+        let retainedSessionID = await proxy.sessionID
+        #expect(retainedSessionID == sessionID)
+    }
+
+    @Test("Reconnecting the same proxy after invalidation establishes a fresh session")
+    func reconnectAfterInvalidationEstablishesFreshSession() async throws {
+        let (transport, url) = try await startTransport()
+        defer { Task { try? await transport.stop() } }
+
+        let proxy = MCPServerProxy(config: .sse(config: MCPServerSseConfig(url: url)))
+        defer { Task { await proxy.disconnect() } }
+
+        try await proxy.connect()
+        let firstSession = try #require(await proxy.sessionID)
+        let firstUUID = try #require(UUID(uuidString: firstSession))
+
+        // Simulate a server restart wiping its in-memory session table.
+        await transport.sessionManager.removeSession(id: firstUUID)
+
+        // Following the `.sessionInvalidated` guidance, reconnect the SAME proxy.
+        // The stale session ID must not leak onto the initialize POST (the server
+        // would reject it as unknown); the server must issue a fresh session. (#125)
+        try await proxy.connect()
+        let secondSession = try #require(await proxy.sessionID)
+        #expect(secondSession != firstSession)
+
+        // The reconnected proxy is fully functional against the new session.
+        try await proxy.ping()
+        let tools = try await proxy.listTools()
+        #expect(!tools.isEmpty)
+    }
+
     private func waitForCondition(
         timeoutNanoseconds: UInt64 = 2_000_000_000,
         pollNanoseconds: UInt64 = 50_000_000,

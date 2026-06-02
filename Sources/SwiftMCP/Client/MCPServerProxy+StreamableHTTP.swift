@@ -13,6 +13,11 @@ extension MCPServerProxy {
         guard let requestID = message.id else {
             throw MCPServerProxyError.communicationError("Message must have an ID")
         }
+        // Fail fast if the stream has already terminated (e.g. the session was
+        // invalidated by the server), mirroring the line-based send path. (#125)
+        if let streamFailure {
+            throw streamFailure
+        }
         guard let endpointURL = endpointURL
             ?? (isStreamableMCPURL(sseConfig.url) ? sseConfig.url : nil) else {
             throw MCPServerProxyError.communicationError("Not connected to server")
@@ -108,6 +113,21 @@ extension MCPServerProxy {
             }
             let responseBody = String(data: data, encoding: .utf8)?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+            // A 404 to a POST carrying an `Mcp-Session-Id` means the server has
+            // terminated the session (e.g. after a restart) — POSTs have no
+            // resumable-stream path, so the session is unambiguously gone.
+            // Surface a typed error so callers reconnect instead of retrying
+            // with the dead session ID. (#125) GET retries (`requestBody == nil`)
+            // are excluded: their 404 can also mean an expired resume point on a
+            // still-live session.
+            if httpResponse.statusCode == 404, sessionID != nil, requestBody != nil {
+                logger.error(
+                    "[MCP DEBUG] Streamable request rejected — session invalidated by server: \(responseBody)"
+                )
+                throw MCPServerProxyError.sessionInvalidated
+            }
+
             let details = responseBody.isEmpty ? "" : ": \(responseBody)"
             throw MCPServerProxyError.communicationError(
                 "HTTP error \(httpResponse.statusCode)\(details)"
