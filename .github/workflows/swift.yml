@@ -51,14 +51,21 @@ jobs:
       - name: Test (Linux)
         run: swift test -v --skip-build
 
-  # Aspirational platform: swift-nio (NIOPosix) does not currently compile on
-  # Windows (IPPROTO / Sendable errors in System.swift, Thread.swift,
-  # ThreadWindows.swift) — an upstream issue, not in SwiftMCP. The Build/Test
-  # steps use step-level `continue-on-error` so the job's *check* reports green
-  # and does not block merges (a job-level flag leaves the check red, which
-  # branch protection still blocks on). Unexpected failures in other steps
-  # (e.g. toolchain setup) still surface. Remove the per-step flags once
-  # swift-nio builds on Windows. See https://github.com/apple/swift-nio.
+  # Windows runs in two parts within a single job:
+  #
+  # 1. Real, enforced (no `continue-on-error`): the NIO-free configuration
+  #    (`Server` trait off, so no swift-nio in the graph — the server demo CLIs
+  #    are gated `#if Server` and compile to a no-op stub) builds AND tests on
+  #    Windows today. If swift-nio ever leaks back into the core/client, or a
+  #    non-server test regresses on Windows, these steps fail the job.
+  #
+  # 2. Aspirational (`continue-on-error`): the full, default-traits build pulls
+  #    swift-nio (NIOPosix), which does not currently compile on Windows
+  #    (IPPROTO / Sendable errors in System.swift, Thread.swift,
+  #    ThreadWindows.swift — an upstream issue, not in SwiftMCP). These steps
+  #    stay visible without failing the job; drop the two `continue-on-error`
+  #    flags once swift-nio builds on Windows. See
+  #    https://github.com/apple/swift-nio.
   build-windows:
     runs-on: windows-latest
     timeout-minutes: 45
@@ -70,10 +77,14 @@ jobs:
           swift-version: "6.3.1"
       - name: Verify Swift version
         run: swift --version
-      - name: Build (Windows)
+      - name: Build SwiftMCP library — Client trait only (no swift-nio)
+        run: swift build --target SwiftMCP --traits Client
+      - name: Test — non-server suite (Client + OpenAPI, no swift-nio)
+        run: swift test --traits "Client,OpenAPI"
+      - name: Build — full (default traits, with swift-nio)
         run: swift build --build-tests -v
         continue-on-error: true
-      - name: Test (Windows)
+      - name: Test — full (default traits)
         run: swift test -v --skip-build
         continue-on-error: true
 
@@ -97,29 +108,6 @@ jobs:
         run: swift build --target SwiftMCP --traits Client
       - name: Build whole package — Client + OpenAPI (no swift-nio)
         run: swift build --traits "Client,OpenAPI"
-      - name: Test — non-server suite (Client + OpenAPI, no swift-nio)
-        run: swift test --traits "Client,OpenAPI"
-
-  # Windows DOES build AND test the NIO-free configuration. With the `Server`
-  # trait disabled there is no swift-nio in the graph (the server demo CLIs are
-  # gated `#if Server` and compile to a no-op stub), so `swift test` builds the
-  # library plus the non-server test suite. These are real (non continue-on-error)
-  # checks: if swift-nio ever leaks back into the core/client, or a non-server
-  # test regresses, this job goes red. The full `build-windows` job above stays
-  # aspirational until swift-nio itself builds on Windows.
-  windows-client:
-    runs-on: windows-latest
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v6
-      - name: Setup Swift
-        uses: SwiftyLab/setup-swift@latest
-        with:
-          swift-version: "6.3.1"
-      - name: Verify Swift version
-        run: swift --version
-      - name: Build SwiftMCP library — Client trait only (no swift-nio)
-        run: swift build --target SwiftMCP --traits Client
       - name: Test — non-server suite (Client + OpenAPI, no swift-nio)
         run: swift test --traits "Client,OpenAPI"
 
