@@ -111,12 +111,20 @@ jobs:
       - name: Test — non-server suite (Client + OpenAPI, no swift-nio)
         run: swift test --traits "Client,OpenAPI"
 
+  # A normal Android run (build + emulator boot + test) finishes in ~8 min. But
+  # when a test FAILS, swift-android-action's emulator teardown can hang
+  # (`adb emu kill` → "stop: Not implemented"), so a fast test failure would
+  # otherwise run out the whole job timeout and report as a confusing
+  # "cancelled". Bound the action with a step-level timeout so a failure (or a
+  # hung teardown) surfaces as a red check in ~25 min, and keep the job timeout
+  # just above it.
   build-android:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
       - name: Build & test (Android emulator)
+        timeout-minutes: 25
         uses: skiptools/swift-android-action@v2
         with:
           swift-version: "6.3.2"
