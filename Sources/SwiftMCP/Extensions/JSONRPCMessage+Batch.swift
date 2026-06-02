@@ -1,5 +1,4 @@
 import Foundation
-import NIOCore
 
 extension JSONRPCMessage {
     /// Decode a single or batched JSON-RPC payload from `Data`.
@@ -15,7 +14,12 @@ extension JSONRPCMessage {
             return [single]
         }
     }
+}
 
+#if Server
+import NIOCore
+
+extension JSONRPCMessage {
     /// Decode a single or batched JSON-RPC payload from a `ByteBuffer`.
     /// - Parameter buffer: Incoming buffer containing JSON data.
     static func decodeMessages(from buffer: ByteBuffer) throws -> [JSONRPCMessage] {
@@ -33,3 +37,4 @@ extension JSONRPCMessage {
         }
     }
 }
+#endif

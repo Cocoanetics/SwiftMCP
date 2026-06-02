@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 
 /// New streamable HTTP MCP protocol routes (`/mcp`).
@@ -245,3 +246,4 @@ extension HTTPSSETransport {
 		}
 	}
 }
+#endif

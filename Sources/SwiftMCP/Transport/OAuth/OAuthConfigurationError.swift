@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 
 /// Configuration structure that can be loaded from JSON files
@@ -97,3 +98,4 @@ public struct JSONOAuthConfiguration: Codable, Sendable {
         return try decoder.decode(JSONOAuthConfiguration.self, from: data)
     }
 }
+#endif

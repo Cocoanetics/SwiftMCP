@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 
 extension HTTPSSETransport {
@@ -29,3 +30,4 @@ extension HTTPSSETransport {
         await sessionManager.broadcastResourceUpdated(uri: uri)
     }
 }
+#endif

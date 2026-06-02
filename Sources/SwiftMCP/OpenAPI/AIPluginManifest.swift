@@ -1,3 +1,4 @@
+#if OpenAPI
 import Foundation
 
 /// Represents the AI plugin manifest structure
@@ -82,3 +83,4 @@ struct AIPluginManifest: Codable {
         let url: String
     }
 }
+#endif

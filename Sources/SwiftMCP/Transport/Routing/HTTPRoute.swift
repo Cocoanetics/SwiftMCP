@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 
 /// A route definition for the HTTP router.
@@ -60,3 +61,4 @@ struct HTTPRoute: Sendable {
 		})
 	}
 }
+#endif

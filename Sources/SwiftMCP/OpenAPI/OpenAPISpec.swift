@@ -1,3 +1,4 @@
+#if OpenAPI
 import Foundation
 
 /// Represents an OpenAPI 3.1.0 specification
@@ -248,3 +249,4 @@ struct OpenAPISpec: Codable {
         ))
     }
 }
+#endif

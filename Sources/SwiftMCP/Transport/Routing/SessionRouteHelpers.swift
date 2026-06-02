@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 
 extension HTTPSSETransport {
@@ -46,7 +47,7 @@ extension HTTPSSETransport {
         sessionID: UUID?
     ) async -> RouteResponse? {
         if let headerVersion = request.header("MCP-Protocol-Version") {
-            guard HTTPSSETransport.supportedProtocolVersions.contains(headerVersion) else {
+            guard MCPProtocolVersion.supported.contains(headerVersion) else {
                 return textResponse(status: .badRequest, body: "Invalid or unsupported MCP-Protocol-Version header.")
             }
 
@@ -72,7 +73,7 @@ extension HTTPSSETransport {
         sessionID: UUID?
     ) async -> String {
         if let headerVersion = request.header("MCP-Protocol-Version"),
-           HTTPSSETransport.supportedProtocolVersions.contains(headerVersion) {
+           MCPProtocolVersion.supported.contains(headerVersion) {
             return headerVersion
         }
 
@@ -82,7 +83,7 @@ extension HTTPSSETransport {
             return negotiatedVersion
         }
 
-        return HTTPSSETransport.fallbackHTTPProtocolVersion
+        return MCPProtocolVersion.fallbackHTTP
     }
 
     func bindBearerTokenIfNeeded(_ token: String?, to sessionID: UUID) async {
@@ -124,3 +125,4 @@ extension HTTPSSETransport {
         return RouteResponse(status: status, headers: headers, body: Data(body.utf8))
     }
 }
+#endif

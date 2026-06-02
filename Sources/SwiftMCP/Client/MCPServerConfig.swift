@@ -1,3 +1,4 @@
+#if Client
 import Foundation
 
 /// Configuration options for connecting to an MCP server.
@@ -14,3 +15,4 @@ public enum MCPServerConfig: Sendable {
     /// Connect to an MCP server via Server-Sent Events (SSE).
     case sse(config: MCPServerSseConfig)
 }
+#endif

@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 
 /// Internal response type that can carry either buffered data or a stream.
@@ -61,3 +62,4 @@ struct RouteResponse: Sendable {
 		return RouteResponse(status: status, headers: headers, body: data)
 	}
 }
+#endif

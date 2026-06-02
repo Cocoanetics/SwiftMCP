@@ -1,3 +1,4 @@
+#if Server
 import Testing
 import Foundation
 @testable import SwiftMCP
@@ -146,3 +147,4 @@ struct StreamingRouteTests {
 		#expect(receivedAuth.value == "my-token")
 	}
 }
+#endif

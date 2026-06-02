@@ -1,3 +1,4 @@
+#if Client
 import SwiftCross
 import Logging
 
@@ -152,3 +153,4 @@ extension JSONRPCID {
         }
     }
 }
+#endif

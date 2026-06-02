@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 
 #if canImport(Network)
@@ -29,4 +30,5 @@ extension TCPBonjourTransport {
         await sessionManager.broadcastResourceUpdated(uri: uri)
     }
 }
+#endif
 #endif

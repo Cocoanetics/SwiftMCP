@@ -1,5 +1,4 @@
 import Foundation
-import NIO
 
 extension Session {
     /// Send a progress notification to the client associated with this session.

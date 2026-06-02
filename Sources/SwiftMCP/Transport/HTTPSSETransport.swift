@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 import Logging
 import NIOCore
@@ -96,15 +97,6 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
     var sseChannelCount: Int {
         get async { await sessionManager.channelCount }
     }
-
-    internal static let latestProtocolVersion = "2025-11-25"
-    internal static let intermediateHTTPProtocolVersion = "2025-06-18"
-    internal static let fallbackHTTPProtocolVersion = "2025-03-26"
-    internal static let supportedProtocolVersions: Set<String> = [
-        latestProtocolVersion,
-        intermediateHTTPProtocolVersion,
-        fallbackHTTPProtocolVersion
-    ]
 
     // MARK: - Initialization
 
@@ -222,3 +214,4 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         return TransportError.bindingFailed(errorMessage)
     }
 }
+#endif

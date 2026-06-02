@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 
 /// Validation options for JWT tokens
@@ -57,3 +58,4 @@ public struct JWTValidationOptions: Sendable {
         self.allowedClockSkew = allowedClockSkew
     }
 }
+#endif

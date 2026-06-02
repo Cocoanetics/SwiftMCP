@@ -1,3 +1,4 @@
+#if Client
 import SwiftCross
 import Logging
 
@@ -207,3 +208,4 @@ extension MCPServerProxy {
         }
     }
 }
+#endif

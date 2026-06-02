@@ -1,3 +1,4 @@
+#if Client
 import Foundation
 
 /// Configuration for connecting to an MCP server via TCP.
@@ -39,9 +40,9 @@ public struct MCPServerTcpConfig: Sendable {
         if let serviceType {
             self.serviceType = serviceType
         } else if let serviceName {
-            self.serviceType = TCPBonjourTransport.serviceType(for: serviceName)
+            self.serviceType = MCPBonjourServiceType.forServer(serviceName)
         } else {
-            self.serviceType = TCPBonjourTransport.serviceType
+            self.serviceType = MCPBonjourServiceType.base
         }
         self.timeout = timeout
         self.preferIPv4 = preferIPv4
@@ -51,7 +52,7 @@ public struct MCPServerTcpConfig: Sendable {
     public init(
         host: String,
         port: UInt16,
-        serviceType: String = TCPBonjourTransport.serviceType,
+        serviceType: String = MCPBonjourServiceType.base,
         timeout: TimeInterval = 10,
         preferIPv4: Bool = true
     ) {
@@ -61,3 +62,4 @@ public struct MCPServerTcpConfig: Sendable {
         self.preferIPv4 = preferIPv4
     }
 }
+#endif

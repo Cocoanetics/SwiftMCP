@@ -1,3 +1,4 @@
+#if Client
 import Foundation
 
 struct SSEClientMessage {
@@ -6,3 +7,4 @@ struct SSEClientMessage {
     let id: String?
     let retry: Int?
 }
+#endif

@@ -1,3 +1,4 @@
+#if Client
 import Foundation
 
 extension MCPServerProxy {
@@ -178,3 +179,4 @@ extension MCPServerProxy {
         _ = try await send(request)
     }
 }
+#endif

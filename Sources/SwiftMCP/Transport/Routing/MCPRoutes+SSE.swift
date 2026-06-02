@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 
 extension HTTPSSETransport {
@@ -199,3 +200,4 @@ extension HTTPSSETransport {
 		case internalError
 	}
 }
+#endif

@@ -1,3 +1,4 @@
+#if Client
 import Foundation
 
 /// Implement to receive notifications when the server's tool list changes.
@@ -25,3 +26,4 @@ public protocol MCPServerProxyPromptsListChangedHandling: AnyObject, Sendable {
     ///   - proxy: The proxy that received the notification.
     func mcpServerProxyPromptsListDidChange(_ proxy: MCPServerProxy) async
 }
+#endif

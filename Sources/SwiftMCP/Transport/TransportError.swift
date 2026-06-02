@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 
 /**
@@ -27,3 +28,4 @@ public enum TransportError: LocalizedError {
         }
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if Server
 #if canImport(Glibc)
 @preconcurrency import Glibc
 #endif
@@ -174,3 +175,4 @@ public final class StdioTransport: Transport, @unchecked Sendable {
         try FileHandle.standardOutput.write(contentsOf: out)
     }
 }
+#endif

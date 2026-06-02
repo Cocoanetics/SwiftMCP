@@ -1,3 +1,4 @@
+#if Server
 import SwiftCross
 
 extension HTTPSSETransport {
@@ -256,3 +257,4 @@ extension HTTPSSETransport {
 		return responseHeaders
 	}
 }
+#endif

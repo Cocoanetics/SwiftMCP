@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 
 // swiftlint:disable identifier_name
@@ -11,3 +12,4 @@ internal struct OIDCWellKnownConfiguration: Decodable, Sendable {
     let registration_endpoint: URL?
 }
 // swiftlint:enable identifier_name
+#endif

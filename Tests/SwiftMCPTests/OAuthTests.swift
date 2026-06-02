@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 import Testing
 @testable import SwiftMCP
@@ -199,3 +200,4 @@ struct OAuthTests {
         #expect(tokenResponse.idToken == nil)
     }
 }
+#endif

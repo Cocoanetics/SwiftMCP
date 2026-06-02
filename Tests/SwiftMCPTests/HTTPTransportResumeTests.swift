@@ -1,3 +1,4 @@
+#if Server
 // Test-only: HTTP responses are known to be HTTPURLResponse.
 
 import Testing
@@ -145,3 +146,4 @@ struct HTTPTransportResumeTests {
         #endif
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if Server
 import Testing
 import SwiftCross
 @testable import SwiftMCP
@@ -139,3 +140,4 @@ private actor ToolsListChangedCapture: MCPServerProxyToolsListChangedHandling {
         count += 1
     }
 }
+#endif

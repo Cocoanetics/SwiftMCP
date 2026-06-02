@@ -1,3 +1,4 @@
+#if Server
 import SwiftCross
 import Crypto
 import _CryptoExtras
@@ -138,3 +139,4 @@ public struct JSONWebKeySet: Codable, Sendable {
         }
     }
 }
+#endif

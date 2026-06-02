@@ -1,3 +1,4 @@
+#if Client
 import Foundation
 
 protocol StdioConnection: Sendable {
@@ -6,3 +7,4 @@ protocol StdioConnection: Sendable {
     func write(_ data: Data) async
     func stop() async
 }
+#endif

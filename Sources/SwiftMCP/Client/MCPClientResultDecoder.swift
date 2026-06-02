@@ -1,3 +1,4 @@
+#if Client
 import Foundation
 
 /// Decodes MCP tool call results into native Swift types.
@@ -204,3 +205,4 @@ public enum MCPClientResultDecoder {
         return decoder
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 import NIOCore
 import NIOHTTP1
@@ -24,3 +25,4 @@ extension Channel {
         self.flush()
     }
 }
+#endif

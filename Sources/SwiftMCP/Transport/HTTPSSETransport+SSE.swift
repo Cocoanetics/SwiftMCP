@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 import NIOCore
 
@@ -64,3 +65,4 @@ extension HTTPSSETransport {
         await sessionManager.finishStream(streamID: streamID)
     }
 }
+#endif

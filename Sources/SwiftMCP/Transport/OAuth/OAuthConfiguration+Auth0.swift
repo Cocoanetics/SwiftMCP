@@ -1,3 +1,4 @@
+#if Server
 //
 //  OAuthConfiguration+Auth0.swift
 //  SwiftMCP
@@ -42,3 +43,4 @@ extension OAuthConfiguration {
         )
     }
 }
+#endif

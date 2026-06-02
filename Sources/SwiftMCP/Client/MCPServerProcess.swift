@@ -1,3 +1,4 @@
+#if Client
 #if os(macOS) || os(Linux)
 
 import Foundation
@@ -158,4 +159,5 @@ public final actor MCPServerProcess: StdioConnection {
     }
 }
 
+#endif
 #endif

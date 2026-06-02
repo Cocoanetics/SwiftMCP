@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 import NIOCore
 import NIOHTTP1
@@ -13,3 +14,4 @@ enum RequestState {
     case streaming(head: HTTPRequestHead, continuation: AsyncStream<Data>.Continuation, bytesWritten: Int)
     case rejected
 }
+#endif

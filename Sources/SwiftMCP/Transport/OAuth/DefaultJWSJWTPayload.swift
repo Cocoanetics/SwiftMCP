@@ -1,3 +1,4 @@
+#if Server
 import SwiftCross
 
 public extension OAuthConfiguration {
@@ -33,3 +34,4 @@ public extension OAuthConfiguration {
         }
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if OpenAPI
 //
 //  OpenAIFileResponse.swift
 //  SwiftMCP
@@ -22,3 +23,4 @@ public struct OpenAIFileResponse: Codable, Sendable {
         self.openaiFileResponse = files
     }
 }
+#endif

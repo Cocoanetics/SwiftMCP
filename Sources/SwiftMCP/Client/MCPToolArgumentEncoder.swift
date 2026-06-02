@@ -1,3 +1,4 @@
+#if Client
 import Foundation
 
 /// Helpers for encoding native values into MCP tool argument payloads.
@@ -37,3 +38,4 @@ public enum MCPToolArgumentEncoder {
         values.map(encode)
     }
 }
+#endif

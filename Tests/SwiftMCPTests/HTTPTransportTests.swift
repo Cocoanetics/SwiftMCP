@@ -1,3 +1,4 @@
+#if Server
 // swiftlint:disable force_cast
 // Test-only: HTTP responses are known to be `HTTPURLResponse` and decoded JSON
 // payloads are known shapes. Force casts keep test code direct and readable.
@@ -228,3 +229,4 @@ struct HTTPTransportTests {
 
 }
 // swiftlint:enable force_cast
+#endif

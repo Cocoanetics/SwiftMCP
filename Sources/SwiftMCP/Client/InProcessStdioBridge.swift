@@ -1,3 +1,4 @@
+#if Client
 import Foundation
 import Dispatch
 
@@ -98,3 +99,4 @@ final class InProcessStdioBridge: StdioConnection, @unchecked Sendable {
         }
     }
 }
+#endif

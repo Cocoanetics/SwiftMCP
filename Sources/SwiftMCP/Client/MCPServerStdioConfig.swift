@@ -1,3 +1,4 @@
+#if Client
 import Foundation
 
 /// Configuration for an MCP server using standard input/output.
@@ -18,3 +19,4 @@ public struct MCPServerStdioConfig: Codable, Equatable, Sendable {
         self.environment = environment
     }
 }
+#endif

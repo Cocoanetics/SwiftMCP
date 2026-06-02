@@ -22,14 +22,10 @@ let package = Package(
 			name: "JSONValue",
 			targets: ["JSONValue"]
 		),
-		.executable(
-			name: "SwiftMCPDemo",
-			targets: ["SwiftMCPDemo"]
-		),
-		.executable(
-			name: "SwiftMCPIntentsDemo",
-			targets: ["SwiftMCPIntentsDemo"]
-		),
+		// NOTE: the server demo CLIs (SwiftMCPDemo, SwiftMCPIntentsDemo) link
+		// swift-nio via the `Server` trait and are appended below only where
+		// swift-nio builds (everywhere except Windows). Library consumers never
+		// build these demo products regardless.
 		.executable(
 			name: "SwiftMCPUtility",
 			targets: ["SwiftMCPUtility"]
@@ -54,6 +50,25 @@ let package = Package(
 			name: "SwiftMCPAggregator",
 			targets: ["SwiftMCPAggregator"]
 		)
+	],
+	traits: [
+		// All feature traits are enabled by default, so existing consumers
+		// (and `swift build` / `swift test` without flags) are unaffected.
+		.default(enabledTraits: ["Server", "Client", "OpenAPI"]),
+		// The HTTP/SSE + TCP server transports. The only feature that links
+		// swift-nio, swift-crypto and swift-certificates. Disable it (e.g. on
+		// Windows, or for client/tools-only consumers) to drop those deps.
+		.trait(name: "Server"),
+		// The MCP client (`MCPServerProxy`).
+		.trait(name: "Client"),
+		// OpenAPI / AI-plugin manifest models and the matching HTTP routes.
+		.trait(name: "OpenAPI")
+		// NOTE: AppIntents bridging is intentionally NOT a trait. The
+		// `@MCPServer`/`@MCPAppIntentTool` macros expand to code in the
+		// *consumer's* module that references the AppIntents glue under
+		// `#if canImport(AppIntents)`. Package-trait conditions are not visible
+		// in consumer modules, so a trait cannot gate that surface — and
+		// `canImport(AppIntents)` already excludes it on non-Apple platforms.
 	],
 	dependencies: [
 		.package(url: "https://github.com/apple/swift-log.git", from: "1.0.0"),
@@ -82,32 +97,21 @@ let package = Package(
 				"SwiftMCPMacros",
 				"JSONValue",
 				.product(name: "SwiftCross", package: "SwiftCross"),
-				.product(name: "NIOCore", package: "swift-nio"),
-				.product(name: "NIOHTTP1", package: "swift-nio"),
-				.product(name: "NIOPosix", package: "swift-nio"),
 				.product(name: "Logging", package: "swift-log"),
-				.product(name: "NIOFoundationCompat", package: "swift-nio"),
-				.product(name: "Crypto", package: "swift-crypto"),
-				.product(name: "_CryptoExtras", package: "swift-crypto"),
-				.product(name: "X509", package: "swift-certificates")
+				// swift-nio + swift-crypto + swift-certificates are linked ONLY
+				// when the `Server` trait is enabled (the HTTP/SSE transport).
+				.product(name: "NIOCore", package: "swift-nio", condition: .when(traits: ["Server"])),
+				.product(name: "NIOHTTP1", package: "swift-nio", condition: .when(traits: ["Server"])),
+				.product(name: "NIOPosix", package: "swift-nio", condition: .when(traits: ["Server"])),
+				.product(name: "NIOFoundationCompat", package: "swift-nio", condition: .when(traits: ["Server"])),
+				.product(name: "Crypto", package: "swift-crypto", condition: .when(traits: ["Server"])),
+				.product(name: "_CryptoExtras", package: "swift-crypto", condition: .when(traits: ["Server"])),
+				.product(name: "X509", package: "swift-certificates", condition: .when(traits: ["Server"]))
 			]
 		),
-		.executableTarget(
-			name: "SwiftMCPDemo",
-			dependencies: [
-				"SwiftMCP",
-				.product(name: "ArgumentParser", package: "swift-argument-parser")
-			],
-			path: "Demos/SwiftMCPDemo"
-		),
-		.executableTarget(
-			name: "SwiftMCPIntentsDemo",
-			dependencies: [
-				"SwiftMCP",
-				.product(name: "ArgumentParser", package: "swift-argument-parser")
-			],
-			path: "Demos/SwiftMCPIntentsDemo"
-		),
+		// NOTE: SwiftMCPDemo and SwiftMCPIntentsDemo executable targets are
+		// appended after the Package initializer, guarded by `#if !os(Windows)`,
+		// because they require the swift-nio-backed `Server` transports.
 		.executableTarget(
 			name: "SwiftMCPUtility",
 			dependencies: [
@@ -140,9 +144,9 @@ let package = Package(
 				"SwiftMCP",
 				"SwiftMCPUtilityCore",
 				.product(name: "SwiftCross", package: "SwiftCross"),
-				.product(name: "Crypto", package: "swift-crypto"),
-				.product(name: "_CryptoExtras", package: "swift-crypto"),
-				.product(name: "X509", package: "swift-certificates")
+				.product(name: "Crypto", package: "swift-crypto", condition: .when(traits: ["Server"])),
+				.product(name: "_CryptoExtras", package: "swift-crypto", condition: .when(traits: ["Server"])),
+				.product(name: "X509", package: "swift-certificates", condition: .when(traits: ["Server"]))
 			]
 		),
 		// MARK: - Prototype: per-instance @MCPExtension contributions
@@ -178,3 +182,35 @@ let package = Package(
 		)
 	]
 )
+
+// The SwiftMCPDemo / SwiftMCPIntentsDemo command-line servers use the
+// swift-nio-backed HTTP/SSE, stdio and TCP transports (the `Server` trait), so
+// they only build where swift-nio is available. swift-nio does not currently
+// compile on Windows, so these demo executables are omitted there — which lets
+// the package itself (library + tests) build and run with `--traits Client` /
+// `--traits Client,OpenAPI` on Windows. Library consumers never build these
+// demo products. Remove this guard once swift-nio builds on Windows.
+#if !os(Windows)
+package.products += [
+	.executable(name: "SwiftMCPDemo", targets: ["SwiftMCPDemo"]),
+	.executable(name: "SwiftMCPIntentsDemo", targets: ["SwiftMCPIntentsDemo"])
+]
+package.targets += [
+	.executableTarget(
+		name: "SwiftMCPDemo",
+		dependencies: [
+			"SwiftMCP",
+			.product(name: "ArgumentParser", package: "swift-argument-parser")
+		],
+		path: "Demos/SwiftMCPDemo"
+	),
+	.executableTarget(
+		name: "SwiftMCPIntentsDemo",
+		dependencies: [
+			"SwiftMCP",
+			.product(name: "ArgumentParser", package: "swift-argument-parser")
+		],
+		path: "Demos/SwiftMCPIntentsDemo"
+	)
+]
+#endif

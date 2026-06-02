@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 
 /// A transport-agnostic HTTP response.
@@ -21,3 +22,4 @@ public struct HTTPRouteResponse<Body: Sendable>: Sendable {
 		self.body = body
 	}
 }
+#endif

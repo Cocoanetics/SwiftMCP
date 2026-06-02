@@ -1,3 +1,4 @@
+#if Server
 //
 //  HTTPRouteResponse+Stream.swift
 //  SwiftMCP
@@ -46,3 +47,4 @@ extension HTTPRouteResponse where Body == AsyncStream<Data> {
 		)
 	}
 }
+#endif

@@ -1,3 +1,4 @@
+#if Client
 import SwiftCross
 
 extension MCPServerProxy {
@@ -163,3 +164,4 @@ extension MCPServerProxy {
         }
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if Server
 //
 //  HTTPRouteResponse+Data.swift
 //  SwiftMCP
@@ -52,3 +53,4 @@ extension HTTPRouteResponse where Body == Data? {
 		HTTPRouteResponse(status: .accepted, body: nil)
 	}
 }
+#endif

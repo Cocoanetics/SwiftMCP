@@ -1,3 +1,4 @@
+#if Client
 import Foundation
 
 /// Helpers for encoding client arguments into MCP tool payloads.
@@ -59,3 +60,4 @@ public enum MCPClientArgumentEncoder {
         .array(values.map { .string(String(describing: $0)) })
     }
 }
+#endif

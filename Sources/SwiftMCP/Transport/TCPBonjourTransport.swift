@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 import Logging
 
@@ -7,13 +8,13 @@ import Network
 /// A TCP transport that advertises via Bonjour and exchanges newline-delimited JSON-RPC.
 public final class TCPBonjourTransport: Transport, @unchecked Sendable {
     /// Base DNS-SD service type for MCP over TCP.
-    public static let serviceType = "_mcp._tcp"
+    public static let serviceType = MCPBonjourServiceType.base
 
     /// Returns a server-specific service type derived from the server name,
     /// e.g. `"Post"` → `"_post-mcp._tcp"`.  This prevents Bonjour collisions
     /// between unrelated MCP servers on the same network.
     public static func serviceType(for serverName: String) -> String {
-        "_\(serverName.lowercased())-mcp._tcp"
+        MCPBonjourServiceType.forServer(serverName)
     }
 
     public let server: MCPServer
@@ -181,12 +182,12 @@ import Logging
 /// Stub implementation for platforms without Network framework.
 public final class TCPBonjourTransport: Transport, @unchecked Sendable {
     /// Base DNS-SD service type for MCP over TCP.
-    public static let serviceType = "_mcp._tcp"
+    public static let serviceType = MCPBonjourServiceType.base
 
     /// Returns a server-specific service type derived from the server name,
     /// e.g. `"Post"` → `"_post-mcp._tcp"`.
     public static func serviceType(for serverName: String) -> String {
-        "_\(serverName.lowercased())-mcp._tcp"
+        MCPBonjourServiceType.forServer(serverName)
     }
 
     public let server: MCPServer
@@ -245,4 +246,5 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
     public func send(_ data: Data) async throws {
     }
 }
+#endif
 #endif

@@ -1,3 +1,4 @@
+#if Client
 #if canImport(Network)
 import Foundation
 import Network
@@ -244,4 +245,5 @@ public final actor TCPConnection: StdioConnection {
     public func stop() async {
     }
 }
+#endif
 #endif

@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 
 /// A transport-agnostic HTTP request.
@@ -49,3 +50,4 @@ public struct HTTPRouteRequest<Body: Sendable>: Sendable {
 		headers.first(where: { $0.0.caseInsensitiveCompare(name) == .orderedSame })?.1
 	}
 }
+#endif

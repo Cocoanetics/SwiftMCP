@@ -1,3 +1,4 @@
+#if Client
 import Foundation
 
 extension MCPServerProxy {
@@ -142,3 +143,4 @@ extension MCPServerProxy {
         return try decodeJSONPayload(params, as: payloadType)
     }
 }
+#endif

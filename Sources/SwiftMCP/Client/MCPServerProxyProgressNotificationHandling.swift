@@ -1,3 +1,4 @@
+#if Client
 import Foundation
 
 // swiftlint:disable type_name
@@ -7,3 +8,4 @@ public protocol MCPServerProxyProgressNotificationHandling: AnyObject, Sendable 
     func mcpServerProxy(_ proxy: MCPServerProxy, didReceiveProgress progress: ProgressNotification) async
 }
 // swiftlint:enable type_name
+#endif

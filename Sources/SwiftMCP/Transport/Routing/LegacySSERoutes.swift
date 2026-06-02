@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 
 /// Legacy SSE protocol routes (`/sse`, `/messages/:sessionID`).
@@ -128,3 +129,4 @@ extension HTTPSSETransport {
 		return components.url
 	}
 }
+#endif

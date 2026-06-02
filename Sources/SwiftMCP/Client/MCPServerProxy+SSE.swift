@@ -1,3 +1,4 @@
+#if Client
 import SwiftCross
 
 extension MCPServerProxy {
@@ -36,7 +37,7 @@ extension MCPServerProxy {
 
     internal func applyStreamableProtocolHeaders(_ request: inout URLRequest) {
         request.setValue(
-            HTTPSSETransport.latestProtocolVersion,
+            MCPProtocolVersion.latest,
             forHTTPHeaderField: "MCP-Protocol-Version"
         )
         if let sessionID {
@@ -308,3 +309,4 @@ extension MCPServerProxy {
         return components.url
     }
 }
+#endif
