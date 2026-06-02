@@ -13,6 +13,19 @@ extension MCPServerProxy {
         streamFailure = nil
         endpointURL = nil
 
+        // Reset the session identity so a reconnect after `.sessionInvalidated`
+        // starts clean. The stdio/TCP cases immediately assign a fresh
+        // client-side UUID below; the SSE case must NOT send a stale
+        // `Mcp-Session-Id` on the initialize POST, because a server that has
+        // forgotten the session rejects it as "Unknown session" before it can
+        // create a new one. (#125)
+        sessionID = nil
+
+        // Cancel any stream left over from a previous connection so reconnecting
+        // on the same proxy doesn't leave a second general-SSE loop running.
+        streamTask?.cancel()
+        streamTask = nil
+
         switch config {
         case .stdio(let stdioConfig):
             sessionID = UUID().uuidString
