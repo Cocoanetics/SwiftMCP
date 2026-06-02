@@ -68,7 +68,7 @@ struct ContactInfoArrayOutput: Sendable, Codable {
 
 /// A test server with various tools
 @MCPServer(name: "ComplexTypesServer", version: "1.0")
-class ComplexTypesServer {
+final class ComplexTypesServer {
     /// Processes an array of integers
     /// - Parameter numbers: Array of integers to process
     /// - Returns: Array of doubled integers

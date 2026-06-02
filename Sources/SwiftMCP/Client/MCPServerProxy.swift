@@ -74,6 +74,11 @@ public final actor MCPServerProxy {
     public internal(set) var endpointURL: URL?
     public internal(set) var sessionID: String?
     internal var streamTask: Task<Void, Error>?
+    /// Identifies the currently-active stream. Bumped whenever a stream is
+    /// retired (reconnect / disconnect) so a late `handleStreamTermination`
+    /// from a now-stale stream task is ignored instead of failing the requests
+    /// of the connection that replaced it.
+    internal var streamGeneration: Int = 0
 
     public internal(set) var serverName: String?
     public internal(set) var serverVersion: String?

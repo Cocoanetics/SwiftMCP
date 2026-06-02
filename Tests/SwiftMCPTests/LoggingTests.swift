@@ -5,7 +5,7 @@ import Logging
 
 /// A simple test server that implements logging
 @MCPServer(name: "Test Logging Server")
-class TestLoggingServer: MCPLoggingProviding {
+actor TestLoggingServer: MCPLoggingProviding {
     var minimumLogLevel: LogLevel = .info
 
     func setMinimumLogLevel(_ level: LogLevel) {
@@ -100,10 +100,10 @@ func testLoggingServer() async throws {
     await server.testLogging()
 
     // Test with debug level
-    server.setMinimumLogLevel(.debug)
+    await server.setMinimumLogLevel(.debug)
     await server.testLogging()
 
     // Test with error level
-    server.setMinimumLogLevel(.error)
+    await server.setMinimumLogLevel(.error)
     await server.testLogging()
 }

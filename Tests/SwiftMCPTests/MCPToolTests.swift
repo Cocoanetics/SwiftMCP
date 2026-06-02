@@ -15,7 +15,7 @@ import Testing
 
 // Test class with triple-slash documentation
 @MCPServer
-class TripleSlashDocumentation {
+final class TripleSlashDocumentation {
     /// Simple function with no parameters
     /// - Returns: A string
     @MCPTool
@@ -52,7 +52,7 @@ class TripleSlashDocumentation {
 
 // Test class with multi-line documentation
 @MCPServer
-class MultiLineDocumentation {
+final class MultiLineDocumentation {
     /**
      Function with multi-line documentation
      - Parameter a: First parameter
@@ -80,7 +80,7 @@ class MultiLineDocumentation {
 
 // Test class with mixed documentation styles
 @MCPServer
-class MixedDocumentationStyles {
+final class MixedDocumentationStyles {
     /// Triple-slash documentation
     @MCPTool
     func tripleSlash() {}
@@ -96,7 +96,7 @@ class MixedDocumentationStyles {
 
 // Test class with URL parameters
 @MCPServer
-class URLParameterHandling {
+final class URLParameterHandling {
     /// Function that takes a URL parameter
     /// - Parameter url: The URL to process
     /// - Returns: The URL's host

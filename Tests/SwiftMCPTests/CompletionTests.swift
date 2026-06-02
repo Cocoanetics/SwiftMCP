@@ -3,7 +3,7 @@ import Testing
 @testable import SwiftMCP
 
 @MCPServer
-class CompletionServer {
+final class CompletionServer {
     enum Color: CaseIterable {
         case red
         case green
@@ -21,7 +21,7 @@ class CompletionServer {
 }
 
 @MCPServer
-class CustomCompletionServer: MCPCompletionProviding {
+final class CustomCompletionServer: MCPCompletionProviding {
     enum Color: CaseIterable { case red, green, blue }
 
     @MCPResource("color://message?color={color}")

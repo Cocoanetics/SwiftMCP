@@ -12,7 +12,7 @@ import Testing
 // MARK: - Test Server with Tool Hints
 
 @MCPServer(name: "HintsTestServer", version: "1.0.0")
-class HintsTestServer {
+final class HintsTestServer {
 
     /// A read-only search function that doesn't modify anything
     @MCPTool(hints: [.readOnly])

@@ -3,7 +3,7 @@ import Foundation
 @testable import SwiftMCP
 
 @MCPServer(name: "OpenAPITestServer", version: "1.0")
-class OpenAPITestServer {
+final class OpenAPITestServer {
 
     /// A test tool
     @MCPTool
