@@ -8,7 +8,7 @@ import SwiftMCP
  A Calculator for simple math doing additionals, subtractions etc.
  */
 @MCPServer
-class Calculator {
+final class Calculator {
 	/// Adds two integers and returns their sum
 	/// - Parameter a: First number to add
 	/// - Parameter b: Second number to add

@@ -3,7 +3,7 @@ import SwiftMCP
 
 // Test class that uses the MCPServer macro without explicitly conforming to MCPServer
 @MCPServer
-class AutoConformingCalculator {
+final class AutoConformingCalculator {
     /// Adds two integers and returns their sum
     /// - Parameter a: First number to add
     /// - Parameter b: Second number to add

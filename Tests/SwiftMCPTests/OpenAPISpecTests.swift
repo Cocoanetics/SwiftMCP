@@ -3,7 +3,7 @@ import Foundation
 @testable import SwiftMCP
 
 @MCPServer(name: "test_server")
-class TestAPIServer {
+final class TestAPIServer {
     /// A simple function that returns a string
     /// - Returns: A greeting message
     @MCPTool
@@ -268,7 +268,7 @@ enum TestWeatherCondition: String, CaseIterable, Codable {
 
 // Test server with various return types
 @MCPServer(name: "TestServer", version: "1.0")
-class TestServer {
+final class TestServer {
 
     /// Get a single weather forecast
     /// - Returns: A weather forecast with temperature, condition and timestamp

@@ -3,7 +3,7 @@ import Testing
 @testable import SwiftMCP
 
 @MCPServer
-class PromptTestServer {
+final class PromptTestServer {
     enum Mood: String, CaseIterable { case happy, sad, excited }
     enum Priority: Int, CaseIterable { case low = 1, medium = 2, high = 3 }
 

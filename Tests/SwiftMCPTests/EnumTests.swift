@@ -33,7 +33,7 @@ enum SortOrder: String, CaseIterable, CustomStringConvertible {
 // MARK: - Test Server
 
 @MCPServer
-class EnumTestServer {
+final class EnumTestServer {
     /// Process a priority value
     /// - Parameter priority: The priority to process
     @MCPTool

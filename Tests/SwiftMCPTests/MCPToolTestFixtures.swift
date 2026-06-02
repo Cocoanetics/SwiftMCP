@@ -3,7 +3,7 @@ import Foundation
 
 // Test class with SchemaRepresentable types
 @MCPServer
-class SchemaRepresentableTests {
+final class SchemaRepresentableTests {
     /// A person's contact information
     @Schema
     struct ContactInfo {
@@ -47,7 +47,7 @@ class SchemaRepresentableTests {
 
 // Test class with array of enums
 @MCPServer
-class EnumArrayTest {
+final class EnumArrayTest {
     /// Function that takes an array of weekdays
     /// - Parameter days: Array of weekdays
     @MCPTool
@@ -65,7 +65,7 @@ class EnumArrayTest {
 
 // Test class with array of SchemaRepresentable types
 @MCPServer
-class SchemaRepresentableArrayTest {
+final class SchemaRepresentableArrayTest {
     /// Function that takes an array of addresses
     /// - Parameter addresses: Array of addresses
     @MCPTool

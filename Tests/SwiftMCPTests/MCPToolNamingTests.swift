@@ -11,7 +11,7 @@ import Testing
 
 /// Server with default naming (functionName)
 @MCPServer(name: "DefaultNamingServer")
-class DefaultNamingServer {
+final class DefaultNamingServer {
     /// Lists all windows
     @MCPTool
     func listWindows() -> [String] { [] }
@@ -23,7 +23,7 @@ class DefaultNamingServer {
 
 /// Server with snake_case naming
 @MCPServer(name: "SnakeCaseServer", toolNaming: .snakeCase)
-class SnakeCaseServer {
+final class SnakeCaseServer {
     /// Lists all windows
     @MCPTool
     func listWindows() -> [String] { [] }
@@ -43,7 +43,7 @@ class SnakeCaseServer {
 
 /// Server with PascalCase naming
 @MCPServer(name: "PascalCaseServer", toolNaming: .pascalCase)
-class PascalCaseServer {
+final class PascalCaseServer {
     /// Lists all windows
     @MCPTool
     func listWindows() -> [String] { [] }

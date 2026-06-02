@@ -13,11 +13,15 @@ import Foundation
 public protocol MCPLoggingProviding: MCPService {
     /// The current minimum log level for sending messages to clients.
     /// Only messages with this level or higher will be sent.
-    nonisolated var minimumLogLevel: LogLevel { get }
+    ///
+    /// Declared `async` so actor-based servers can store the level as
+    /// actor-isolated state; synchronous (e.g. class) conformers satisfy it
+    /// without `await`.
+    var minimumLogLevel: LogLevel { get async }
 
     /// Sets the minimum log level for sending messages to clients.
     /// - Parameter level: The new minimum log level
-    func setMinimumLogLevel(_ level: LogLevel)
+    func setMinimumLogLevel(_ level: LogLevel) async
 
     /// Sends a log message to all connected clients.
     /// - Parameter message: The log message to send
