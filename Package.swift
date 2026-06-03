@@ -83,7 +83,13 @@ let package = Package(
 		.package(url: "https://github.com/apple/swift-nio.git", from: "2.0.0"),
 		.package(url: "https://github.com/swiftlang/swift-docc-plugin.git", from: "1.0.0"),
 		.package(url: "https://github.com/swiftlang/swift-syntax.git", "602.0.0-latest"..<"604.0.0"),
-		.package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
+		// Allow both the crypto 3.x and 4.x major series. swift-certificates
+		// >= 1.19 moves to crypto 4.x, so capping at < 4.0 here would make a
+		// blanket `swift package update` unresolvable. crypto 4.0's only
+		// breaking change is additive `CryptoError` cases, and `_RSA.Signing`
+		// (the only API we use) still supports macOS 10.15 / iOS 13, so the
+		// bump is safe for our macOS 12 / iOS 15 floor.
+		.package(url: "https://github.com/apple/swift-crypto.git", "3.0.0"..<"5.0.0"),
 		.package(url: "https://github.com/apple/swift-certificates.git", from: "1.1.0"),
 		.package(url: "https://github.com/Cocoanetics/SwiftCross.git", from: "1.2.0")
     ],
