@@ -5,9 +5,6 @@ import SwiftMCP
 import Logging
 import NIOCore
 import ServiceLifecycle
-#if canImport(OSLog)
-import OSLog
-#endif
 
 /**
  A command that processes JSON-RPC requests from standard input and writes responses to standard output.

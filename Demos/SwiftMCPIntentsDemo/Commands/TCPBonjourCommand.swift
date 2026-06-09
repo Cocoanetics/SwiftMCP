@@ -4,9 +4,6 @@ import ArgumentParser
 import SwiftMCP
 import Logging
 import ServiceLifecycle
-#if canImport(OSLog)
-import OSLog
-#endif
 
 /**
  A command that exposes the AppIntents demo server over TCP with Bonjour discovery.

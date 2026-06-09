@@ -4,9 +4,6 @@ import ArgumentParser
 import SwiftMCP
 import Logging
 import ServiceLifecycle
-#if canImport(OSLog)
-import OSLog
-#endif
 
 /**
  A command that starts an HTTP server with Server-Sent Events (SSE) support for SwiftMCP.

@@ -5,10 +5,6 @@ import SwiftMCP
 import Logging
 import NIOCore
 import Dispatch
-
-#if canImport(OSLog)
-import OSLog
-#endif
 #endif
 
 /**
