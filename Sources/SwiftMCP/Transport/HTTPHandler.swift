@@ -1,19 +1,22 @@
 #if Server
 import SwiftCross
 @preconcurrency import NIOCore
-import NIOHTTP1
+import NIOFoundationCompat
+import NIOHTTPTypes
 import HTTPTypes
 import Logging
 
 /// HTTP request handler for the SSE transport.
 ///
-/// Manages the NIO state machine and dispatches to the router.
-/// Body chunks are always streamed via `AsyncStream<Data>`. The dispatch
-/// layer collects them into `Data` for buffered handlers, or forwards
-/// the stream for streaming handlers.
+/// Consumes swift-http-types request parts (translated from NIO's HTTP/1 parts
+/// by the upstream `HTTP1ToHTTPServerCodec`) and dispatches to the router, so
+/// it works in `HTTPRequest` / `HTTPResponse` / `HTTPFields` directly. Body
+/// chunks are always streamed via `AsyncStream<Data>`. The dispatch layer
+/// collects them into `Data` for buffered handlers, or forwards the stream for
+/// streaming handlers.
 final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @unchecked Sendable {
-    typealias InboundIn = HTTPServerRequestPart
-    typealias OutboundOut = HTTPServerResponsePart
+    typealias InboundIn = HTTPRequestPart
+    typealias OutboundOut = HTTPResponsePart
 
     private var requestState: RequestState = .idle
     private let transport: HTTPSSETransport
@@ -53,7 +56,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         // HEAD — create stream and dispatch handler immediately
         case (.head(let head), _):
             let sizeLimit = maxBodySize(for: head)
-            if let contentLength = head.headers.first(name: "content-length"),
+            if let contentLength = head.headerFields[.contentLength],
                let length = Int(contentLength), length > sizeLimit {
                 logger.warning("Rejecting request with Content-Length \(length) > max \(sizeLimit)")
                 rejectOversizedRequest(context: context)
@@ -105,12 +108,12 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
     /// Match the route and dispatch the handler. For buffered handlers, the body
     /// stream is collected into `Data` first. For streaming handlers, the stream
     /// is passed directly.
-    private func dispatchRoute(context: ChannelHandlerContext, head: HTTPRequestHead, bodyStream: AsyncStream<Data>) {
+    private func dispatchRoute(context: ChannelHandlerContext, head: HTTPRequest, bodyStream: AsyncStream<Data>) {
         let channel = context.channel
-        let (path, queryParams) = parseURI(head.uri)
+        let uri = head.path ?? "/"
+        let (path, queryParams) = parseURI(uri)
 
-        guard let method = convertMethod(head.method),
-              let routeMatch = transport.router.match(method: method, path: path) else {
+        guard let routeMatch = transport.router.match(method: head.method, path: path) else {
             sendResponse(channel: channel, status: .notFound)
             return
         }
@@ -118,8 +121,8 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         let handler = routeMatch.route.handler
 
         let request = HTTPRouteRequest<AsyncStream<Data>>(
-            method: method, uri: head.uri, path: path,
-            headerFields: convertHeaders(head.headers), body: bodyStream,
+            method: head.method, uri: uri, path: path,
+            headerFields: Self.requestHeaderFields(from: head), body: bodyStream,
             pathParams: routeMatch.pathParams, queryParams: queryParams
         )
 
@@ -153,8 +156,6 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
     // MARK: - Response Writing
 
     private func writeRouteResponse(_ response: RouteResponse, to channel: Channel) async {
-        let status = nioStatus(response.status)
-
         if let stream = response.bodyStream {
             // For streaming responses (SSE), don't set Content-Length.
             // Write head immediately so the client can start consuming.
@@ -162,34 +163,32 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             if fields[.accessControlAllowOrigin] == nil {
                 fields[.accessControlAllowOrigin] = "*"
             }
-            let head = HTTPResponseHead(version: .http1_1, status: status, headers: Self.nioHeaders(from: fields))
-            channel.writeAndFlush(HTTPServerResponsePart.head(head), promise: nil)
+            let head = HTTPResponse(status: response.status, headerFields: fields)
+            channel.writeAndFlush(HTTPResponsePart.head(head), promise: nil)
 
             for await chunk in stream {
                 let buffer = channel.allocator.buffer(data: chunk)
-                channel.write(HTTPServerResponsePart.body(.byteBuffer(buffer)), promise: nil)
+                channel.write(HTTPResponsePart.body(buffer), promise: nil)
                 channel.flush()
             }
 
-            channel.writeAndFlush(HTTPServerResponsePart.end(nil), promise: nil)
+            channel.writeAndFlush(HTTPResponsePart.end(nil), promise: nil)
         } else {
             var body: ByteBuffer?
             if let data = response.body {
                 body = channel.allocator.buffer(data: data)
             }
-            sendResponse(channel: channel, status: status, fields: response.headerFields, body: body)
+            sendResponse(channel: channel, status: response.status, fields: response.headerFields, body: body)
         }
     }
 
     // MARK: - Helpers
 
-    private func maxBodySize(for head: HTTPRequestHead) -> Int {
-        if let method = convertMethod(head.method) {
-            let (path, _) = parseURI(head.uri)
-            if let match = transport.router.match(method: method, path: path),
-               let perRoute = match.route.maxBodySize {
-                return perRoute
-            }
+    private func maxBodySize(for head: HTTPRequest) -> Int {
+        let (path, _) = parseURI(head.path ?? "/")
+        if let match = transport.router.match(method: head.method, path: path),
+           let perRoute = match.route.maxBodySize {
+            return perRoute
         }
         return transport.maxMessageSize
     }
@@ -202,25 +201,22 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         let message = "Request body exceeds maximum allowed size of \(transport.maxMessageSize) bytes."
         var buffer = context.channel.allocator.buffer(capacity: message.utf8.count)
         buffer.writeString(message)
-        sendResponse(channel: context.channel, status: .payloadTooLarge, fields: fields, body: buffer)
+        sendResponse(channel: context.channel, status: .contentTooLarge, fields: fields, body: buffer)
         context.close(promise: nil)
     }
 
-    private func convertMethod(_ nioMethod: NIOHTTP1.HTTPMethod) -> HTTPRequest.Method? {
-        switch nioMethod {
-        case .GET: return .get
-        case .POST: return .post
-        case .PUT: return .put
-        case .DELETE: return .delete
-        case .PATCH: return .patch
-        case .OPTIONS: return .options
-        case .HEAD: return .head
-        default: return nil
+    /// The request's header fields, re-exposing the `Host` header that the HTTP/1
+    /// codec lifts into the `:authority` pseudo-header, so routes that read
+    /// `header("Host")` keep working.
+    static func requestHeaderFields(from request: HTTPRequest) -> HTTPFields {
+        var fields = request.headerFields
+        // `HTTPField.Name.host` is unavailable (HTTP/2 maps Host to `:authority`),
+        // so reconstruct the literal `Host` field name to re-expose it.
+        let hostName = HTTPField.Name("Host")!
+        if let authority = request.authority, fields[hostName] == nil {
+            fields[hostName] = authority
         }
-    }
-
-    private func nioStatus(_ status: HTTPResponse.Status) -> HTTPResponseStatus {
-        HTTPResponseStatus(statusCode: status.code)
+        return fields
     }
 
     private func parseURI(_ uri: String) -> (path: String, queryParams: [(String, String)]) {
@@ -236,15 +232,6 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             return (key, value)
         }
         return (path, queryParams)
-    }
-
-    private func convertHeaders(_ nioHeaders: HTTPHeaders) -> HTTPFields {
-        var fields = HTTPFields()
-        for (name, value) in nioHeaders {
-            guard let fieldName = HTTPField.Name(name) else { continue }
-            fields.append(HTTPField(name: fieldName, value: value))
-        }
-        return fields
     }
 
     /// Apply the framework's default response fields (CORS, Content-Type, Content-Length)
@@ -275,28 +262,19 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         return fields
     }
 
-    /// Convert `HTTPFields` to NIO `HTTPHeaders`, preserving original field-name casing and order.
-    static func nioHeaders(from fields: HTTPFields) -> HTTPHeaders {
-        var headers = HTTPHeaders()
-        for field in fields {
-            headers.add(name: field.name.rawName, value: field.value)
-        }
-        return headers
-    }
-
     private func sendResponse(
         channel: Channel,
-        status: HTTPResponseStatus,
+        status: HTTPResponse.Status,
         fields: HTTPFields = [:],
         body: ByteBuffer? = nil
     ) {
         let resolvedFields = Self.responseFieldsApplyingDefaults(fields, bodyLength: body?.readableBytes)
-        let head = HTTPResponseHead(version: .http1_1, status: status, headers: Self.nioHeaders(from: resolvedFields))
-        channel.write(HTTPServerResponsePart.head(head), promise: nil)
+        let head = HTTPResponse(status: status, headerFields: resolvedFields)
+        channel.write(HTTPResponsePart.head(head), promise: nil)
         if let body = body {
-            channel.write(HTTPServerResponsePart.body(.byteBuffer(body)), promise: nil)
+            channel.write(HTTPResponsePart.body(body), promise: nil)
         }
-        channel.writeAndFlush(HTTPServerResponsePart.end(nil), promise: nil)
+        channel.writeAndFlush(HTTPResponsePart.end(nil), promise: nil)
     }
 }
 #endif

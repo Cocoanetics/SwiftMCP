@@ -132,6 +132,11 @@ let package = Package(
 				// when the `Server` trait is enabled (the HTTP/SSE transport).
 				.product(name: "NIOCore", package: "swift-nio", condition: .when(traits: ["Server"])),
 				.product(
+					name: "NIOHTTPTypes",
+					package: "swift-nio-extras",
+					condition: .when(traits: ["Server"])
+				),
+				.product(
 					name: "NIOHTTPTypesHTTP1",
 					package: "swift-nio-extras",
 					condition: .when(traits: ["Server"])

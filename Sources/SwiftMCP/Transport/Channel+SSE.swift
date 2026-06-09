@@ -1,7 +1,7 @@
 #if Server
 import Foundation
 import NIOCore
-import NIOHTTP1
+import NIOHTTPTypes
 import Logging
 
 extension Channel {
@@ -18,7 +18,9 @@ extension Channel {
         var buffer = self.allocator.buffer(capacity: messageText.utf8.count)
         buffer.writeString(message.description)
 
-        let part = HTTPServerResponsePart.body(.byteBuffer(buffer))
+        // SSE body chunk as an http-types response part — the pipeline's
+        // HTTP1ToHTTPServerCodec converts it back to a NIO part on the way out.
+        let part = HTTPResponsePart.body(buffer)
 
         // Write with promise
         self.write(part, promise: nil)

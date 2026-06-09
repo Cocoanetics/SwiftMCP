@@ -4,6 +4,7 @@ import Logging
 import NIOCore
 import NIOFoundationCompat
 import NIOHTTP1
+import NIOHTTPTypesHTTP1
 import NIOPosix
 import ServiceLifecycle
 
@@ -121,6 +122,12 @@ public final class HTTPSSETransport: Transport, Service, @unchecked Sendable {
             .childChannelInitializer {  channel in
                 return channel.pipeline.configureHTTPServerPipeline().flatMap {
                     channel.pipeline.addHandler(HTTPLogger())
+                }.flatMap {
+                    // Translate NIO's HTTP/1 request/response parts to and from
+                    // swift-http-types so HTTPHandler works in HTTPRequest /
+                    // HTTPResponse / HTTPFields directly. HTTPLogger stays on the
+                    // NIO side (added before this codec).
+                    channel.pipeline.addHandler(HTTP1ToHTTPServerCodec(secure: false))
                 }.flatMap {
                     channel.pipeline.addHandler(HTTPHandler(transport: self))
                 }
