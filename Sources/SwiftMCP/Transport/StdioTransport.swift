@@ -5,12 +5,13 @@
 
 import Foundation
 import Logging
+import ServiceLifecycle
 
 /// A transport that exposes an MCP server over standard input/output.
 ///
 /// This transport allows communication with an MCP server through standard input and output streams,
 /// making it suitable for command-line interfaces and pipe-based communication.
-public final class StdioTransport: Transport, @unchecked Sendable {
+public final class StdioTransport: Transport, Service, @unchecked Sendable {
     /// The MCP server instance that this transport exposes.
     ///
     /// This server handles the actual business logic while the transport handles I/O.
@@ -56,60 +57,63 @@ public final class StdioTransport: Transport, @unchecked Sendable {
     public func start() async throws {
         await state.start()
 
-        // Capture immutable properties in a @Sendable closure.
+        // Read on a background task so this method returns immediately.
         Task { @Sendable in
-            let session = Session(id: UUID())
-            await session.setTransport(self)
             do {
-                try await session.work { _ in
-                    while await state.isCurrentlyRunning() {
-                        if let input = readLine(),
-                           !input.isEmpty,
-                           let data = input.data(using: .utf8) {
-
-                            let string = String(data: data, encoding: .utf8)!
-                            logger.trace( "STDIN:\n\n\(string)")
-
-                            try await handleReceived(data)
-                        } else {
-                            // If no input is available, sleep briefly and try again.
-                            try await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
-                        }
-                    }
-                }
+                try await readLoop()
             } catch {
                 logger.error("Error processing input: \(error)")
             }
         }
     }
 
-    /// Runs the transport synchronously and blocks until the transport is stopped.
+    /// Runs the transport, processing stdin on the calling task until the
+    /// transport is stopped or stdin reaches end-of-file.
     ///
-    /// This method processes input directly on the calling task and will not return until
-    /// `stop()` is called from another task.
+    /// Returns when `stop()` is called from another task, when a `ServiceGroup`
+    /// graceful shutdown is triggered, or when the peer closes stdin (EOF).
     ///
     /// - Throws: An error if the transport fails to process input.
     public func run() async throws {
         await state.start()
 
+        // A `ServiceGroup` graceful shutdown signal calls `stop()`, clearing the
+        // running flag so the read loop exits; the loop also returns on stdin
+        // EOF. Standalone callers drive shutdown via `stop()`.
+        try await withGracefulShutdownHandler {
+            try await readLoop()
+        } onGracefulShutdown: { [weak self] in
+            Task { [weak self] in try? await self?.stop() }
+        }
+    }
+
+    /// Reads newline-delimited JSON-RPC messages from stdin until stdin reaches
+    /// end-of-file or the transport is stopped.
+    ///
+    /// `readLine()` blocks until a complete line or EOF is available, so the loop
+    /// needs no polling delay. A `nil` result means the peer closed stdin (EOF),
+    /// in which case the loop returns so the caller can shut down cleanly. Blank
+    /// or non-UTF8 lines are skipped.
+    private func readLoop() async throws {
         let session = Session(id: UUID())
         await session.setTransport(self)
         try await session.work { _ in
             while await state.isCurrentlyRunning() {
-                if let input = readLine(),
-                   !input.isEmpty,
-                   let data = input.data(using: .utf8) {
-
-                    let string = String(data: data, encoding: .utf8)!
-                    logger.trace( "STDIN:\n\n\(string)")
-
-                    try await handleReceived(data)
-                } else {
-                    // If no input is available, sleep briefly and try again.
-                    try await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+                guard let input = readLine() else {
+                    // EOF: stdin was closed by the peer.
+                    break
                 }
+                guard !input.isEmpty, let data = input.data(using: .utf8) else {
+                    // Blank or non-UTF8 line — skip and keep reading.
+                    continue
+                }
+                logger.trace("STDIN:\n\n\(input)")
+                try await handleReceived(data)
             }
         }
+        // The read loop ended (EOF or an explicit stop); ensure the running flag
+        // is cleared so the transport's state stays consistent.
+        await state.stop()
     }
 
     /// Stops the transport.

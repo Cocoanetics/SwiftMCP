@@ -1,5 +1,6 @@
 #if Server
 import Foundation
+import ServiceLifecycle
 
 #if canImport(Network)
 import Network
@@ -20,7 +21,14 @@ extension TCPBonjourTransport {
 
     public func run() async throws {
         try await start()
-        await state.waitUntilStopped()
+        // Inside a `ServiceGroup`, a graceful shutdown signal calls `stop()`,
+        // which cancels the listener/connections and resumes `waitUntilStopped()`
+        // so this method returns. Standalone callers drive shutdown via `stop()`.
+        await withGracefulShutdownHandler {
+            await state.waitUntilStopped()
+        } onGracefulShutdown: { [weak self] in
+            Task { [weak self] in try? await self?.stop() }
+        }
     }
 
     public func stop() async throws {

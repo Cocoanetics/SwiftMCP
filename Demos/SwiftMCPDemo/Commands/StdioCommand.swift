@@ -4,6 +4,7 @@ import ArgumentParser
 import SwiftMCP
 import Logging
 import NIOCore
+import ServiceLifecycle
 #if canImport(OSLog)
 import OSLog
 #endif
@@ -40,6 +41,16 @@ struct StdioCommand: AsyncParsableCommand {
 """
     )
 
+    /// A logger bound to stderr so `ServiceGroup` lifecycle messages never
+    /// interleave with the JSON-RPC responses written to stdout.
+    private static let lifecycleLogger: Logging.Logger = {
+        var logger = Logging.Logger(label: "com.cocoanetics.SwiftMCP.ServiceGroup") {
+            StreamLogHandler.standardError(label: $0)
+        }
+        logger.logLevel = .notice
+        return logger
+    }()
+
 	func run() async throws {
 #if canImport(OSLog)
         LoggingSystem.bootstrapWithOSLog()
@@ -52,7 +63,20 @@ struct StdioCommand: AsyncParsableCommand {
 			logToStderr("MCP Server \(calculator.serverName) (\(calculator.serverVersion)) started with Stdio transport")
 
             let transport = StdioTransport(server: calculator)
-            try await transport.run()
+
+            // A `ServiceGroup` owns the run loop and traps SIGINT/SIGTERM,
+            // driving a graceful shutdown of the transport. The lifecycle logs
+            // go to stderr so they never corrupt the stdout JSON-RPC stream.
+            let group = ServiceGroup(
+                configuration: .init(
+                    services: [
+                        .init(service: transport, successTerminationBehavior: .gracefullyShutdownGroup)
+                    ],
+                    gracefulShutdownSignals: [.sigterm, .sigint],
+                    logger: Self.lifecycleLogger
+                )
+            )
+            try await group.run()
         } catch let error as TransportError {
             // Handle transport errors
             let errorMessage = """

@@ -91,6 +91,10 @@ let package = Package(
 		// bump is safe for our macOS 12 / iOS 15 floor.
 		.package(url: "https://github.com/apple/swift-crypto.git", "3.0.0"..<"5.0.0"),
 		.package(url: "https://github.com/apple/swift-certificates.git", from: "1.1.0"),
+		// Graceful startup/shutdown + signal handling for the server transports.
+		// NIO-free (only swift-log + swift-async-algorithms), so it is linked
+		// only under the `Server` trait to keep the core dependency-light.
+		.package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.6.0"),
 		.package(url: "https://github.com/Cocoanetics/SwiftCross.git", from: "1.2.0")
     ],
 	targets: [
@@ -119,14 +123,16 @@ let package = Package(
 				.product(name: "NIOFoundationCompat", package: "swift-nio", condition: .when(traits: ["Server"])),
 				.product(name: "Crypto", package: "swift-crypto", condition: .when(traits: ["Server"])),
 				.product(name: "_CryptoExtras", package: "swift-crypto", condition: .when(traits: ["Server"])),
-				.product(name: "X509", package: "swift-certificates", condition: .when(traits: ["Server"]))
+				.product(name: "X509", package: "swift-certificates", condition: .when(traits: ["Server"])),
+				.product(name: "ServiceLifecycle", package: "swift-service-lifecycle", condition: .when(traits: ["Server"]))
 			]
 		),
 		.executableTarget(
 			name: "SwiftMCPDemo",
 			dependencies: [
 				"SwiftMCP",
-				.product(name: "ArgumentParser", package: "swift-argument-parser")
+				.product(name: "ArgumentParser", package: "swift-argument-parser"),
+				.product(name: "ServiceLifecycle", package: "swift-service-lifecycle", condition: .when(traits: ["Server"]))
 			],
 			path: "Demos/SwiftMCPDemo"
 		),
@@ -134,7 +140,8 @@ let package = Package(
 			name: "SwiftMCPIntentsDemo",
 			dependencies: [
 				"SwiftMCP",
-				.product(name: "ArgumentParser", package: "swift-argument-parser")
+				.product(name: "ArgumentParser", package: "swift-argument-parser"),
+				.product(name: "ServiceLifecycle", package: "swift-service-lifecycle", condition: .when(traits: ["Server"]))
 			],
 			path: "Demos/SwiftMCPIntentsDemo"
 		),

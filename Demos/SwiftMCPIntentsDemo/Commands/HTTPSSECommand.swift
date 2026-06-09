@@ -3,6 +3,7 @@ import Foundation
 import ArgumentParser
 import SwiftMCP
 import Logging
+import ServiceLifecycle
 #if canImport(OSLog)
 import OSLog
 #endif
@@ -47,8 +48,6 @@ final class HTTPSSECommand: AsyncParsableCommand {
     @Option(name: .long, help: "Path to OAuth configuration JSON file")
     var oauth: String?
 
-    private var signalHandler: SignalHandler?
-
     required init() {}
 
     required init(from decoder: Decoder) throws {
@@ -87,17 +86,24 @@ final class HTTPSSECommand: AsyncParsableCommand {
         try configureAuthentication(on: transport)
         transport.serveOpenAPI = openapi
 
-        let tcpTransport = try await startTCPTransportIfNeeded(server: server)
-        await setupSignalHandling(httpTransport: transport, tcpTransport: tcpTransport)
-
-        do {
-            try await transport.run()
-        } catch {
-            if let tcpTransport {
-                try? await tcpTransport.stop()
-            }
-            throw error
+        // Each transport is a `Service`. The `ServiceGroup` starts them, traps
+        // SIGINT/SIGTERM, and drives an ordered graceful shutdown (with a
+        // timeout) — replacing the bespoke signal handler.
+        var services: [ServiceGroupConfiguration.ServiceConfiguration] = [
+            .init(service: transport, successTerminationBehavior: .gracefullyShutdownGroup)
+        ]
+        if let tcpTransport = makeTCPTransportIfNeeded(server: server) {
+            services.append(.init(service: tcpTransport, successTerminationBehavior: .gracefullyShutdownGroup))
         }
+
+        let group = ServiceGroup(
+            configuration: .init(
+                services: services,
+                gracefulShutdownSignals: [.sigterm, .sigint],
+                logger: Logging.Logger(label: "com.cocoanetics.SwiftMCP.ServiceGroup")
+            )
+        )
+        try await group.run()
     }
 
     private func configureAuthentication(on transport: HTTPSSETransport) throws {
@@ -155,24 +161,12 @@ final class HTTPSSECommand: AsyncParsableCommand {
         }
     }
 
-    private func startTCPTransportIfNeeded(server: any MCPServer) async throws -> TCPBonjourTransport? {
+    /// Builds the optional TCP+Bonjour transport. It is returned unstarted —
+    /// the `ServiceGroup` starts it by calling `run()`.
+    private func makeTCPTransportIfNeeded(server: any MCPServer) -> TCPBonjourTransport? {
         guard tcp else { return nil }
-        let transport = TCPBonjourTransport(server: server)
-        try await transport.start()
-        print("MCP Server \(server.serverName) started with TCP+Bonjour transport")
-        return transport
-    }
-
-    private func setupSignalHandling(
-        httpTransport: HTTPSSETransport,
-        tcpTransport: TCPBonjourTransport?
-    ) async {
-        if let tcpTransport {
-            signalHandler = SignalHandler(transports: [httpTransport, tcpTransport])
-        } else {
-            signalHandler = SignalHandler(transport: httpTransport)
-        }
-        await signalHandler?.setup()
+        print("MCP Server \(server.serverName) will also expose a TCP+Bonjour transport")
+        return TCPBonjourTransport(server: server)
     }
 }
 #endif
