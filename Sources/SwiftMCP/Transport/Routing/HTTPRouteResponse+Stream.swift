@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import HTTPTypes
 
 // MARK: - Factories for AsyncStream<Data> body
 
@@ -33,7 +34,7 @@ extension HTTPRouteResponse where Body == AsyncStream<Data> {
 
 		return HTTPRouteResponse(
 			status: .ok,
-			headers: [("Content-Type", contentType)],
+			headerFields: [.contentType: contentType],
 			body: stream
 		)
 	}
@@ -42,7 +43,7 @@ extension HTTPRouteResponse where Body == AsyncStream<Data> {
 	public static func eventStream(_ source: AsyncStream<Data>) -> Self {
 		HTTPRouteResponse(
 			status: .ok,
-			headers: [("Content-Type", "text/event-stream"), ("Cache-Control", "no-cache")],
+			headerFields: [.contentType: "text/event-stream", .cacheControl: "no-cache"],
 			body: source
 		)
 	}

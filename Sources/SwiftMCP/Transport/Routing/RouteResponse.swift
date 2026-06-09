@@ -1,31 +1,32 @@
 #if Server
 import Foundation
+import HTTPTypes
 
 /// Internal response type that can carry either buffered data or a stream.
 struct RouteResponse: Sendable {
-	var status: HTTPStatus
-	var headers: [(String, String)]
+	var status: HTTPResponse.Status
+	var headerFields: HTTPFields
 	var body: Data?
 	var bodyStream: AsyncStream<Data>?
 	/// Optional stream registration info used to register SSE channels.
 	var streamInfo: StreamRouteResponseInfo?
 
-	init(status: HTTPStatus, headers: [(String, String)] = [], body: Data? = nil) {
+	init(status: HTTPResponse.Status, headerFields: HTTPFields = [:], body: Data? = nil) {
 		self.status = status
-		self.headers = headers
+		self.headerFields = headerFields
 		self.body = body
 		self.bodyStream = nil
 		self.streamInfo = nil
 	}
 
 	init(
-		status: HTTPStatus,
-		headers: [(String, String)] = [],
+		status: HTTPResponse.Status,
+		headerFields: HTTPFields = [:],
 		bodyStream: AsyncStream<Data>,
 		streamInfo: StreamRouteResponseInfo? = nil
 	) {
 		self.status = status
-		self.headers = headers
+		self.headerFields = headerFields
 		self.body = nil
 		self.bodyStream = bodyStream
 		self.streamInfo = streamInfo
@@ -33,7 +34,7 @@ struct RouteResponse: Sendable {
 
 	init(_ response: HTTPRouteResponse<Data?>) {
 		self.status = response.status
-		self.headers = response.headers
+		self.headerFields = response.headerFields
 		self.body = response.body
 		self.bodyStream = nil
 		self.streamInfo = nil
@@ -41,13 +42,13 @@ struct RouteResponse: Sendable {
 
 	init(_ response: HTTPRouteResponse<AsyncStream<Data>>) {
 		self.status = response.status
-		self.headers = response.headers
+		self.headerFields = response.headerFields
 		self.body = nil
 		self.bodyStream = response.body
 		self.streamInfo = nil
 	}
 
-	static func json<T: Encodable>(_ value: T, status: HTTPStatus = .ok, sessionId: String? = nil) -> RouteResponse {
+	static func json<T: Encodable>(_ value: T, status: HTTPResponse.Status = .ok, sessionId: String? = nil) -> RouteResponse {
 		let encoder = JSONEncoder()
 		encoder.dateEncodingStrategy = .iso8601WithTimeZone
 		encoder.nonConformingFloatEncodingStrategy = .convertToString(
@@ -55,11 +56,11 @@ struct RouteResponse: Sendable {
 		guard let data = try? encoder.encode(value) else {
 			return RouteResponse(status: .internalServerError, body: Data("Internal Server Error encoding response".utf8))
 		}
-		var headers: [(String, String)] = [("Content-Type", "application/json")]
+		var headerFields: HTTPFields = [.contentType: "application/json"]
 		if let sessionId {
-			headers.append(("Mcp-Session-Id", sessionId))
+			headerFields[.mcpSessionID] = sessionId
 		}
-		return RouteResponse(status: status, headers: headers, body: data)
+		return RouteResponse(status: status, headerFields: headerFields, body: data)
 	}
 }
 #endif

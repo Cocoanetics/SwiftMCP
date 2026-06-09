@@ -81,6 +81,16 @@ let package = Package(
 		.package(url: "https://github.com/apple/swift-log.git", from: "1.0.0"),
 		.package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.2.0"),
 		.package(url: "https://github.com/apple/swift-nio.git", from: "2.0.0"),
+		// Apple's version-independent HTTP currency types (HTTPRequest.Method,
+		// HTTPResponse.Status, HTTPFields). Zero-dependency and Foundation-free,
+		// so it lives in the *core* target (not behind `Server`) and is shared by
+		// both the client and the server transports as the single header/method/
+		// status representation.
+		.package(url: "https://github.com/apple/swift-http-types.git", from: "1.0.0"),
+		// NIO ⇄ swift-http-types channel-handler bridge (`NIOHTTPTypesHTTP1`).
+		// Server-only: it pulls swift-nio, so it is linked behind the `Server`
+		// trait alongside the rest of the NIO stack.
+		.package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.25.0"),
 		.package(url: "https://github.com/swiftlang/swift-docc-plugin.git", from: "1.0.0"),
 		.package(url: "https://github.com/swiftlang/swift-syntax.git", "602.0.0-latest"..<"604.0.0"),
 		// Allow both the crypto 3.x and 4.x major series. swift-certificates
@@ -115,9 +125,17 @@ let package = Package(
 				"JSONValue",
 				.product(name: "SwiftCross", package: "SwiftCross"),
 				.product(name: "Logging", package: "swift-log"),
+				// Shared HTTP currency types — core dependency (NIO-free,
+				// Foundation-free), used by both client and server.
+				.product(name: "HTTPTypes", package: "swift-http-types"),
 				// swift-nio + swift-crypto + swift-certificates are linked ONLY
 				// when the `Server` trait is enabled (the HTTP/SSE transport).
 				.product(name: "NIOCore", package: "swift-nio", condition: .when(traits: ["Server"])),
+				.product(
+					name: "NIOHTTPTypesHTTP1",
+					package: "swift-nio-extras",
+					condition: .when(traits: ["Server"])
+				),
 				.product(name: "NIOHTTP1", package: "swift-nio", condition: .when(traits: ["Server"])),
 				.product(name: "NIOPosix", package: "swift-nio", condition: .when(traits: ["Server"])),
 				.product(name: "NIOFoundationCompat", package: "swift-nio", condition: .when(traits: ["Server"])),

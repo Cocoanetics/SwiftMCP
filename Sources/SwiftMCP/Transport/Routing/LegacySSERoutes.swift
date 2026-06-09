@@ -1,5 +1,6 @@
 #if Server
 import Foundation
+import HTTPTypes
 
 /// Legacy SSE protocol routes (`/sse`, `/messages/:sessionID`).
 extension HTTPSSETransport {
@@ -8,14 +9,14 @@ extension HTTPSSETransport {
 	func legacySSERoutes() -> [HTTPRoute] {
 		[
 			// GET /sse — SSE connection (legacy protocol)
-			HTTPRoute(.GET, "/sse", calling: HTTPSSETransport.handleSSE),
+			HTTPRoute(.get, "/sse", calling: HTTPSSETransport.handleSSE),
 
 			// Non-GET on /sse → 405
 			HTTPRoute(method: nil, pathPattern: "/sse",
 				handler: { (_: HTTPSSETransport, _: HTTPRouteRequest<Data?>) in RouteResponse(status: .methodNotAllowed) }),
 
 			// POST /messages/:sessionID — legacy message endpoint
-			HTTPRoute(.POST, "/messages/:sessionID", calling: HTTPSSETransport.handleMessages),
+			HTTPRoute(.post, "/messages/:sessionID", calling: HTTPSSETransport.handleMessages),
 
 			// Non-POST on /messages/* → 405
 			HTTPRoute(method: nil, pathPattern: "/messages/:sessionID",

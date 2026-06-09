@@ -2,6 +2,7 @@
 import SwiftCross
 @preconcurrency import NIOCore
 import NIOHTTP1
+import HTTPTypes
 import Logging
 
 /// HTTP request handler for the SSE transport.
@@ -118,7 +119,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
 
         let request = HTTPRouteRequest<AsyncStream<Data>>(
             method: method, uri: head.uri, path: path,
-            headers: convertHeaders(head.headers), body: bodyStream,
+            headerFields: convertHeaders(head.headers), body: bodyStream,
             pathParams: routeMatch.pathParams, queryParams: queryParams
         )
 
@@ -152,20 +153,16 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
     // MARK: - Response Writing
 
     private func writeRouteResponse(_ response: RouteResponse, to channel: Channel) async {
-        var nioHeaders = HTTPHeaders()
-        for (name, value) in response.headers {
-            nioHeaders.add(name: name, value: value)
-        }
-        if nioHeaders["Access-Control-Allow-Origin"].isEmpty {
-            nioHeaders.add(name: "Access-Control-Allow-Origin", value: "*")
-        }
-
         let status = nioStatus(response.status)
 
         if let stream = response.bodyStream {
             // For streaming responses (SSE), don't set Content-Length.
             // Write head immediately so the client can start consuming.
-            let head = HTTPResponseHead(version: .http1_1, status: status, headers: nioHeaders)
+            var fields = response.headerFields
+            if fields[.accessControlAllowOrigin] == nil {
+                fields[.accessControlAllowOrigin] = "*"
+            }
+            let head = HTTPResponseHead(version: .http1_1, status: status, headers: Self.nioHeaders(from: fields))
             channel.writeAndFlush(HTTPServerResponsePart.head(head), promise: nil)
 
             for await chunk in stream {
@@ -180,7 +177,7 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
             if let data = response.body {
                 body = channel.allocator.buffer(data: data)
             }
-            sendResponse(channel: channel, status: status, headers: nioHeaders, body: body)
+            sendResponse(channel: channel, status: status, fields: response.headerFields, body: body)
         }
     }
 
@@ -198,31 +195,32 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
     }
 
     private func rejectOversizedRequest(context: ChannelHandlerContext) {
-        var headers = HTTPHeaders()
-        headers.add(name: "Connection", value: "close")
-        headers.add(name: "Content-Type", value: "text/plain; charset=utf-8")
+        let fields: HTTPFields = [
+            .connection: "close",
+            .contentType: "text/plain; charset=utf-8"
+        ]
         let message = "Request body exceeds maximum allowed size of \(transport.maxMessageSize) bytes."
         var buffer = context.channel.allocator.buffer(capacity: message.utf8.count)
         buffer.writeString(message)
-        sendResponse(channel: context.channel, status: .payloadTooLarge, headers: headers, body: buffer)
+        sendResponse(channel: context.channel, status: .payloadTooLarge, fields: fields, body: buffer)
         context.close(promise: nil)
     }
 
-    private func convertMethod(_ nioMethod: NIOHTTP1.HTTPMethod) -> RouteMethod? {
+    private func convertMethod(_ nioMethod: NIOHTTP1.HTTPMethod) -> HTTPRequest.Method? {
         switch nioMethod {
-        case .GET: return .GET
-        case .POST: return .POST
-        case .PUT: return .PUT
-        case .DELETE: return .DELETE
-        case .PATCH: return .PATCH
-        case .OPTIONS: return .OPTIONS
-        case .HEAD: return .HEAD
+        case .GET: return .get
+        case .POST: return .post
+        case .PUT: return .put
+        case .DELETE: return .delete
+        case .PATCH: return .patch
+        case .OPTIONS: return .options
+        case .HEAD: return .head
         default: return nil
         }
     }
 
-    private func nioStatus(_ status: HTTPStatus) -> HTTPResponseStatus {
-        HTTPResponseStatus(statusCode: status.rawValue)
+    private func nioStatus(_ status: HTTPResponse.Status) -> HTTPResponseStatus {
+        HTTPResponseStatus(statusCode: status.code)
     }
 
     private func parseURI(_ uri: String) -> (path: String, queryParams: [(String, String)]) {
@@ -240,52 +238,60 @@ final class HTTPHandler: NSObject, ChannelInboundHandler, Identifiable, @uncheck
         return (path, queryParams)
     }
 
-    private func convertHeaders(_ nioHeaders: HTTPHeaders) -> [(String, String)] {
-        nioHeaders.map { ($0.name, $0.value) }
+    private func convertHeaders(_ nioHeaders: HTTPHeaders) -> HTTPFields {
+        var fields = HTTPFields()
+        for (name, value) in nioHeaders {
+            guard let fieldName = HTTPField.Name(name) else { continue }
+            fields.append(HTTPField(name: fieldName, value: value))
+        }
+        return fields
     }
 
-    static func responseHeadersApplyingDefaults(
-        _ headers: [(String, String)],
+    /// Apply the framework's default response fields (CORS, Content-Type, Content-Length)
+    /// without overwriting values the route already provided. `HTTPFields` is
+    /// case-insensitive and replaces rather than appends, so defaults can never
+    /// duplicate an existing field.
+    static func responseFieldsApplyingDefaults(
+        _ fields: HTTPFields,
         bodyLength: Int?
-    ) -> [(String, String)] {
-        var responseHeaders = HTTPHeaders()
-        for (name, value) in headers {
-            responseHeaders.add(name: name, value: value)
-        }
+    ) -> HTTPFields {
+        var fields = fields
 
-        if responseHeaders["Access-Control-Allow-Origin"].isEmpty {
-            responseHeaders.add(name: "Access-Control-Allow-Origin", value: "*")
+        if fields[.accessControlAllowOrigin] == nil {
+            fields[.accessControlAllowOrigin] = "*"
         }
 
         if let bodyLength {
-            if responseHeaders["Content-Type"].isEmpty {
-                responseHeaders.add(name: "Content-Type", value: "text/plain; charset=utf-8")
+            if fields[.contentType] == nil {
+                fields[.contentType] = "text/plain; charset=utf-8"
             }
-            if responseHeaders["Content-Length"].isEmpty {
-                responseHeaders.add(name: "Content-Length", value: "\(bodyLength)")
+            if fields[.contentLength] == nil {
+                fields[.contentLength] = "\(bodyLength)"
             }
-        } else if responseHeaders["Content-Length"].isEmpty {
-            responseHeaders.add(name: "Content-Length", value: "0")
+        } else if fields[.contentLength] == nil {
+            fields[.contentLength] = "0"
         }
 
-        return responseHeaders.map { ($0.name, $0.value) }
+        return fields
+    }
+
+    /// Convert `HTTPFields` to NIO `HTTPHeaders`, preserving original field-name casing and order.
+    static func nioHeaders(from fields: HTTPFields) -> HTTPHeaders {
+        var headers = HTTPHeaders()
+        for field in fields {
+            headers.add(name: field.name.rawName, value: field.value)
+        }
+        return headers
     }
 
     private func sendResponse(
         channel: Channel,
         status: HTTPResponseStatus,
-        headers: HTTPHeaders? = nil,
+        fields: HTTPFields = [:],
         body: ByteBuffer? = nil
     ) {
-        let headerPairs = (headers ?? HTTPHeaders()).map { ($0.name, $0.value) }
-        let resolvedHeaders = Self.responseHeadersApplyingDefaults(headerPairs, bodyLength: body?.readableBytes)
-
-        var responseHeaders = HTTPHeaders()
-        for (name, value) in resolvedHeaders {
-            responseHeaders.add(name: name, value: value)
-        }
-
-        let head = HTTPResponseHead(version: .http1_1, status: status, headers: responseHeaders)
+        let resolvedFields = Self.responseFieldsApplyingDefaults(fields, bodyLength: body?.readableBytes)
+        let head = HTTPResponseHead(version: .http1_1, status: status, headers: Self.nioHeaders(from: resolvedFields))
         channel.write(HTTPServerResponsePart.head(head), promise: nil)
         if let body = body {
             channel.write(HTTPServerResponsePart.body(.byteBuffer(body)), promise: nil)

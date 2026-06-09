@@ -1,6 +1,7 @@
 #if Server
 import Testing
 import Foundation
+import HTTPTypes
 @testable import SwiftMCP
 
 @Suite("Router Path Matching")
@@ -12,12 +13,12 @@ struct RouterTests {
 	func exactMatch() {
 		let router = Router()
 		router.addRoute(HTTPRoute(
-			method: .GET,
+			method: .get,
 			pathPattern: "/health",
 			handler: { (_: HTTPSSETransport, _: HTTPRouteRequest<Data?>) in RouteResponse(status: .ok) }
 		))
 
-		let match = router.match(method: .GET, path: "/health")
+		let match = router.match(method: .get, path: "/health")
 		#expect(match != nil)
 		#expect(match?.pathParams.isEmpty == true)
 	}
@@ -26,24 +27,24 @@ struct RouterTests {
 	func noMatch() {
 		let router = Router()
 		router.addRoute(HTTPRoute(
-			method: .GET,
+			method: .get,
 			pathPattern: "/health",
 			handler: { (_: HTTPSSETransport, _: HTTPRouteRequest<Data?>) in RouteResponse(status: .ok) }
 		))
 
-		#expect(router.match(method: .GET, path: "/status") == nil)
+		#expect(router.match(method: .get, path: "/status") == nil)
 	}
 
 	@Test("rejects wrong method")
 	func wrongMethod() {
 		let router = Router()
 		router.addRoute(HTTPRoute(
-			method: .GET,
+			method: .get,
 			pathPattern: "/health",
 			handler: { (_: HTTPSSETransport, _: HTTPRouteRequest<Data?>) in RouteResponse(status: .ok) }
 		))
 
-		#expect(router.match(method: .POST, path: "/health") == nil)
+		#expect(router.match(method: .post, path: "/health") == nil)
 	}
 
 	@Test("nil method matches any")
@@ -55,9 +56,9 @@ struct RouterTests {
 			handler: { (_: HTTPSSETransport, _: HTTPRouteRequest<Data?>) in RouteResponse(status: .ok) }
 		))
 
-		#expect(router.match(method: .GET, path: "/anything") != nil)
-		#expect(router.match(method: .POST, path: "/anything") != nil)
-		#expect(router.match(method: .DELETE, path: "/anything") != nil)
+		#expect(router.match(method: .get, path: "/anything") != nil)
+		#expect(router.match(method: .post, path: "/anything") != nil)
+		#expect(router.match(method: .delete, path: "/anything") != nil)
 	}
 
 	// MARK: - Path Parameters
@@ -66,12 +67,12 @@ struct RouterTests {
 	func singleParam() {
 		let router = Router()
 		router.addRoute(HTTPRoute(
-			method: .GET,
+			method: .get,
 			pathPattern: "/files/:id",
 			handler: { (_: HTTPSSETransport, _: HTTPRouteRequest<Data?>) in RouteResponse(status: .ok) }
 		))
 
-		let match = router.match(method: .GET, path: "/files/abc123")
+		let match = router.match(method: .get, path: "/files/abc123")
 		#expect(match != nil)
 		#expect(match?.pathParams["id"] == "abc123")
 	}
@@ -80,12 +81,12 @@ struct RouterTests {
 	func multipleParams() {
 		let router = Router()
 		router.addRoute(HTTPRoute(
-			method: .POST,
+			method: .post,
 			pathPattern: "/users/:userId/posts/:postId",
 			handler: { (_: HTTPSSETransport, _: HTTPRouteRequest<Data?>) in RouteResponse(status: .ok) }
 		))
 
-		let match = router.match(method: .POST, path: "/users/42/posts/99")
+		let match = router.match(method: .post, path: "/users/42/posts/99")
 		#expect(match != nil)
 		#expect(match?.pathParams["userId"] == "42")
 		#expect(match?.pathParams["postId"] == "99")
@@ -95,24 +96,24 @@ struct RouterTests {
 	func tooFewSegments() {
 		let router = Router()
 		router.addRoute(HTTPRoute(
-			method: .GET,
+			method: .get,
 			pathPattern: "/files/:id",
 			handler: { (_: HTTPSSETransport, _: HTTPRouteRequest<Data?>) in RouteResponse(status: .ok) }
 		))
 
-		#expect(router.match(method: .GET, path: "/files") == nil)
+		#expect(router.match(method: .get, path: "/files") == nil)
 	}
 
 	@Test("rejects path with too many segments")
 	func tooManySegments() {
 		let router = Router()
 		router.addRoute(HTTPRoute(
-			method: .GET,
+			method: .get,
 			pathPattern: "/files/:id",
 			handler: { (_: HTTPSSETransport, _: HTTPRouteRequest<Data?>) in RouteResponse(status: .ok) }
 		))
 
-		#expect(router.match(method: .GET, path: "/files/abc/extra") == nil)
+		#expect(router.match(method: .get, path: "/files/abc/extra") == nil)
 	}
 
 	// MARK: - Wildcard
@@ -126,10 +127,10 @@ struct RouterTests {
 			handler: { (_: HTTPSSETransport, _: HTTPRouteRequest<Data?>) in RouteResponse(status: .ok) }
 		))
 
-		#expect(router.match(method: .GET, path: "/oauth/token") != nil)
-		#expect(router.match(method: .POST, path: "/oauth/register") != nil)
-		#expect(router.match(method: .GET, path: "/oauth/a/b/c") != nil)
-		#expect(router.match(method: .GET, path: "/oauth") != nil)
+		#expect(router.match(method: .get, path: "/oauth/token") != nil)
+		#expect(router.match(method: .post, path: "/oauth/register") != nil)
+		#expect(router.match(method: .get, path: "/oauth/a/b/c") != nil)
+		#expect(router.match(method: .get, path: "/oauth") != nil)
 	}
 
 	@Test("wildcard does not match different prefix")
@@ -141,7 +142,7 @@ struct RouterTests {
 			handler: { (_: HTTPSSETransport, _: HTTPRouteRequest<Data?>) in RouteResponse(status: .ok) }
 		))
 
-		#expect(router.match(method: .GET, path: "/other/token") == nil)
+		#expect(router.match(method: .get, path: "/other/token") == nil)
 	}
 
 	// MARK: - First Match Wins
@@ -152,7 +153,7 @@ struct RouterTests {
 
 		// More specific route first
 		router.addRoute(HTTPRoute(
-			method: .GET,
+			method: .get,
 			pathPattern: "/mcp",
 			handler: { (_: HTTPSSETransport, _: HTTPRouteRequest<Data?>) in
 				RouteResponse(status: .ok, body: Data("specific".utf8))
@@ -161,14 +162,14 @@ struct RouterTests {
 
 		// Catch-all second
 		router.addRoute(HTTPRoute(
-			method: .GET,
+			method: .get,
 			pathPattern: "/:anything",
 			handler: { (_: HTTPSSETransport, _: HTTPRouteRequest<Data?>) in
 				RouteResponse(status: .ok, body: Data("catchall".utf8))
 			}
 		))
 
-		let match = router.match(method: .GET, path: "/mcp")
+		let match = router.match(method: .get, path: "/mcp")
 		#expect(match != nil)
 		// First route should match (exact before parameter)
 		#expect(match?.pathParams.isEmpty == true)
@@ -180,17 +181,17 @@ struct RouterTests {
 	func mixedSegments() {
 		let router = Router()
 		router.addRoute(HTTPRoute(
-			method: .POST,
+			method: .post,
 			pathPattern: "/mcp/uploads/:cid",
 			handler: { (_: HTTPSSETransport, _: HTTPRouteRequest<Data?>) in RouteResponse(status: .ok) }
 		))
 
-		let match = router.match(method: .POST, path: "/mcp/uploads/content-id-123")
+		let match = router.match(method: .post, path: "/mcp/uploads/content-id-123")
 		#expect(match != nil)
 		#expect(match?.pathParams["cid"] == "content-id-123")
 
 		// Wrong literal segment
-		#expect(router.match(method: .POST, path: "/mcp/downloads/abc") == nil)
+		#expect(router.match(method: .post, path: "/mcp/downloads/abc") == nil)
 	}
 }
 #endif

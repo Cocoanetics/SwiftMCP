@@ -1,5 +1,6 @@
 #if Server
 import Foundation
+import HTTPTypes
 
 /// A transport-agnostic HTTP response.
 ///
@@ -7,19 +8,34 @@ import Foundation
 /// or streaming (`AsyncStream<Data>`).
 public struct HTTPRouteResponse<Body: Sendable>: Sendable {
 
-	/// The HTTP status code.
-	public var status: HTTPStatus
+	/// The HTTP status.
+	public var status: HTTPResponse.Status
 
-	/// Response headers as name-value pairs.
-	public var headers: [(String, String)]
+	/// Response header fields. Case-insensitive and validated (see `HTTPTypes.HTTPFields`).
+	public var headerFields: HTTPFields
 
 	/// The response body.
 	public var body: Body
 
-	public init(status: HTTPStatus, headers: [(String, String)] = [], body: Body) {
+	public init(status: HTTPResponse.Status, headerFields: HTTPFields = [:], body: Body) {
 		self.status = status
-		self.headers = headers
+		self.headerFields = headerFields
 		self.body = body
+	}
+
+	/// Response headers as name-value pairs.
+	@available(*, deprecated, message: "Use headerFields (HTTPFields) instead.")
+	public init(status: HTTPResponse.Status, headers: [(String, String)], body: Body) {
+		self.status = status
+		self.headerFields = HTTPFields(legacyPairs: headers)
+		self.body = body
+	}
+
+	/// Response headers as name-value pairs.
+	@available(*, deprecated, message: "Use headerFields (HTTPFields) instead.")
+	public var headers: [(String, String)] {
+		get { headerFields.legacyPairs }
+		set { headerFields = HTTPFields(legacyPairs: newValue) }
 	}
 }
 #endif

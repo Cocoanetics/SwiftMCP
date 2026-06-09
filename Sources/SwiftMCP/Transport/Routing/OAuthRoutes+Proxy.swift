@@ -1,5 +1,6 @@
 #if Server
 import SwiftCross
+import HTTPTypes
 
 extension HTTPSSETransport {
 	/// Handle OAuth proxy requests: /authorize redirects, /oauth/* proxy, /userinfo, jwks, /u/* redirects.
@@ -69,7 +70,7 @@ extension HTTPSSETransport {
 
 		guard let redirectURL = components.url else { return nil }
 		logger.info("Redirecting /authorize request to Auth0: \(redirectURL.absoluteString)")
-		return RouteResponse(status: .found, headers: [("Location", redirectURL.absoluteString)])
+		return RouteResponse(status: .found, headerFields: [.location: redirectURL.absoluteString])
 	}
 
 	/// Resolution of a request URI to a proxy target or redirect.
@@ -98,7 +99,7 @@ extension HTTPSSETransport {
 		case let path where path.hasPrefix("/u/"):
 			let redirectURL = config.issuer.appendingPathComponent(String(requestURI.dropFirst(1))).absoluteString
 			logger.info("Redirecting Auth0 UI path to Auth0: \(redirectURL)")
-			return .redirect(RouteResponse(status: .found, headers: [("Location", redirectURL)]))
+			return .redirect(RouteResponse(status: .found, headerFields: [.location: redirectURL]))
 		default:
 			return .unknown
 		}
@@ -123,13 +124,13 @@ extension HTTPSSETransport {
 		}
 
 		// Copy headers, excluding hop-by-hop and forwarding headers
-		for (name, value) in request.headers {
-			let lowercaseName = name.lowercased()
+		for field in request.headerFields {
+			let lowercaseName = field.name.canonicalName
 			if lowercaseName != "host" &&
 			   lowercaseName != "content-length" &&
 			   lowercaseName != "connection" &&
 			   !lowercaseName.hasPrefix("x-forwarded") {
-				proxyRequest.setValue(value, forHTTPHeaderField: name)
+				proxyRequest.setValue(field.value, forHTTPHeaderField: field.name.rawName)
 			}
 		}
 
@@ -166,22 +167,22 @@ extension HTTPSSETransport {
 				return .json(err, status: .internalServerError)
 			}
 
-			var responseHeaders: [(String, String)] = []
+			var responseFields = HTTPFields()
 
 			// Handle token response: validate and store access token in session
 			if request.uri.hasPrefix("/oauth/token") {
 				if let sessionUUID = await storeAccessTokenIfValid(request: request, config: config, data: data) {
-					responseHeaders.append(("Mcp-Session-Id", sessionUUID.uuidString))
+					responseFields[.mcpSessionID] = sessionUUID.uuidString
 					logger.info("Stored validated access token in session \(sessionUUID.uuidString)")
 				}
 			}
 
-			responseHeaders.append(contentsOf: copyUpstreamHeaders(from: httpResponse, config: config))
-			responseHeaders.append(("Content-Length", "\(data.count)"))
+			responseFields.append(contentsOf: copyUpstreamHeaders(from: httpResponse, config: config))
+			responseFields[.contentLength] = "\(data.count)"
 
 			return RouteResponse(
-				status: HTTPStatus(rawValue: httpResponse.statusCode),
-				headers: responseHeaders,
+				status: HTTPResponse.Status(code: httpResponse.statusCode),
+				headerFields: responseFields,
 				body: data
 			)
 		} catch {
@@ -231,7 +232,7 @@ extension HTTPSSETransport {
 	private func copyUpstreamHeaders(
 		from httpResponse: HTTPURLResponse,
 		config: OAuthConfiguration
-	) -> [(String, String)] {
+	) -> HTTPFields {
 		let headersToExclude = [
 			"transfer-encoding", "connection", "content-encoding",
 			"access-control-allow-origin", "access-control-allow-methods",
@@ -239,22 +240,23 @@ extension HTTPSSETransport {
 			"access-control-max-age"
 		]
 
-		var responseHeaders: [(String, String)] = []
+		var responseFields = HTTPFields()
 		httpResponse.allHeaderFields.forEach { key, value in
 			guard let keyString = key as? String, let valueString = value as? String,
-				  !headersToExclude.contains(keyString.lowercased()) else {
+				  !headersToExclude.contains(keyString.lowercased()),
+				  let fieldName = HTTPField.Name(keyString) else {
 				return
 			}
-			if keyString.lowercased() == "location", valueString.hasPrefix("/") {
+			if fieldName == .location, valueString.hasPrefix("/") {
 				let baseURL = "\(config.issuer.scheme!)://\(config.issuer.host!)"
 				let absoluteURL = baseURL + valueString
-				responseHeaders.append((keyString, absoluteURL))
+				responseFields.append(HTTPField(name: fieldName, value: absoluteURL))
 				logger.info("Converted relative Location header '\(valueString)' to absolute: '\(absoluteURL)'")
 			} else {
-				responseHeaders.append((keyString, valueString))
+				responseFields.append(HTTPField(name: fieldName, value: valueString))
 			}
 		}
-		return responseHeaders
+		return responseFields
 	}
 }
 #endif

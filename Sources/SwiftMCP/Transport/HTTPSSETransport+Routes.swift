@@ -1,5 +1,6 @@
 #if Server
 import Foundation
+import HTTPTypes
 
 extension HTTPSSETransport {
     // MARK: - Route Registration
@@ -12,7 +13,7 @@ extension HTTPSSETransport {
     ///
     /// Must be called before ``start()``.
     public func addRoute(
-        _ method: RouteMethod,
+        _ method: HTTPRequest.Method,
         _ path: String,
         maxBodySize: Int? = nil,
         handler: @escaping @Sendable (HTTPRouteRequest<Data?>) async throws -> HTTPRouteResponse<Data?>
@@ -34,7 +35,7 @@ extension HTTPSSETransport {
     ///
     /// Must be called before ``start()``.
     public func addRoute(
-        _ method: RouteMethod,
+        _ method: HTTPRequest.Method,
         _ path: String,
         maxBodySize: Int? = nil,
         handler: @escaping @Sendable (HTTPRouteRequest<Data?>) async throws -> HTTPRouteResponse<AsyncStream<Data>>
@@ -65,7 +66,7 @@ extension HTTPSSETransport {
     ///
     /// Must be called before ``start()``.
     public func addRoute(
-        _ method: RouteMethod,
+        _ method: HTTPRequest.Method,
         _ path: String,
         maxBodySize: Int? = nil,
         streamingHandler: @escaping @Sendable (HTTPRouteRequest<AsyncStream<Data>>) async throws
@@ -90,7 +91,7 @@ extension HTTPSSETransport {
     ///
     /// Must be called before ``start()``.
     public func addRoute(
-        _ method: RouteMethod,
+        _ method: HTTPRequest.Method,
         _ path: String,
         maxBodySize: Int? = nil,
         streamingHandler: @escaping @Sendable (HTTPRouteRequest<AsyncStream<Data>>) async throws

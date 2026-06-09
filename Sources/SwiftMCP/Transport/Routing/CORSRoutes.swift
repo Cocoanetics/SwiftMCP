@@ -1,5 +1,6 @@
 #if Server
 import Foundation
+import HTTPTypes
 
 /// CORS preflight route handler.
 extension HTTPSSETransport {
@@ -8,16 +9,14 @@ extension HTTPSSETransport {
 	func corsRoutes() -> [HTTPRoute] {
 		[
 			HTTPRoute(
-				method: .OPTIONS,
+				method: .options,
 				pathPattern: "/*",
 				handler: { (_: HTTPSSETransport, _: HTTPRouteRequest<Data?>) in
-					RouteResponse(status: .ok, headers: [
-						("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS"),
-						(
-							"Access-Control-Allow-Headers",
+					RouteResponse(status: .ok, headerFields: [
+						.accessControlAllowMethods: "GET, POST, DELETE, OPTIONS",
+						.accessControlAllowHeaders:
 							"Content-Type, Content-Disposition, Authorization, "
 								+ "MCP-Protocol-Version, Mcp-Session-Id"
-						)
 					])
 				}
 			)

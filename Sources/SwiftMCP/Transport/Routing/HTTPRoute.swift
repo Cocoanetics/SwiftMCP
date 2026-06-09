@@ -1,11 +1,12 @@
 #if Server
 import Foundation
+import HTTPTypes
 
 /// A route definition for the HTTP router.
 struct HTTPRoute: Sendable {
 
 	/// The HTTP method to match, or `nil` to match any method.
-	let method: RouteMethod?
+	let method: HTTPRequest.Method?
 
 	/// The path pattern, e.g. `/mcp/uploads/:cid` or `/oauth/*`.
 	let pathPattern: String
@@ -24,7 +25,7 @@ struct HTTPRoute: Sendable {
 	/// - `Data?` → body stream is collected before the handler is called.
 	/// - `AsyncStream<Data>` → body stream is forwarded directly.
 	init<Body: RouteBody>(
-		method: RouteMethod?,
+		method: HTTPRequest.Method?,
 		pathPattern: String,
 		maxBodySize: Int? = nil,
 		handler: @escaping @Sendable (HTTPSSETransport, HTTPRouteRequest<Body>) async throws -> RouteResponse
@@ -36,7 +37,7 @@ struct HTTPRoute: Sendable {
 			let body = await Body.collect(from: streamingRequest.body)
 			let request = HTTPRouteRequest<Body>(
 				method: streamingRequest.method, uri: streamingRequest.uri, path: streamingRequest.path,
-				headers: streamingRequest.headers, body: body,
+				headerFields: streamingRequest.headerFields, body: body,
 				pathParams: streamingRequest.pathParams, queryParams: streamingRequest.queryParams
 			)
 			return try await handler(transport, request)
@@ -47,11 +48,11 @@ struct HTTPRoute: Sendable {
 	///
 	/// Usage:
 	/// ```
-	/// HTTPRoute(.POST, "/mcp", calling: HTTPSSETransport.handleStreamableHTTP)
-	/// HTTPRoute(.POST, "/upload", calling: HTTPSSETransport.handleUpload)
+	/// HTTPRoute(.post, "/mcp", calling: HTTPSSETransport.handleStreamableHTTP)
+	/// HTTPRoute(.post, "/upload", calling: HTTPSSETransport.handleUpload)
 	/// ```
 	init<Body: RouteBody>(
-		_ method: RouteMethod,
+		_ method: HTTPRequest.Method,
 		_ pathPattern: String,
 		maxBodySize: Int? = nil,
 		calling: @escaping @Sendable (HTTPSSETransport) -> @Sendable (HTTPRouteRequest<Body>) async throws -> RouteResponse

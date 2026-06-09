@@ -1,5 +1,6 @@
 #if Client
 import SwiftCross
+import HTTPTypes
 
 extension MCPServerProxy {
     /// Effectively-unbounded timeout for long-lived SSE / streamable
@@ -36,12 +37,9 @@ extension MCPServerProxy {
     }
 
     internal func applyStreamableProtocolHeaders(_ request: inout URLRequest) {
-        request.setValue(
-            MCPProtocolVersion.latest,
-            forHTTPHeaderField: "MCP-Protocol-Version"
-        )
+        request.setValue(MCPProtocolVersion.latest, forHTTPField: .mcpProtocolVersion)
         if let sessionID {
-            request.setValue(sessionID, forHTTPHeaderField: "Mcp-Session-Id")
+            request.setValue(sessionID, forHTTPField: .mcpSessionID)
         }
     }
 
@@ -55,7 +53,7 @@ extension MCPServerProxy {
         if isStreamableMCPURL(sseConfig.url) {
             applyStreamableProtocolHeaders(&request)
         } else if let sessionID {
-            request.setValue(sessionID, forHTTPHeaderField: "Mcp-Session-Id")
+            request.setValue(sessionID, forHTTPField: .mcpSessionID)
         }
     }
 
@@ -70,7 +68,7 @@ extension MCPServerProxy {
         if isStreamableMCPURL(sseConfig.url) {
             applyStreamableProtocolHeaders(&request)
             if let lastEventID {
-                request.setValue(lastEventID, forHTTPHeaderField: "Last-Event-ID")
+                request.setValue(lastEventID, forHTTPField: .lastEventID)
             }
         }
     }
@@ -268,7 +266,7 @@ extension MCPServerProxy {
         // the absent header here would wipe the existing ID and strip it from
         // every subsequent request, trapping the retry loop forever. (#125)
         if (200...299).contains(httpResponse.statusCode),
-           let newSessionID = httpResponse.value(forHTTPHeaderField: "Mcp-Session-Id") {
+           let newSessionID = httpResponse.value(forHTTPField: .mcpSessionID) {
             sessionID = newSessionID
         }
 

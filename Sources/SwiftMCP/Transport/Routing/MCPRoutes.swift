@@ -1,5 +1,6 @@
 #if Server
 import Foundation
+import HTTPTypes
 
 /// New streamable HTTP MCP protocol routes (`/mcp`).
 extension HTTPSSETransport {
@@ -8,13 +9,13 @@ extension HTTPSSETransport {
 	func mcpRoutes() -> [HTTPRoute] {
 		[
 			// POST /mcp — streamable HTTP endpoint for JSON-RPC
-			HTTPRoute(.POST, "/mcp", calling: HTTPSSETransport.handleStreamableHTTP),
+			HTTPRoute(.post, "/mcp", calling: HTTPSSETransport.handleStreamableHTTP),
 
 			// GET /mcp — SSE connection (new streamable HTTP protocol)
-			HTTPRoute(.GET, "/mcp", calling: HTTPSSETransport.handleSSE),
+			HTTPRoute(.get, "/mcp", calling: HTTPSSETransport.handleSSE),
 
 			// DELETE /mcp — session removal
-			HTTPRoute(.DELETE, "/mcp", calling: HTTPSSETransport.handleDeleteSession)
+			HTTPRoute(.delete, "/mcp", calling: HTTPSSETransport.handleDeleteSession)
 		]
 	}
 
@@ -181,21 +182,21 @@ extension HTTPSSETransport {
 				await self.finishSSEStream(streamInfo.streamID)
 			}
 
-			let headers: [(String, String)] = [
-				("Content-Type", "text/event-stream"),
-				("Cache-Control", "no-cache"),
-				("Connection", "keep-alive"),
-				("Mcp-Session-Id", sid)
+			let headerFields: HTTPFields = [
+				.contentType: "text/event-stream",
+				.cacheControl: "no-cache",
+				.connection: "keep-alive",
+				.mcpSessionID: sid
 			]
 
-			return RouteResponse(status: .ok, headers: headers, bodyStream: stream, streamInfo: streamInfo)
+			return RouteResponse(status: .ok, headerFields: headerFields, bodyStream: stream, streamInfo: streamInfo)
 		}
 
 		_ = await session.work { _ in
 			await self.server.processBatch(messages, ignoringEmptyResponses: true)
 		}
 
-		return RouteResponse(status: .accepted, headers: [("Mcp-Session-Id", sid)])
+		return RouteResponse(status: .accepted, headerFields: [.mcpSessionID: sid])
 	}
 
 	/// Internal errors thrown while resolving the streamable HTTP context.
