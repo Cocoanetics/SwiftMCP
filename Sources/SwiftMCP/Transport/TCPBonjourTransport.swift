@@ -1,12 +1,13 @@
 #if Server
 import Foundation
 import Logging
+import ServiceLifecycle
 
 #if canImport(Network)
 import Network
 
 /// A TCP transport that advertises via Bonjour and exchanges newline-delimited JSON-RPC.
-public final class TCPBonjourTransport: Transport, @unchecked Sendable {
+public final class TCPBonjourTransport: Transport, Service, @unchecked Sendable {
     /// Base DNS-SD service type for MCP over TCP.
     public static let serviceType = MCPBonjourServiceType.base
 
@@ -178,7 +179,7 @@ public final class TCPBonjourTransport: Transport, @unchecked Sendable {
 #else
 
 /// Stub implementation for platforms without Network framework.
-public final class TCPBonjourTransport: Transport, @unchecked Sendable {
+public final class TCPBonjourTransport: Transport, Service, @unchecked Sendable {
     /// Base DNS-SD service type for MCP over TCP.
     public static let serviceType = MCPBonjourServiceType.base
 

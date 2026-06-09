@@ -5,6 +5,7 @@ import NIOCore
 import NIOFoundationCompat
 import NIOHTTP1
 import NIOPosix
+import ServiceLifecycle
 
 /**
  A transport that exposes an HTTP server with Server-Sent Events (SSE) and JSON-RPC endpoints.
@@ -18,7 +19,7 @@ import NIOPosix
  - Configurable authorization
  - Keep-alive mechanisms
  */
-public final class HTTPSSETransport: Transport, @unchecked Sendable {
+public final class HTTPSSETransport: Transport, Service, @unchecked Sendable {
     /// The MCP server instance that this transport exposes.
     public let server: MCPServer
 
@@ -152,9 +153,22 @@ public final class HTTPSSETransport: Transport, @unchecked Sendable {
         }
     }
 
+    /// Runs the transport and blocks until it is stopped.
+    ///
+    /// When executed inside a `ServiceGroup`, a graceful shutdown signal (e.g.
+    /// `SIGINT`/`SIGTERM`) closes the listening channel via ``stop()`` so this
+    /// method returns and the group can drain. When called standalone, it
+    /// behaves exactly as before and returns once the channel is closed.
     public func run() async throws {
         try await start()
-        try await channel?.closeFuture.get()
+        try await withGracefulShutdownHandler {
+            try await channel?.closeFuture.get()
+        } onGracefulShutdown: { [weak self] in
+            // `onGracefulShutdown` is synchronous; bridge to the async `stop()`.
+            // Closing the channel completes `closeFuture`, unblocking the
+            // operation above so `run()` returns.
+            Task { [weak self] in try? await self?.stop() }
+        }
     }
 
     public func stop() async throws {

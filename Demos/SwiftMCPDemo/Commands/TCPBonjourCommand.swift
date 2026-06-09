@@ -3,6 +3,7 @@ import Foundation
 import ArgumentParser
 import SwiftMCP
 import Logging
+import ServiceLifecycle
 #if canImport(OSLog)
 import OSLog
 #endif
@@ -58,7 +59,19 @@ struct TCPBonjourCommand: AsyncParsableCommand {
                 acceptLocalOnly: true,
                 preferIPv4: ipv4Only
             )
-            try await transport.run()
+
+            // A `ServiceGroup` owns the run loop and traps SIGINT/SIGTERM to
+            // drive a graceful shutdown of the transport.
+            let group = ServiceGroup(
+                configuration: .init(
+                    services: [
+                        .init(service: transport, successTerminationBehavior: .gracefullyShutdownGroup)
+                    ],
+                    gracefulShutdownSignals: [.sigterm, .sigint],
+                    logger: Logging.Logger(label: "com.cocoanetics.SwiftMCP.ServiceGroup")
+                )
+            )
+            try await group.run()
         } catch let error as TransportError {
             let errorMessage = """
                 Transport Error: \(error.localizedDescription)
