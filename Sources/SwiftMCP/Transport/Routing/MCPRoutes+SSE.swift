@@ -1,5 +1,6 @@
 #if Server
 import Foundation
+import HTTPTypes
 
 extension HTTPSSETransport {
 	/// Resolved request context used by `handleSSE`.
@@ -179,19 +180,19 @@ extension HTTPSSETransport {
 		streamInfo: StreamRouteResponseInfo,
 		context: SSEContext
 	) -> RouteResponse {
-		var headers: [(String, String)] = [
-			("Content-Type", "text/event-stream"),
-			("Cache-Control", "no-cache"),
-			("Connection", "keep-alive"),
-			("Access-Control-Allow-Methods", "GET"),
-			("Access-Control-Allow-Headers", "Content-Type, Authorization, MCP-Protocol-Version")
+		var headerFields: HTTPFields = [
+			.contentType: "text/event-stream",
+			.cacheControl: "no-cache",
+			.connection: "keep-alive",
+			.accessControlAllowMethods: "GET",
+			.accessControlAllowHeaders: "Content-Type, Authorization, MCP-Protocol-Version"
 		]
 
 		if !context.isLegacy {
-			headers.append(("Mcp-Session-Id", context.sessionID.uuidString))
+			headerFields[.mcpSessionID] = context.sessionID.uuidString
 		}
 
-		return RouteResponse(status: .ok, headers: headers, bodyStream: stream, streamInfo: streamInfo)
+		return RouteResponse(status: .ok, headerFields: headerFields, bodyStream: stream, streamInfo: streamInfo)
 	}
 
 	fileprivate enum SSEStreamCreationError: Error {

@@ -1,5 +1,6 @@
 #if Server
 import Foundation
+import HTTPTypes
 
 /// Simple linear-scan HTTP router with path parameter extraction.
 final class Router: @unchecked Sendable {
@@ -16,7 +17,7 @@ final class Router: @unchecked Sendable {
 		routes.append(contentsOf: newRoutes)
 	}
 
-	func match(method: RouteMethod, path: String) -> RouteMatch? {
+	func match(method: HTTPRequest.Method, path: String) -> RouteMatch? {
 		let requestSegments = pathSegments(path)
 
 		for route in routes {

@@ -1,7 +1,6 @@
 #if Server
 import Foundation
-import NIOCore
-import NIOHTTP1
+import HTTPTypes
 
 /// Represents the state of an HTTP request being processed.
 ///
@@ -11,7 +10,7 @@ import NIOHTTP1
 enum RequestState {
     case idle
     /// Body chunks are being yielded into the continuation.
-    case streaming(head: HTTPRequestHead, continuation: AsyncStream<Data>.Continuation, bytesWritten: Int)
+    case streaming(head: HTTPRequest, continuation: AsyncStream<Data>.Continuation, bytesWritten: Int)
     case rejected
 }
 #endif

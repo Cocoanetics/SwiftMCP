@@ -1,5 +1,6 @@
 #if Client
 import SwiftCross
+import HTTPTypes
 
 extension MCPServerProxy {
     /// Sends a JSON-RPC message to the server and waits for the response.
@@ -121,7 +122,7 @@ extension MCPServerProxy {
 
             switch httpResponse.statusCode {
             case 200, 202:
-                if let updatedSessionID = httpResponse.value(forHTTPHeaderField: "Mcp-Session-Id") {
+                if let updatedSessionID = httpResponse.value(forHTTPField: .mcpSessionID) {
                     sessionID = updatedSessionID
                 }
 

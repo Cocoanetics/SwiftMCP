@@ -1,5 +1,6 @@
 #if Client
 import SwiftCross
+import HTTPTypes
 
 extension MCPServerProxy {
     // MARK: - Streamable HTTP
@@ -68,7 +69,7 @@ extension MCPServerProxy {
             throw MCPServerProxyError.communicationError("Invalid HTTP response")
         }
 
-        if let updatedSessionID = httpResponse.value(forHTTPHeaderField: "Mcp-Session-Id") {
+        if let updatedSessionID = httpResponse.value(forHTTPField: .mcpSessionID) {
             sessionID = updatedSessionID
         }
 

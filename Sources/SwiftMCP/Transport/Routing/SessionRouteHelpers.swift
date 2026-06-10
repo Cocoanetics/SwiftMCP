@@ -1,5 +1,6 @@
 #if Server
 import Foundation
+import HTTPTypes
 
 extension HTTPSSETransport {
     enum SessionHeaderResolution {
@@ -113,16 +114,14 @@ extension HTTPSSETransport {
         }
     }
 
-    func textResponse(status: HTTPStatus, body: String, sessionID: UUID? = nil) -> RouteResponse {
-        var headers: [(String, String)] = [
-            ("Content-Type", "text/plain; charset=utf-8")
-        ]
+    func textResponse(status: HTTPResponse.Status, body: String, sessionID: UUID? = nil) -> RouteResponse {
+        var headerFields: HTTPFields = [.contentType: "text/plain; charset=utf-8"]
 
         if let sessionID {
-            headers.append(("Mcp-Session-Id", sessionID.uuidString))
+            headerFields[.mcpSessionID] = sessionID.uuidString
         }
 
-        return RouteResponse(status: status, headers: headers, body: Data(body.utf8))
+        return RouteResponse(status: status, headerFields: headerFields, body: Data(body.utf8))
     }
 }
 #endif

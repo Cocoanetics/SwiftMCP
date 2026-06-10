@@ -1,6 +1,7 @@
 #if Server
 import Testing
 import Foundation
+import HTTPTypes
 @testable import SwiftMCP
 
 /// Thread-safe box for capturing values from @Sendable closures.
@@ -20,7 +21,7 @@ struct StreamingRouteTests {
 	/// Helper: create a streaming request with pre-loaded chunks.
 	private func makeStreamingRequest(
 		path: String,
-		method: RouteMethod = .POST,
+		method: HTTPRequest.Method = .post,
 		headers: [(String, String)] = [],
 		pathParams: [String: String] = [:],
 		chunks: [Data]
@@ -33,7 +34,7 @@ struct StreamingRouteTests {
 
 		return HTTPRouteRequest<AsyncStream<Data>>(
 			method: method, uri: path, path: path,
-			headers: headers, body: stream,
+			headerFields: HTTPFields(legacyPairs: headers), body: stream,
 			pathParams: pathParams, queryParams: []
 		)
 	}
@@ -45,7 +46,7 @@ struct StreamingRouteTests {
 		let received = Box<Data?>(nil)
 
 		let route = HTTPRoute(
-			method: .POST,
+			method: .post,
 			pathPattern: "/test",
 			handler: { (_: HTTPSSETransport, request: HTTPRouteRequest<Data?>) in
 				received.value = request.body
@@ -71,7 +72,7 @@ struct StreamingRouteTests {
 		let received = Box<[Data]>([])
 
 		let route = HTTPRoute(
-			method: .POST,
+			method: .post,
 			pathPattern: "/upload",
 			handler: { (_: HTTPSSETransport, request: HTTPRouteRequest<AsyncStream<Data>>) in
 				for await chunk in request.body {
@@ -102,7 +103,7 @@ struct StreamingRouteTests {
 		let received = Box<Data?>(Data("sentinel".utf8))
 
 		let route = HTTPRoute(
-			method: .GET,
+			method: .get,
 			pathPattern: "/empty",
 			handler: { (_: HTTPSSETransport, request: HTTPRouteRequest<Data?>) in
 				received.value = request.body
@@ -110,7 +111,7 @@ struct StreamingRouteTests {
 			}
 		)
 
-		let request = makeStreamingRequest(path: "/empty", method: .GET, chunks: [])
+		let request = makeStreamingRequest(path: "/empty", method: .get, chunks: [])
 
 		let response = try await route.handler(makeTransport(), request)
 		#expect(response.status == .ok)
@@ -125,7 +126,7 @@ struct StreamingRouteTests {
 		let receivedAuth = Box<String?>(nil)
 
 		let route = HTTPRoute(
-			method: .POST,
+			method: .post,
 			pathPattern: "/uploads/:cid",
 			handler: { (_: HTTPSSETransport, request: HTTPRouteRequest<AsyncStream<Data>>) in
 				receivedCID.value = request.pathParams["cid"]

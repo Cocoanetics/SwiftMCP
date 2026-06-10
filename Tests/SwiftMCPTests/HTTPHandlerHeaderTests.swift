@@ -1,51 +1,53 @@
 #if Server
 import Testing
-import SwiftCross
+import HTTPTypes
 @testable import SwiftMCP
 
 @Suite("HTTP Handler Header Tests")
 struct HTTPHandlerHeaderTests {
-    private func values(named name: String, in headers: [(String, String)]) -> [String] {
-        headers
-            .filter { $0.0.caseInsensitiveCompare(name) == .orderedSame }
-            .map(\.1)
+    private func count(of name: HTTPField.Name, in fields: HTTPFields) -> Int {
+        fields.filter { $0.name == name }.count
     }
 
     @Test("Route-provided CORS and Content-Length headers are not duplicated")
     func routeHeadersAreNotDuplicated() {
-        let headers = HTTPHandler.responseHeadersApplyingDefaults(
+        let fields = HTTPHandler.responseFieldsApplyingDefaults(
             [
-                ("Access-Control-Allow-Origin", "https://example.com"),
-                ("Content-Type", "text/plain; charset=utf-8"),
-                ("Content-Length", "5")
+                .accessControlAllowOrigin: "https://example.com",
+                .contentType: "text/plain; charset=utf-8",
+                .contentLength: "5"
             ],
             bodyLength: 5
         )
 
-        #expect(values(named: "Access-Control-Allow-Origin", in: headers) == ["https://example.com"])
-        #expect(values(named: "Content-Length", in: headers) == ["5"])
-        #expect(values(named: "Content-Type", in: headers) == ["text/plain; charset=utf-8"])
+        #expect(fields[.accessControlAllowOrigin] == "https://example.com")
+        #expect(fields[.contentLength] == "5")
+        #expect(fields[.contentType] == "text/plain; charset=utf-8")
+        // Defaults replace rather than append, so each field appears exactly once.
+        #expect(count(of: .accessControlAllowOrigin, in: fields) == 1)
+        #expect(count(of: .contentLength, in: fields) == 1)
+        #expect(count(of: .contentType, in: fields) == 1)
     }
 
     @Test("Framework defaults are applied once when headers are missing")
     func frameworkDefaultsAreAppliedWhenMissing() {
-        let headers = HTTPHandler.responseHeadersApplyingDefaults([], bodyLength: 5)
+        let fields = HTTPHandler.responseFieldsApplyingDefaults([:], bodyLength: 5)
 
-        #expect(values(named: "Access-Control-Allow-Origin", in: headers) == ["*"])
-        #expect(values(named: "Content-Length", in: headers) == ["5"])
-        #expect(values(named: "Content-Type", in: headers) == ["text/plain; charset=utf-8"])
+        #expect(fields[.accessControlAllowOrigin] == "*")
+        #expect(fields[.contentLength] == "5")
+        #expect(fields[.contentType] == "text/plain; charset=utf-8")
     }
 
     @Test("Existing Content-Length is preserved for empty-body responses")
     func existingContentLengthIsPreservedWithoutBody() {
-        let headers = HTTPHandler.responseHeadersApplyingDefaults(
-            [("Content-Length", "0")],
+        let fields = HTTPHandler.responseFieldsApplyingDefaults(
+            [.contentLength: "0"],
             bodyLength: nil
         )
 
-        #expect(values(named: "Access-Control-Allow-Origin", in: headers) == ["*"])
-        #expect(values(named: "Content-Length", in: headers) == ["0"])
-        #expect(values(named: "Content-Type", in: headers).isEmpty)
+        #expect(fields[.accessControlAllowOrigin] == "*")
+        #expect(fields[.contentLength] == "0")
+        #expect(fields[.contentType] == nil)
     }
 }
 #endif

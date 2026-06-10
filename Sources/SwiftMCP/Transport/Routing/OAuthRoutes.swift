@@ -1,5 +1,6 @@
 #if Server
 import SwiftCross
+import HTTPTypes
 
 /// OAuth route handlers: authorization server metadata, protected resource metadata,
 /// and transparent proxy to Auth0 endpoints.
@@ -11,13 +12,13 @@ extension HTTPSSETransport {
 
 		return [
 			// GET /.well-known/oauth-authorization-server
-			HTTPRoute(.GET, "/.well-known/oauth-authorization-server", calling: HTTPSSETransport.handleOAuthAuthorizationServer),
+			HTTPRoute(.get, "/.well-known/oauth-authorization-server", calling: HTTPSSETransport.handleOAuthAuthorizationServer),
 
 			// GET /.well-known/oauth-protected-resource
-			HTTPRoute(.GET, "/.well-known/oauth-protected-resource", calling: HTTPSSETransport.handleOAuthProtectedResource),
+			HTTPRoute(.get, "/.well-known/oauth-protected-resource", calling: HTTPSSETransport.handleOAuthProtectedResource),
 
 			// GET /.well-known/openid-configuration — local or proxy
-			HTTPRoute(method: .GET, pathPattern: "/.well-known/openid-configuration",
+			HTTPRoute(method: .get, pathPattern: "/.well-known/openid-configuration",
 				handler: { transport, request in
 					if let config = transport.oauthConfiguration, config.transparentProxy {
 						return try await transport.handleOAuthProxy(request: request)
@@ -76,7 +77,7 @@ extension HTTPSSETransport {
 
 		do {
 			let data = try encoder.encode(metadata)
-			return RouteResponse(status: .ok, headers: [("Content-Type", "application/json")], body: data)
+			return RouteResponse(status: .ok, headerFields: [.contentType: "application/json"], body: data)
 		} catch {
 			logger.error("Failed to encode OAuth metadata: \(error)")
 			return RouteResponse(status: .internalServerError)
@@ -105,7 +106,7 @@ extension HTTPSSETransport {
 
 		do {
 			let data = try encoder.encode(metadata)
-			return RouteResponse(status: .ok, headers: [("Content-Type", "application/json")], body: data)
+			return RouteResponse(status: .ok, headerFields: [.contentType: "application/json"], body: data)
 		} catch {
 			logger.error("Failed to encode OAuth metadata: \(error)")
 			return RouteResponse(status: .internalServerError)

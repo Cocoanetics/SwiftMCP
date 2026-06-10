@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import HTTPTypes
 
 // MARK: - Factories for Data? body
 
@@ -14,18 +15,18 @@ extension HTTPRouteResponse where Body == Data? {
 
 	/// 200 OK with raw data body and specified content type.
 	public static func ok(_ body: Data, contentType: String) -> Self {
-		HTTPRouteResponse(status: .ok, headers: [("Content-Type", contentType)], body: body)
+		HTTPRouteResponse(status: .ok, headerFields: [.contentType: contentType], body: body)
 	}
 
 	/// Text response with specified status.
-	public static func text(_ string: String, status: HTTPStatus = .ok) -> Self {
+	public static func text(_ string: String, status: HTTPResponse.Status = .ok) -> Self {
 		let data = Data(string.utf8)
-		return HTTPRouteResponse(status: status, headers: [("Content-Type", "text/plain; charset=utf-8")], body: data)
+		return HTTPRouteResponse(status: status, headerFields: [.contentType: "text/plain; charset=utf-8"], body: data)
 	}
 
 	/// JSON data response with specified status.
-	public static func json(_ data: Data, status: HTTPStatus = .ok) -> Self {
-		HTTPRouteResponse(status: status, headers: [("Content-Type", "application/json")], body: data)
+	public static func json(_ data: Data, status: HTTPResponse.Status = .ok) -> Self {
+		HTTPRouteResponse(status: status, headerFields: [.contentType: "application/json"], body: data)
 	}
 
 	/// 404 Not Found with no body.

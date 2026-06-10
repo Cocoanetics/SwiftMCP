@@ -1,5 +1,6 @@
 #if Server && OpenAPI
 import Foundation
+import HTTPTypes
 
 /// OpenAPI-related route handlers: AI plugin manifest, OpenAPI spec, and tool call endpoint.
 extension HTTPSSETransport {
@@ -12,13 +13,13 @@ extension HTTPSSETransport {
 
 		return [
 			// GET /.well-known/ai-plugin.json — AI plugin manifest
-			HTTPRoute(.GET, "/.well-known/ai-plugin.json", calling: HTTPSSETransport.handleAIPluginManifest),
+			HTTPRoute(.get, "/.well-known/ai-plugin.json", calling: HTTPSSETransport.handleAIPluginManifest),
 
 			// GET /openapi.json — OpenAPI spec
-			HTTPRoute(.GET, "/openapi.json", calling: HTTPSSETransport.handleOpenAPISpec),
+			HTTPRoute(.get, "/openapi.json", calling: HTTPSSETransport.handleOpenAPISpec),
 
 			// POST /{serverName}/:toolName — Tool call endpoint
-			HTTPRoute(.POST, "\(serverPath)/:toolName", calling: HTTPSSETransport.handleToolCallAsync)
+			HTTPRoute(.post, "\(serverPath)/:toolName", calling: HTTPSSETransport.handleToolCallAsync)
 		]
 	}
 
@@ -58,7 +59,7 @@ extension HTTPSSETransport {
 
 		do {
 			let jsonData = try encoder.encode(manifest)
-			return RouteResponse(status: .ok, headers: [("Content-Type", "application/json")], body: jsonData)
+			return RouteResponse(status: .ok, headerFields: [.contentType: "application/json"], body: jsonData)
 		} catch {
 			logger.error("Failed to encode AI plugin manifest: \(error)")
 			return RouteResponse(status: .internalServerError)
@@ -90,7 +91,7 @@ extension HTTPSSETransport {
 
 		do {
 			let jsonData = try encoder.encode(spec)
-			return RouteResponse(status: .ok, headers: [("Content-Type", "application/json")], body: jsonData)
+			return RouteResponse(status: .ok, headerFields: [.contentType: "application/json"], body: jsonData)
 		} catch {
 			logger.error("Failed to encode OpenAPI spec: \(error)")
 			return RouteResponse(status: .internalServerError)
@@ -115,7 +116,7 @@ extension HTTPSSETransport {
 		if case .unauthorized(let message) = await authorize(token, sessionID: sessionID) {
 			let err = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32000, message: "Unauthorized: \(message)"))
 			let data = (try? JSONEncoder().encode(err)) ?? Data()
-			return RouteResponse(status: .unauthorized, headers: [("Content-Type", "application/json")], body: data)
+			return RouteResponse(status: .unauthorized, headerFields: [.contentType: "application/json"], body: data)
 		}
 
 		guard let body = request.body else {
@@ -131,7 +132,7 @@ extension HTTPSSETransport {
 			let encoder = MCPJSONCoding.makeValueEncoder()
 			encoder.outputFormatting = [.prettyPrinted]
 			let jsonData = try encoder.encode(responseToEncode)
-			return RouteResponse(status: .ok, headers: [("Content-Type", "application/json")], body: jsonData)
+			return RouteResponse(status: .ok, headerFields: [.contentType: "application/json"], body: jsonData)
 
 		} catch {
 			return openAPIErrorResponse(for: error)
@@ -238,12 +239,12 @@ extension HTTPSSETransport {
 
 		let data = (try? JSONEncoder().encode(err)) ?? Data()
 
-		var status: HTTPStatus = .badRequest
+		var status: HTTPResponse.Status = .badRequest
 		if let mcpError = error as? MCPToolError, case .unknownTool = mcpError {
 			status = .notFound
 		}
 
-		return RouteResponse(status: status, headers: [("Content-Type", "application/json")], body: data)
+		return RouteResponse(status: status, headerFields: [.contentType: "application/json"], body: data)
 	}
 }
 #endif
