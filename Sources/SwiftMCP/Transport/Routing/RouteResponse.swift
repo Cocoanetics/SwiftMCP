@@ -48,7 +48,11 @@ struct RouteResponse: Sendable {
 		self.streamInfo = nil
 	}
 
-	static func json<T: Encodable>(_ value: T, status: HTTPResponse.Status = .ok, sessionId: String? = nil) -> RouteResponse {
+	static func json<T: Encodable>(
+		_ value: T,
+		status: HTTPResponse.Status = .ok,
+		sessionId: String? = nil
+	) -> RouteResponse {
 		let encoder = JSONEncoder()
 		encoder.dateEncodingStrategy = .iso8601WithTimeZone
 		encoder.nonConformingFloatEncodingStrategy = .convertToString(
