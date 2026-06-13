@@ -2,6 +2,18 @@ import Foundation
 import Testing
 @testable import SwiftMCP
 
+/// A server that exposes resources only through the documented dynamic
+/// `mcpResources` path. It declares no `@MCPResource` functions, so
+/// `mcpResourceMetadata` is empty while `resources/list` still returns content.
+@MCPServer(name: "DynamicResourceServer", version: "1.0")
+actor DynamicResourceServer {
+    var mcpResources: [MCPResource] {
+        get async {
+            [SimpleResource(uri: URL(string: "config://dynamic")!, name: "dynamic")]
+        }
+    }
+}
+
 /// Verifies that `resources/subscribe` and `resources/unsubscribe` are only
 /// honored by servers that actually advertise the `resources` capability.
 ///
@@ -73,5 +85,31 @@ struct ResourceSubscriptionGateTests {
         // resource availability, not blanket rejection.
         #expect(response.error.message != Self.unsupportedMessage)
         #expect(response.error.code == -32603)
+    }
+
+    @Test("Server exposing only dynamic resources passes the capability guard")
+    func dynamicResourceServerPassesCapabilityGuard() async throws {
+        let server = DynamicResourceServer()
+
+        guard let message = await server.handleMessage(subscribeRequest(method: "resources/subscribe")) else {
+            Issue.record("Expected a response message")
+            return
+        }
+        guard case .errorResponse(let response) = message else {
+            Issue.record("Expected errorResponse case")
+            return
+        }
+
+        // mcpResourceMetadata is empty, but dynamic mcpResources is not, so the
+        // gate must let it through (and only stop at the missing session).
+        #expect(response.error.message != Self.unsupportedMessage)
+        #expect(response.error.code == -32603)
+    }
+
+    @Test("exposesResources reflects metadata and dynamic resources")
+    func exposesResourcesPredicate() async {
+        #expect(await ResourceTestServer().exposesResources)
+        #expect(await DynamicResourceServer().exposesResources)
+        #expect(!(await Calculator().exposesResources))
     }
 }

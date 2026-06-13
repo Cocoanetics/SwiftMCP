@@ -112,7 +112,7 @@ public extension MCPServer {
         }
 
         if let resourceProvider = self as? MCPResourceProviding,
-           !(await resourceProvider.mcpResourceMetadata).isEmpty {
+           await resourceProvider.exposesResources {
             capabilities.resources = .init(subscribe: true, listChanged: true)
         }
 
