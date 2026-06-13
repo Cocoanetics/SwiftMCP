@@ -139,7 +139,10 @@ public final class StdioTransport: Transport, Service, @unchecked Sendable {
 
             if await SessionInitializationGate.shouldReject(messages, for: session) {
                 logger.warning("Rejected stdio request before initialize")
-                try await send(SessionInitializationGate.rejectionResponses(for: messages))
+                let rejections = SessionInitializationGate.rejectionResponses(for: messages)
+                if !rejections.isEmpty {
+                    try await send(rejections)
+                }
                 return
             }
 

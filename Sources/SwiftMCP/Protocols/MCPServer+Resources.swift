@@ -130,6 +130,19 @@ public extension MCPServer {
     internal func handleResourceSubscribe(
         _ request: JSONRPCMessage.JSONRPCRequestData
     ) async -> JSONRPCMessage? {
+        // Only honor subscriptions when the server actually advertises the
+        // `resources` capability. The `@MCPServer` macro always adds
+        // `MCPResourceProviding` conformance (so extension-contributed resources
+        // can surface), so conformance alone is not a reliable signal — match the
+        // same `mcpResourceMetadata` check used when advertising capabilities.
+        guard let resourceProvider = self as? MCPResourceProviding,
+              !(await resourceProvider.mcpResourceMetadata).isEmpty else {
+            return JSONRPCMessage.errorResponse(
+                id: request.id,
+                error: .init(code: -32601, message: "Server does not support resource subscriptions")
+            )
+        }
+
         guard let session = Session.current else {
             return JSONRPCMessage.errorResponse(
                 id: request.id,
@@ -152,6 +165,14 @@ public extension MCPServer {
     internal func handleResourceUnsubscribe(
         _ request: JSONRPCMessage.JSONRPCRequestData
     ) async -> JSONRPCMessage? {
+        guard let resourceProvider = self as? MCPResourceProviding,
+              !(await resourceProvider.mcpResourceMetadata).isEmpty else {
+            return JSONRPCMessage.errorResponse(
+                id: request.id,
+                error: .init(code: -32601, message: "Server does not support resource subscriptions")
+            )
+        }
+
         guard let session = Session.current else {
             return JSONRPCMessage.errorResponse(
                 id: request.id,
