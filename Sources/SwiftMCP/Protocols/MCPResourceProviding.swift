@@ -122,6 +122,24 @@ extension MCPResourceProviding {
         get async { [] }
     }
 
+    /// Whether this server actually exposes any resources — either through
+    /// `@MCPResource`-generated metadata or the documented dynamic `mcpResources`
+    /// path.
+    ///
+    /// This is the single signal used both to advertise the `resources`
+    /// capability and to honor `resources/subscribe`, so the two stay
+    /// consistent. The metadata check is evaluated first so the common
+    /// `@MCPResource` case never has to materialize a potentially expensive
+    /// dynamic `mcpResources`.
+    var exposesResources: Bool {
+        get async {
+            if !(await mcpResourceMetadata).isEmpty {
+                return true
+            }
+            return !(await mcpResources).isEmpty
+        }
+    }
+
     public func callResourceAsFunction(_ name: String, arguments: JSONDictionary) async throws -> Encodable & Sendable {
         // Default implementation throws an error - this should be overridden by the macro
         throw MCPResourceError.notFound(uri: "function://\(name)")

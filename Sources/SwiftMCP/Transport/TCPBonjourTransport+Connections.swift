@@ -111,7 +111,10 @@ extension TCPBonjourTransport {
                 let messages = try JSONRPCMessage.decodeMessages(from: data)
                 if await SessionInitializationGate.shouldReject(messages, for: session) {
                     logger.warning("Rejected TCP request before initialize (\(session.id))")
-                    try await send(SessionInitializationGate.rejectionResponses(for: messages))
+                    let rejections = SessionInitializationGate.rejectionResponses(for: messages)
+                    if !rejections.isEmpty {
+                        try await send(rejections)
+                    }
                     return
                 }
 

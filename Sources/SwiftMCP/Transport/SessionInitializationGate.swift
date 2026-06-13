@@ -19,27 +19,19 @@ enum SessionInitializationGate {
         !(await session.hasReceivedInitializeRequest) && !batchStartsWithInitialize(messages)
     }
 
+    /// Builds one error response per *request* in the batch.
+    ///
+    /// Notifications carry no `id` and expect no response, so a batch containing
+    /// only notifications yields an empty array — the transport must stay silent
+    /// rather than fabricate an unsolicited `id: nil` error.
     static func rejectionResponses(for messages: [JSONRPCMessage]) -> [JSONRPCMessage] {
-        let requestIDs = messages.compactMap { message -> JSONRPCID? in
+        messages.compactMap { message -> JSONRPCMessage? in
             guard case .request(let request) = message else {
                 return nil
             }
 
-            return request.id
-        }
-
-        if requestIDs.isEmpty {
-            return [
-                .errorResponse(
-                    id: nil,
-                    error: .init(code: -32000, message: rejectionMessage)
-                )
-            ]
-        }
-
-        return requestIDs.map { requestID in
-            .errorResponse(
-                id: requestID,
+            return .errorResponse(
+                id: request.id,
                 error: .init(code: -32000, message: rejectionMessage)
             )
         }

@@ -68,6 +68,16 @@ struct LineTransportInitializationTests {
         #expect(error.error.message == SessionInitializationGate.rejectionMessage)
     }
 
+    @Test("Notification-only batches produce no rejection responses")
+    func notificationOnlyBatchesProduceNoResponses() {
+        let responses = SessionInitializationGate.rejectionResponses(for: [
+            .notification(method: "notifications/initialized"),
+            .notification(method: "notifications/cancelled")
+        ])
+
+        #expect(responses.isEmpty)
+    }
+
     @Test("In-process stdio rejects ping before initialize", .enabled(if: isStdioProcessSupported))
     func inProcessStdioRejectsPingBeforeInitialize() async throws {
         let bridge = InProcessStdioBridge(server: LocalStdioServer())
