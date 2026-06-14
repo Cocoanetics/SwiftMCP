@@ -62,6 +62,20 @@ extension HTTPSSETransport {
 				return errorResponse
 			}
 
+			// Reject JSON-RPC batches on protocol revisions that removed batching
+			// (2025-06-18 onward). Older/unknown versions still permit them.
+			let resolvedVersion = await resolvedHTTPProtocolVersion(for: request, sessionID: context.authSessionID)
+			if JSONRPCMessage.batchingRejected(body: body, version: resolvedVersion) {
+				let batchError = JSONRPCMessage.errorResponse(
+					id: nil,
+					error: .init(
+						code: -32600,
+						message: "JSON-RPC batching is not supported in protocol version \(resolvedVersion)."
+					)
+				)
+				return .json(batchError, status: .badRequest, sessionId: context.authSessionID?.uuidString)
+			}
+
 			if let authError = await authorizeRequest(token: token, authSessionID: context.authSessionID) {
 				return authError
 			}
