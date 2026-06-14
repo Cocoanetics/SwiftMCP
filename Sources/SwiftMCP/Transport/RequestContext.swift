@@ -23,6 +23,19 @@ public final class RequestContext: Sendable {
         /// Optional authentication token for authorization.
         public let accessToken: String?
 
+        /// The protocol revision this request declares (modern `2026-07-28`+),
+        /// from `io.modelcontextprotocol/protocolVersion`.
+        public let protocolVersion: String?
+
+        /// The client software identity, from `io.modelcontextprotocol/clientInfo`.
+        public let clientInfo: Implementation?
+
+        /// The client's declared capabilities, from `io.modelcontextprotocol/clientCapabilities`.
+        public let clientCapabilities: ClientCapabilities?
+
+        /// The log level requested for this request, from `io.modelcontextprotocol/logLevel`.
+        public let logLevel: LogLevel?
+
         init?(dictionary: JSONDictionary) {
             if dictionary.isEmpty {
                 return nil
@@ -30,6 +43,13 @@ public final class RequestContext: Sendable {
 
             self.progressToken = dictionary["progressToken"]
             self.accessToken = dictionary["accessToken"]?.stringValue
+
+            // Modern per-request identity. Best-effort: malformed metadata is
+            // treated as absent rather than failing the whole request.
+            self.protocolVersion = dictionary[MCPMetaKey.protocolVersion]?.stringValue
+            self.clientInfo = try? dictionary[MCPMetaKey.clientInfo]?.decoded(Implementation.self)
+            self.clientCapabilities = try? dictionary[MCPMetaKey.clientCapabilities]?.decoded(ClientCapabilities.self)
+            self.logLevel = dictionary[MCPMetaKey.logLevel]?.stringValue.flatMap(LogLevel.init(string:))
         }
     }
 
