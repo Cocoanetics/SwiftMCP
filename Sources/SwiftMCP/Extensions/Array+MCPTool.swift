@@ -8,7 +8,12 @@
 import Foundation
 
 extension Array where Element == MCPToolMetadata {
-    public func convertedToTools() -> [MCPTool] {
+    /// Converts tool metadata into wire `MCPTool`s.
+    ///
+    /// - Parameter includeOutputSchema: When `false`, the `outputSchema` field
+    ///   is omitted — structured tool output was introduced in `2025-06-18`, so
+    ///   it must not be advertised to clients negotiating an earlier revision.
+    public func convertedToTools(includeOutputSchema: Bool = true) -> [MCPTool] {
         return self.map { meta in
             // Create properties for the JSON schema
             let properties = Dictionary(uniqueKeysWithValues: meta.parameters.map { param in
@@ -26,7 +31,7 @@ extension Array where Element == MCPToolMetadata {
                 description: hasParameters ? meta.description : nil,
                 additionalProperties: hasParameters ? nil : false
             ))
-            let outputSchema = meta.outputSchema
+            let outputSchema = includeOutputSchema ? meta.outputSchema : nil
 
             // Create and return the tool
             return MCPTool(

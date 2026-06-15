@@ -118,6 +118,13 @@ extension TCPBonjourTransport {
                     return
                 }
 
+                let batchVersion = await JSONRPCMessage.batchingVersion(for: messages, session: session)
+                if JSONRPCMessage.batchingRejected(body: data, version: batchVersion) {
+                    logger.warning("Rejected TCP batch on protocol version \(batchVersion) (\(session.id))")
+                    try await send([JSONRPCMessage.batchingRejectionResponse(version: batchVersion)])
+                    return
+                }
+
                 let responses = await server.processBatch(messages)
                 guard !responses.isEmpty else { return }
                 try await send(responses)

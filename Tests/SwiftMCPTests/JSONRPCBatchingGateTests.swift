@@ -59,4 +59,30 @@ struct JSONRPCBatchingGateTests {
         let bareInitialize = JSONRPCMessage.request(id: 1, method: "initialize", params: [:])
         #expect(SessionInitializationGate.initializeProtocolVersion([bareInitialize]) == nil)
     }
+
+    @Test("batchingVersion prefers the negotiated session, then a leading initialize, then latest")
+    func batchingVersionResolution() async {
+        let ping = JSONRPCMessage.request(id: 1, method: "ping")
+
+        let negotiated = Session(id: UUID())
+        await negotiated.setNegotiatedProtocolVersion("2025-06-18")
+        #expect(await JSONRPCMessage.batchingVersion(for: [ping], session: negotiated) == "2025-06-18")
+
+        let fresh = Session(id: UUID())
+        let initialize = JSONRPCMessage.request(
+            id: 1, method: "initialize", params: ["protocolVersion": .string("2025-03-26")]
+        )
+        #expect(await JSONRPCMessage.batchingVersion(for: [initialize, ping], session: fresh) == "2025-03-26")
+        #expect(await JSONRPCMessage.batchingVersion(for: [ping], session: fresh) == MCPProtocolVersion.latest)
+    }
+
+    @Test("batchingRejectionResponse is a JSON-RPC -32600 error with no id")
+    func rejectionResponseShape() {
+        guard case .errorResponse(let data) = JSONRPCMessage.batchingRejectionResponse(version: "2025-11-25") else {
+            Issue.record("Expected an error response")
+            return
+        }
+        #expect(data.id == nil)
+        #expect(data.error.code == -32600)
+    }
 }

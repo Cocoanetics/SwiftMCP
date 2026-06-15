@@ -18,9 +18,12 @@ public extension MCPServer {
             ])
         }
 
+        // `outputSchema` is a 2025-06-18 feature; omit it for older clients.
+        let includeOutputSchema = await RequestContext.current?.supports(.structuredToolOutput) ?? true
         let toolMetadata = await toolProvider.mcpToolMetadata
-        if let tools = try? JSONValue(encoding: toolMetadata.convertedToTools()) {
-            return JSONRPCMessage.response(id: id, result: ["tools": tools])
+        let tools = toolMetadata.convertedToTools(includeOutputSchema: includeOutputSchema)
+        if let encoded = try? JSONValue(encoding: tools) {
+            return JSONRPCMessage.response(id: id, result: ["tools": encoded])
         }
         return JSONRPCMessage.errorResponse(
             id: id,
@@ -50,6 +53,12 @@ public extension MCPServer {
 
         let metadata = mcpToolMetadata(for: toolName)
 
+        // structuredContent and resource_link are 2025-06-18 features; degrade
+        // both for clients that negotiated an earlier revision.
+        let profile = await RequestContext.current?.protocolProfile
+        let includeStructuredContent = profile?.has(.structuredToolOutput) ?? true
+        let includeResourceLinks = profile?.has(.resourceLinks) ?? true
+
         do {
             let result = try await toolProvider.callTool(toolName, arguments: arguments)
             let wrappedResult = try metadata?.wrapOutputIfNeeded(result) ?? result
@@ -58,7 +67,9 @@ public extension MCPServer {
             return try buildToolCallResponse(
                 requestID: request.id,
                 wrappedResult: wrappedResult,
-                expectsToolResult: expectsToolResult
+                expectsToolResult: expectsToolResult,
+                includeStructuredContent: includeStructuredContent,
+                includeResourceLinks: includeResourceLinks
             )
         } catch {
             return JSONRPCMessage.response(
@@ -79,34 +90,63 @@ public extension MCPServer {
     private func buildToolCallResponse(
         requestID: JSONRPCID,
         wrappedResult: Encodable & Sendable,
-        expectsToolResult: Bool
+        expectsToolResult: Bool,
+        includeStructuredContent: Bool,
+        includeResourceLinks: Bool
     ) throws -> JSONRPCMessage {
         var resultPayload: JSONDictionary = [
             "isError": false
         ]
 
+        var content: JSONValue
+        var structured: JSONValue?
+
         if let payload = try encodeSingleContent(wrappedResult) {
-            resultPayload["content"] = payload
-            return JSONRPCMessage.response(id: requestID, result: resultPayload)
+            content = payload
+        } else if let payload = try encodeContentArray(wrappedResult, expectsToolResult: expectsToolResult) {
+            content = payload
+        } else if let payload = try encodeResourceContent(wrappedResult, expectsToolResult: expectsToolResult) {
+            content = payload
+        } else {
+            // Fallback: encode as JSON and wrap in a text content block.
+            let (textContent, structuredContent) = try encodeFallbackTextContent(wrappedResult)
+            content = .array([.object(textContent)])
+            structured = structuredContent
         }
 
-        if let payload = try encodeContentArray(wrappedResult, expectsToolResult: expectsToolResult) {
-            resultPayload["content"] = payload
-            return JSONRPCMessage.response(id: requestID, result: resultPayload)
+        // resource_link is a 2025-06-18 content type; degrade to text for older clients.
+        if !includeResourceLinks {
+            content = degradingResourceLinks(in: content)
         }
+        resultPayload["content"] = content
 
-        if let payload = try encodeResourceContent(wrappedResult, expectsToolResult: expectsToolResult) {
-            resultPayload["content"] = payload
-            return JSONRPCMessage.response(id: requestID, result: resultPayload)
-        }
-
-        // Fallback: encode as JSON and wrap in a text content block.
-        let (content, structured) = try encodeFallbackTextContent(wrappedResult)
-        resultPayload["content"] = .array([.object(content)])
-        if let structured {
+        if let structured, includeStructuredContent {
             resultPayload["structuredContent"] = structured
         }
         return JSONRPCMessage.response(id: requestID, result: resultPayload)
+    }
+
+    /// Rewrites any `resource_link` content blocks (a 2025-06-18 feature) into
+    /// plain `text` blocks carrying the link's name and URI, for clients that
+    /// negotiated an earlier revision. Non-array content is returned unchanged,
+    /// so single, array and mixed tool results are all handled uniformly.
+    private func degradingResourceLinks(in content: JSONValue) -> JSONValue {
+        guard case .array(let items) = content else { return content }
+        return .array(items.map(degradeResourceLink))
+    }
+
+    private func degradeResourceLink(_ item: JSONValue) -> JSONValue {
+        guard case .object(let object) = item,
+              object["type"]?.stringValue == "resource_link" else {
+            return item
+        }
+
+        let uri = object["uri"]?.stringValue ?? ""
+        var text = object["name"]?.stringValue.map { "\($0): \(uri)" } ?? uri
+        if let description = object["description"]?.stringValue, !description.isEmpty {
+            text += " — \(description)"
+        }
+        return .object(["type": .string("text"), "text": .string(text)])
     }
 
     /// Encodes a single MCP content value (text/image/audio/link/embedded) if applicable.
