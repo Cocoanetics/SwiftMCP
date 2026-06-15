@@ -73,10 +73,19 @@ public extension MCPServer {
     ) async -> JSONRPCMessage {
         let capabilities = await buildServerCapabilities()
 
-        let serverInfo = InitializeResult.ServerInfo(
+        // `title` / `icons` / `websiteUrl` are richer serverInfo identity fields
+        // introduced in 2025-06-18; include them only for clients negotiating
+        // that revision or later (they share the `.titleField` gate).
+        let includeRichIdentity = MCPProtocolVersion.profile(for: protocolVersion)?.has(.titleField) ?? false
+        let icons = (self as? HasIcons)?.icons ?? []
+
+        let serverInfo = Implementation(
+            icons: includeRichIdentity && !icons.isEmpty ? icons : nil,
             name: serverName,
+            title: includeRichIdentity ? serverTitle : nil,
             version: serverVersion,
-            description: serverDescription
+            description: serverDescription,
+            websiteUrl: includeRichIdentity ? serverWebsiteUrl : nil
         )
 
         let result = InitializeResult(

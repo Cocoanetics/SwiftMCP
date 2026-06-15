@@ -35,6 +35,17 @@ public protocol MCPServer {
     var serverDescription: String? { get }
 
     /**
+     A human-friendly display name for the server, distinct from `serverName`
+     (a programmatic identifier). Introduced in protocol version `2025-06-18`.
+     */
+    var serverTitle: String? { get }
+
+    /**
+     A URL for the server's website or homepage. Introduced in protocol version `2025-06-18`.
+     */
+    var serverWebsiteUrl: URL? { get }
+
+    /**
      Handles a JSON-RPC message and generates an appropriate response.
 
      - Parameter message: The JSON-RPC message to handle
@@ -70,6 +81,25 @@ public extension MCPServer {
     var serverDescription: String? {
         Mirror(reflecting: self).children
             .first(where: { $0.label == "__mcpServerDescription" })?.value as? String
+    }
+
+    /**
+     The server's display title, derived from the `@MCPServer(title:)` macro argument.
+     */
+    var serverTitle: String? {
+        Mirror(reflecting: self).children
+            .first(where: { $0.label == "__mcpServerTitle" })?.value as? String
+    }
+
+    /**
+     The server's website URL, derived from the `@MCPServer(websiteUrl:)` macro argument.
+     */
+    var serverWebsiteUrl: URL? {
+        // The macro stores the URL as a String (so generated code needs no
+        // Foundation import in the consumer); convert here.
+        (Mirror(reflecting: self).children
+            .first(where: { $0.label == "__mcpServerWebsiteUrl" })?.value as? String)
+            .flatMap(URL.init(string:))
     }
 
     /// Handles the roots list changed notification by retrieving the updated roots list.

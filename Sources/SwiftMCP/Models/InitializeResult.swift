@@ -16,27 +16,15 @@ public struct InitializeResult: Codable, Sendable {
     public let capabilities: ServerCapabilities
 
     /// Information about the server
-    public let serverInfo: ServerInfo
+    public let serverInfo: Implementation
 
-    /// Server information structure
-    public struct ServerInfo: Codable, Sendable {
-        /// The name of the server
-        public let name: String
+    /// Server identity. The spec models both client and server info as
+    /// `Implementation`; this alias preserves the `InitializeResult.ServerInfo`
+    /// spelling while unifying onto the full type (name, title, version,
+    /// description, icons, websiteUrl).
+    public typealias ServerInfo = Implementation
 
-        /// The version of the server
-        public let version: String
-
-        /// An optional description of the server
-        public let description: String?
-
-        public init(name: String, version: String, description: String? = nil) {
-            self.name = name
-            self.version = version
-            self.description = description
-        }
-    }
-
-    public init(protocolVersion: String, capabilities: ServerCapabilities, serverInfo: ServerInfo) {
+    public init(protocolVersion: String, capabilities: ServerCapabilities, serverInfo: Implementation) {
         self.protocolVersion = protocolVersion
         self.capabilities = capabilities
         self.serverInfo = serverInfo
