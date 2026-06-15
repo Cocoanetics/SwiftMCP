@@ -16,14 +16,20 @@ public extension RequestContext {
 
     /// The protocol revision in effect for this request.
     ///
-    /// Resolution order: the modern `_meta` value, then the legacy
-    /// session-negotiated version, then the server's current ``MCPProtocolVersion/latest``.
+    /// Resolution order: the negotiated **legacy session** version, then the
+    /// modern `_meta` value, then the server's current ``MCPProtocolVersion/latest``.
+    ///
+    /// The session is checked first on purpose: on the legacy (stateful) path a
+    /// client commits to a version at `initialize`, and it must not be able to
+    /// opt back into a different version by adding a per-request
+    /// `_meta["io.modelcontextprotocol/protocolVersion"]`. The modern path is
+    /// sessionless, so there `_meta` is the only source.
     var effectiveProtocolVersion: String {
         get async {
-            if let version = meta?.protocolVersion {
+            if let version = await Session.current?.negotiatedProtocolVersion {
                 return version
             }
-            if let version = await Session.current?.negotiatedProtocolVersion {
+            if let version = meta?.protocolVersion {
                 return version
             }
             return MCPProtocolVersion.latest
@@ -41,14 +47,18 @@ public extension RequestContext {
         }
     }
 
-    /// The client's declared capabilities, from `_meta` (modern) or the session
-    /// (legacy).
+    /// The client's declared capabilities: from the negotiated **legacy
+    /// session** if present, otherwise the modern `_meta` value.
+    ///
+    /// Session-first for the same reason as ``effectiveProtocolVersion`` — a
+    /// legacy client's negotiated capabilities are authoritative and cannot be
+    /// overridden per-request via `_meta`.
     var effectiveClientCapabilities: ClientCapabilities? {
         get async {
-            if let capabilities = meta?.clientCapabilities {
+            if let capabilities = await Session.current?.clientCapabilities {
                 return capabilities
             }
-            return await Session.current?.clientCapabilities
+            return meta?.clientCapabilities
         }
     }
 
