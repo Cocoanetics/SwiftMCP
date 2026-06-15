@@ -37,7 +37,7 @@ public extension RequestContext {
     var protocolProfile: ProtocolVersionProfile {
         get async {
             let version = await effectiveProtocolVersion
-            return MCPProtocolVersion.profile(for: version) ?? .v2025_11_25
+            return MCPProtocolVersion.profile(for: version) ?? .v20251125
         }
     }
 

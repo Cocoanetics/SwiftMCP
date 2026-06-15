@@ -169,7 +169,7 @@ public extension ProtocolVersionProfile {
     /// ``MCPProtocolVersion/supported``); only its HTTP+SSE transport survives
     /// as the deprecated legacy SSE routes. Present as the root of the
     /// ``deriving(_:era:adding:removing:)`` chain.
-    static let v2024_11_05 = ProtocolVersionProfile(
+    static let v20241105 = ProtocolVersionProfile(
         version: "2024-11-05",
         era: .legacy,
         features: [
@@ -181,7 +181,7 @@ public extension ProtocolVersionProfile {
 
     /// `2025-03-26`: Streamable HTTP, JSON-RPC batching, tool annotations,
     /// audio content and the declared `completions` capability.
-    static let v2025_03_26 = v2024_11_05.deriving(
+    static let v20250326 = v20241105.deriving(
         "2025-03-26",
         adding: [
             .jsonRPCBatching, .resumableStreams,
@@ -191,7 +191,7 @@ public extension ProtocolVersionProfile {
 
     /// `2025-06-18`: removes batching; adds the `MCP-Protocol-Version` header,
     /// elicitation, structured tool output, resource links and `title`.
-    static let v2025_06_18 = v2025_03_26.deriving(
+    static let v20250618 = v20250326.deriving(
         "2025-06-18",
         adding: [
             .protocolVersionHeader, .elicitation, .structuredToolOutput,
@@ -203,11 +203,11 @@ public extension ProtocolVersionProfile {
     /// `2025-11-25`: no change to the *core* feature surface modelled here
     /// (experimental Tasks are handled via the extensions map, not as a core
     /// feature key).
-    static let v2025_11_25 = v2025_06_18.deriving("2025-11-25")
+    static let v20251125 = v20250618.deriving("2025-11-25")
 
     /// `2026-07-28` (modern): defined fresh rather than as a delta, since the
     /// stateless redesign removes most of the legacy surface.
-    static let v2026_07_28 = ProtocolVersionProfile(
+    static let v20260728 = ProtocolVersionProfile(
         version: "2026-07-28",
         era: .modern,
         features: [
@@ -237,7 +237,7 @@ public extension MCPProtocolVersion {
     /// negotiate): it also covers `2024-11-05` (context only) and ``modern``
     /// (described ahead of implementation).
     static var allKnownProfiles: [ProtocolVersionProfile] {
-        [.v2024_11_05, .v2025_03_26, .v2025_06_18, .v2025_11_25, .v2026_07_28]
+        [.v20241105, .v20250326, .v20250618, .v20251125, .v20260728]
     }
 
     /// The capability profile for `version`, or `nil` if it is unknown.
