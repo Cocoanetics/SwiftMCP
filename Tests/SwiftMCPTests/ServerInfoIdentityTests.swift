@@ -87,4 +87,32 @@ struct ServerInfoIdentityTests {
         #expect(info["icons"] == nil)
         #expect(info["title"] == nil)
     }
+
+    // MARK: - Read path (decode -> Implementation, as MCPServerProxy does)
+
+    @Test("Emitted serverInfo decodes back into InitializeResult (proxy read path)")
+    func roundTripsToInitializeResult() async throws {
+        let request = JSONRPCMessage.request(
+            id: 1,
+            method: "initialize",
+            params: [
+                "protocolVersion": .string("2025-06-18"),
+                "capabilities": .object([:]),
+                "clientInfo": .object(["name": .string("C"), "version": .string("1.0")])
+            ]
+        )
+        let session = Session(id: UUID())
+        let response = await session.work { _ in await RichIdentityServer().handleMessage(request) }
+        guard case .response(let data)? = response, let result = data.result else {
+            Issue.record("Expected an initialize response")
+            return
+        }
+
+        // Exactly what MCPServerProxy does to capture the server's identity.
+        let initResult = try result.decoded(InitializeResult.self)
+        #expect(initResult.serverInfo.title == "Weather Tools")
+        #expect(initResult.serverInfo.websiteUrl == URL(string: "https://example.com/weather"))
+        #expect(initResult.serverInfo.icons?.count == 1)
+        #expect(initResult.serverInfo.icons?.first?.src == URL(string: "https://example.com/icon.png"))
+    }
 }
