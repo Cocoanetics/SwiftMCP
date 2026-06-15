@@ -71,7 +71,8 @@ extension HTTPSSETransport {
 
     func resolvedHTTPProtocolVersion<Body: Sendable>(
         for request: HTTPRouteRequest<Body>,
-        sessionID: UUID?
+        sessionID: UUID?,
+        messages: [JSONRPCMessage] = []
     ) async -> String {
         if let headerVersion = request.header("MCP-Protocol-Version"),
            MCPProtocolVersion.supported.contains(headerVersion) {
@@ -82,6 +83,14 @@ extension HTTPSSETransport {
            let session = await sessionManager.existingSession(id: sessionID),
            let negotiatedVersion = await session.negotiatedProtocolVersion {
             return negotiatedVersion
+        }
+
+        // A brand-new session has neither header nor stored version yet; the
+        // version it is negotiating is declared inside the leading `initialize`
+        // request (defaulting to `latest`, as `handleInitializeRequest` does).
+        // Honour it so the rest of the batch is gated against that version.
+        if SessionInitializationGate.batchStartsWithInitialize(messages) {
+            return SessionInitializationGate.initializeProtocolVersion(messages) ?? MCPProtocolVersion.latest
         }
 
         return MCPProtocolVersion.fallbackHTTP

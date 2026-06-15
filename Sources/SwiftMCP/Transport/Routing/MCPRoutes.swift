@@ -62,6 +62,17 @@ extension HTTPSSETransport {
 				return errorResponse
 			}
 
+			// Reject JSON-RPC batches on protocol revisions that removed batching
+			// (2025-06-18 onward); older/unknown versions still permit them.
+			if let batchError = await batchingRejectionResponse(
+				body: body,
+				request: request,
+				messages: messages,
+				sessionID: context.authSessionID
+			) {
+				return batchError
+			}
+
 			if let authError = await authorizeRequest(token: token, authSessionID: context.authSessionID) {
 				return authError
 			}
@@ -144,6 +155,31 @@ extension HTTPSSETransport {
 		case .authorized:
 			return nil
 		}
+	}
+
+	/// Reject a JSON-RPC batch when the governing protocol version removed
+	/// batching (`2025-06-18` onward). For a brand-new session the version is
+	/// declared inside the leading `initialize`, so `messages` is consulted to
+	/// resolve it. Returns a `400` + JSON-RPC `-32600` response, or `nil`.
+	private func batchingRejectionResponse<Body: Sendable>(
+		body: Data,
+		request: HTTPRouteRequest<Body>,
+		messages: [JSONRPCMessage],
+		sessionID: UUID?
+	) async -> RouteResponse? {
+		let version = await resolvedHTTPProtocolVersion(for: request, sessionID: sessionID, messages: messages)
+		guard JSONRPCMessage.batchingRejected(body: body, version: version) else {
+			return nil
+		}
+
+		let error = JSONRPCMessage.errorResponse(
+			id: nil,
+			error: .init(
+				code: -32600,
+				message: "JSON-RPC batching is not supported in protocol version \(version)."
+			)
+		)
+		return .json(error, status: .badRequest, sessionId: sessionID?.uuidString)
 	}
 
 	/// Dispatch the messages either as a streaming SSE response or buffered accepted response.

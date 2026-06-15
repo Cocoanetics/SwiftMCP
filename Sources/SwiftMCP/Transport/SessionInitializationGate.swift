@@ -15,6 +15,19 @@ enum SessionInitializationGate {
         return false
     }
 
+    /// The `protocolVersion` declared by a leading `initialize` request, if the
+    /// batch begins with one. Returns `nil` when the batch does not start with
+    /// `initialize` or that request omits the field.
+    static func initializeProtocolVersion(_ messages: [JSONRPCMessage]) -> String? {
+        guard let first = messages.first,
+              case .request(let request) = first,
+              request.method == "initialize" else {
+            return nil
+        }
+
+        return request.params?["protocolVersion"]?.stringValue
+    }
+
     static func shouldReject(_ messages: [JSONRPCMessage], for session: Session) async -> Bool {
         !(await session.hasReceivedInitializeRequest) && !batchStartsWithInitialize(messages)
     }
