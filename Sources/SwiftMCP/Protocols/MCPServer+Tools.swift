@@ -18,9 +18,12 @@ public extension MCPServer {
             ])
         }
 
+        // `outputSchema` is a 2025-06-18 feature; omit it for older clients.
+        let includeOutputSchema = await RequestContext.current?.supports(.structuredToolOutput) ?? true
         let toolMetadata = await toolProvider.mcpToolMetadata
-        if let tools = try? JSONValue(encoding: toolMetadata.convertedToTools()) {
-            return JSONRPCMessage.response(id: id, result: ["tools": tools])
+        let tools = toolMetadata.convertedToTools(includeOutputSchema: includeOutputSchema)
+        if let encoded = try? JSONValue(encoding: tools) {
+            return JSONRPCMessage.response(id: id, result: ["tools": encoded])
         }
         return JSONRPCMessage.errorResponse(
             id: id,
@@ -50,6 +53,9 @@ public extension MCPServer {
 
         let metadata = mcpToolMetadata(for: toolName)
 
+        // `structuredContent` is a 2025-06-18 feature; omit it for older clients.
+        let includeStructuredContent = await RequestContext.current?.supports(.structuredToolOutput) ?? true
+
         do {
             let result = try await toolProvider.callTool(toolName, arguments: arguments)
             let wrappedResult = try metadata?.wrapOutputIfNeeded(result) ?? result
@@ -58,7 +64,8 @@ public extension MCPServer {
             return try buildToolCallResponse(
                 requestID: request.id,
                 wrappedResult: wrappedResult,
-                expectsToolResult: expectsToolResult
+                expectsToolResult: expectsToolResult,
+                includeStructuredContent: includeStructuredContent
             )
         } catch {
             return JSONRPCMessage.response(
@@ -79,7 +86,8 @@ public extension MCPServer {
     private func buildToolCallResponse(
         requestID: JSONRPCID,
         wrappedResult: Encodable & Sendable,
-        expectsToolResult: Bool
+        expectsToolResult: Bool,
+        includeStructuredContent: Bool
     ) throws -> JSONRPCMessage {
         var resultPayload: JSONDictionary = [
             "isError": false
@@ -103,7 +111,7 @@ public extension MCPServer {
         // Fallback: encode as JSON and wrap in a text content block.
         let (content, structured) = try encodeFallbackTextContent(wrappedResult)
         resultPayload["content"] = .array([.object(content)])
-        if let structured {
+        if let structured, includeStructuredContent {
             resultPayload["structuredContent"] = structured
         }
         return JSONRPCMessage.response(id: requestID, result: resultPayload)

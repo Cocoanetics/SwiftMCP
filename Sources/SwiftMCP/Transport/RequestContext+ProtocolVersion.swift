@@ -56,4 +56,12 @@ public extension RequestContext {
     /// logging via `_meta`). `nil` for legacy requests, which use the
     /// session-wide level set by `logging/setLevel`.
     var requestedLogLevel: LogLevel? { meta?.logLevel }
+
+    /// Whether the request's negotiated protocol version supports `feature`.
+    ///
+    /// Convenience over ``protocolProfile`` for the common version-gating case:
+    /// `if await RequestContext.current?.supports(.structuredToolOutput) ?? true`.
+    func supports(_ feature: MCPFeature) async -> Bool {
+        await protocolProfile.has(feature)
+    }
 }
