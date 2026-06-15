@@ -44,4 +44,19 @@ struct JSONRPCBatchingGateTests {
         let batch = data(#"[{"jsonrpc":"2.0","method":"ping","id":1}]"#)
         #expect(JSONRPCMessage.batchingRejected(body: batch, version: "1999-01-01") == false)
     }
+
+    @Test("initializeProtocolVersion reads a leading initialize's declared version")
+    func initializeVersionExtraction() {
+        let initialize = JSONRPCMessage.request(
+            id: 1, method: "initialize", params: ["protocolVersion": .string("2025-11-25")]
+        )
+        let ping = JSONRPCMessage.request(id: 2, method: "ping")
+
+        #expect(SessionInitializationGate.initializeProtocolVersion([initialize, ping]) == "2025-11-25")
+        #expect(SessionInitializationGate.initializeProtocolVersion([ping, initialize]) == nil)   // not leading
+        #expect(SessionInitializationGate.initializeProtocolVersion([ping]) == nil)
+
+        let bareInitialize = JSONRPCMessage.request(id: 1, method: "initialize", params: [:])
+        #expect(SessionInitializationGate.initializeProtocolVersion([bareInitialize]) == nil)
+    }
 }
