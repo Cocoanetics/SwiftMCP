@@ -14,6 +14,9 @@ public enum ProxyGenerator {
         public let serverDescription: String?
         public let source: String?
         public let openAPI: String?
+        public let serverTitle: String?
+        public let serverWebsiteUrl: String?
+        public let serverIconURLs: [String]
 
         public init(
             fileName: String,
@@ -21,7 +24,10 @@ public enum ProxyGenerator {
             serverVersion: String?,
             serverDescription: String?,
             source: String?,
-            openAPI: String?
+            openAPI: String?,
+            serverTitle: String? = nil,
+            serverWebsiteUrl: String? = nil,
+            serverIconURLs: [String] = []
         ) {
             self.fileName = fileName
             self.serverName = serverName
@@ -29,6 +35,9 @@ public enum ProxyGenerator {
             self.serverDescription = serverDescription
             self.source = source
             self.openAPI = openAPI
+            self.serverTitle = serverTitle
+            self.serverWebsiteUrl = serverWebsiteUrl
+            self.serverIconURLs = serverIconURLs
         }
     }
 

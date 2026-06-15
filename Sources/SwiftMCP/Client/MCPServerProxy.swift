@@ -83,6 +83,12 @@ public final actor MCPServerProxy {
     public internal(set) var serverName: String?
     public internal(set) var serverVersion: String?
     public internal(set) var serverDescription: String?
+    /// The server's human-friendly display title, if it advertised one (2025-06-18+).
+    public internal(set) var serverTitle: String?
+    /// The server's website URL, if it advertised one (2025-06-18+).
+    public internal(set) var serverWebsiteUrl: URL?
+    /// The server's display icons (2025-06-18+); empty when none were advertised.
+    public internal(set) var serverIcons: [Icon] = []
     public internal(set) var serverCapabilities: ServerCapabilities?
 
     internal var notificationHandlers: [String: NotificationHandlerBox] = [:]

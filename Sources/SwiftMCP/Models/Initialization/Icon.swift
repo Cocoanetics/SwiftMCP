@@ -25,6 +25,22 @@ public struct Icon: Codable, Sendable {
     public var sizes: [Size]?
 
     public var theme: Theme?
+
+    public init(src: URL, mimeType: String? = nil, sizes: [Size]? = nil, theme: Theme? = nil) {
+        self.src = src
+        self.mimeType = mimeType
+        self.sizes = sizes
+        self.theme = theme
+    }
+
+    /// Convenience initializer from a string URL. Traps on a malformed URL —
+    /// intended for compile-time-constant icon URLs.
+    public init(_ src: String, mimeType: String? = nil, sizes: [Size]? = nil, theme: Theme? = nil) {
+        guard let url = URL(string: src) else {
+            preconditionFailure("Invalid icon URL: \(src)")
+        }
+        self.init(src: url, mimeType: mimeType, sizes: sizes, theme: theme)
+    }
 }
 
 extension Icon.Size: Codable {

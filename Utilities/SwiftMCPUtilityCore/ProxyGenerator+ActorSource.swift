@@ -56,8 +56,15 @@ extension ProxyGenerator {
     }
 
     private static func appendMetadataSection(metadata: HeaderMetadata, into lines: inout [String]) {
+        let name = swiftOptionalStringLiteral(metadata.serverName)
+        let title = swiftOptionalStringLiteral(metadata.serverTitle)
+        let website = swiftOptionalStringLiteral(metadata.serverWebsiteUrl)
+        let icons = metadata.serverIconURLs.map { swiftOptionalStringLiteral($0) }.joined(separator: ", ")
         lines.append("    // MARK: - Metadata")
-        lines.append("    public static let serverName: String? = \(swiftOptionalStringLiteral(metadata.serverName))")
+        lines.append("    public static let serverName: String? = \(name)")
+        lines.append("    public static let serverTitle: String? = \(title)")
+        lines.append("    public static let serverWebsiteUrl: String? = \(website)")
+        lines.append("    public static let serverIconURLs: [String] = [\(icons)]")
         lines.append("")
     }
 
@@ -170,9 +177,16 @@ extension ProxyGenerator {
 
     static func swiftOptionalStringLiteral(_ value: String?) -> String {
         guard let value else { return "nil" }
+        // Escape for embedding as a Swift double-quoted string literal. Server
+        // metadata (e.g. a free-form title) is untrusted display text, so it may
+        // contain backslashes, quotes or newlines. Backslash MUST be escaped
+        // first so the backslashes introduced below are not double-escaped.
         let escaped = value
-            .replacingOccurrences(of: "\\\\", with: "\\\\\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\\\"")
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\n", with: "\\n")
+            .replacingOccurrences(of: "\r", with: "\\r")
+            .replacingOccurrences(of: "\t", with: "\\t")
         return "\"\(escaped)\""
     }
 

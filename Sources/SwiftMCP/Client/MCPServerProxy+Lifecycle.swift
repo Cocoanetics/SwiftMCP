@@ -222,6 +222,9 @@ extension MCPServerProxy {
         serverName = initResult.serverInfo.name
         serverVersion = initResult.serverInfo.version
         serverDescription = initResult.serverInfo.description ?? rawServerDescription
+        serverTitle = initResult.serverInfo.title
+        serverWebsiteUrl = initResult.serverInfo.websiteUrl
+        serverIcons = initResult.serverInfo.icons ?? []
         serverCapabilities = initResult.capabilities
         if service == nil {
             service = serverName

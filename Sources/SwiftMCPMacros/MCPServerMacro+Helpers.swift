@@ -16,6 +16,8 @@ extension MCPServerMacro {
         let version: String
         let descriptionLiteral: String
         let serverDescriptionText: String?
+        let titleLiteral: String
+        let websiteUrlLiteral: String
         let generateClient: Bool
         let toolNaming: String?
     }
@@ -60,6 +62,8 @@ extension MCPServerMacro {
             version: serverVersion,
             descriptionLiteral: serverDescription,
             serverDescriptionText: serverDescriptionText,
+            titleLiteral: parsed.titleArg ?? "nil",
+            websiteUrlLiteral: parsed.websiteUrlArg ?? "nil",
             generateClient: parsed.generateClient,
             toolNaming: parsed.toolNaming
         )
@@ -68,6 +72,8 @@ extension MCPServerMacro {
     private struct ParsedLabeledArguments {
         var descriptionArg: String?
         var serverDescriptionText: String?
+        var titleArg: String?
+        var websiteUrlArg: String?
         var generateClient = false
         var toolNaming: String?
     }
@@ -81,6 +87,12 @@ extension MCPServerMacro {
                 let stringValue = stringLiteral.segments.description
                 parsed.descriptionArg = "\"\(stringValue.escapedForSwiftString)\""
                 parsed.serverDescriptionText = stringValue
+            } else if argument.label?.text == "title",
+                      let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
+                parsed.titleArg = "\"\(stringLiteral.segments.description.escapedForSwiftString)\""
+            } else if argument.label?.text == "websiteUrl",
+                      let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
+                parsed.websiteUrlArg = "\"\(stringLiteral.segments.description.escapedForSwiftString)\""
             } else if argument.label?.text == "generateClient",
                       let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
                 parsed.generateClient = boolLiteral.literal.text == "true"
