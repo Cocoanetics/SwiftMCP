@@ -52,4 +52,26 @@ struct ProxyGeneratorDocCommentTests {
         // The type doc comment prefers the title over the programmatic name.
         #expect(source.contains("A generated proxy for the Weather Tools MCP server (1.0)."))
     }
+
+    @Test("Server titles with special characters are escaped in the generated literal")
+    func escapesSpecialCharactersInTitle() throws {
+        let metadata = ProxyGenerator.HeaderMetadata(
+            fileName: "P.swift",
+            serverName: "p",
+            serverVersion: "1.0",
+            serverDescription: nil,
+            source: nil,
+            openAPI: nil,
+            serverTitle: "a\"b\\c\nd"   // quote, backslash, newline
+        )
+
+        let source = ProxyGenerator.generate(
+            typeName: "P",
+            tools: [],
+            headerMetadata: metadata
+        ).description
+
+        // " -> \", \ -> \\, newline -> \n : a valid Swift literal, not a malformed one.
+        #expect(source.contains(#"a\"b\\c\nd"#))
+    }
 }

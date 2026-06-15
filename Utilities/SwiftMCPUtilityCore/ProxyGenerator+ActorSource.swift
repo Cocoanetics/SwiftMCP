@@ -177,9 +177,16 @@ extension ProxyGenerator {
 
     static func swiftOptionalStringLiteral(_ value: String?) -> String {
         guard let value else { return "nil" }
+        // Escape for embedding as a Swift double-quoted string literal. Server
+        // metadata (e.g. a free-form title) is untrusted display text, so it may
+        // contain backslashes, quotes or newlines. Backslash MUST be escaped
+        // first so the backslashes introduced below are not double-escaped.
         let escaped = value
-            .replacingOccurrences(of: "\\\\", with: "\\\\\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\\\"")
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\n", with: "\\n")
+            .replacingOccurrences(of: "\r", with: "\\r")
+            .replacingOccurrences(of: "\t", with: "\\t")
         return "\"\(escaped)\""
     }
 
