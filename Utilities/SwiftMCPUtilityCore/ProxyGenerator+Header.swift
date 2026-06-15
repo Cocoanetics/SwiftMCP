@@ -41,13 +41,16 @@ extension ProxyGenerator {
     }
 
     private static func typeDocSummary(metadata: HeaderMetadata) -> String {
+        // Prefer the human-friendly title when present, falling back to name.
+        let title = metadata.serverTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let name = metadata.serverName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let displayName = title.isEmpty ? name : title
         let version = metadata.serverVersion?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !name.isEmpty {
+        if !displayName.isEmpty {
             if !version.isEmpty {
-                return "A generated proxy for the \(name) MCP server (\(version))."
+                return "A generated proxy for the \(displayName) MCP server (\(version))."
             }
-            return "A generated proxy for the \(name) MCP server."
+            return "A generated proxy for the \(displayName) MCP server."
         }
         return "A generated MCP server proxy."
     }

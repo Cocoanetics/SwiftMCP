@@ -87,6 +87,9 @@ struct GenerateProxyCommand: AsyncParsableCommand {
         let serverName: String?
         let serverVersion: String?
         let serverDescription: String?
+        let serverTitle: String?
+        let serverWebsiteUrl: String?
+        let serverIconURLs: [String]
     }
 
     private func collectServerSurfaces(proxy: MCPServerProxy) async throws -> ServerSurfaces {
@@ -99,6 +102,9 @@ struct GenerateProxyCommand: AsyncParsableCommand {
         let serverName = await proxy.serverName
         let serverVersion = await proxy.serverVersion
         let serverDescription = await proxy.serverDescription
+        let serverTitle = await proxy.serverTitle
+        let serverWebsiteUrl = await proxy.serverWebsiteUrl?.absoluteString
+        let serverIconURLs = await proxy.serverIcons.map { $0.src.absoluteString }
         return ServerSurfaces(
             tools: tools,
             resources: resources,
@@ -108,7 +114,10 @@ struct GenerateProxyCommand: AsyncParsableCommand {
             supportsPrompts: supportsPrompts,
             serverName: serverName,
             serverVersion: serverVersion,
-            serverDescription: serverDescription
+            serverDescription: serverDescription,
+            serverTitle: serverTitle,
+            serverWebsiteUrl: serverWebsiteUrl,
+            serverIconURLs: serverIconURLs
         )
     }
 
@@ -140,7 +149,10 @@ struct GenerateProxyCommand: AsyncParsableCommand {
             serverVersion: surfaces.serverVersion,
             serverDescription: surfaces.serverDescription,
             source: connectionSourceDescription(),
-            openAPI: openapi
+            openAPI: openapi,
+            serverTitle: surfaces.serverTitle,
+            serverWebsiteUrl: surfaces.serverWebsiteUrl,
+            serverIconURLs: surfaces.serverIconURLs
         )
     }
 

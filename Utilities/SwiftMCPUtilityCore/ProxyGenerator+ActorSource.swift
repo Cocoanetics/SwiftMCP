@@ -56,8 +56,15 @@ extension ProxyGenerator {
     }
 
     private static func appendMetadataSection(metadata: HeaderMetadata, into lines: inout [String]) {
+        let name = swiftOptionalStringLiteral(metadata.serverName)
+        let title = swiftOptionalStringLiteral(metadata.serverTitle)
+        let website = swiftOptionalStringLiteral(metadata.serverWebsiteUrl)
+        let icons = metadata.serverIconURLs.map { swiftOptionalStringLiteral($0) }.joined(separator: ", ")
         lines.append("    // MARK: - Metadata")
-        lines.append("    public static let serverName: String? = \(swiftOptionalStringLiteral(metadata.serverName))")
+        lines.append("    public static let serverName: String? = \(name)")
+        lines.append("    public static let serverTitle: String? = \(title)")
+        lines.append("    public static let serverWebsiteUrl: String? = \(website)")
+        lines.append("    public static let serverIconURLs: [String] = [\(icons)]")
         lines.append("")
     }
 
