@@ -97,6 +97,22 @@ struct ProtocolVersionProfileTests {
         #expect(!MCPProtocolVersion.supported.contains(MCPProtocolVersion.modern))
     }
 
+    /// Guardrail: the server must only advertise the latest stable version it
+    /// more or less fully supports. Until the modern (`2026-07-28`) surface
+    /// (server/discover, MRTR, sessionless transport, …) is implemented, every
+    /// advertised version must be legacy-era, and `latest` must be advertised.
+    /// Adding a modern version here must be a deliberate change to this test.
+    @Test("Only fully-supported (legacy-era) versions are advertised")
+    func advertisesOnlyImplementedVersions() {
+        for version in MCPProtocolVersion.supported {
+            let profile = MCPProtocolVersion.profile(for: version)
+            #expect(profile != nil, "advertised version \(version) has no profile")
+            #expect(profile?.era == .legacy, "advertised version \(version) is not a fully-supported version")
+        }
+        #expect(MCPProtocolVersion.supported.contains(MCPProtocolVersion.latest))
+        #expect(!MCPProtocolVersion.supported.contains(MCPProtocolVersion.modern))
+    }
+
     // MARK: - The batching delta (the motivating case)
 
     @Test("JSON-RPC batching is only on for the revisions that defined it")
