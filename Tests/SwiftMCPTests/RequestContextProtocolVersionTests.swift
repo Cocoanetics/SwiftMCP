@@ -76,15 +76,17 @@ struct RequestContextProtocolVersionTests {
         }
     }
 
-    @Test("_meta wins over the session when both are present")
-    func metaWinsOverSession() async {
+    @Test("A negotiated legacy session wins over a stray _meta version")
+    func sessionVersionWinsOverMeta() async {
         let session = Session(id: UUID())
         await session.setNegotiatedProtocolVersion("2025-06-18")
-        let context = makeContext(meta: [MCPMetaKey.protocolVersion: .string("2026-07-28")])
+        // A legacy client must not be able to opt into a different version by
+        // adding a per-request _meta protocolVersion.
+        let context = makeContext(meta: [MCPMetaKey.protocolVersion: .string("2025-11-25")])
 
         await session.work { _ in
-            #expect(await context.effectiveProtocolVersion == "2026-07-28")
-            #expect(await context.protocolProfile.isModern)
+            #expect(await context.effectiveProtocolVersion == "2025-06-18")
+            #expect(await context.protocolProfile.era == .legacy)
         }
     }
 }
