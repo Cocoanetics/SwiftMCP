@@ -146,6 +146,13 @@ public final class StdioTransport: Transport, Service, @unchecked Sendable {
                 return
             }
 
+            let batchVersion = await JSONRPCMessage.batchingVersion(for: messages, session: session)
+            if JSONRPCMessage.batchingRejected(body: data, version: batchVersion) {
+                logger.warning("Rejected stdio batch on protocol version \(batchVersion)")
+                try await send([JSONRPCMessage.batchingRejectionResponse(version: batchVersion)])
+                return
+            }
+
             let responses = await server.processBatch(messages)
 
             guard !responses.isEmpty else {

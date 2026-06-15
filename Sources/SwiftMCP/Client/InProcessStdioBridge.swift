@@ -79,6 +79,9 @@ final class InProcessStdioBridge: StdioConnection, @unchecked Sendable {
                     return SessionInitializationGate.rejectionResponses(for: messages)
                 }
 
+                // The in-process bridge is internal SwiftMCP infrastructure, not an
+                // external wire transport, so it is intentionally not version-gated
+                // for batching (see LineTransportInitializationTests).
                 return await server.processBatch(messages)
             }
             guard !responses.isEmpty else { return }

@@ -47,6 +47,27 @@ extension JSONRPCMessage {
         }
         return !profile.has(.jsonRPCBatching)
     }
+
+    /// The protocol version that governs batching on a session-bound transport
+    /// (stdio, TCP, in-process): the session's negotiated version, else a
+    /// leading `initialize`'s declared version, else `latest` — mirroring the
+    /// HTTP resolution order.
+    static func batchingVersion(for messages: [JSONRPCMessage], session: Session) async -> String {
+        await session.negotiatedProtocolVersion
+            ?? SessionInitializationGate.initializeProtocolVersion(messages)
+            ?? MCPProtocolVersion.latest
+    }
+
+    /// The JSON-RPC error response for a batch rejected under `version`.
+    static func batchingRejectionResponse(version: String) -> JSONRPCMessage {
+        .errorResponse(
+            id: nil,
+            error: .init(
+                code: -32600,
+                message: "JSON-RPC batching is not supported in protocol version \(version)."
+            )
+        )
+    }
 }
 
 #if Server
