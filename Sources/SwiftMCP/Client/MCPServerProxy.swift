@@ -91,6 +91,14 @@ public final actor MCPServerProxy {
     public internal(set) var serverIcons: [Icon] = []
     public internal(set) var serverCapabilities: ServerCapabilities?
 
+    /// The protocol revision negotiated with the server during `initialize`
+    /// (the value the server echoed back, which may be older than the `latest`
+    /// the client proposed). `nil` until the handshake completes. The client
+    /// honors this when acting on the connection — notably the
+    /// `MCP-Protocol-Version` header it sends on subsequent streamable-HTTP
+    /// requests.
+    public internal(set) var negotiatedProtocolVersion: String?
+
     internal var notificationHandlers: [String: NotificationHandlerBox] = [:]
 
     /// Optional handler for log notifications from the server.

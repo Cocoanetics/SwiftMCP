@@ -37,10 +37,32 @@ extension MCPServerProxy {
     }
 
     internal func applyStreamableProtocolHeaders(_ request: inout URLRequest) {
-        request.setValue(MCPProtocolVersion.latest, forHTTPField: .mcpProtocolVersion)
+        // After the handshake the client MUST echo the *negotiated* revision,
+        // not the `latest` it proposed (2025-06-18 transport rules). Passing
+        // `nil` omits the header entirely, which is what a pre-2025-06-18
+        // negotiated revision requires (the header postdates it).
+        request.setValue(mcpProtocolVersionHeaderValue, forHTTPField: .mcpProtocolVersion)
         if let sessionID {
             request.setValue(sessionID, forHTTPField: .mcpSessionID)
         }
+    }
+
+    /// The value for the `MCP-Protocol-Version` header on streamable-HTTP
+    /// requests: the negotiated revision once known, otherwise the `latest` the
+    /// client is about to propose on the `initialize` request.
+    internal var mcpProtocolVersionHeaderValue: String? {
+        Self.mcpProtocolVersionHeader(for: negotiatedProtocolVersion ?? MCPProtocolVersion.latest)
+    }
+
+    /// The `MCP-Protocol-Version` header value for `version`: the revision
+    /// itself when it includes the header feature (`2025-06-18`+), otherwise
+    /// `nil` so the header is omitted for revisions that predate it. Unknown
+    /// revisions are treated permissively (sent as-is).
+    internal static func mcpProtocolVersionHeader(for version: String) -> String? {
+        guard MCPProtocolVersion.profile(for: version)?.has(.protocolVersionHeader) ?? true else {
+            return nil
+        }
+        return version
     }
 
     internal func configureSSEPOSTRequest(

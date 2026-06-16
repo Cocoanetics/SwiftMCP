@@ -13,6 +13,10 @@ extension MCPServerProxy {
         isDisconnecting = false
         streamFailure = nil
         endpointURL = nil
+        // Clear any version carried over from a previous connection so the
+        // re-`initialize` below proposes `latest` afresh rather than echoing a
+        // stale negotiated version in its `MCP-Protocol-Version` header.
+        negotiatedProtocolVersion = nil
 
         // Reset the session identity so a reconnect after `.sessionInvalidated`
         // starts clean. The stdio/TCP cases immediately assign a fresh
@@ -219,6 +223,9 @@ extension MCPServerProxy {
 
         let rawServerDescription = extractServerDescription(from: result)
         let initResult = try Self.decodeJSONPayload(result, as: InitializeResult.self)
+        // The server echoes the agreed revision, which may be older than the
+        // `latest` we proposed; from here on the client acts on this version.
+        negotiatedProtocolVersion = initResult.protocolVersion
         serverName = initResult.serverInfo.name
         serverVersion = initResult.serverInfo.version
         serverDescription = initResult.serverInfo.description ?? rawServerDescription
