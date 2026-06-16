@@ -98,8 +98,8 @@ struct HTTPTransportTests {
         #endif
     }
 
-    @Test("POST /mcp: initialize rejects unsupported protocol version")
-    func initializeRejectsUnsupportedProtocolVersion() async throws {
+    @Test("POST /mcp: initialize down-negotiates an unsupported protocol version to the server's latest")
+    func initializeDownNegotiatesUnsupportedProtocolVersion() async throws {
         #if canImport(FoundationNetworking)
         return
         #else
@@ -112,6 +112,9 @@ struct HTTPTransportTests {
                 id: 1,
                 method: "initialize",
                 params: [
+                    // A revision the server doesn't support (here an older,
+                    // profile-only one). Per the MCP lifecycle the server must
+                    // offer a version it *does* support rather than reject.
                     "protocolVersion": .string("2024-11-05"),
                     "capabilities": .object([:]),
                     "clientInfo": .object([
@@ -125,15 +128,15 @@ struct HTTPTransportTests {
         let (response, events) = try await HTTPTransportTestHelpers.readFiniteSSEResponse(request)
         #expect(response.statusCode == 200)
 
-        let initEvent = try #require(HTTPTransportTestHelpers.errorResponseEvent(events, id: 1))
+        let initEvent = try #require(HTTPTransportTestHelpers.responseEvent(events, id: 1))
         let message = try #require(try HTTPTransportTestHelpers.decodeEventMessage(initEvent))
-        guard case .errorResponse(let errorData) = message else {
-            Issue.record("Expected initialize error response")
+        guard case .response(let responseData) = message else {
+            Issue.record("Expected a successful initialize response")
             return
         }
 
-        #expect(errorData.error.code == -32602)
-        #expect(errorData.error.message.contains("Unsupported protocol version"))
+        // The handshake succeeds and the server advertises its latest revision.
+        #expect(responseData.result?["protocolVersion"]?.stringValue == MCPProtocolVersion.latest)
         #endif
     }
 

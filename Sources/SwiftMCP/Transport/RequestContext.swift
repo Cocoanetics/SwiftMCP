@@ -204,6 +204,21 @@ public final class RequestContext: Sendable {
             throw MCPServerError.noActiveSession
         }
 
+        // Elicitation was introduced in 2025-06-18. If the session negotiated an
+        // earlier revision, the feature is not part of the agreed protocol —
+        // refuse rather than emitting an `elicitation/create` the client cannot
+        // understand. Gate on the negotiated profile, not just the advertised
+        // capability, so a client that over-declares the capability on an older
+        // revision is still held to what it negotiated.
+        if let version = await session.negotiatedProtocolVersion,
+           let profile = MCPProtocolVersion.profile(for: version),
+           !profile.has(.elicitation) {
+            throw MCPServerError.featureUnavailableInNegotiatedVersion(
+                feature: .elicitation,
+                version: version
+            )
+        }
+
         // Check if client supports elicitation
         let capabilities = await session.clientCapabilities
         guard capabilities?.elicitation != nil else {

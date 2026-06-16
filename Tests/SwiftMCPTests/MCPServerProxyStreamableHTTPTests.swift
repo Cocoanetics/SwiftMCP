@@ -29,6 +29,27 @@ struct MCPServerProxyStreamableHTTPTests {
         #expect(!tools.isEmpty)
     }
 
+    @Test("Proxy captures the negotiated protocol version and keeps sending matching headers")
+    func capturesNegotiatedVersion() async throws {
+        let (transport, url) = try await startTransport()
+        defer { Task { try? await transport.stop() } }
+
+        let proxy = MCPServerProxy(config: .sse(config: MCPServerSseConfig(url: url)))
+        defer { Task { await proxy.disconnect() } }
+
+        try await proxy.connect()
+
+        // The server echoes the version the client proposed (`latest`).
+        let negotiated = await proxy.negotiatedProtocolVersion
+        #expect(negotiated == MCPProtocolVersion.latest)
+
+        // A follow-up request now carries the negotiated version in its
+        // `MCP-Protocol-Version` header. If the client still sent a mismatching
+        // value the server's `validateHTTPProtocolVersion` guard would reject it
+        // with HTTP 400, so a successful ping proves the header agrees.
+        try await proxy.ping()
+    }
+
     @Test("Proxy receives list-changed notifications over the general GET stream")
     func receivesToolsListChanged() async throws {
         let (transport, url) = try await startTransport()

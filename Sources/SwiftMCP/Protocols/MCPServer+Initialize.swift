@@ -15,14 +15,16 @@ public extension MCPServer {
         _ request: JSONRPCMessage.JSONRPCRequestData
     ) async -> JSONRPCMessage? {
         await Session.current?.markInitializeRequestReceived()
-        let negotiatedProtocolVersion = request.params?["protocolVersion"]?.stringValue
+        // MCP lifecycle negotiation: echo the requested revision when we support
+        // it, otherwise respond with the latest revision we *do* support — never
+        // reject the handshake. A client that proposed something we don't know
+        // (typically a newer revision) then decides whether it can speak our
+        // latest. Absent any proposal we assume our latest.
+        let requestedProtocolVersion = request.params?["protocolVersion"]?.stringValue
             ?? MCPProtocolVersion.latest
-        guard MCPProtocolVersion.supported.contains(negotiatedProtocolVersion) else {
-            return JSONRPCMessage.errorResponse(
-                id: request.id,
-                error: .init(code: -32602, message: "Unsupported protocol version: \(negotiatedProtocolVersion)")
-            )
-        }
+        let negotiatedProtocolVersion = MCPProtocolVersion.supported.contains(requestedProtocolVersion)
+            ? requestedProtocolVersion
+            : MCPProtocolVersion.latest
         await Session.current?.setNegotiatedProtocolVersion(negotiatedProtocolVersion)
         await extractAndStoreCapabilities(request)
         await extractAndStoreClientInfo(request)
