@@ -152,7 +152,7 @@ extension URITemplateValidator {
 
         let operatorStripResult = stripOperator(expression)
         if let failure = operatorStripResult.failure { return failure }
-        var expr = operatorStripResult.expr
+        let expr = operatorStripResult.expr
         var level = operatorStripResult.level
 
         let variables = expr.split(separator: ",")

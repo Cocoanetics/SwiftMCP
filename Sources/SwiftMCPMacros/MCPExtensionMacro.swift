@@ -80,6 +80,15 @@ public enum \(extensionName) {
         return [DeclSyntax(stringLiteral: nestedEnum)]
     }
 
+    public static func expansion(
+        of node: AttributeSyntax,
+        providingMembersOf declaration: some DeclGroupSyntax,
+        conformingTo protocols: [TypeSyntax],
+        in context: some MacroExpansionContext
+    ) throws -> [DeclSyntax] {
+        try expansion(of: node, providingMembersOf: declaration, in: context)
+    }
+
     /// Resolves the extension name from the attribute's first string-literal
     /// argument or, when absent, derives it from the source file path.
     private static func resolveExtensionName(

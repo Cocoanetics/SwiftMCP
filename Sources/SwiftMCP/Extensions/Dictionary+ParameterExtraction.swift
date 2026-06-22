@@ -70,19 +70,24 @@ public extension Dictionary where Key == String, Value == JSONValue {
             return (jsonValue as! T)
         }
         if T.self == Bool.self {
-            return try (extractBool(named: name) as! T)
+            let value = try extractBool(named: name)
+            return (value as! T)
         }
         if T.self == Date.self {
-            return try (extractDate(named: name) as! T)
+            let value = try extractDate(named: name)
+            return (value as! T)
         }
         if T.self == URL.self {
-            return try (extractURL(named: name) as! T)
+            let value = try extractURL(named: name)
+            return (value as! T)
         }
         if T.self == UUID.self {
-            return try (extractUUID(named: name) as! T)
+            let value = try extractUUID(named: name)
+            return (value as! T)
         }
         if T.self == Data.self {
-            return try (extractData(named: name) as! T)
+            let value = try extractData(named: name)
+            return (value as! T)
         }
         if T.self == String.self, let stringValue = jsonValue.stringValue {
             return (stringValue as! T)
