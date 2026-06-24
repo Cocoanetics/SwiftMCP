@@ -234,7 +234,7 @@ extension HTTPSSETransport {
 
 		let err = JSONRPCMessage.errorResponse(
 			id: nil,
-			error: .init(code: -32000, message: localizedDescription, data: errorData)
+			error: .init(code: -32000, message: localizedDescription, data: .object(errorData))
 		)
 
 		let data = (try? JSONEncoder().encode(err)) ?? Data()

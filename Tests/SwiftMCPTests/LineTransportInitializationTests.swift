@@ -64,7 +64,7 @@ struct LineTransportInitializationTests {
             return
         }
 
-        #expect(error.id == .int(7))
+        #expect(error.id == .integer(7))
         #expect(error.error.message == SessionInitializationGate.rejectionMessage)
     }
 
@@ -102,7 +102,7 @@ struct LineTransportInitializationTests {
             return
         }
 
-        #expect(error.id == .int(1))
+        #expect(error.id == .integer(1))
         #expect(error.error.message == SessionInitializationGate.rejectionMessage)
     }
 
@@ -134,13 +134,13 @@ struct LineTransportInitializationTests {
             return
         }
 
-        #expect(initializeResponse.id == .int(1))
+        #expect(initializeResponse.id == .integer(1))
 
         guard case .response(let pingResponse) = messages[1] else {
             Issue.record("Expected ping response")
             return
         }
 
-        #expect(pingResponse.id == .int(2))
+        #expect(pingResponse.id == .integer(2))
     }
 }

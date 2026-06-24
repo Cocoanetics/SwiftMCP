@@ -170,7 +170,7 @@ enum HTTPTransportTestHelpers {
                   case .response(let response) = message else {
                 return false
             }
-            return response.id == .int(id)
+            return response.id == .integer(id)
         }
     }
 
@@ -190,7 +190,7 @@ enum HTTPTransportTestHelpers {
                   case .errorResponse(let errorResponse) = message else {
                 return false
             }
-            return errorResponse.id == .int(id)
+            return errorResponse.id == .integer(id)
         }
     }
 }

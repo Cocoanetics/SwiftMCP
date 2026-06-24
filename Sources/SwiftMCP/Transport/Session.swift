@@ -245,7 +245,7 @@ public actor Session {
         // Extract the string ID for tracking
         let id: String
         switch messageId {
-        case .int(let intId):
+        case .integer(let intId):
             id = String(intId)
         case .string(let stringId):
             id = stringId
@@ -277,7 +277,7 @@ public actor Session {
 
         let id: String
         switch messageId {
-        case .int(let intId):
+        case .integer(let intId):
             id = String(intId)
         case .string(let stringId):
             id = stringId

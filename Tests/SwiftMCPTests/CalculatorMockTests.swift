@@ -27,7 +27,7 @@ struct CalculatorMockTests {
                 throw TestError("Expected response case")
             }
 
-            #expect(response.id == .int(1))
+            #expect(response.id == .integer(1))
             let result = try #require(response.result)
             let isError = try #require(result["isError"]?.value as? Bool)
             #expect(isError == false)
@@ -58,7 +58,7 @@ struct CalculatorMockTests {
                 throw TestError("Expected response case")
             }
 
-            #expect(response.id == .int(1))
+            #expect(response.id == .integer(1))
             let result = try #require(response.result)
             let isError = try #require(result["isError"]?.value as? Bool)
             #expect(isError == false)
@@ -89,7 +89,7 @@ struct CalculatorMockTests {
                 throw TestError("Expected response case")
             }
 
-            #expect(response.id == .int(1))
+            #expect(response.id == .integer(1))
             let result = try #require(response.result)
             let isError = try #require(result["isError"]?.value as? Bool)
             #expect(isError == false)
@@ -120,7 +120,7 @@ struct CalculatorMockTests {
                 throw TestError("Expected response case")
             }
 
-            #expect(response.id == .int(1))
+            #expect(response.id == .integer(1))
             let result = try #require(response.result)
             let isError = try #require(result["isError"]?.value as? Bool)
             #expect(isError == false)
@@ -155,7 +155,7 @@ struct CalculatorMockTests {
                 throw TestError("Expected response case")
             }
 
-            #expect(response.id == .int(1))
+            #expect(response.id == .integer(1))
             let result = try #require(response.result)
             let isError = try #require(result["isError"]?.value as? Bool)
             #expect(isError == false)
@@ -186,7 +186,7 @@ struct CalculatorMockTests {
                 throw TestError("Expected response case")
             }
 
-            #expect(response.id == .int(1))
+            #expect(response.id == .integer(1))
             let result = try #require(response.result)
             let isError = try #require(result["isError"]?.value as? Bool)
             #expect(isError == false)
