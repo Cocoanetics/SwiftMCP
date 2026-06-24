@@ -24,7 +24,7 @@ private func createContact(client: MockClient) async throws -> (text: String, st
     guard case .response(let createResponse) = createMessage else {
         throw TestError("Expected response case")
     }
-    #expect(createResponse.id == .int(1))
+    #expect(createResponse.id == .integer(1))
     let createResult = try #require(createResponse.result)
     let createIsError = try #require(createResult["isError"]?.value as? Bool)
     #expect(createIsError == false)
@@ -62,7 +62,7 @@ private func processContacts(client: MockClient, contactText: String) async thro
     guard case .response(let processResponse) = processMessage else {
         throw TestError("Expected response case")
     }
-    #expect(processResponse.id == .int(1))
+    #expect(processResponse.id == .integer(1))
     let processResult = try #require(processResponse.result)
     let processIsError = try #require(processResult["isError"]?.value as? Bool)
     #expect(processIsError == false)
@@ -161,7 +161,7 @@ private func createProfileFor(client: MockClient, contactText: String, addressTe
     guard case .response(let profileResponse) = profileMessage else {
         throw TestError("Expected response case")
     }
-    #expect(profileResponse.id == .int(1))
+    #expect(profileResponse.id == .integer(1))
     let profileResult = try #require(profileResponse.result)
     let profileIsError = try #require(profileResult["isError"]?.value as? Bool)
     #expect(profileIsError == false)

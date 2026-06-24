@@ -97,7 +97,7 @@ struct EnumTests {
                 throw TestError("Expected response case")
             }
 
-            #expect(responseData.id == .int(1))
+            #expect(responseData.id == .integer(1))
             let result = try #require(responseData.result)
             let isError = try #require(result["isError"]?.value as? Bool)
             #expect(isError == false)
@@ -128,7 +128,7 @@ struct EnumTests {
                 throw TestError("Expected response case")
             }
 
-            #expect(responseData.id == .int(2))
+            #expect(responseData.id == .integer(2))
             let result = try #require(responseData.result)
             let isError = try #require(result["isError"]?.value as? Bool)
             #expect(isError == false)
@@ -163,7 +163,7 @@ struct EnumTests {
                 throw TestError("Expected response case")
             }
 
-            #expect(responseData.id == .int(3))
+            #expect(responseData.id == .integer(3))
             let result = try #require(responseData.result)
             let content = try #require(result["content"]?.value as? [[String: String]])
             let firstContent = try #require(content.first)
@@ -196,7 +196,7 @@ struct EnumTests {
                 throw TestError("Expected response case")
             }
 
-            #expect(responseData.id == .int(4))
+            #expect(responseData.id == .integer(4))
             let result = try #require(responseData.result)
             let isError = try #require(result["isError"]?.value as? Bool)
             #expect(isError == false)
@@ -227,7 +227,7 @@ struct EnumTests {
                 throw TestError("Expected response case")
             }
 
-            #expect(responseData.id == .int(5))
+            #expect(responseData.id == .integer(5))
             let result = try #require(responseData.result)
             let isError = try #require(result["isError"]?.value as? Bool)
             #expect(isError == false)
@@ -256,7 +256,7 @@ struct EnumTests {
                 throw TestError("Expected response case")
             }
 
-            #expect(responseData.id == .int(6))
+            #expect(responseData.id == .integer(6))
             let result = try #require(responseData.result)
             let isError = try #require(result["isError"]?.value as? Bool)
             #expect(isError == false)

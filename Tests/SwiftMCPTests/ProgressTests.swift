@@ -37,7 +37,7 @@ func testContextProgressToken() throws {
     )
 
     let context = RequestContext(message: message)
-    #expect(context.id == .int(1))
+    #expect(context.id == .integer(1))
     #expect(context.method == "tools/call")
     #expect(context.meta?.progressToken?.value as? Int == 5)
 }

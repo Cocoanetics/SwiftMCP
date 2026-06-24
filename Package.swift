@@ -18,10 +18,6 @@ let package = Package(
 			name: "SwiftMCP",
 			targets: ["SwiftMCP"]
 		),
-		.library(
-			name: "JSONValue",
-			targets: ["JSONValue"]
-		),
 		// The server demo CLIs run the swift-nio-backed transports under the
 		// `Server` trait; their transport code is gated `#if Server`, so with
 		// `Server` disabled they build as a no-op stub (no swift-nio).
@@ -105,7 +101,13 @@ let package = Package(
 		// NIO-free (only swift-log + swift-async-algorithms), so it is linked
 		// only under the `Server` trait to keep the core dependency-light.
 		.package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.6.0"),
-		.package(url: "https://github.com/Cocoanetics/SwiftCross.git", from: "1.2.0")
+		.package(url: "https://github.com/Cocoanetics/SwiftCross.git", from: "1.2.0"),
+		// Foundation-only JSON family (value type + JSON Schema model + JSON-RPC
+		// 2.0 envelope types) in one `JSONFoundation` module. Extracted to its own
+		// repo so it can be consumed without SwiftMCP's NIO/crypto graph. Linked
+		// into the core target and re-exported via Exports.swift, so `import
+		// SwiftMCP` still surfaces these types.
+		.package(url: "https://github.com/Cocoanetics/JSONFoundation.git", from: "1.1.0")
     ],
 	targets: [
 		.macro(
@@ -116,13 +118,10 @@ let package = Package(
 			]
 		),
 		.target(
-			name: "JSONValue"
-		),
-		.target(
 			name: "SwiftMCP",
 			dependencies: [
 				"SwiftMCPMacros",
-				"JSONValue",
+				.product(name: "JSONFoundation", package: "JSONFoundation"),
 				.product(name: "SwiftCross", package: "SwiftCross"),
 				.product(name: "Logging", package: "swift-log"),
 				// Shared HTTP currency types — core dependency (NIO-free,

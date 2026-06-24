@@ -12,7 +12,7 @@ func testDecodeJSONRPCRequest() throws {
 		throw TestError("Expected request case")
 	}
 	#expect(request.jsonrpc == "2.0")
-	#expect(request.id == .int(1))
+	#expect(request.id == .integer(1))
 	#expect(request.method == "testMethod")
 	#expect(request.params?["foo"]?.value as? Int == 42)
 }
@@ -27,7 +27,7 @@ func testDecodeJSONRPCResponse() throws {
 		throw TestError("Expected response case")
 	}
 	#expect(response.jsonrpc == "2.0")
-	#expect(response.id == .int(1))
+	#expect(response.id == .integer(1))
 	#expect(response.result?["bar"]?.value as? String == "baz")
 }
 
@@ -41,7 +41,7 @@ func testDecodeJSONRPCErrorResponse() throws {
 		throw TestError("Expected errorResponse case")
 	}
 	#expect(error.jsonrpc == "2.0")
-	#expect(error.id == .int(1))
+	#expect(error.id == .integer(1))
 	#expect(error.error.code == -32601)
 	#expect(error.error.message == "Method not found")
 }
@@ -63,7 +63,7 @@ func testDecodeJSONRPCBatch() throws {
 	guard case .request(let request1) = batch[0] else {
 		throw TestError("Expected first message to be request")
 	}
-	#expect(request1.id == .int(1))
+	#expect(request1.id == .integer(1))
 	#expect(request1.method == "ping")
 
 	// Check second message is a notification
@@ -76,7 +76,7 @@ func testDecodeJSONRPCBatch() throws {
 	guard case .request(let request2) = batch[2] else {
 		throw TestError("Expected third message to be request")
 	}
-	#expect(request2.id == .int(2))
+	#expect(request2.id == .integer(2))
 	#expect(request2.method == "tools/list")
 }
 
@@ -107,13 +107,13 @@ func testHandleBatchRequest() async throws {
 	guard case .response(let response1) = responses[0] else {
 		throw TestError("Expected first response to be response")
 	}
-	#expect(response1.id == .int(1))
+	#expect(response1.id == .integer(1))
 
 	// Check second response (tools/list)
 	guard case .response(let response2) = responses[1] else {
 		throw TestError("Expected second response to be response")
 	}
-	#expect(response2.id == .int(2))
+	#expect(response2.id == .integer(2))
 }
 
 @Test
@@ -134,11 +134,11 @@ func testEncodeBatchResponse() throws {
 	guard case .response(let response1) = decoded[0] else {
 		throw TestError("Expected first message to be response")
 	}
-	#expect(response1.id == .int(1))
+	#expect(response1.id == .integer(1))
 
 	// Check second response
 	guard case .response(let response2) = decoded[1] else {
 		throw TestError("Expected second message to be response")
 	}
-	#expect(response2.id == .int(2))
+	#expect(response2.id == .integer(2))
 }

@@ -25,7 +25,7 @@ func testIntArrayProcessing() async throws {
         #expect(Bool(false), "Expected response case")
         return
     }
-    #expect(response.id == .int(1))
+    #expect(response.id == .integer(1))
     let result = try #require(response.result)
     let isError = try #require(result["isError"]?.value as? Bool)
     #expect(isError == false)
@@ -56,7 +56,7 @@ func testOptionalIntArrayProcessing() async throws {
         #expect(Bool(false), "Expected response case")
         return
     }
-    #expect(response.id == .int(1))
+    #expect(response.id == .integer(1))
     let result = try #require(response.result)
     let isError = try #require(result["isError"]?.value as? Bool)
     #expect(isError == false)
@@ -89,7 +89,7 @@ func testStringArrayProcessing() async throws {
         #expect(Bool(false), "Expected response case")
         return
     }
-    #expect(response.id == .int(1))
+    #expect(response.id == .integer(1))
     let result = try #require(response.result)
     let isError = try #require(result["isError"]?.value as? Bool)
     #expect(isError == false)
@@ -122,7 +122,7 @@ func testDoubleArrayProcessing() async throws {
         #expect(Bool(false), "Expected response case")
         return
     }
-    #expect(response.id == .int(1))
+    #expect(response.id == .integer(1))
     let result = try #require(response.result)
     let isError = try #require(result["isError"]?.value as? Bool)
     #expect(isError == false)
@@ -155,7 +155,7 @@ func testOptionalDoubleArrayProcessing() async throws {
         #expect(Bool(false), "Expected response case")
         return
     }
-    #expect(response.id == .int(1))
+    #expect(response.id == .integer(1))
     let result = try #require(response.result)
     let isError = try #require(result["isError"]?.value as? Bool)
     #expect(isError == false)
@@ -188,7 +188,7 @@ func testBooleanArrayProcessing() async throws {
         #expect(Bool(false), "Expected response case")
         return
     }
-    #expect(response.id == .int(1))
+    #expect(response.id == .integer(1))
     let result = try #require(response.result)
     let isError = try #require(result["isError"]?.value as? Bool)
     #expect(isError == false)
@@ -221,7 +221,7 @@ func testOptionalBooleanArrayProcessing() async throws {
         #expect(Bool(false), "Expected response case")
         return
     }
-    #expect(response.id == .int(1))
+    #expect(response.id == .integer(1))
     let result = try #require(response.result)
     let isError = try #require(result["isError"]?.value as? Bool)
     #expect(isError == false)

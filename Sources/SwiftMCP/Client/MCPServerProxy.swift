@@ -64,7 +64,7 @@ public final actor MCPServerProxy {
 
     internal func nextRequestID() -> JSONRPCID {
         defer { requestIdSequence += 1 }
-        return .int(requestIdSequence)
+        return .integer(requestIdSequence)
     }
 
     internal var responseTasks: [JSONRPCID: CheckedContinuation<JSONRPCMessage, Error>] = [:]
@@ -165,7 +165,7 @@ public final actor MCPServerProxy {
 extension JSONRPCID {
     internal var stringValue: String {
         switch self {
-        case .int(let value):
+        case .integer(let value):
             return String(value)
         case .string(let value):
             return value

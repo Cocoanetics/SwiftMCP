@@ -53,7 +53,7 @@ public struct LogMessage: Codable, Sendable {
     public init(level: LogLevel, data: [String: Any], logger: String? = nil) {
         self.level = level
         self.logger = logger
-        self.data = .object((try? data.mapValues { try JSONValue(jsonObject: $0) }) ?? [:])
+        self.data = .object(data.mapValues { JSONValue(jsonObject: $0) })
     }
 
     public init(from decoder: any Decoder) throws {

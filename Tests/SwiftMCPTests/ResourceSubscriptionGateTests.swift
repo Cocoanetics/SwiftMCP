@@ -45,7 +45,7 @@ struct ResourceSubscriptionGateTests {
             return
         }
 
-        #expect(response.id == .int(1))
+        #expect(response.id == .integer(1))
         #expect(response.error.code == -32601)
         #expect(response.error.message == Self.unsupportedMessage)
     }
