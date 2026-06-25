@@ -249,9 +249,7 @@ extension MCPServerProxy {
 
     /// Sends a JSON-RPC notification (fire-and-forget, no response expected).
     internal func sendNotification(_ message: JSONRPCMessage) async throws {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        let data = try encoder.encode(message)
+        let data = try JSONRPCMessage.makeEncoder().encode(message)
 
         switch config {
         case .stdio, .stdioHandles, .tcp:

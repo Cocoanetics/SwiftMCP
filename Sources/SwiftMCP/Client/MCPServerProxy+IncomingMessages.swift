@@ -82,8 +82,7 @@ extension MCPServerProxy {
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         configureSSEPOSTRequest(&urlRequest, sseConfig: sseConfig)
-        let encoder = JSONEncoder()
-        let data = try? encoder.encode(response)
+        let data = try? JSONRPCMessage.makeEncoder().encode(response)
         urlRequest.httpBody = data
         do {
             let (_, response) = try await session.data(for: urlRequest)
