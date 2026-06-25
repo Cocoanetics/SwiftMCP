@@ -188,9 +188,24 @@ extension HTTPSSETransport {
 		token: String?,
 		context: StreamableHTTPContext
 	) async -> RouteResponse {
-		let sid = context.sessionID.uuidString
 		let session = await sessionManager.session(id: context.sessionID)
 		await bindBearerTokenIfNeeded(token, to: context.sessionID)
+
+		// Connection-based mode: hand the (already gated) frame to the session's
+		// scoped connection and let `serve(over:)` dispatch it.
+		if server == nil {
+			return await dispatchStreamableScoped(messages: messages, session: session, context: context)
+		}
+		return await dispatchStreamableCoupled(messages: messages, session: session, context: context)
+	}
+
+	/// Server-coupled dispatch: process the batch inline and stream/ack the result.
+	private func dispatchStreamableCoupled(
+		messages: [JSONRPCMessage],
+		session: Session,
+		context: StreamableHTTPContext
+	) async -> RouteResponse {
+		let sid = context.sessionID.uuidString
 		let containsRequests = batchContainsRequests(messages)
 
 		if containsRequests {
@@ -208,7 +223,7 @@ extension HTTPSSETransport {
 
 			Task {
 				let responses = await session.work(onStream: streamContext) { _ in
-					await self.server.processBatch(messages, ignoringEmptyResponses: true)
+					await self.server?.processBatch(messages, ignoringEmptyResponses: true) ?? []
 				}
 
 				for response in responses {
@@ -229,8 +244,60 @@ extension HTTPSSETransport {
 		}
 
 		_ = await session.work { _ in
-			await self.server.processBatch(messages, ignoringEmptyResponses: true)
+			await self.server?.processBatch(messages, ignoringEmptyResponses: true)
 		}
+
+		return RouteResponse(status: .accepted, headerFields: [.mcpSessionID: sid])
+	}
+
+	/// Connection-based dispatch: feed the frame to the session's scoped
+	/// connection so `serve(over:)` routes it. For a request-bearing POST the
+	/// frame's `within` scope binds the per-request SSE stream (so responses and
+	/// mid-call notifications land on it) and finishes the stream after dispatch;
+	/// the open stream is returned as the POST body. A notification-only POST is
+	/// dispatched without a stream and acknowledged with `202`.
+	private func dispatchStreamableScoped(
+		messages: [JSONRPCMessage],
+		session: Session,
+		context: StreamableHTTPContext
+	) async -> RouteResponse {
+		let sid = context.sessionID.uuidString
+		let (connection, isNew) = await connectionRegistry.connection(for: context.sessionID, transport: self)
+		if isNew {
+			connectionsContinuation.yield(connection)
+		}
+
+		if batchContainsRequests(messages) {
+			guard "text/event-stream".matchesAcceptHeader(context.acceptHeader)
+				|| "*/*".matchesAcceptHeader(context.acceptHeader) else {
+				return textResponse(
+					status: .badRequest,
+					body: "Client must accept text/event-stream.",
+					sessionID: context.sessionID
+				)
+			}
+
+			let (stream, streamInfo) = await createSSEStream(sessionID: context.sessionID, kind: .request)
+			let streamContext = OutboundStreamContext(streamID: streamInfo.streamID, kind: .request)
+
+			connection.deliver(MCPInboundFrame(messages) { operation in
+				await session.work(onStream: streamContext) { _ in await operation() }
+				await self.finishSSEStream(streamInfo.streamID)
+			})
+
+			let headerFields: HTTPFields = [
+				.contentType: "text/event-stream",
+				.cacheControl: "no-cache",
+				.connection: "keep-alive",
+				.mcpSessionID: sid
+			]
+
+			return RouteResponse(status: .ok, headerFields: headerFields, bodyStream: stream, streamInfo: streamInfo)
+		}
+
+		connection.deliver(MCPInboundFrame(messages) { operation in
+			await session.work { _ in await operation() }
+		})
 
 		return RouteResponse(status: .accepted, headerFields: [.mcpSessionID: sid])
 	}
@@ -279,6 +346,7 @@ extension HTTPSSETransport {
 			return textResponse(status: .notFound, body: "Unknown session. Send initialize first.")
 		case .existing(let sessionID):
 			await sessionManager.removeSession(id: sessionID)
+			await connectionRegistry.remove(sessionID)
 			return RouteResponse(status: .noContent)
 		}
 	}

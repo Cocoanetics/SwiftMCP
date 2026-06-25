@@ -74,7 +74,7 @@ extension HTTPSSETransport {
 			}
 
 			let responses = await sessionManager.session(id: sessionID).work { _ in
-				await self.server.processBatch(messages, ignoringEmptyResponses: true)
+				await self.server?.processBatch(messages, ignoringEmptyResponses: true) ?? []
 			}
 
 			if let generalStreamID = await sessionManager.primaryGeneralStreamID(for: sessionID) {

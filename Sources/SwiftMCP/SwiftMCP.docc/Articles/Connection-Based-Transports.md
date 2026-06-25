@@ -132,10 +132,35 @@ each as an ``MCPConnection``, and yield it to ``MCPTransport/connections``. Run
 until graceful shutdown in `Service.run()`, then finish the connections stream
 (and each connection's `inbound`) so routing unwinds.
 
-The bundled ``StdioTransport`` and ``TCPBonjourTransport`` support both modes:
-construct them with a server (`init(server:)`) to run them yourself, or
-server-less (`StdioTransport()` / `TCPBonjourTransport(serviceName:)`) to hand
-them to `serve`.
+All three bundled transports support both modes: construct them with a server
+(`init(server:)`) to run them yourself, or server-less
+(`StdioTransport()` / `TCPBonjourTransport(serviceName:)` / `HTTPSSETransport(host:port:)`)
+to hand them to `serve`:
+
+```swift
+let http = HTTPSSETransport(host: "0.0.0.0", port: 8080)   // no server
+let tcp  = TCPBonjourTransport(serviceName: "acpx")
+try await server.serve(over: [http, tcp], logger: log)     // one call, both transports
+```
+
+## Session-spanning transports
+
+Stdio and TCP map one socket to one connection. HTTP+SSE doesn't: a logical
+client is a `Mcp-Session-Id` session spread across many HTTP requests — stateless
+POSTs plus SSE streams — and a POST's reply belongs to *that* request's stream.
+For transports like this, the connection (not `serve`) owns the `Session` and the
+per-request reply routing, via ``MCPScopedConnection``:
+
+- The transport surfaces one ``MCPScopedConnection`` per session.
+- Each POST is delivered as an ``MCPInboundFrame`` whose ``MCPInboundFrame/within``
+  scope binds the right `Session.current` and the POST's SSE stream, then tears it
+  down.
+- `serve` becomes a pure pump: it dispatches each pre-gated frame inside `within`,
+  so responses *and* mid-call notifications route to the correct stream through
+  machinery the transport already owns.
+
+This is how ``HTTPSSETransport`` conforms to ``MCPTransport`` while preserving
+resumable streams, request-scoped progress, OAuth, and the rest.
 
 ## Testability
 
@@ -151,6 +176,8 @@ canned ``MCPConnection/inbound`` stream and assert on what
 
 - ``MCPConnection``
 - ``MCPBatchConnection``
+- ``MCPScopedConnection``
+- ``MCPInboundFrame``
 - ``MCPTransport``
 
 ### Serving

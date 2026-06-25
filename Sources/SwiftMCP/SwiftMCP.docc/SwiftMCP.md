@@ -67,6 +67,8 @@ Start with <doc:GettingStarted> to create your first MCP server, then explore <d
 - <doc:Connection-Based-Transports>
 - ``MCPConnection``
 - ``MCPBatchConnection``
+- ``MCPScopedConnection``
+- ``MCPInboundFrame``
 - ``MCPTransport``
 
 ### Server Components

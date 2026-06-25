@@ -136,6 +136,14 @@ public extension MCPServer {
         connection: any MCPConnection,
         logger: Logger
     ) async where Self: Sendable {
+        // Scoped connections (HTTP+SSE) own their `Session` and supply a per-frame
+        // outbound scope; `serve` is then a pure pump that dispatches inside each
+        // frame's `within`. See ``MCPScopedConnection``.
+        if let scoped = connection as? MCPScopedConnection {
+            await routeScoped(connection: scoped, logger: logger)
+            return
+        }
+
         let session = Session(id: UUID())
         // The session writes outbound bytes through its (weakly held) transport;
         // back it with an adapter that forwards to this connection. Kept alive
@@ -168,6 +176,44 @@ public extension MCPServer {
         }
 
         withExtendedLifetime(outbound) {}
+    }
+
+    /// Pumps a scoped connection: each pre-gated frame is dispatched on its own
+    /// child task inside the frame's ``MCPInboundFrame/within`` scope, which binds
+    /// the connection's `Session.current` (and per-request outbound routing). The
+    /// connection owns session lifecycle and gating, so `serve` neither mints a
+    /// session nor re-runs the initialize gate here.
+    private func routeScoped(
+        connection: any MCPScopedConnection,
+        logger: Logger
+    ) async where Self: Sendable {
+        await withTaskGroup(of: Void.self) { tasks in
+            for await frame in connection.scopedInbound {
+                tasks.addTask {
+                    await frame.within {
+                        await dispatchScoped(frame.messages, on: connection, logger: logger)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Dispatches an admitted scoped frame through ``processBatch(_:ignoringEmptyResponses:)``
+    /// and writes each response back via the connection (which routes it to the
+    /// frame's reply destination using the scope bound by `within`).
+    private func dispatchScoped(
+        _ messages: [JSONRPCMessage],
+        on connection: any MCPConnection,
+        logger: Logger
+    ) async where Self: Sendable {
+        let responses = await processBatch(messages)
+        for response in responses {
+            do {
+                try await connection.send(response)
+            } catch {
+                logger.error("serve: failed to send response: \(error)")
+            }
+        }
     }
 
     /// Sequentially applies the initialize-ordering gate to an inbound frame.

@@ -7,9 +7,11 @@ extension HTTPSSETransport {
 
 	/// Returns the OpenAPI routes if `serveOpenAPI` is enabled, otherwise an empty array.
 	func openAPIRoutes() -> [HTTPRoute] {
-		guard serveOpenAPI else { return [] }
+		// OpenAPI introspects the server's tools, so it is only available in the
+		// server-coupled mode.
+		guard serveOpenAPI, server != nil else { return [] }
 
-		let serverPath = "/\(server.serverName.asModelName)"
+		let serverPath = "/\(coupledServer.serverName.asModelName)"
 
 		return [
 			// GET /.well-known/ai-plugin.json — AI plugin manifest
@@ -43,11 +45,11 @@ extension HTTPSSETransport {
 			scheme = "http"
 		}
 
-		let description = server.serverDescription ?? "MCP Server providing tools for automation and integration"
+		let description = coupledServer.serverDescription ?? "MCP Server providing tools for automation and integration"
 
 		let manifest = AIPluginManifest(
-			nameForHuman: server.serverName,
-			nameForModel: server.serverName.asModelName,
+			nameForHuman: coupledServer.serverName,
+			nameForModel: coupledServer.serverName.asModelName,
 			descriptionForHuman: description,
 			descriptionForModel: description,
 			auth: .none,
@@ -84,7 +86,7 @@ extension HTTPSSETransport {
 			scheme = "http"
 		}
 
-		let spec = await OpenAPISpec(server: server, scheme: scheme, host: host)
+		let spec = await OpenAPISpec(server: coupledServer, scheme: scheme, host: host)
 
 		let encoder = JSONEncoder()
 		encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -105,7 +107,7 @@ extension HTTPSSETransport {
 		guard pathComponents.count == 2,
 			  let serverComponent = pathComponents.first,
 			  let toolName = pathComponents.dropFirst().first,
-			  serverComponent == server.serverName.asModelName
+			  serverComponent == coupledServer.serverName.asModelName
 		else {
 			return RouteResponse(status: .notFound)
 		}
@@ -142,7 +144,7 @@ extension HTTPSSETransport {
 	/// Dispatch a tool / resource / prompt by name and return its result along with metadata (if a tool).
 	private func dispatchTool(toolName: String, arguments: JSONDictionary) async throws
 		-> (Encodable & Sendable, MCPToolMetadata?) {
-		if let toolProvider = server as? MCPToolProviding {
+		if let toolProvider = coupledServer as? MCPToolProviding {
 			let toolMetadata = await toolProvider.mcpToolMetadata
 			if toolMetadata.contains(where: { $0.name == toolName }) {
 				let metadata = toolMetadata.first(where: { $0.name == toolName })
@@ -150,14 +152,14 @@ extension HTTPSSETransport {
 				return (result, metadata)
 			}
 		}
-		if let resourceProvider = server as? MCPResourceProviding {
+		if let resourceProvider = coupledServer as? MCPResourceProviding {
 			let resourceMetadata = await resourceProvider.mcpResourceMetadata
 			if resourceMetadata.contains(where: { $0.functionMetadata.name == toolName }) {
 				let result = try await resourceProvider.callResourceAsFunction(toolName, arguments: arguments)
 				return (result, nil)
 			}
 		}
-		if let promptProvider = server as? MCPPromptProviding {
+		if let promptProvider = coupledServer as? MCPPromptProviding {
 			let promptMetadata = await promptProvider.mcpPromptMetadata
 			if promptMetadata.contains(where: { $0.name == toolName }) {
 				let messages = try await promptProvider.callPrompt(toolName, arguments: arguments)

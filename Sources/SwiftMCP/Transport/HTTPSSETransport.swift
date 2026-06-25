@@ -20,9 +20,31 @@ import ServiceLifecycle
  - Configurable authorization
  - Keep-alive mechanisms
  */
-public final class HTTPSSETransport: Transport, Service, @unchecked Sendable {
-    /// The MCP server instance that this transport exposes.
-    public let server: MCPServer
+public final class HTTPSSETransport: Transport, MCPTransport, Service, @unchecked Sendable {
+    /// The MCP server instance that this transport exposes in the server-coupled
+    /// mode. `nil` in the connection-based mode, where
+    /// ``MCPServer/serve(over:gracefulShutdownSignals:logger:)`` owns dispatch and
+    /// each `Mcp-Session-Id` session is surfaced as an ``MCPScopedConnection``.
+    public let server: MCPServer?
+
+    /// Connections accepted in the connection-based mode — one per session. Empty
+    /// in the server-coupled mode.
+    public let connections: AsyncStream<MCPConnection>
+    internal let connectionsContinuation: AsyncStream<MCPConnection>.Continuation
+
+    /// Per-session scoped connections, created lazily as sessions appear and fed
+    /// by each POST. Only used in the connection-based mode.
+    internal let connectionRegistry = HTTPConnectionRegistry()
+
+    /// The server in the server-coupled mode. Routes that introspect the server
+    /// (OpenAPI) or dispatch inline are only registered when `server != nil`, so
+    /// this is only reached in that mode.
+    internal var coupledServer: MCPServer {
+        guard let server else {
+            preconditionFailure("server-coupled route reached without a server")
+        }
+        return server
+    }
 
     /// The hostname or IP address on which the HTTP server listens.
     public let host: String
@@ -107,10 +129,34 @@ public final class HTTPSSETransport: Transport, Service, @unchecked Sendable {
         self.host = host
         self.port = port
         self.group = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
+        (connections, connectionsContinuation) = HTTPSSETransport.makeConnectionsStream()
     }
 
     public convenience init(server: MCPServer) {
         self.init(server: server, host: ProcessInfo.processInfo.hostName, port: 8080)
+    }
+
+    /// Initializes a connection-based HTTP+SSE transport with no server.
+    ///
+    /// Pass the transport to ``MCPServer/serve(over:gracefulShutdownSignals:logger:)``,
+    /// which consumes ``connections`` and routes each frame. Each `Mcp-Session-Id`
+    /// session is surfaced as an ``MCPScopedConnection`` whose per-request SSE
+    /// stream is bound for the duration of dispatch. OpenAPI endpoints are
+    /// unavailable in this mode (they introspect the server's tools, which the
+    /// decoupled transport does not hold).
+    public init(host: String = ProcessInfo.processInfo.hostName, port: Int = 8080) {
+        self.server = nil
+        self.host = host
+        self.port = port
+        self.group = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
+        (connections, connectionsContinuation) = HTTPSSETransport.makeConnectionsStream()
+    }
+
+    private static func makeConnectionsStream()
+        -> (AsyncStream<MCPConnection>, AsyncStream<MCPConnection>.Continuation) {
+        var continuation: AsyncStream<MCPConnection>.Continuation!
+        let stream = AsyncStream<MCPConnection> { continuation = $0 }
+        return (stream, continuation)
     }
 
     // MARK: - Server Lifecycle
@@ -183,6 +229,11 @@ public final class HTTPSSETransport: Transport, Service, @unchecked Sendable {
         stopKeepAliveTimer()
 
         await sessionManager.removeAllSessions()
+
+        // End the connection-based stream and each scoped connection so any
+        // `serve(over:)` routing loop unwinds.
+        await connectionRegistry.closeAll()
+        connectionsContinuation.finish()
 
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             group.shutdownGracefully { error in
