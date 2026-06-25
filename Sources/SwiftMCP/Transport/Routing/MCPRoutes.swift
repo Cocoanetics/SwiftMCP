@@ -192,9 +192,9 @@ extension HTTPSSETransport {
 		await bindBearerTokenIfNeeded(token, to: context.sessionID)
 
 		// Connection-based mode: hand the (already gated) frame to the session's
-		// scoped connection and let `serve(over:)` dispatch it.
+		// connection and let `serve(over:)` dispatch it.
 		if server == nil {
-			return await dispatchStreamableScoped(messages: messages, session: session, context: context)
+			return await dispatchStreamableConnection(messages: messages, session: session, context: context)
 		}
 		return await dispatchStreamableCoupled(messages: messages, session: session, context: context)
 	}
@@ -250,13 +250,13 @@ extension HTTPSSETransport {
 		return RouteResponse(status: .accepted, headerFields: [.mcpSessionID: sid])
 	}
 
-	/// Connection-based dispatch: feed the frame to the session's scoped
+	/// Connection-based dispatch: feed the frame to the session's
 	/// connection so `serve(over:)` routes it. For a request-bearing POST the
 	/// frame's `within` scope binds the per-request SSE stream (so responses and
 	/// mid-call notifications land on it) and finishes the stream after dispatch;
 	/// the open stream is returned as the POST body. A notification-only POST is
 	/// dispatched without a stream and acknowledged with `202`.
-	private func dispatchStreamableScoped(
+	private func dispatchStreamableConnection(
 		messages: [JSONRPCMessage],
 		session: Session,
 		context: StreamableHTTPContext

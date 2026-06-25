@@ -32,7 +32,7 @@ public final class HTTPSSETransport: Transport, MCPTransport, Service, @unchecke
     public let connections: AsyncStream<MCPConnection>
     internal let connectionsContinuation: AsyncStream<MCPConnection>.Continuation
 
-    /// Per-session scoped connections, created lazily as sessions appear and fed
+    /// Per-session connections, created lazily as sessions appear and fed
     /// by each POST. Only used in the connection-based mode.
     internal let connectionRegistry = HTTPConnectionRegistry()
 
@@ -230,7 +230,7 @@ public final class HTTPSSETransport: Transport, MCPTransport, Service, @unchecke
 
         await sessionManager.removeAllSessions()
 
-        // End the connection-based stream and each scoped connection so any
+        // End the connection-based stream and each session connection so any
         // `serve(over:)` routing loop unwinds.
         await connectionRegistry.closeAll()
         connectionsContinuation.finish()

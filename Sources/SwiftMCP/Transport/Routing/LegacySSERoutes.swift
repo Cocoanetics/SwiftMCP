@@ -85,7 +85,7 @@ extension HTTPSSETransport {
 	/// on the session's general SSE stream (the POST itself returns `202`).
 	private func dispatchLegacyMessages(_ messages: [JSONRPCMessage], sessionID: UUID) async {
 		if server == nil {
-			// Connection-based mode: route the frame through the session's scoped
+			// Connection-based mode: route the frame through the session's
 			// connection so `serve(over:)` dispatches it. Legacy SSE replies go to
 			// the session's general stream, so bind that as the frame's scope.
 			let session = await sessionManager.session(id: sessionID)

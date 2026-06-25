@@ -22,7 +22,7 @@ struct HTTPServeTests {
     func endToEnd() async throws {
         let server = HTTPServeTestServer()
         // Server-less transport: serve(over:) owns dispatch; the transport surfaces
-        // each Mcp-Session-Id session as a scoped connection.
+        // each Mcp-Session-Id session as a connection.
         let transport = HTTPSSETransport(host: "127.0.0.1", port: 0)
 
         let serveTask = Task {

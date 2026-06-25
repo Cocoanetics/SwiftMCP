@@ -1,5 +1,5 @@
 //
-//  HTTPScopedConnection.swift
+//  HTTPSessionConnection.swift
 //  SwiftMCP
 //
 //  The per-session ``MCPConnection`` surfaced by a connection-based
@@ -18,7 +18,7 @@ import Foundation
 /// scope binds the POST's per-request SSE stream. Outbound responses are routed
 /// to that stream via the existing SSE machinery — the same path
 /// ``HTTPSSETransport/send(_:)`` uses for notifications.
-final class HTTPScopedConnection: MCPConnection, @unchecked Sendable {
+final class HTTPSessionConnection: MCPConnection, @unchecked Sendable {
     let session: Session
     private unowned let transport: HTTPSSETransport
 
@@ -59,20 +59,20 @@ final class HTTPScopedConnection: MCPConnection, @unchecked Sendable {
     }
 }
 
-/// Thread-safe registry mapping sessions to their ``HTTPScopedConnection``s.
+/// Thread-safe registry mapping sessions to their ``HTTPSessionConnection``s.
 actor HTTPConnectionRegistry {
-    private var connections: [UUID: HTTPScopedConnection] = [:]
+    private var connections: [UUID: HTTPSessionConnection] = [:]
 
     /// Returns the connection for `session`, creating one (flagged `isNew`) if
     /// absent so the caller can yield it to `connections`.
     func connection(
         for session: Session,
         transport: HTTPSSETransport
-    ) -> (connection: HTTPScopedConnection, isNew: Bool) {
+    ) -> (connection: HTTPSessionConnection, isNew: Bool) {
         if let existing = connections[session.id] {
             return (existing, false)
         }
-        let created = HTTPScopedConnection(session: session, transport: transport)
+        let created = HTTPSessionConnection(session: session, transport: transport)
         connections[session.id] = created
         return (created, true)
     }
