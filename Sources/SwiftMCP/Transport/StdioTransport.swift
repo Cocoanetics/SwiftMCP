@@ -11,11 +11,20 @@ import ServiceLifecycle
 ///
 /// This transport allows communication with an MCP server through standard input and output streams,
 /// making it suitable for command-line interfaces and pipe-based communication.
-public final class StdioTransport: Transport, Service, @unchecked Sendable {
-    /// The MCP server instance that this transport exposes.
-    ///
-    /// This server handles the actual business logic while the transport handles I/O.
-    public let server: MCPServer
+///
+/// `StdioTransport` works in two modes:
+///
+/// - **Server-coupled (legacy):** construct it with `init(server:)` and run it
+///   directly (e.g. inside your own `ServiceGroup`). It reads stdin, dispatches
+///   through the server, and writes responses to stdout itself.
+/// - **Connection-based:** construct it with `init()` (no server) and hand it to
+///   ``MCPServer/serve(over:gracefulShutdownSignals:logger:)``. It then surfaces
+///   stdin/stdout as a single ``MCPConnection`` and lets `serve` do the routing.
+public final class StdioTransport: Transport, MCPTransport, Service, @unchecked Sendable {
+    /// The MCP server instance that this transport exposes, when used in the
+    /// server-coupled mode. `nil` in the connection-based mode, where
+    /// ``MCPServer/serve(over:gracefulShutdownSignals:logger:)`` owns dispatch.
+    public let server: MCPServer?
 
     /// Logger instance for logging transport activity.
     ///
@@ -41,11 +50,34 @@ public final class StdioTransport: Transport, Service, @unchecked Sendable {
 
     private let state = TransportState()
 
-    /// Initializes a new StdioTransport with the given MCP server.
+    /// The connections accepted by this transport. In the connection-based mode
+    /// this yields exactly one connection (stdin/stdout). It stays empty in the
+    /// server-coupled mode.
+    public let connections: AsyncStream<MCPConnection>
+    private let connectionsContinuation: AsyncStream<MCPConnection>.Continuation
+
+    /// Initializes a server-coupled StdioTransport with the given MCP server.
     ///
     /// - Parameter server: The MCP server to expose over standard input/output.
     public init(server: MCPServer) {
         self.server = server
+        (connections, connectionsContinuation) = Self.makeConnectionsStream()
+    }
+
+    /// Initializes a connection-based StdioTransport with no server.
+    ///
+    /// Pass the transport to ``MCPServer/serve(over:gracefulShutdownSignals:logger:)``,
+    /// which consumes ``connections`` and routes each frame.
+    public init() {
+        self.server = nil
+        (connections, connectionsContinuation) = Self.makeConnectionsStream()
+    }
+
+    private static func makeConnectionsStream()
+        -> (AsyncStream<MCPConnection>, AsyncStream<MCPConnection>.Continuation) {
+        var continuation: AsyncStream<MCPConnection>.Continuation!
+        let stream = AsyncStream<MCPConnection> { continuation = $0 }
+        return (stream, continuation)
     }
 
     /// Starts reading from stdin asynchronously in a non-blocking manner.
@@ -73,6 +105,10 @@ public final class StdioTransport: Transport, Service, @unchecked Sendable {
     /// Returns when `stop()` is called from another task, when a `ServiceGroup`
     /// graceful shutdown is triggered, or when the peer closes stdin (EOF).
     ///
+    /// In the connection-based mode (no `server`), stdin/stdout is surfaced as a
+    /// single ``MCPConnection`` and routing is left to
+    /// ``MCPServer/serve(over:gracefulShutdownSignals:logger:)``.
+    ///
     /// - Throws: An error if the transport fails to process input.
     public func run() async throws {
         await state.start()
@@ -81,7 +117,11 @@ public final class StdioTransport: Transport, Service, @unchecked Sendable {
         // running flag so the read loop exits; the loop also returns on stdin
         // EOF. Standalone callers drive shutdown via `stop()`.
         try await withGracefulShutdownHandler {
-            try await readLoop()
+            if server != nil {
+                try await readLoop()
+            } else {
+                try await connectionReadLoop()
+            }
         } onGracefulShutdown: { [weak self] in
             Task { [weak self] in try? await self?.stop() }
         }
@@ -116,6 +156,36 @@ public final class StdioTransport: Transport, Service, @unchecked Sendable {
         await state.stop()
     }
 
+    /// Connection-based read loop: surfaces stdin/stdout as one ``MCPConnection``
+    /// and forwards decoded frames to its `inbound` stream. Wire framing and
+    /// decoding stay here; dispatch is `serve`'s job.
+    private func connectionReadLoop() async throws {
+        let connection = StdioServerConnection(logger: logger)
+        connectionsContinuation.yield(connection)
+
+        while await state.isCurrentlyRunning() {
+            guard let input = readLine() else {
+                // EOF: stdin was closed by the peer.
+                break
+            }
+            guard !input.isEmpty, let data = input.data(using: .utf8) else {
+                // Blank or non-UTF8 line — skip and keep reading.
+                continue
+            }
+            logger.trace("STDIN:\n\n\(input)")
+            do {
+                let messages = try JSONRPCMessage.decodeMessages(from: data)
+                connection.deliver(messages)
+            } catch {
+                logger.error("Error decoding message: \(error)")
+            }
+        }
+
+        connection.close()
+        connectionsContinuation.finish()
+        await state.stop()
+    }
+
     /// Stops the transport.
     ///
     /// This method stops processing input from stdin. Any pending input will be discarded.
@@ -129,6 +199,10 @@ public final class StdioTransport: Transport, Service, @unchecked Sendable {
 
     /// handle received data
     func handleReceived(_ data: Data) async throws {
+        guard let server else {
+            logger.error("Received stdio data without a server (connection mode)")
+            return
+        }
         do {
             guard let session = Session.current else {
                 logger.error("Received stdio data without an active session")
@@ -186,6 +260,42 @@ public final class StdioTransport: Transport, Service, @unchecked Sendable {
         var out = data
         out.append(Data("\n".utf8))
 
+        try FileHandle.standardOutput.write(contentsOf: out)
+    }
+}
+
+/// The single stdin/stdout ``MCPBatchConnection`` surfaced by a connection-based
+/// ``StdioTransport``. Inbound frames (a stdin line decodes to one frame) are
+/// pushed in by the transport's read loop; outbound frames are encoded and
+/// written to stdout. It is batch-capable because a stdin line may be a JSON-RPC
+/// batch array.
+private final class StdioServerConnection: MCPBatchConnection, @unchecked Sendable {
+    let inboundBatches: AsyncStream<[JSONRPCMessage]>
+    private let inboundContinuation: AsyncStream<[JSONRPCMessage]>.Continuation
+    private let logger: Logger
+
+    init(logger: Logger) {
+        self.logger = logger
+        var continuation: AsyncStream<[JSONRPCMessage]>.Continuation!
+        inboundBatches = AsyncStream { continuation = $0 }
+        inboundContinuation = continuation
+    }
+
+    /// Forwards a decoded inbound frame to the routing loop.
+    func deliver(_ frame: [JSONRPCMessage]) {
+        inboundContinuation.yield(frame)
+    }
+
+    /// Ends the inbound stream (stdin EOF or transport stop).
+    func close() {
+        inboundContinuation.finish()
+    }
+
+    func send(_ batch: [JSONRPCMessage]) async throws {
+        let data = try JSONRPCFrame.encode(batch)
+        logger.trace("STDOUT:\n\n\(String(data: data, encoding: .utf8) ?? "")")
+        var out = data
+        out.append(Data("\n".utf8))
         try FileHandle.standardOutput.write(contentsOf: out)
     }
 }

@@ -14,6 +14,19 @@ extension JSONRPCMessage {
         return !profile.has(.jsonRPCBatching)
     }
 
+    /// Whether a decoded frame must be rejected because it is a JSON-RPC batch
+    /// and `version` removed batching support (`2025-06-18` onward).
+    ///
+    /// The byte-level ``batchingRejected(body:version:)`` is unavailable once a
+    /// connection has decoded the wire payload, so this works off the frame: a
+    /// frame carrying more than one message is unambiguously a batch.
+    static func batchingRejected(frame: [JSONRPCMessage], version: String) -> Bool {
+        guard frame.count > 1, let profile = MCPProtocolVersion.profile(for: version) else {
+            return false
+        }
+        return !profile.has(.jsonRPCBatching)
+    }
+
     /// The protocol version that governs batching on a session-bound transport
     /// (stdio, TCP, in-process): the session's negotiated version, else a
     /// leading `initialize`'s declared version, else `latest` — mirroring the

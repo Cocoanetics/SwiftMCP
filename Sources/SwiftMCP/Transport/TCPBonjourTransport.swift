@@ -7,7 +7,17 @@ import ServiceLifecycle
 import Network
 
 /// A TCP transport that advertises via Bonjour and exchanges newline-delimited JSON-RPC.
-public final class TCPBonjourTransport: Transport, Service, @unchecked Sendable {
+///
+/// `TCPBonjourTransport` works in two modes:
+///
+/// - **Server-coupled (legacy):** construct it with `init(server:)` and run it
+///   directly (e.g. inside your own `ServiceGroup`). It dispatches through the
+///   server itself.
+/// - **Connection-based:** construct it with `init(serviceName:)` (no server)
+///   and hand it to ``MCPServer/serve(over:gracefulShutdownSignals:logger:)``.
+///   Each accepted TCP connection is surfaced as an ``MCPConnection`` and `serve`
+///   does the routing.
+public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unchecked Sendable {
     /// Base DNS-SD service type for MCP over TCP.
     public static let serviceType = MCPBonjourServiceType.base
 
@@ -18,7 +28,9 @@ public final class TCPBonjourTransport: Transport, Service, @unchecked Sendable 
         MCPBonjourServiceType.forServer(serverName)
     }
 
-    public let server: MCPServer
+    /// The MCP server exposed in the server-coupled mode. `nil` in the
+    /// connection-based mode, where `serve(over:)` owns dispatch.
+    public let server: MCPServer?
     public let logger = Logger(label: "com.cocoanetics.SwiftMCP.TCPBonjourTransport")
 
     /// Optional override for the advertised Bonjour service name.
@@ -29,6 +41,11 @@ public final class TCPBonjourTransport: Transport, Service, @unchecked Sendable 
     public let acceptLocalOnly: Bool
     public let preferIPv4: Bool
     public internal(set) var port: UInt16?
+
+    /// Connections accepted in the connection-based mode. One element per TCP
+    /// client. Stays empty in the server-coupled mode.
+    public let connections: AsyncStream<MCPConnection>
+    internal let connectionsContinuation: AsyncStream<MCPConnection>.Continuation
 
     internal let queue = DispatchQueue(label: "com.cocoanetics.SwiftMCP.TCPBonjourTransport")
     internal let state = TransportState()
@@ -162,6 +179,7 @@ public final class TCPBonjourTransport: Transport, Service, @unchecked Sendable 
         self.port = port
         self.acceptLocalOnly = acceptLocalOnly
         self.preferIPv4 = preferIPv4
+        (connections, connectionsContinuation) = TCPBonjourTransport.makeConnectionsStream()
     }
 
     public convenience init(server: MCPServer) {
@@ -175,11 +193,51 @@ public final class TCPBonjourTransport: Transport, Service, @unchecked Sendable 
             preferIPv4: true
         )
     }
+
+    /// Initializes a connection-based TCP+Bonjour transport with no server.
+    ///
+    /// Pass the transport to ``MCPServer/serve(over:gracefulShutdownSignals:logger:)``,
+    /// which consumes ``connections`` and routes each frame. The Bonjour service
+    /// name (and the derived service type) come from `serviceName` rather than a
+    /// server.
+    ///
+    /// - Parameters:
+    ///   - serviceName: The Bonjour service name to advertise.
+    ///   - serviceType: Optional DNS-SD service type. Defaults to one derived
+    ///     from `serviceName`.
+    ///   - serviceDomain: Bonjour domain. Defaults to `"local."`.
+    ///   - port: TCP port, or `nil` to pick automatically.
+    ///   - acceptLocalOnly: Restrict to the local link. Defaults to `true`.
+    ///   - preferIPv4: Prefer IPv4 when binding. Defaults to `true`.
+    public init(
+        serviceName: String,
+        serviceType: String? = nil,
+        serviceDomain: String = "local.",
+        port: UInt16? = nil,
+        acceptLocalOnly: Bool = true,
+        preferIPv4: Bool = true
+    ) {
+        self.server = nil
+        self.serviceName = serviceName
+        self.serviceType = serviceType ?? TCPBonjourTransport.serviceType(for: serviceName)
+        self.serviceDomain = serviceDomain
+        self.port = port
+        self.acceptLocalOnly = acceptLocalOnly
+        self.preferIPv4 = preferIPv4
+        (connections, connectionsContinuation) = TCPBonjourTransport.makeConnectionsStream()
+    }
+
+    private static func makeConnectionsStream()
+        -> (AsyncStream<MCPConnection>, AsyncStream<MCPConnection>.Continuation) {
+        var continuation: AsyncStream<MCPConnection>.Continuation!
+        let stream = AsyncStream<MCPConnection> { continuation = $0 }
+        return (stream, continuation)
+    }
 }
 #else
 
 /// Stub implementation for platforms without Network framework.
-public final class TCPBonjourTransport: Transport, Service, @unchecked Sendable {
+public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unchecked Sendable {
     /// Base DNS-SD service type for MCP over TCP.
     public static let serviceType = MCPBonjourServiceType.base
 
@@ -189,7 +247,7 @@ public final class TCPBonjourTransport: Transport, Service, @unchecked Sendable 
         MCPBonjourServiceType.forServer(serverName)
     }
 
-    public let server: MCPServer
+    public let server: MCPServer?
     public let logger = Logger(label: "com.cocoanetics.SwiftMCP.TCPBonjourTransport")
 
     /// Optional override for the advertised Bonjour service name.
@@ -200,6 +258,9 @@ public final class TCPBonjourTransport: Transport, Service, @unchecked Sendable 
     public let acceptLocalOnly: Bool
     public let preferIPv4: Bool
     public private(set) var port: UInt16?
+
+    /// Always-empty on platforms without the Network framework.
+    public let connections: AsyncStream<MCPConnection>
 
     public init(
         server: MCPServer,
@@ -217,6 +278,7 @@ public final class TCPBonjourTransport: Transport, Service, @unchecked Sendable 
         self.port = port
         self.acceptLocalOnly = acceptLocalOnly
         self.preferIPv4 = preferIPv4
+        self.connections = AsyncStream { $0.finish() }
     }
 
     public convenience init(server: MCPServer) {
@@ -229,6 +291,26 @@ public final class TCPBonjourTransport: Transport, Service, @unchecked Sendable 
             acceptLocalOnly: true,
             preferIPv4: true
         )
+    }
+
+    /// Connection-based initializer. Building/running fails at runtime on
+    /// platforms without the Network framework.
+    public init(
+        serviceName: String,
+        serviceType: String? = nil,
+        serviceDomain: String = "local.",
+        port: UInt16? = nil,
+        acceptLocalOnly: Bool = true,
+        preferIPv4: Bool = true
+    ) {
+        self.server = nil
+        self.serviceName = serviceName
+        self.serviceType = serviceType ?? TCPBonjourTransport.serviceType(for: serviceName)
+        self.serviceDomain = serviceDomain
+        self.port = port
+        self.acceptLocalOnly = acceptLocalOnly
+        self.preferIPv4 = preferIPv4
+        self.connections = AsyncStream { $0.finish() }
     }
 
     public func start() async throws {

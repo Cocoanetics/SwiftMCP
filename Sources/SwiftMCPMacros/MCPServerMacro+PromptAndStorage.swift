@@ -9,9 +9,36 @@
 import Foundation
 import SwiftSyntax
 
+/// The kind of type `@MCPServer` is attached to. Drives the isolation/mutation
+/// modifiers on the generated storage and metadata accessors.
+///
+/// - `actorType`: storage is actor-isolated; the executor serializes access.
+/// - `classType`: storage is `nonisolated(unsafe)` and accessors are
+///   `nonisolated` — the historical reference-type layout.
+/// - `structType`: a value-type server. A `struct` cannot carry
+///   `nonisolated(unsafe)` stored properties, and `@MCPExtension`'s
+///   `register(in:)` calls `__mcpRegisterExtension` on an immutable parameter, so
+///   the contributions live in a small reference-typed box — registration stays
+///   non-`mutating` and the server stays `Sendable`.
+enum MCPServerHostKind {
+    case actorType
+    case classType
+    case structType
+
+    /// `nonisolated` prefix for the public metadata getters. Class hosts read
+    /// `nonisolated(unsafe)` storage; actor and struct hosts read isolated or
+    /// plain storage and need no prefix.
+    var metadataIsolation: String {
+        switch self {
+        case .actorType, .structType: return ""
+        case .classType: return "nonisolated "
+        }
+    }
+}
+
 extension MCPServerMacro {
     // MARK: - Prompt dispatch
-    static func makePromptDeclarations(mcpPrompts: [String], isActor: Bool) -> [String] {
+    static func makePromptDeclarations(mcpPrompts: [String], host: MCPServerHostKind) -> [String] {
         let promptMetadataArray = mcpPrompts
             .map { "__mcpPromptMetadata_\($0)" }
             .joined(separator: ", ")
@@ -21,8 +48,9 @@ extension MCPServerMacro {
         // Class hosts keep the original `nonisolated` getter (reads
         // `nonisolated(unsafe)` storage). Actor hosts drop `nonisolated`
         // so the getter is actor-isolated and can read actor-isolated
-        // storage — the executor handles serialization.
-        let metadataIsolation = isActor ? "" : "nonisolated "
+        // storage — the executor handles serialization. Struct hosts read
+        // plain stored state, so they need no isolation prefix either.
+        let metadataIsolation = host.metadataIsolation
         let promptMetadataProperty = """
 \(promptMetadataDocLine)
 \(metadataIsolation)public var mcpPromptMetadata: [MCPPromptMetadata] {
@@ -71,32 +99,36 @@ public func callPrompt(
     }
 
     // MARK: - Extension storage
-    static func makeExtensionStorageDeclarations(serverTypeName: String, isActor: Bool) -> [String] {
-        // Two layouts:
-        //
-        // - Actor hosts: storage is actor-isolated (no `nonisolated(unsafe)`),
-        //   `__mcpRegisterExtension` is actor-isolated (so the executor
-        //   serializes register / register-while-dispatch automatically),
-        //   and the matching `register(in:)` emitted by `@MCPExtension` is
-        //   `async` so external callers `await` it.
-        //
-        // - Class hosts: storage stays `nonisolated(unsafe)`, the method is
-        //   declared `async` with a sync body so the same `await
-        //   server.__mcpRegisterExtension(...)` shape from `@MCPExtension`
-        //   compiles. There is no actor executor to serialize, but class
-        //   `@MCPServer` users have always treated registration as
-        //   setup-time work — same contract as before.
-        let storageIsolation = isActor ? "" : "nonisolated(unsafe) "
-        let methodAsync = isActor ? "" : "async "
+    static func makeExtensionStorageDeclarations(serverTypeName: String, host: MCPServerHostKind) -> [String] {
+        if case .structType = host {
+            return makeStructExtensionStorage(serverTypeName: serverTypeName)
+        }
+        return makeReferenceExtensionStorage(serverTypeName: serverTypeName, host: host)
+    }
 
-        let contributionsStorageLine1 = "/// Contributions from `@MCPExtension`-annotated extensions."
-        let contributionsStorageLine2 = "/// Populated by `MyServer.<Name>.register(in:)` calls at startup."
-        let contributionsStorageDecl = "\(storageIsolation)private var __mcpExtensionContributions: "
-            + "[MCPExtensionContribution<\(serverTypeName)>] = []"
+    /// Reference-type (`class` / `actor`) layout.
+    ///
+    /// - Actor hosts: storage is actor-isolated (no `nonisolated(unsafe)`),
+    ///   `__mcpRegisterExtension` is actor-isolated (so the executor serializes
+    ///   register / register-while-dispatch automatically), and the matching
+    ///   `register(in:)` emitted by `@MCPExtension` is `async`.
+    /// - Class hosts: storage stays `nonisolated(unsafe)` and the method is
+    ///   declared `async` with a sync body so the same `await
+    ///   server.__mcpRegisterExtension(...)` shape compiles. Class `@MCPServer`
+    ///   users have always treated registration as setup-time work.
+    private static func makeReferenceExtensionStorage(
+        serverTypeName: String,
+        host: MCPServerHostKind
+    ) -> [String] {
+        let isActor: Bool
+        if case .actorType = host { isActor = true } else { isActor = false }
+        let storageIsolation = isActor ? "" : "nonisolated(unsafe) "
+        let registerEffects = isActor ? "" : "async "
+
         let contributionsStorage = """
-\(contributionsStorageLine1)
-\(contributionsStorageLine2)
-\(contributionsStorageDecl)
+/// Contributions from `@MCPExtension`-annotated extensions.
+/// Populated by `MyServer.<Name>.register(in:)` calls at startup.
+\(storageIsolation)private var __mcpExtensionContributions: [MCPExtensionContribution<\(serverTypeName)>] = []
 """
 
         let registeredIDsStorage = """
@@ -112,16 +144,54 @@ public func callPrompt(
 public func __mcpRegisterExtension(
    _ contribution: MCPExtensionContribution<\(serverTypeName)>,
    byID id: ObjectIdentifier
-) \(methodAsync){
+) \(registerEffects){
    guard !__mcpRegisteredExtensionIDs.contains(id) else { return }
    __mcpRegisteredExtensionIDs.insert(id)
    __mcpExtensionContributions.append(contribution)
 }
 """
-        return [
-            contributionsStorage,
-            registeredIDsStorage,
-            registerExtensionMethod
-        ]
+        return [contributionsStorage, registeredIDsStorage, registerExtensionMethod]
+    }
+
+    /// Value-type (`struct`) layout. The contributions live in a small
+    /// reference-typed box so `__mcpRegisterExtension` is non-`mutating` —
+    /// `@MCPExtension`'s `register(in server:)` calls it on an immutable `server`
+    /// parameter, which a `mutating` method could not satisfy. The box is
+    /// `@unchecked Sendable` (registration is setup-time work, the same contract
+    /// as class hosts), so the value-type server stays `Sendable`.
+    private static func makeStructExtensionStorage(serverTypeName: String) -> [String] {
+        let storageBox = """
+/// Reference-typed storage for `@MCPExtension` contributions on this value-type
+/// server, so registration need not make the server `mutating`.
+private final class __MCPExtensionStorage: @unchecked Sendable {
+   var contributions: [MCPExtensionContribution<\(serverTypeName)>] = []
+   var registeredIDs: Set<ObjectIdentifier> = []
+}
+"""
+
+        let boxInstance = "private let __mcpExtensionStorageBox = __MCPExtensionStorage()"
+
+        let contributionsAccessor = """
+/// Contributions from `@MCPExtension`-annotated extensions.
+private var __mcpExtensionContributions: [MCPExtensionContribution<\(serverTypeName)>] {
+   __mcpExtensionStorageBox.contributions
+}
+"""
+
+        let registerExtensionMethod = """
+/// Installs an extension's contribution on this server instance.
+/// Called by `register(in:)` emitted by `@MCPExtension`. Idempotent on the
+/// extension's metatype identity — registering the same extension twice
+/// has no effect.
+public func __mcpRegisterExtension(
+   _ contribution: MCPExtensionContribution<\(serverTypeName)>,
+   byID id: ObjectIdentifier
+) async {
+   guard !__mcpExtensionStorageBox.registeredIDs.contains(id) else { return }
+   __mcpExtensionStorageBox.registeredIDs.insert(id)
+   __mcpExtensionStorageBox.contributions.append(contribution)
+}
+"""
+        return [storageBox, boxInstance, contributionsAccessor, registerExtensionMethod]
     }
 }

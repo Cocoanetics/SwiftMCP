@@ -101,7 +101,7 @@ public func callTool(_ name: String, arguments: JSONDictionary) async throws -> 
     static func makeToolMetadataProperty(
         mcpTools: [(functionName: String, toolName: String)],
         hasAppShortcutsProvider: Bool,
-        isActor: Bool
+        host: MCPServerHostKind
     ) -> String {
         let metadataArray = mcpTools.map { tool -> String in
             // When server-level toolNaming changes the name, use .renamed() to
@@ -125,7 +125,7 @@ public func callTool(_ name: String, arguments: JSONDictionary) async throws -> 
             appShortcutsBlock = ""
         }
 
-        let metadataIsolation = isActor ? "" : "nonisolated "
+        let metadataIsolation = host.metadataIsolation
         return """
 /// Returns an array of all available tool metadata
 \(metadataIsolation)public var mcpToolMetadata: [MCPToolMetadata] {
@@ -142,7 +142,7 @@ public func callTool(_ name: String, arguments: JSONDictionary) async throws -> 
     }
 
     // MARK: - Resource dispatch
-    static func makeResourceDeclarations(mcpResources: [String], isActor: Bool) -> [String] {
+    static func makeResourceDeclarations(mcpResources: [String], host: MCPServerHostKind) -> [String] {
         var output: [String] = []
 
         // Add mcpResourceMetadata property
@@ -152,7 +152,7 @@ public func callTool(_ name: String, arguments: JSONDictionary) async throws -> 
         let resourceMetadataSeed = mcpResources.isEmpty ? "[]" : "[\(resourceMetadataArray)]"
         let resourceMetadataDocLine = "/// Returns an array of all available resource metadata, "
             + "including contributions from `@MCPExtension`-annotated extensions."
-        let metadataIsolation = isActor ? "" : "nonisolated "
+        let metadataIsolation = host.metadataIsolation
         let resourceMetadataProperty = """
 \(resourceMetadataDocLine)
 \(metadataIsolation)public var mcpResourceMetadata: [MCPResourceMetadata] {

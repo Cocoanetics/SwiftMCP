@@ -62,11 +62,19 @@ Start with <doc:GettingStarted> to create your first MCP server, then explore <d
 - ``MCPToolParameterInfo``
 - ``MCPToolError``
 
+### Serving & Transports
+
+- <doc:Connection-Based-Transports>
+- ``MCPConnection``
+- ``MCPBatchConnection``
+- ``MCPTransport``
+
 ### Server Components
 
 - ``Transport``
 - ``HTTPSSETransport``
 - ``StdioTransport``
+- ``TCPBonjourTransport``
 
 ```swift
 @MCPServer(version: "1.0.0")

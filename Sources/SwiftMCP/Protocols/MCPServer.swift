@@ -55,6 +55,24 @@ public protocol MCPServer {
 
     /// Called when the roots list has changed. Default implementation does nothing.
     func handleRootsListChanged() async
+
+    /// A lifecycle hook invoked once, after all transports have stopped, to
+    /// release server-lifetime resources.
+    ///
+    /// Override this on a stateful server to tear down things that outlive a
+    /// single request — child processes, a singleton lock, open files.
+    /// ``serve(over:gracefulShutdownSignals:logger:)`` calls it **after the
+    /// transport group has fully stopped**, so it always runs *last* and on
+    /// *every* exit path (a graceful signal, a transport finishing, or a
+    /// transport throwing). The default implementation does nothing.
+    ///
+    /// ```swift
+    /// func shutdown() async {
+    ///     await closeLiveAgents()   // no orphaned subprocesses
+    ///     releaseSingletonLock()    // safe: transports already drained
+    /// }
+    /// ```
+    func shutdown() async
 }
 
 // MARK: - Default Implementations
@@ -104,4 +122,8 @@ public extension MCPServer {
 
     /// Handles the roots list changed notification by retrieving the updated roots list.
     func handleRootsListChanged() async {}
+
+    /// Default no-op lifecycle hook. Override on a stateful server to release
+    /// server-lifetime resources after all transports have stopped.
+    func shutdown() async {}
 }
