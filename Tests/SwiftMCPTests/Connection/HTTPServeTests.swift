@@ -139,5 +139,64 @@ struct HTTPServeTests {
         try await serveTask.value
         #endif
     }
+
+    @Test("Legacy SSE rejects a JSON-RPC batch on a no-batching protocol version")
+    func legacySSEBatchRejected() async throws {
+        #if canImport(FoundationNetworking)
+        return
+        #else
+        let server = HTTPServeTestServer()
+        let transport = HTTPSSETransport(host: "127.0.0.1", port: 0)
+
+        let serveTask = Task {
+            try await server.serve(
+                over: [transport],
+                gracefulShutdownSignals: [],
+                logger: Logger(label: "test.http.legacy.batch")
+            )
+        }
+
+        let bound = await HTTPTransportTestHelpers.waitForCondition { transport.port != 0 }
+        #expect(bound)
+        let baseURL = URL(string: "http://127.0.0.1:\(transport.port)")!
+
+        // Open the general SSE stream to mint a legacy session + endpoint URL.
+        let capture = HTTPTransportTestHelpers.openStreamingRequest({
+            var request = URLRequest(url: baseURL.appendingPathComponent("sse"))
+            request.httpMethod = "GET"
+            request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+            return request
+        }())
+        let hasEndpoint = await HTTPTransportTestHelpers.waitForCondition {
+            capture.events.value.contains { $0.event == "endpoint" }
+        }
+        #expect(hasEndpoint)
+        let endpointEvent = try #require(capture.events.value.first { $0.event == "endpoint" })
+        let messagesURL = try #require(URL(string: endpointEvent.data))
+
+        // A batch led by initialize(2025-06-18) — a revision that removed batching.
+        // The endpoint's batch gate must reject it with a synchronous 400, not 202.
+        let batch: [JSONRPCMessage] = [
+            .request(id: 1, method: "initialize", params: [
+                "protocolVersion": .string("2025-06-18"),
+                "capabilities": .object([:]),
+                "clientInfo": .object(["name": .string("TestClient"), "version": .string("1.0")])
+            ]),
+            .request(id: 2, method: "ping")
+        ]
+        let postSession = URLSession(configuration: .ephemeral)
+        var post = URLRequest(url: messagesURL)
+        post.httpMethod = "POST"
+        post.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        post.httpBody = try JSONEncoder().encode(batch)
+        let (data, response) = try await postSession.data(for: post)
+        #expect((response as? HTTPURLResponse)?.statusCode == 400)
+        #expect(String(data: data, encoding: .utf8)?.contains("-32600") == true)
+
+        capture.task.cancel()
+        try await transport.stop()
+        try await serveTask.value
+        #endif
+    }
 }
 #endif

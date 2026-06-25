@@ -73,6 +73,18 @@ extension HTTPSSETransport {
 				)
 			}
 
+			// Gate batches by the negotiated version, exactly as `/mcp` does — so a
+			// revision that removed batching is rejected on this endpoint too.
+			if let batchError = await batchingRejectionResponse(
+				body: body,
+				request: request,
+				messages: messages,
+				sessionID: sessionID
+			) {
+				logger.warning("Rejected legacy SSE batch on a no-batching protocol version (\(sessionID))")
+				return batchError
+			}
+
 			await dispatchLegacyMessages(messages, sessionID: sessionID)
 		} catch {
 			logger.error("Failed to decode JSON-RPC message in SSE context: \(error)")

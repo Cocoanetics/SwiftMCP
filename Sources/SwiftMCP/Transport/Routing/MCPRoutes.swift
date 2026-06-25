@@ -161,7 +161,10 @@ extension HTTPSSETransport {
 	/// batching (`2025-06-18` onward). For a brand-new session the version is
 	/// declared inside the leading `initialize`, so `messages` is consulted to
 	/// resolve it. Returns a `400` + JSON-RPC `-32600` response, or `nil`.
-	private func batchingRejectionResponse<Body: Sendable>(
+	///
+	/// Shared by the streamable HTTP (`/mcp`) and legacy SSE (`/messages`) POST
+	/// handlers so both endpoints gate batches identically.
+	internal func batchingRejectionResponse<Body: Sendable>(
 		body: Data,
 		request: HTTPRouteRequest<Body>,
 		messages: [JSONRPCMessage],
