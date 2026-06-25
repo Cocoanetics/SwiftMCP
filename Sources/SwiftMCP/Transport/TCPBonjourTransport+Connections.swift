@@ -245,35 +245,36 @@ extension TCPBonjourTransport {
     }
 }
 
-/// An ``MCPBatchConnection`` backed by a single `NWConnection`. Inbound frames
-/// (a TCP line decodes to one frame) are pushed in by the transport's receive
-/// loop; `send` encodes a frame and writes it to the socket as one
-/// newline-delimited payload. It is batch-capable because a line may be a
-/// JSON-RPC batch array.
-private final class NWConnectionChannel: MCPBatchConnection, @unchecked Sendable {
-    let inboundBatches: AsyncStream<[JSONRPCMessage]>
-    private let inboundContinuation: AsyncStream<[JSONRPCMessage]>.Continuation
+/// An ``MCPConnection`` backed by a single `NWConnection`. It owns a fresh
+/// session; inbound frames (a TCP line decodes to one frame) are pushed in by the
+/// transport's receive loop; `send` encodes a frame and writes it to the socket
+/// as one newline-delimited payload. Bespoke (rather than ``BasicConnection``)
+/// because it has to hold the non-`Sendable` `NWConnection`.
+private final class NWConnectionChannel: MCPConnection, @unchecked Sendable {
+    let session = Session(id: UUID())
+    let inbound: AsyncStream<MCPInboundFrame>
+    private let inboundContinuation: AsyncStream<MCPInboundFrame>.Continuation
     private let connection: NWConnection
     private let logger: Logger
 
     init(connection: NWConnection, logger: Logger) {
         self.connection = connection
         self.logger = logger
-        var continuation: AsyncStream<[JSONRPCMessage]>.Continuation!
-        inboundBatches = AsyncStream { continuation = $0 }
+        var continuation: AsyncStream<MCPInboundFrame>.Continuation!
+        inbound = AsyncStream { continuation = $0 }
         inboundContinuation = continuation
     }
 
-    func deliver(_ frame: [JSONRPCMessage]) {
-        inboundContinuation.yield(frame)
+    func deliver(_ messages: [JSONRPCMessage]) {
+        inboundContinuation.yield(MCPInboundFrame(messages))
     }
 
     func close() {
         inboundContinuation.finish()
     }
 
-    func send(_ batch: [JSONRPCMessage]) async throws {
-        let data = try JSONRPCFrame.encode(batch)
+    func send(_ frame: [JSONRPCMessage]) async throws {
+        let data = try JSONRPCFrame.encode(frame)
         logger.trace("TCP OUT:\n\n\(String(data: data, encoding: .utf8) ?? "")")
         var out = data
         out.append(Data("\n".utf8))

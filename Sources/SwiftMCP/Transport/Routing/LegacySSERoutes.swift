@@ -89,7 +89,7 @@ extension HTTPSSETransport {
 			// connection so `serve(over:)` dispatches it. Legacy SSE replies go to
 			// the session's general stream, so bind that as the frame's scope.
 			let session = await sessionManager.session(id: sessionID)
-			let (connection, isNew) = await connectionRegistry.connection(for: sessionID, transport: self)
+			let (connection, isNew) = await connectionRegistry.connection(for: session, transport: self)
 			if isNew {
 				connectionsContinuation.yield(connection)
 			}

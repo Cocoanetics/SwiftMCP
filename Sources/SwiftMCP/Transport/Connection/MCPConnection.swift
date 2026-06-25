@@ -8,93 +8,83 @@
 
 import Foundation
 
-/// A single, full-duplex JSON-RPC channel to one client.
+/// A single full-duplex JSON-RPC channel to one client, owning the ``Session``
+/// its traffic belongs to.
 ///
 /// A ``MCPTransport`` is a *source* of connections; each connection is one
-/// JSON-RPC conversation. The connection knows nothing about the MCP server —
-/// it only moves JSON-RPC messages in and out.
-/// ``MCPServer/serve(over:gracefulShutdownSignals:logger:)`` is the bridge that
-/// pulls each connection's ``inbound`` messages, routes them through the server,
-/// and writes replies back with `send(_:)`.
+/// JSON-RPC conversation. The connection owns its ``session`` and provides the
+/// outbound scope for each inbound frame.
+/// ``MCPServer/serve(over:gracefulShutdownSignals:logger:)`` is a pure pump: it
+/// binds the connection's session, gates each frame, and runs the server inside
+/// the frame's ``MCPInboundFrame/within`` scope — never minting a session of its
+/// own. That single contract covers a one-socket transport (stdio, TCP) and one
+/// whose session spans many connections (HTTP+SSE: a session per
+/// `Mcp-Session-Id`, a per-request SSE stream per POST) alike.
 ///
-/// The base protocol deals in **single messages** — the common case, and the
-/// only shape MCP `2025-06-18` and later use (that revision removed JSON-RPC
-/// batching). A transport that needs to carry batches conforms to
-/// ``MCPBatchConnection`` instead, which adds a whole-frame interface.
+/// For a one-socket transport, ``BasicConnection`` supplies the whole shape — a
+/// fresh session whose outbound is wired back to the transport — so the transport
+/// only feeds decoded frames and writes bytes.
 ///
-/// ## Testability
+/// ## Frames
 ///
-/// Because a connection is just two JSON-RPC streams, it can be exercised
-/// without any networking: feed a canned ``inbound`` stream and assert on what
-/// `send(_:)` receives. No server, sockets, or `ServiceGroup` required.
+/// The unit of transfer is a *frame*: an array of ``JSONRPCMessage``. A single
+/// message is a one-element frame; a JSON-RPC batch is a multi-element frame that
+/// round-trips as one payload (batching was removed in MCP `2025-06-18`, so most
+/// frames are single).
 public protocol MCPConnection: Sendable {
-    /// JSON-RPC messages arriving from the client.
-    ///
-    /// The stream finishes when the client disconnects or the underlying
-    /// transport stops, which lets the per-connection routing loop in
-    /// `serve(over:)` end cleanly.
-    var inbound: AsyncStream<JSONRPCMessage> { get }
+    /// The session this connection's traffic belongs to. The connection owns its
+    /// lifetime; `serve` binds it as `Session.current` while pumping.
+    var session: Session { get }
 
-    /// Sends a JSON-RPC message to the client.
-    ///
-    /// Server→client pushes — responses, progress and log notifications emitted
-    /// mid–tool-call, or `sampling`/`elicitation`/`roots` requests — all travel
-    /// through this method.
-    ///
-    /// - Parameter message: The message to deliver.
-    /// - Throws: A transport-specific error if the message cannot be written
-    ///   (for example, the connection has already closed).
-    func send(_ message: JSONRPCMessage) async throws
-}
+    /// Inbound JSON-RPC frames, each carrying the connection's outbound scope for
+    /// it. The stream finishes when the client disconnects or the transport
+    /// stops, ending the per-connection routing loop.
+    var inbound: AsyncStream<MCPInboundFrame> { get }
 
-/// A connection that can also carry JSON-RPC *batches* — a top-level array of
-/// messages that must round-trip as one wire payload.
-///
-/// Batching was removed in MCP `2025-06-18`, so this is an opt-in refinement for
-/// transports that still need to interoperate with older clients. A batch-capable
-/// transport (stdio, TCP) conforms to `MCPBatchConnection`;
-/// ``MCPServer/serve(over:gracefulShutdownSignals:logger:)`` then routes whole
-/// frames through ``MCPServer/processBatch(_:ignoringEmptyResponses:)`` (and
-/// applies the version-gated batch reject), instead of the per-message path it
-/// uses for a plain ``MCPConnection``.
-///
-/// Conformers implement only the batch members; the single-message
-/// ``MCPConnection`` requirements are derived for free (a message is sent as a
-/// one-element frame, and ``MCPConnection/inbound`` flattens
-/// ``inboundBatches``).
-public protocol MCPBatchConnection: MCPConnection {
-    /// Inbound JSON-RPC frames. A single message arrives as a one-element frame;
-    /// a JSON-RPC batch arrives as a multi-element frame.
-    var inboundBatches: AsyncStream<[JSONRPCMessage]> { get }
-
-    /// Sends a whole JSON-RPC frame as one wire payload, preserving batch
-    /// semantics.
-    /// - Parameter batch: One or more JSON-RPC messages to deliver together.
+    /// Sends a JSON-RPC frame to the client.
+    ///
+    /// Responses, and server→client pushes (notifications, `sampling`/`roots`
+    /// requests), travel through here. A one-socket transport writes the frame as
+    /// one payload; HTTP+SSE delivers each message as its own SSE event.
+    ///
+    /// - Parameter frame: One or more JSON-RPC messages to deliver.
     /// - Throws: A transport-specific error if the frame cannot be written.
-    func send(_ batch: [JSONRPCMessage]) async throws
+    func send(_ frame: [JSONRPCMessage]) async throws
 }
 
-public extension MCPBatchConnection {
-    /// Derives the single-message inbound stream by flattening ``inboundBatches``.
-    /// `serve` consumes ``inboundBatches`` directly for batch connections, so
-    /// this exists only to satisfy ``MCPConnection`` conformance.
-    var inbound: AsyncStream<JSONRPCMessage> {
-        let batches = inboundBatches
-        return AsyncStream { continuation in
-            let task = Task {
-                for await frame in batches {
-                    for message in frame {
-                        continuation.yield(message)
-                    }
-                }
-                continuation.finish()
-            }
-            continuation.onTermination = { _ in task.cancel() }
-        }
-    }
-
-    /// Sends a single message as a one-element frame.
+public extension MCPConnection {
+    /// Convenience for sending a single message as a one-element frame.
     func send(_ message: JSONRPCMessage) async throws {
         try await send([message])
+    }
+}
+
+/// One inbound JSON-RPC frame plus the connection's outbound scope for it.
+///
+/// `serve` runs each frame's dispatch inside ``within``. For a one-socket
+/// transport that scope is a pass-through (the default). HTTP+SSE uses it to bind
+/// the POST's per-request SSE stream (via `Session.taskStreamContext`) so the
+/// response and any mid-call notifications land on it, then tears the stream down
+/// — without leaking any HTTP type into this core boundary.
+public struct MCPInboundFrame: Sendable {
+    /// The decoded messages of one wire frame.
+    public let messages: [JSONRPCMessage]
+
+    /// Runs `operation` inside this frame's outbound scope.
+    public let within: @Sendable (_ operation: @Sendable () async -> Void) async -> Void
+
+    /// Creates a frame with an explicit outbound scope.
+    public init(
+        _ messages: [JSONRPCMessage],
+        within: @escaping @Sendable (_ operation: @Sendable () async -> Void) async -> Void
+    ) {
+        self.messages = messages
+        self.within = within
+    }
+
+    /// Creates a frame with a pass-through scope (a one-socket transport whose
+    /// outbound has a single destination).
+    public init(_ messages: [JSONRPCMessage]) {
+        self.init(messages, within: { await $0() })
     }
 }

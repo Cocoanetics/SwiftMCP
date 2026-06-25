@@ -41,18 +41,12 @@ final class MCPConnectionTransport: Transport, @unchecked Sendable {
     func run() async throws {}
     func stop() async throws {}
 
-    /// Decodes the JSON-RPC payload `Session` produced and forwards it on the
+    /// Decodes the JSON-RPC payload `Session` produced (a notification, response,
+    /// or `sampling`/`roots` request) and forwards it as one frame on the
     /// connection.
-    ///
-    /// `Session` always hands us a single encoded message (responses,
-    /// notifications, `sampling`/`roots` requests), so we decode and forward it
-    /// via the single-message ``MCPConnection/send(_:)``. A batch connection turns
-    /// that into a one-element frame.
     func send(_ data: Data) async throws {
         let messages = try JSONRPCMessage.decodeMessages(from: data)
-        for message in messages {
-            try await connection.send(message)
-        }
+        try await connection.send(messages)
     }
 }
 #endif

@@ -123,52 +123,40 @@ public extension MCPServer {
         }
     }
 
-    /// Routes a single connection: binds a session, pumps inbound traffic through
-    /// the server, and writes responses back.
+    /// Pumps one connection: binds its `Session.current` and dispatches each
+    /// inbound frame inside the frame's ``MCPInboundFrame/within`` scope.
     ///
-    /// Each inbound item is processed on its own child task (which inherits the
-    /// bound `Session.current`), so a long-running tool call — including one that
-    /// awaits a server→client response such as `sampling`/`elicitation`/`roots` —
-    /// never blocks reading the next inbound item, including that very response.
-    /// A ``MCPBatchConnection`` routes whole frames through ``processBatch(_:ignoringEmptyResponses:)``;
-    /// a plain ``MCPConnection`` routes single messages through ``handleMessage(_:)``.
+    /// The connection owns its session. If that session has no transport of its
+    /// own — a one-socket ``BasicConnection`` — `serve` wires an adapter that
+    /// forwards the session's outbound bytes to the connection; HTTP+SSE already
+    /// attaches its own. The gate runs sequentially in the read loop (so the
+    /// initialize flag settles before the next frame is admitted), while dispatch
+    /// runs on its own child task — so a tool awaiting a server→client response
+    /// (`sampling`/`elicitation`/`roots`) never blocks reading that very response.
     private func route(
         connection: any MCPConnection,
         logger: Logger
     ) async where Self: Sendable {
-        // Scoped connections (HTTP+SSE) own their `Session` and supply a per-frame
-        // outbound scope; `serve` is then a pure pump that dispatches inside each
-        // frame's `within`. See ``MCPScopedConnection``.
-        if let scoped = connection as? MCPScopedConnection {
-            await routeScoped(connection: scoped, logger: logger)
-            return
-        }
+        let session = connection.session
 
-        let session = Session(id: UUID())
-        // The session writes outbound bytes through its (weakly held) transport;
-        // back it with an adapter that forwards to this connection. Kept alive
-        // for the whole connection via `withExtendedLifetime` below.
-        let outbound = MCPConnectionTransport(connection: connection, logger: logger)
-        await session.setTransport(outbound)
+        // Wire the session's outbound to the connection unless it already has a
+        // transport. Held alive for the connection via `withExtendedLifetime`.
+        let outbound: MCPConnectionTransport?
+        if await session.transport == nil {
+            let shim = MCPConnectionTransport(connection: connection, logger: logger)
+            await session.setTransport(shim)
+            outbound = shim
+        } else {
+            outbound = nil
+        }
 
         await session.work { _ in
             await withTaskGroup(of: Void.self) { tasks in
-                if let batchConnection = connection as? MCPBatchConnection {
-                    for await frame in batchConnection.inboundBatches {
-                        // The gate runs sequentially in the read loop so the
-                        // initialize flag is settled before the next item is
-                        // admitted; dispatch then runs concurrently so reads keep
-                        // flowing (mid-call responses are not blocked).
-                        guard await admit(frame, on: batchConnection, session: session) else { continue }
-                        tasks.addTask {
-                            await dispatchFrame(frame, on: batchConnection, logger: logger)
-                        }
-                    }
-                } else {
-                    for await message in connection.inbound {
-                        guard await admit([message], on: connection, session: session) else { continue }
-                        tasks.addTask {
-                            await dispatchMessage(message, on: connection, logger: logger)
+                for await frame in connection.inbound {
+                    guard await admit(frame.messages, on: connection, session: session) else { continue }
+                    tasks.addTask {
+                        await frame.within {
+                            await dispatch(frame.messages, on: connection, logger: logger)
                         }
                     }
                 }
@@ -178,103 +166,46 @@ public extension MCPServer {
         withExtendedLifetime(outbound) {}
     }
 
-    /// Pumps a scoped connection: each pre-gated frame is dispatched on its own
-    /// child task inside the frame's ``MCPInboundFrame/within`` scope, which binds
-    /// the connection's `Session.current` (and per-request outbound routing). The
-    /// connection owns session lifecycle and gating, so `serve` neither mints a
-    /// session nor re-runs the initialize gate here.
-    private func routeScoped(
-        connection: any MCPScopedConnection,
-        logger: Logger
-    ) async where Self: Sendable {
-        await withTaskGroup(of: Void.self) { tasks in
-            for await frame in connection.scopedInbound {
-                tasks.addTask {
-                    await frame.within {
-                        await dispatchScoped(frame.messages, on: connection, logger: logger)
-                    }
-                }
-            }
-        }
-    }
-
-    /// Dispatches an admitted scoped frame through ``processBatch(_:ignoringEmptyResponses:)``
-    /// and writes each response back via the connection (which routes it to the
-    /// frame's reply destination using the scope bound by `within`).
-    private func dispatchScoped(
-        _ messages: [JSONRPCMessage],
-        on connection: any MCPConnection,
-        logger: Logger
-    ) async where Self: Sendable {
-        let responses = await processBatch(messages)
-        for response in responses {
-            do {
-                try await connection.send(response)
-            } catch {
-                logger.error("serve: failed to send response: \(error)")
-            }
-        }
-    }
-
-    /// Sequentially applies the initialize-ordering gate to an inbound frame.
+    /// Sequentially gates an inbound frame against the bound session.
     ///
     /// A frame beginning with `initialize` opens the session — marked here, before
     /// the concurrently-dispatched follow-ups are admitted, so they don't race the
     /// initialize handler and get spuriously rejected. Non-initialize requests
-    /// arriving before initialization are rejected (parity with the byte-stream
-    /// transports). Returns `true` if the frame should be dispatched.
+    /// before initialization, and batches on protocol revisions that removed
+    /// batching (`2025-06-18`+), are rejected. Returns `true` to dispatch.
     private func admit(
-        _ frame: [JSONRPCMessage],
+        _ messages: [JSONRPCMessage],
         on connection: any MCPConnection,
         session: Session
     ) async -> Bool {
-        if SessionInitializationGate.batchStartsWithInitialize(frame) {
+        if SessionInitializationGate.batchStartsWithInitialize(messages) {
             await session.markInitializeRequestReceived()
             return true
         }
-        if await SessionInitializationGate.shouldReject(frame, for: session) {
-            for rejection in SessionInitializationGate.rejectionResponses(for: frame) {
-                try? await connection.send(rejection)
+        if await SessionInitializationGate.shouldReject(messages, for: session) {
+            let rejections = SessionInitializationGate.rejectionResponses(for: messages)
+            if !rejections.isEmpty {
+                try? await connection.send(rejections)
             }
+            return false
+        }
+        let version = await JSONRPCMessage.batchingVersion(for: messages, session: session)
+        if JSONRPCMessage.batchingRejected(frame: messages, version: version) {
+            try? await connection.send([JSONRPCMessage.batchingRejectionResponse(version: version)])
             return false
         }
         return true
     }
 
-    /// Dispatches a single admitted message through ``handleMessage(_:)`` and
-    /// writes any reply back.
-    private func dispatchMessage(
-        _ message: JSONRPCMessage,
+    /// Dispatches an admitted frame through ``processBatch(_:ignoringEmptyResponses:)``
+    /// and writes any responses back through the connection (which routes them to
+    /// the frame's reply destination, using the scope bound by `within`).
+    private func dispatch(
+        _ messages: [JSONRPCMessage],
         on connection: any MCPConnection,
         logger: Logger
     ) async where Self: Sendable {
-        guard let response = await handleMessage(message) else { return }
-        do {
-            try await connection.send(response)
-        } catch {
-            logger.error("serve: failed to send response: \(error)")
-        }
-    }
-
-    /// Dispatches a whole admitted frame: applies the version-gated batch reject
-    /// (matching the legacy stdio/TCP/HTTP routes), runs
-    /// ``processBatch(_:ignoringEmptyResponses:)``, and writes any responses back
-    /// as one frame.
-    private func dispatchFrame(
-        _ frame: [JSONRPCMessage],
-        on connection: any MCPBatchConnection,
-        logger: Logger
-    ) async where Self: Sendable {
-        guard let session = Session.current else { return }
-
-        // Reject batches on protocol revisions that removed batching (2025-06-18+).
-        let version = await JSONRPCMessage.batchingVersion(for: frame, session: session)
-        if JSONRPCMessage.batchingRejected(frame: frame, version: version) {
-            try? await connection.send([JSONRPCMessage.batchingRejectionResponse(version: version)])
-            return
-        }
-
-        let responses = await processBatch(frame)
+        let responses = await processBatch(messages)
         guard !responses.isEmpty else { return }
         do {
             try await connection.send(responses)

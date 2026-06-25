@@ -160,7 +160,13 @@ public final class StdioTransport: Transport, MCPTransport, Service, @unchecked 
     /// and forwards decoded frames to its `inbound` stream. Wire framing and
     /// decoding stay here; dispatch is `serve`'s job.
     private func connectionReadLoop() async throws {
-        let connection = StdioServerConnection(logger: logger)
+        let connection = BasicConnection { [logger] frame in
+            let data = try JSONRPCFrame.encode(frame)
+            logger.trace("STDOUT:\n\n\(String(data: data, encoding: .utf8) ?? "")")
+            var out = data
+            out.append(Data("\n".utf8))
+            try FileHandle.standardOutput.write(contentsOf: out)
+        }
         connectionsContinuation.yield(connection)
 
         while await state.isCurrentlyRunning() {
@@ -260,42 +266,6 @@ public final class StdioTransport: Transport, MCPTransport, Service, @unchecked 
         var out = data
         out.append(Data("\n".utf8))
 
-        try FileHandle.standardOutput.write(contentsOf: out)
-    }
-}
-
-/// The single stdin/stdout ``MCPBatchConnection`` surfaced by a connection-based
-/// ``StdioTransport``. Inbound frames (a stdin line decodes to one frame) are
-/// pushed in by the transport's read loop; outbound frames are encoded and
-/// written to stdout. It is batch-capable because a stdin line may be a JSON-RPC
-/// batch array.
-private final class StdioServerConnection: MCPBatchConnection, @unchecked Sendable {
-    let inboundBatches: AsyncStream<[JSONRPCMessage]>
-    private let inboundContinuation: AsyncStream<[JSONRPCMessage]>.Continuation
-    private let logger: Logger
-
-    init(logger: Logger) {
-        self.logger = logger
-        var continuation: AsyncStream<[JSONRPCMessage]>.Continuation!
-        inboundBatches = AsyncStream { continuation = $0 }
-        inboundContinuation = continuation
-    }
-
-    /// Forwards a decoded inbound frame to the routing loop.
-    func deliver(_ frame: [JSONRPCMessage]) {
-        inboundContinuation.yield(frame)
-    }
-
-    /// Ends the inbound stream (stdin EOF or transport stop).
-    func close() {
-        inboundContinuation.finish()
-    }
-
-    func send(_ batch: [JSONRPCMessage]) async throws {
-        let data = try JSONRPCFrame.encode(batch)
-        logger.trace("STDOUT:\n\n\(String(data: data, encoding: .utf8) ?? "")")
-        var out = data
-        out.append(Data("\n".utf8))
         try FileHandle.standardOutput.write(contentsOf: out)
     }
 }

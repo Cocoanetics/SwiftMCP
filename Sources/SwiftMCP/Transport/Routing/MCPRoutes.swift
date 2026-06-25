@@ -262,7 +262,7 @@ extension HTTPSSETransport {
 		context: StreamableHTTPContext
 	) async -> RouteResponse {
 		let sid = context.sessionID.uuidString
-		let (connection, isNew) = await connectionRegistry.connection(for: context.sessionID, transport: self)
+		let (connection, isNew) = await connectionRegistry.connection(for: session, transport: self)
 		if isNew {
 			connectionsContinuation.yield(connection)
 		}

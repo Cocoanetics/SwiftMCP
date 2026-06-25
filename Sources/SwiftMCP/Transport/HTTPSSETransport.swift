@@ -24,7 +24,7 @@ public final class HTTPSSETransport: Transport, MCPTransport, Service, @unchecke
     /// The MCP server instance that this transport exposes in the server-coupled
     /// mode. `nil` in the connection-based mode, where
     /// ``MCPServer/serve(over:gracefulShutdownSignals:logger:)`` owns dispatch and
-    /// each `Mcp-Session-Id` session is surfaced as an ``MCPScopedConnection``.
+    /// each `Mcp-Session-Id` session is surfaced as an ``MCPConnection``.
     public let server: MCPServer?
 
     /// Connections accepted in the connection-based mode — one per session. Empty
@@ -140,8 +140,8 @@ public final class HTTPSSETransport: Transport, MCPTransport, Service, @unchecke
     ///
     /// Pass the transport to ``MCPServer/serve(over:gracefulShutdownSignals:logger:)``,
     /// which consumes ``connections`` and routes each frame. Each `Mcp-Session-Id`
-    /// session is surfaced as an ``MCPScopedConnection`` whose per-request SSE
-    /// stream is bound for the duration of dispatch. OpenAPI endpoints are
+    /// session is surfaced as an ``MCPConnection`` whose per-request SSE stream is
+    /// bound for the duration of dispatch. OpenAPI endpoints are
     /// unavailable in this mode (they introspect the server's tools, which the
     /// decoupled transport does not hold).
     public init(host: String = ProcessInfo.processInfo.hostName, port: Int = 8080) {

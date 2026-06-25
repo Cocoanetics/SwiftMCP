@@ -5,17 +5,16 @@ Decouple transports from the server and let `serve(over:)` own the run loop, sig
 ## Overview
 
 A transport is fundamentally a *source of connections*, and each connection is a
-JSON-RPC duplex. SwiftMCP makes that boundary explicit with two small protocols
-and a single entry point on the server:
+JSON-RPC duplex that owns its session. SwiftMCP makes that boundary explicit with
+two small protocols and a single entry point on the server:
 
-- ``MCPConnection`` — one full-duplex JSON-RPC channel to a client, carrying
-  **single messages**.
-- ``MCPBatchConnection`` — an opt-in refinement for transports that also carry
-  JSON-RPC *batches*.
+- ``MCPConnection`` — one full-duplex JSON-RPC channel to a client; owns its
+  ``Session`` and yields ``MCPInboundFrame``s. ``BasicConnection`` is the
+  ready-made shape for a one-socket transport.
 - ``MCPTransport`` — a `Service` that yields connections.
-- ``MCPServer/serve(over:gracefulShutdownSignals:logger:)`` — runs the
-  transports, routes every message (or batch) through the server, and shuts
-  everything down in order.
+- ``MCPServer/serve(over:gracefulShutdownSignals:logger:)`` — a pump that runs
+  the transports, routes every frame through the server, and shuts everything
+  down in order.
 - ``MCPServer/shutdown()`` — a lifecycle hook for releasing server-lifetime
   resources, called last.
 
@@ -24,13 +23,14 @@ The transport never sees the server, and the server never sees the transport.
 
 ## The boundary
 
-The base connection deals in **single messages** — the common case, and the only
-shape MCP `2025-06-18` and later use (that revision removed JSON-RPC batching):
+There is one connection protocol. A connection **owns its `Session`** and hands
+`serve` inbound frames, each carrying the outbound scope for its reply:
 
 ```swift
 public protocol MCPConnection: Sendable {
-    var inbound: AsyncStream<JSONRPCMessage> { get }     // JSON-RPC in
-    func send(_ message: JSONRPCMessage) async throws    // JSON-RPC out
+    var session: Session { get }                      // the connection owns it
+    var inbound: AsyncStream<MCPInboundFrame> { get }  // frames + per-frame scope
+    func send(_ frame: [JSONRPCMessage]) async throws  // JSON-RPC out
 }
 
 public protocol MCPTransport: Service {
@@ -38,25 +38,19 @@ public protocol MCPTransport: Service {
 }
 ```
 
-A transport that must still carry batches — a top-level JSON array that has to
-round-trip as one payload — conforms to ``MCPBatchConnection`` instead, which
-adds a whole-frame interface. Conformers implement only the batch members; the
-single-message requirements are derived for free:
+The unit of transfer is a *frame* — an array of ``JSONRPCMessage``. A single
+message is a one-element frame; a JSON-RPC batch is a multi-element frame that
+round-trips as one payload (batching was removed in MCP `2025-06-18`, so most
+frames are single).
 
-```swift
-public protocol MCPBatchConnection: MCPConnection {
-    var inboundBatches: AsyncStream<[JSONRPCMessage]> { get }
-    func send(_ batch: [JSONRPCMessage]) async throws
-}
-```
-
-`serve` routes a plain ``MCPConnection`` one message at a time through
-``MCPServer/handleMessage(_:)``, and a ``MCPBatchConnection`` whole-frame through
-``MCPServer/processBatch(_:ignoringEmptyResponses:)`` — applying the same
-version-gated batch reject the byte-stream transports use, so a client on a
-no-batching revision that sends a batch gets a `-32600` error. The bundled
-``StdioTransport`` and ``TCPBonjourTransport`` are batch-capable, because a stdin
-line or TCP frame may be a JSON array.
+`serve` is a **pure pump** over that one shape: it binds the connection's
+session, gates each frame (rejecting pre-initialize requests, and batches on
+no-batching revisions with `-32600`), and runs
+``MCPServer/processBatch(_:ignoringEmptyResponses:)`` inside the frame's
+``MCPInboundFrame/within`` scope — never minting a session of its own. The gate
+runs sequentially in the read loop while dispatch runs concurrently, so a tool
+awaiting a server→client response (`sampling`/`elicitation`/`roots`) never blocks
+reading that very response.
 
 Wire specifics — stdio framing, a TCP listener with Bonjour advertising, HTTP
 POST + SSE — stay inside the transport. Dispatch (initialize, tools, resources,
@@ -127,10 +121,20 @@ struct Calculator {
 
 ## Writing a transport
 
-Conform to ``MCPTransport``: accept connections however the wire dictates, wrap
-each as an ``MCPConnection``, and yield it to ``MCPTransport/connections``. Run
-until graceful shutdown in `Service.run()`, then finish the connections stream
-(and each connection's `inbound`) so routing unwinds.
+For a transport that is a single duplex (stdio, TCP, an in-memory pipe), reach
+for ``BasicConnection`` — it owns a fresh session and `serve` wires its outbound
+back to you, so you only feed decoded frames and write bytes:
+
+```swift
+func run() async throws {
+    let connection = BasicConnection { frame in
+        try await writeLine(JSONRPCFrame.encode(frame))   // your wire
+    }
+    connectionsContinuation.yield(connection)
+    for try await line in lines { connection.deliver(try JSONRPCMessage.decodeMessages(from: line)) }
+    connection.close()   // on EOF
+}
+```
 
 All three bundled transports support both modes: construct them with a server
 (`init(server:)`) to run them yourself, or server-less
@@ -145,39 +149,34 @@ try await server.serve(over: [http, tcp], logger: log)     // one call, both tra
 
 ## Session-spanning transports
 
-Stdio and TCP map one socket to one connection. HTTP+SSE doesn't: a logical
-client is a `Mcp-Session-Id` session spread across many HTTP requests — stateless
-POSTs plus SSE streams — and a POST's reply belongs to *that* request's stream.
-For transports like this, the connection (not `serve`) owns the `Session` and the
-per-request reply routing, via ``MCPScopedConnection``:
+The same one protocol covers transports whose session isn't one socket. HTTP+SSE
+is the example: a logical client is a `Mcp-Session-Id` session spread across many
+HTTP requests — stateless POSTs plus SSE streams — and a POST's reply belongs to
+*that* request's stream. Because a connection already **owns its session** and
+supplies a per-frame ``MCPInboundFrame/within`` scope, this needs no special
+protocol:
 
-- The transport surfaces one ``MCPScopedConnection`` per session.
-- Each POST is delivered as an ``MCPInboundFrame`` whose ``MCPInboundFrame/within``
-  scope binds the right `Session.current` and the POST's SSE stream, then tears it
-  down.
-- `serve` becomes a pure pump: it dispatches each pre-gated frame inside `within`,
-  so responses *and* mid-call notifications route to the correct stream through
-  machinery the transport already owns.
-
-This is how ``HTTPSSETransport`` conforms to ``MCPTransport`` while preserving
-resumable streams, request-scoped progress, OAuth, and the rest.
+- ``HTTPSSETransport`` surfaces one ``MCPConnection`` per `Mcp-Session-Id` session
+  (whose session is the transport's own).
+- Each POST is delivered as a frame whose `within` binds the POST's per-request
+  SSE stream, then finishes it.
+- `serve` pumps it like any other connection; responses *and* mid-call
+  notifications route to that stream through machinery the transport already owns
+  — preserving resumable streams, request-scoped progress, OAuth, and legacy SSE.
 
 ## Testability
 
-Because a connection is just two JSON-RPC streams and a transport is just a
-source of them, both can be exercised with no sockets and no server: feed a
-canned ``MCPConnection/inbound`` stream and assert on what
-`send(_:)` receives. That is exactly how SwiftMCP tests
-`serve(over:)` itself.
+Because a connection is just an inbound stream and a `send`, it can be exercised
+with no sockets and no server: feed a canned ``MCPConnection/inbound`` and assert
+on what `send(_:)` receives. That is exactly how SwiftMCP tests `serve(over:)`.
 
 ## Topics
 
 ### Protocols
 
 - ``MCPConnection``
-- ``MCPBatchConnection``
-- ``MCPScopedConnection``
 - ``MCPInboundFrame``
+- ``BasicConnection``
 - ``MCPTransport``
 
 ### Serving

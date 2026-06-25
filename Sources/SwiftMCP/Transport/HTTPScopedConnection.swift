@@ -2,7 +2,7 @@
 //  HTTPScopedConnection.swift
 //  SwiftMCP
 //
-//  The per-session ``MCPScopedConnection`` surfaced by a connection-based
+//  The per-session ``MCPConnection`` surfaced by a connection-based
 //  ``HTTPSSETransport``, plus a small actor registry that maps `Mcp-Session-Id`
 //  sessions to their connections.
 //
@@ -10,28 +10,30 @@
 #if Server
 import Foundation
 
-/// One MCP session (`Mcp-Session-Id`) surfaced as an ``MCPScopedConnection``.
+/// One MCP session (`Mcp-Session-Id`) surfaced as an ``MCPConnection``.
 ///
-/// POST handlers push pre-gated frames in via ``deliver(_:)`` — each carrying a
-/// `within` scope that binds the session and the POST's per-request SSE stream.
-/// Outbound responses route to that stream through the existing SSE machinery,
-/// the same path ``HTTPSSETransport/send(_:)`` uses for notifications.
-final class HTTPScopedConnection: MCPScopedConnection, @unchecked Sendable {
-    let sessionID: UUID
+/// Unlike a one-socket ``BasicConnection``, this connection's session is the
+/// transport's own (`HTTPSSETransport` attaches itself as the session's
+/// transport), and each POST arrives as an ``MCPInboundFrame`` whose `within`
+/// scope binds the POST's per-request SSE stream. Outbound responses are routed
+/// to that stream via the existing SSE machinery — the same path
+/// ``HTTPSSETransport/send(_:)`` uses for notifications.
+final class HTTPScopedConnection: MCPConnection, @unchecked Sendable {
+    let session: Session
     private unowned let transport: HTTPSSETransport
 
-    let scopedInbound: AsyncStream<MCPInboundFrame>
+    let inbound: AsyncStream<MCPInboundFrame>
     private let inboundContinuation: AsyncStream<MCPInboundFrame>.Continuation
 
-    init(sessionID: UUID, transport: HTTPSSETransport) {
-        self.sessionID = sessionID
+    init(session: Session, transport: HTTPSSETransport) {
+        self.session = session
         self.transport = transport
         var continuation: AsyncStream<MCPInboundFrame>.Continuation!
-        scopedInbound = AsyncStream { continuation = $0 }
+        inbound = AsyncStream { continuation = $0 }
         inboundContinuation = continuation
     }
 
-    /// Hands serve a pre-gated POST frame to dispatch.
+    /// Hands serve a pre-gated POST frame (with its per-request stream scope).
     func deliver(_ frame: MCPInboundFrame) {
         inboundContinuation.yield(frame)
     }
@@ -41,15 +43,18 @@ final class HTTPScopedConnection: MCPScopedConnection, @unchecked Sendable {
         inboundContinuation.finish()
     }
 
-    /// Routes a server→client message to the frame's bound request stream, or the
-    /// session's general stream when no request stream is in scope.
-    func send(_ message: JSONRPCMessage) async throws {
-        if let streamID = Session.currentStreamContext?.streamID {
-            _ = try await transport.sendJSONRPC(message, to: streamID)
-        } else {
-            let data = try JSONRPCFrame.encode([message])
-            let sse = SSEMessage(data: String(data: data, encoding: .utf8) ?? "")
-            _ = await transport.routeSSEMessage(sse, sessionID: sessionID, preferredStreamID: nil)
+    /// Routes each message of the frame to the bound request stream (one SSE event
+    /// per message), or the session's general stream when no request stream is in
+    /// scope.
+    func send(_ frame: [JSONRPCMessage]) async throws {
+        for message in frame {
+            if let streamID = Session.currentStreamContext?.streamID {
+                _ = try await transport.sendJSONRPC(message, to: streamID)
+            } else {
+                let data = try JSONRPCFrame.encode([message])
+                let sse = SSEMessage(data: String(data: data, encoding: .utf8) ?? "")
+                _ = await transport.routeSSEMessage(sse, sessionID: session.id, preferredStreamID: nil)
+            }
         }
     }
 }
@@ -58,17 +63,17 @@ final class HTTPScopedConnection: MCPScopedConnection, @unchecked Sendable {
 actor HTTPConnectionRegistry {
     private var connections: [UUID: HTTPScopedConnection] = [:]
 
-    /// Returns the connection for `sessionID`, creating one (flagged `isNew`) if
+    /// Returns the connection for `session`, creating one (flagged `isNew`) if
     /// absent so the caller can yield it to `connections`.
     func connection(
-        for sessionID: UUID,
+        for session: Session,
         transport: HTTPSSETransport
     ) -> (connection: HTTPScopedConnection, isNew: Bool) {
-        if let existing = connections[sessionID] {
+        if let existing = connections[session.id] {
             return (existing, false)
         }
-        let created = HTTPScopedConnection(sessionID: sessionID, transport: transport)
-        connections[sessionID] = created
+        let created = HTTPScopedConnection(session: session, transport: transport)
+        connections[session.id] = created
         return (created, true)
     }
 
