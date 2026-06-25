@@ -73,20 +73,46 @@ extension HTTPSSETransport {
 				)
 			}
 
-			let responses = await sessionManager.session(id: sessionID).work { _ in
-				await self.server?.processBatch(messages, ignoringEmptyResponses: true) ?? []
-			}
-
-			if let generalStreamID = await sessionManager.primaryGeneralStreamID(for: sessionID) {
-				for response in responses {
-					_ = try? await self.sendJSONRPC(response, to: generalStreamID)
-				}
-			}
+			await dispatchLegacyMessages(messages, sessionID: sessionID)
 		} catch {
 			logger.error("Failed to decode JSON-RPC message in SSE context: \(error)")
 		}
 
 		return RouteResponse(status: .accepted)
+	}
+
+	/// Dispatch decoded legacy-SSE messages. Replies are delivered asynchronously
+	/// on the session's general SSE stream (the POST itself returns `202`).
+	private func dispatchLegacyMessages(_ messages: [JSONRPCMessage], sessionID: UUID) async {
+		if server == nil {
+			// Connection-based mode: route the frame through the session's scoped
+			// connection so `serve(over:)` dispatches it. Legacy SSE replies go to
+			// the session's general stream, so bind that as the frame's scope.
+			let session = await sessionManager.session(id: sessionID)
+			let (connection, isNew) = await connectionRegistry.connection(for: sessionID, transport: self)
+			if isNew {
+				connectionsContinuation.yield(connection)
+			}
+			let generalStreamContext = await sessionManager.primaryGeneralStreamID(for: sessionID)
+				.map { OutboundStreamContext(streamID: $0, kind: .general) }
+			connection.deliver(MCPInboundFrame(messages) { operation in
+				if let generalStreamContext {
+					await session.work(onStream: generalStreamContext) { _ in await operation() }
+				} else {
+					await session.work { _ in await operation() }
+				}
+			})
+			return
+		}
+
+		let responses = await sessionManager.session(id: sessionID).work { _ in
+			await self.server?.processBatch(messages, ignoringEmptyResponses: true) ?? []
+		}
+		if let generalStreamID = await sessionManager.primaryGeneralStreamID(for: sessionID) {
+			for response in responses {
+				_ = try? await self.sendJSONRPC(response, to: generalStreamID)
+			}
+		}
 	}
 
 	// MARK: - Helpers

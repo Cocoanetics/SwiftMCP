@@ -75,5 +75,69 @@ struct HTTPServeTests {
         try await transport.stop()
         try await serveTask.value
     }
+
+    @Test("Legacy SSE (/sse + /messages) works over serve(over:)")
+    func legacySSEOverServe() async throws {
+        #if canImport(FoundationNetworking)
+        return
+        #else
+        let server = HTTPServeTestServer()
+        let transport = HTTPSSETransport(host: "127.0.0.1", port: 0)
+
+        let serveTask = Task {
+            try await server.serve(
+                over: [transport],
+                gracefulShutdownSignals: [],
+                logger: Logger(label: "test.http.legacy")
+            )
+        }
+
+        let bound = await HTTPTransportTestHelpers.waitForCondition { transport.port != 0 }
+        #expect(bound)
+        let baseURL = URL(string: "http://127.0.0.1:\(transport.port)")!
+
+        // Open the general SSE stream and read its `endpoint` event.
+        let capture = HTTPTransportTestHelpers.openStreamingRequest({
+            var request = URLRequest(url: baseURL.appendingPathComponent("sse"))
+            request.httpMethod = "GET"
+            request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+            return request
+        }())
+
+        let hasEndpoint = await HTTPTransportTestHelpers.waitForCondition {
+            capture.events.value.contains { $0.event == "endpoint" }
+        }
+        #expect(hasEndpoint)
+        let endpointEvent = try #require(capture.events.value.first { $0.event == "endpoint" })
+        let messagesURL = try #require(URL(string: endpointEvent.data))
+
+        // POST initialize to the legacy endpoint; the reply arrives on the stream.
+        let postSession = URLSession(configuration: .ephemeral)
+        var initRequest = URLRequest(url: messagesURL)
+        initRequest.httpMethod = "POST"
+        initRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        initRequest.httpBody = try HTTPTransportTestHelpers.encode(HTTPTransportTestHelpers.initializeRequest())
+        let (_, initResponse) = try await postSession.data(for: initRequest)
+        #expect((initResponse as? HTTPURLResponse)?.statusCode == 202)
+        #expect(await HTTPTransportTestHelpers.waitForCondition {
+            HTTPTransportTestHelpers.responseEvent(capture.events.value, id: 1) != nil
+        })
+
+        // POST ping; the reply also arrives on the general stream.
+        var pingRequest = URLRequest(url: messagesURL)
+        pingRequest.httpMethod = "POST"
+        pingRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        pingRequest.httpBody = try HTTPTransportTestHelpers.encode(JSONRPCMessage.request(id: 3, method: "ping"))
+        let (_, pingResponse) = try await postSession.data(for: pingRequest)
+        #expect((pingResponse as? HTTPURLResponse)?.statusCode == 202)
+        #expect(await HTTPTransportTestHelpers.waitForCondition {
+            HTTPTransportTestHelpers.responseEvent(capture.events.value, id: 3) != nil
+        })
+
+        capture.task.cancel()
+        try await transport.stop()
+        try await serveTask.value
+        #endif
+    }
 }
 #endif
