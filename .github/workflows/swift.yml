@@ -40,10 +40,13 @@ jobs:
       # rotated `macos-latest` image can have Xcode 26.0 without the iOS
       # platform installed — `-destination 'generic/platform=iOS'` then resolves
       # to zero destinations ("iOS 26.0 is not installed") before anything
-      # compiles. Fetch the component so the build doesn't depend on how the
-      # runner image happened to be provisioned. Idempotent when already present.
-      - name: Ensure the iOS platform is installed
-        run: xcodebuild -downloadPlatform iOS
+      # compiles. Fetch the component when it is missing. This is best-effort
+      # (`|| true`): on images that already have the platform the download itself
+      # can error ("Unable to connect to simulator"), and the Build step below is
+      # the real gate either way — it only needs the SDK, which is present once
+      # this has run (or was already there).
+      - name: Ensure the iOS platform is installed (best-effort)
+        run: xcodebuild -downloadPlatform iOS || true
       - name: Build (iOS)
         run: xcodebuild -scheme SwiftMCP -destination 'generic/platform=iOS' build
 
