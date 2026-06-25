@@ -13,10 +13,10 @@ import Network
 /// - **Server-coupled (legacy):** construct it with `init(server:)` and run it
 ///   directly (e.g. inside your own `ServiceGroup`). It dispatches through the
 ///   server itself.
-/// - **Connection-based:** construct it with `init(serviceName:)` (no server)
-///   and hand it to ``MCPServer/serve(over:gracefulShutdownSignals:logger:)``.
-///   Each accepted TCP connection is surfaced as an ``MCPConnection`` and `serve`
-///   does the routing.
+/// - **Decoupled:** construct it with `init(serviceName:)` (no server) and hand
+///   it to ``MCPServer/serve(over:gracefulShutdownSignals:logger:)``, which
+///   connects an ``MCPDispatcher`` via ``connect(to:)``. Each accepted TCP
+///   connection binds its own session and routes inbound lines through `handle`.
 public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unchecked Sendable {
     /// Base DNS-SD service type for MCP over TCP.
     public static let serviceType = MCPBonjourServiceType.base
@@ -28,9 +28,14 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
         MCPBonjourServiceType.forServer(serverName)
     }
 
-    /// The MCP server exposed in the server-coupled mode. `nil` in the
-    /// connection-based mode, where `serve(over:)` owns dispatch.
+    /// The MCP server exposed in the server-coupled mode. `nil` in the decoupled
+    /// mode, where the ``MCPDispatcher`` connected by `serve(over:)` owns dispatch.
     public let server: MCPServer?
+
+    /// The dispatcher `serve` connects in the decoupled mode. `nil` until
+    /// ``connect(to:)`` is called (and in the server-coupled mode). Read by the
+    /// receive loop in `TCPBonjourTransport+Connections.swift`.
+    internal var dispatcher: (any MCPDispatcher)?
     public let logger = Logger(label: "com.cocoanetics.SwiftMCP.TCPBonjourTransport")
 
     /// Optional override for the advertised Bonjour service name.
@@ -41,11 +46,6 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
     public let acceptLocalOnly: Bool
     public let preferIPv4: Bool
     public internal(set) var port: UInt16?
-
-    /// Connections accepted in the connection-based mode. One element per TCP
-    /// client. Stays empty in the server-coupled mode.
-    public let connections: AsyncStream<MCPConnection>
-    internal let connectionsContinuation: AsyncStream<MCPConnection>.Continuation
 
     internal let queue = DispatchQueue(label: "com.cocoanetics.SwiftMCP.TCPBonjourTransport")
     internal let state = TransportState()
@@ -179,7 +179,6 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
         self.port = port
         self.acceptLocalOnly = acceptLocalOnly
         self.preferIPv4 = preferIPv4
-        (connections, connectionsContinuation) = TCPBonjourTransport.makeConnectionsStream()
     }
 
     public convenience init(server: MCPServer) {
@@ -194,11 +193,11 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
         )
     }
 
-    /// Initializes a connection-based TCP+Bonjour transport with no server.
+    /// Initializes a decoupled TCP+Bonjour transport with no server.
     ///
     /// Pass the transport to ``MCPServer/serve(over:gracefulShutdownSignals:logger:)``,
-    /// which consumes ``connections`` and routes each frame. The Bonjour service
-    /// name (and the derived service type) come from `serviceName` rather than a
+    /// which connects an ``MCPDispatcher`` and runs it. The Bonjour service name
+    /// (and the derived service type) come from `serviceName` rather than a
     /// server.
     ///
     /// - Parameters:
@@ -224,14 +223,11 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
         self.port = port
         self.acceptLocalOnly = acceptLocalOnly
         self.preferIPv4 = preferIPv4
-        (connections, connectionsContinuation) = TCPBonjourTransport.makeConnectionsStream()
     }
 
-    private static func makeConnectionsStream()
-        -> (AsyncStream<MCPConnection>, AsyncStream<MCPConnection>.Continuation) {
-        var continuation: AsyncStream<MCPConnection>.Continuation!
-        let stream = AsyncStream<MCPConnection> { continuation = $0 }
-        return (stream, continuation)
+    /// Connects the dispatcher `serve` routes inbound TCP lines through.
+    public func connect(to dispatcher: any MCPDispatcher) {
+        self.dispatcher = dispatcher
     }
 }
 #else
@@ -259,9 +255,6 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
     public let preferIPv4: Bool
     public private(set) var port: UInt16?
 
-    /// Always-empty on platforms without the Network framework.
-    public let connections: AsyncStream<MCPConnection>
-
     public init(
         server: MCPServer,
         serviceName: String? = nil,
@@ -278,7 +271,6 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
         self.port = port
         self.acceptLocalOnly = acceptLocalOnly
         self.preferIPv4 = preferIPv4
-        self.connections = AsyncStream { $0.finish() }
     }
 
     public convenience init(server: MCPServer) {
@@ -293,8 +285,8 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
         )
     }
 
-    /// Connection-based initializer. Building/running fails at runtime on
-    /// platforms without the Network framework.
+    /// Decoupled initializer. Building/running fails at runtime on platforms
+    /// without the Network framework.
     public init(
         serviceName: String,
         serviceType: String? = nil,
@@ -310,8 +302,10 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
         self.port = port
         self.acceptLocalOnly = acceptLocalOnly
         self.preferIPv4 = preferIPv4
-        self.connections = AsyncStream { $0.finish() }
     }
+
+    /// No-op on platforms without the Network framework; the transport cannot run.
+    public func connect(to dispatcher: any MCPDispatcher) {}
 
     public func start() async throws {
         throw TransportError.bindingFailed("TCP+Bonjour transport requires the Network framework.")

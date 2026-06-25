@@ -17,14 +17,20 @@ import ServiceLifecycle
 /// - **Server-coupled (legacy):** construct it with `init(server:)` and run it
 ///   directly (e.g. inside your own `ServiceGroup`). It reads stdin, dispatches
 ///   through the server, and writes responses to stdout itself.
-/// - **Connection-based:** construct it with `init()` (no server) and hand it to
-///   ``MCPServer/serve(over:gracefulShutdownSignals:logger:)``. It then surfaces
-///   stdin/stdout as a single ``MCPConnection`` and lets `serve` do the routing.
+/// - **Decoupled:** construct it with `init()` (no server) and hand it to
+///   ``MCPServer/serve(over:gracefulShutdownSignals:logger:)``, which connects an
+///   ``MCPDispatcher`` via ``connect(to:)``. It then reads stdin, calls
+///   ``MCPDispatcher/handle(_:)-(JSONRPCMessage)``, and writes the reply.
 public final class StdioTransport: Transport, MCPTransport, Service, @unchecked Sendable {
     /// The MCP server instance that this transport exposes, when used in the
-    /// server-coupled mode. `nil` in the connection-based mode, where
+    /// server-coupled mode. `nil` in the decoupled mode, where the
+    /// ``MCPDispatcher`` connected by
     /// ``MCPServer/serve(over:gracefulShutdownSignals:logger:)`` owns dispatch.
     public let server: MCPServer?
+
+    /// The dispatcher `serve` connects in the decoupled mode. `nil` until
+    /// ``connect(to:)`` is called (and in the server-coupled mode).
+    private var dispatcher: (any MCPDispatcher)?
 
     /// Logger instance for logging transport activity.
     ///
@@ -50,34 +56,24 @@ public final class StdioTransport: Transport, MCPTransport, Service, @unchecked 
 
     private let state = TransportState()
 
-    /// The connections accepted by this transport. In the connection-based mode
-    /// this yields exactly one connection (stdin/stdout). It stays empty in the
-    /// server-coupled mode.
-    public let connections: AsyncStream<MCPConnection>
-    private let connectionsContinuation: AsyncStream<MCPConnection>.Continuation
-
     /// Initializes a server-coupled StdioTransport with the given MCP server.
     ///
     /// - Parameter server: The MCP server to expose over standard input/output.
     public init(server: MCPServer) {
         self.server = server
-        (connections, connectionsContinuation) = Self.makeConnectionsStream()
     }
 
-    /// Initializes a connection-based StdioTransport with no server.
+    /// Initializes a decoupled StdioTransport with no server.
     ///
     /// Pass the transport to ``MCPServer/serve(over:gracefulShutdownSignals:logger:)``,
-    /// which consumes ``connections`` and routes each frame.
+    /// which connects an ``MCPDispatcher`` and runs it.
     public init() {
         self.server = nil
-        (connections, connectionsContinuation) = Self.makeConnectionsStream()
     }
 
-    private static func makeConnectionsStream()
-        -> (AsyncStream<MCPConnection>, AsyncStream<MCPConnection>.Continuation) {
-        var continuation: AsyncStream<MCPConnection>.Continuation!
-        let stream = AsyncStream<MCPConnection> { continuation = $0 }
-        return (stream, continuation)
+    /// Connects the dispatcher `serve` routes inbound stdin payloads through.
+    public func connect(to dispatcher: any MCPDispatcher) {
+        self.dispatcher = dispatcher
     }
 
     /// Starts reading from stdin asynchronously in a non-blocking manner.
@@ -92,7 +88,11 @@ public final class StdioTransport: Transport, MCPTransport, Service, @unchecked 
         // Read on a background task so this method returns immediately.
         Task { @Sendable in
             do {
-                try await readLoop()
+                if server != nil {
+                    try await readLoop()
+                } else {
+                    try await serveReadLoop()
+                }
             } catch {
                 logger.error("Error processing input: \(error)")
             }
@@ -105,8 +105,8 @@ public final class StdioTransport: Transport, MCPTransport, Service, @unchecked 
     /// Returns when `stop()` is called from another task, when a `ServiceGroup`
     /// graceful shutdown is triggered, or when the peer closes stdin (EOF).
     ///
-    /// In the connection-based mode (no `server`), stdin/stdout is surfaced as a
-    /// single ``MCPConnection`` and routing is left to
+    /// In the decoupled mode (no `server`), stdin payloads are routed through the
+    /// ``MCPDispatcher`` connected by
     /// ``MCPServer/serve(over:gracefulShutdownSignals:logger:)``.
     ///
     /// - Throws: An error if the transport fails to process input.
@@ -120,7 +120,7 @@ public final class StdioTransport: Transport, MCPTransport, Service, @unchecked 
             if server != nil {
                 try await readLoop()
             } else {
-                try await connectionReadLoop()
+                try await serveReadLoop()
             }
         } onGracefulShutdown: { [weak self] in
             Task { [weak self] in try? await self?.stop() }
@@ -128,7 +128,7 @@ public final class StdioTransport: Transport, MCPTransport, Service, @unchecked 
     }
 
     /// Reads newline-delimited JSON-RPC messages from stdin until stdin reaches
-    /// end-of-file or the transport is stopped.
+    /// end-of-file or the transport is stopped (server-coupled mode).
     ///
     /// `readLine()` blocks until a complete line or EOF is available, so the loop
     /// needs no polling delay. A `nil` result means the peer closed stdin (EOF),
@@ -156,40 +156,60 @@ public final class StdioTransport: Transport, MCPTransport, Service, @unchecked 
         await state.stop()
     }
 
-    /// Connection-based read loop: surfaces stdin/stdout as one ``MCPConnection``
-    /// and forwards decoded frames to its `inbound` stream. Wire framing and
-    /// decoding stay here; dispatch is `serve`'s job.
-    private func connectionReadLoop() async throws {
-        let connection = BasicConnection { [logger] frame in
-            let data = try JSONRPCFrame.encode(frame)
-            logger.trace("STDOUT:\n\n\(String(data: data, encoding: .utf8) ?? "")")
-            var out = data
-            out.append(Data("\n".utf8))
-            try FileHandle.standardOutput.write(contentsOf: out)
-        }
-        connectionsContinuation.yield(connection)
-
-        while await state.isCurrentlyRunning() {
-            guard let input = readLine() else {
-                // EOF: stdin was closed by the peer.
-                break
-            }
-            guard !input.isEmpty, let data = input.data(using: .utf8) else {
-                // Blank or non-UTF8 line — skip and keep reading.
-                continue
-            }
-            logger.trace("STDIN:\n\n\(input)")
-            do {
-                let messages = try JSONRPCMessage.decodeMessages(from: data)
-                connection.deliver(messages)
-            } catch {
-                logger.error("Error decoding message: \(error)")
+    /// Decoupled read loop: binds one session, reads stdin **in order**, and
+    /// routes each payload through the connected ``MCPDispatcher``, writing the
+    /// reply to stdout. Wire framing and decoding stay here; the gate and dispatch
+    /// are the dispatcher's job.
+    ///
+    /// Dispatch is in-order — a payload is fully handled before the next line is
+    /// read — so a client that pipes `initialize` and a follow-up together (a
+    /// scripted stdin) is never raced. (A tool that blocks on a server→client
+    /// round-trip therefore stalls a single stdio peer until it completes, exactly
+    /// as the server-coupled loop does.)
+    private func serveReadLoop() async throws {
+        let session = Session(id: UUID())
+        await session.setTransport(self)
+        await session.work { _ in
+            while await state.isCurrentlyRunning() {
+                guard let input = readLine() else {
+                    // EOF: stdin was closed by the peer.
+                    break
+                }
+                guard !input.isEmpty, let data = input.data(using: .utf8) else {
+                    // Blank or non-UTF8 line — skip and keep reading.
+                    continue
+                }
+                logger.trace("STDIN:\n\n\(input)")
+                await dispatchInbound(data)
             }
         }
-
-        connection.close()
-        connectionsContinuation.finish()
         await state.stop()
+    }
+
+    /// Decodes one stdin payload and routes it through the dispatcher, writing any
+    /// reply to stdout.
+    private func dispatchInbound(_ data: Data) async {
+        guard let dispatcher else {
+            logger.error("Received stdio data before a dispatcher was connected")
+            return
+        }
+        do {
+            let messages = try JSONRPCMessage.decodeMessages(from: data)
+            let replies: [JSONRPCMessage]
+            if messages.count == 1 {
+                if let reply = await dispatcher.handle(messages[0]) {
+                    replies = [reply]
+                } else {
+                    replies = []
+                }
+            } else {
+                replies = await dispatcher.handle(messages)
+            }
+            guard !replies.isEmpty else { return }
+            try await send(replies)
+        } catch {
+            logger.error("Error handling stdio message: \(error)")
+        }
     }
 
     /// Stops the transport.
@@ -203,10 +223,10 @@ public final class StdioTransport: Transport, MCPTransport, Service, @unchecked 
 
     // MARK: - Receiving
 
-    /// handle received data
+    /// handle received data (server-coupled mode)
     func handleReceived(_ data: Data) async throws {
         guard let server else {
-            logger.error("Received stdio data without a server (connection mode)")
+            logger.error("Received stdio data without a server (decoupled mode)")
             return
         }
         do {

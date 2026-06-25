@@ -2,7 +2,7 @@
 //  JSONRPCFrame.swift
 //  SwiftMCP
 //
-//  Wire encoding for a JSON-RPC frame shared by the connection-based transports.
+//  Wire encoding for a JSON-RPC frame shared by the bundled transports.
 //
 
 import Foundation

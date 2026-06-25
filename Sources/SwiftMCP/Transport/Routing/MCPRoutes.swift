@@ -183,6 +183,12 @@ extension HTTPSSETransport {
 	}
 
 	/// Dispatch the messages either as a streaming SSE response or buffered accepted response.
+	///
+	/// A request-bearing POST opens a per-request SSE stream, binds it as the
+	/// outbound scope for the duration of dispatch (so the reply *and* any mid-call
+	/// notifications land on it), and closes it afterward — the open stream is
+	/// returned as the POST body. A notification-only POST is dispatched without a
+	/// stream and acknowledged with `202`.
 	private func dispatchStreamable(
 		messages: [JSONRPCMessage],
 		token: String?,
@@ -190,25 +196,9 @@ extension HTTPSSETransport {
 	) async -> RouteResponse {
 		let session = await sessionManager.session(id: context.sessionID)
 		await bindBearerTokenIfNeeded(token, to: context.sessionID)
-
-		// Connection-based mode: hand the (already gated) frame to the session's
-		// connection and let `serve(over:)` dispatch it.
-		if server == nil {
-			return await dispatchStreamableConnection(messages: messages, session: session, context: context)
-		}
-		return await dispatchStreamableCoupled(messages: messages, session: session, context: context)
-	}
-
-	/// Server-coupled dispatch: process the batch inline and stream/ack the result.
-	private func dispatchStreamableCoupled(
-		messages: [JSONRPCMessage],
-		session: Session,
-		context: StreamableHTTPContext
-	) async -> RouteResponse {
 		let sid = context.sessionID.uuidString
-		let containsRequests = batchContainsRequests(messages)
 
-		if containsRequests {
+		if batchContainsRequests(messages) {
 			guard "text/event-stream".matchesAcceptHeader(context.acceptHeader)
 				|| "*/*".matchesAcceptHeader(context.acceptHeader) else {
 				return textResponse(
@@ -223,7 +213,7 @@ extension HTTPSSETransport {
 
 			Task {
 				let responses = await session.work(onStream: streamContext) { _ in
-					await self.server?.processBatch(messages, ignoringEmptyResponses: true) ?? []
+					await self.processInbound(messages)
 				}
 
 				for response in responses {
@@ -243,63 +233,26 @@ extension HTTPSSETransport {
 			return RouteResponse(status: .ok, headerFields: headerFields, bodyStream: stream, streamInfo: streamInfo)
 		}
 
-		_ = await session.work { _ in
-			await self.server?.processBatch(messages, ignoringEmptyResponses: true)
-		}
+		_ = await session.work { _ in await self.processInbound(messages) }
 
 		return RouteResponse(status: .accepted, headerFields: [.mcpSessionID: sid])
 	}
 
-	/// Connection-based dispatch: feed the frame to the session's
-	/// connection so `serve(over:)` routes it. For a request-bearing POST the
-	/// frame's `within` scope binds the per-request SSE stream (so responses and
-	/// mid-call notifications land on it) and finishes the stream after dispatch;
-	/// the open stream is returned as the POST body. A notification-only POST is
-	/// dispatched without a stream and acknowledged with `202`.
-	private func dispatchStreamableConnection(
-		messages: [JSONRPCMessage],
-		session: Session,
-		context: StreamableHTTPContext
-	) async -> RouteResponse {
-		let sid = context.sessionID.uuidString
-		let (connection, isNew) = await connectionRegistry.connection(for: session, transport: self)
-		if isNew {
-			connectionsContinuation.yield(connection)
-		}
-
-		if batchContainsRequests(messages) {
-			guard "text/event-stream".matchesAcceptHeader(context.acceptHeader)
-				|| "*/*".matchesAcceptHeader(context.acceptHeader) else {
-				return textResponse(
-					status: .badRequest,
-					body: "Client must accept text/event-stream.",
-					sessionID: context.sessionID
-				)
+	/// Process an inbound HTTP payload: through the connected ``MCPDispatcher``
+	/// (decoupled mode, where the gate lives) or the transport's own server
+	/// (server-coupled mode, gated upstream at the HTTP layer). Bind the session
+	/// (and any request-stream scope) before calling.
+	internal func processInbound(_ messages: [JSONRPCMessage]) async -> [JSONRPCMessage] {
+		if let dispatcher = self.dispatcher {
+			if messages.count == 1 {
+				if let reply = await dispatcher.handle(messages[0]) {
+					return [reply]
+				}
+				return []
 			}
-
-			let (stream, streamInfo) = await createSSEStream(sessionID: context.sessionID, kind: .request)
-			let streamContext = OutboundStreamContext(streamID: streamInfo.streamID, kind: .request)
-
-			connection.deliver(MCPInboundFrame(messages) { operation in
-				await session.work(onStream: streamContext) { _ in await operation() }
-				await self.finishSSEStream(streamInfo.streamID)
-			})
-
-			let headerFields: HTTPFields = [
-				.contentType: "text/event-stream",
-				.cacheControl: "no-cache",
-				.connection: "keep-alive",
-				.mcpSessionID: sid
-			]
-
-			return RouteResponse(status: .ok, headerFields: headerFields, bodyStream: stream, streamInfo: streamInfo)
+			return await dispatcher.handle(messages)
 		}
-
-		connection.deliver(MCPInboundFrame(messages) { operation in
-			await session.work { _ in await operation() }
-		})
-
-		return RouteResponse(status: .accepted, headerFields: [.mcpSessionID: sid])
+		return await self.server?.processBatch(messages, ignoringEmptyResponses: true) ?? []
 	}
 
 	/// Internal errors thrown while resolving the streamable HTTP context.
@@ -346,7 +299,6 @@ extension HTTPSSETransport {
 			return textResponse(status: .notFound, body: "Unknown session. Send initialize first.")
 		case .existing(let sessionID):
 			await sessionManager.removeSession(id: sessionID)
-			await connectionRegistry.remove(sessionID)
 			return RouteResponse(status: .noContent)
 		}
 	}

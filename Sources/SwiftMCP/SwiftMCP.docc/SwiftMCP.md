@@ -64,11 +64,11 @@ Start with <doc:GettingStarted> to create your first MCP server, then explore <d
 
 ### Serving & Transports
 
-- <doc:Connection-Based-Transports>
-- ``MCPConnection``
-- ``MCPInboundFrame``
-- ``BasicConnection``
+- <doc:Decoupled-Transports>
 - ``MCPTransport``
+- ``MCPDispatcher``
+- ``MCPServer/serve(over:gracefulShutdownSignals:logger:)``
+- ``MCPServer/shutdown()``
 
 ### Server Components
 

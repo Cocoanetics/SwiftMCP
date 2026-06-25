@@ -124,7 +124,9 @@ struct ServeOverTransportsTests {
     @Test("A tool can make a server→client request mid-call")
     func midCallServerRequest() async throws {
         let server = ServeTestServer()
-        let transport = InMemoryTransport()
+        // Concurrent dispatch (HTTP-like): each frame is handled on its own task,
+        // so the tool's server→client round-trip doesn't block reading its reply.
+        let transport = InMemoryTransport(concurrent: true)
 
         let serveTask = Task {
             try await server.serve(over: [transport], gracefulShutdownSignals: [], logger: Self.logger)
@@ -152,8 +154,8 @@ struct ServeOverTransportsTests {
             return
         }
 
-        // Sequential dispatch would block the read loop inside the tool here; the
-        // concurrent pump lets this response through to resume it.
+        // In ordered dispatch the tool would block until its reply arrived; the
+        // concurrent discipline lets this response through to resume it.
         connection.clientSends([.response(id: serverReq.id, result: [:])])
 
         let toolFrame = try #require(await outbound.next())

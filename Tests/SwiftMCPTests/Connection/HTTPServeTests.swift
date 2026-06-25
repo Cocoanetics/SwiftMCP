@@ -21,8 +21,8 @@ struct HTTPServeTests {
     @Test("Initialize + tool call (with mid-call progress) over serve(over:)")
     func endToEnd() async throws {
         let server = HTTPServeTestServer()
-        // Server-less transport: serve(over:) owns dispatch; the transport surfaces
-        // each Mcp-Session-Id session as a connection.
+        // Decoupled transport: serve(over:) connects a dispatcher; each POST binds
+        // its Mcp-Session-Id session + request stream and calls handle.
         let transport = HTTPSSETransport(host: "127.0.0.1", port: 0)
 
         let serveTask = Task {

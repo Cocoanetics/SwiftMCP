@@ -60,9 +60,9 @@ struct StdioCommand: AsyncParsableCommand {
 
             // `serve(over:)` owns the run loop, traps SIGINT/SIGTERM, and drives
             // an ordered graceful shutdown — no hand-built `ServiceGroup`. The
-            // server-less `StdioTransport()` surfaces stdin/stdout as a
-            // connection; the lifecycle logger writes to stderr so it never
-            // corrupts the stdout JSON-RPC stream.
+            // server-less `StdioTransport()` reads stdin and routes each payload
+            // through the dispatcher `serve` connects; the lifecycle logger writes
+            // to stderr so it never corrupts the stdout JSON-RPC stream.
             try await calculator.serve(over: [StdioTransport()], logger: Self.lifecycleLogger)
         } catch let error as TransportError {
             // Handle transport errors
