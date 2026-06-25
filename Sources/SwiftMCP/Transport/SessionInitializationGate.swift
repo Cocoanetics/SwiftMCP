@@ -4,28 +4,20 @@ enum SessionInitializationGate {
     static let rejectionMessage = "Session not initialized. Send initialize first."
 
     static func batchStartsWithInitialize(_ messages: [JSONRPCMessage]) -> Bool {
-        guard let first = messages.first else {
+        guard let first = messages.first, first.isRequest else {
             return false
         }
-
-        if case .request(let request) = first {
-            return request.method == "initialize"
-        }
-
-        return false
+        return first.method == "initialize"
     }
 
     /// The `protocolVersion` declared by a leading `initialize` request, if the
     /// batch begins with one. Returns `nil` when the batch does not start with
     /// `initialize` or that request omits the field.
     static func initializeProtocolVersion(_ messages: [JSONRPCMessage]) -> String? {
-        guard let first = messages.first,
-              case .request(let request) = first,
-              request.method == "initialize" else {
+        guard batchStartsWithInitialize(messages) else {
             return nil
         }
-
-        return request.params?["protocolVersion"]?.stringValue
+        return messages.first?.params?["protocolVersion"]?.stringValue
     }
 
     static func shouldReject(_ messages: [JSONRPCMessage], for session: Session) async -> Bool {
@@ -39,14 +31,10 @@ enum SessionInitializationGate {
     /// rather than fabricate an unsolicited `id: nil` error.
     static func rejectionResponses(for messages: [JSONRPCMessage]) -> [JSONRPCMessage] {
         messages.compactMap { message -> JSONRPCMessage? in
-            guard case .request(let request) = message else {
+            guard message.isRequest, let id = message.id else {
                 return nil
             }
-
-            return .errorResponse(
-                id: request.id,
-                error: .init(code: -32000, message: rejectionMessage)
-            )
+            return .errorResponse(id: id, error: .init(code: -32000, message: rejectionMessage))
         }
     }
 }
