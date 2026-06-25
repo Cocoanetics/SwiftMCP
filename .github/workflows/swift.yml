@@ -36,6 +36,14 @@ jobs:
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: "26.0"
+      # Xcode 16+ ships platform SDKs as on-demand components, so a freshly
+      # rotated `macos-latest` image can have Xcode 26.0 without the iOS
+      # platform installed — `-destination 'generic/platform=iOS'` then resolves
+      # to zero destinations ("iOS 26.0 is not installed") before anything
+      # compiles. Fetch the component so the build doesn't depend on how the
+      # runner image happened to be provisioned. Idempotent when already present.
+      - name: Ensure the iOS platform is installed
+        run: xcodebuild -downloadPlatform iOS
       - name: Build (iOS)
         run: xcodebuild -scheme SwiftMCP -destination 'generic/platform=iOS' build
 
