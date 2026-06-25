@@ -16,12 +16,17 @@ import Foundation
 /// unbound static-function dispatcher. The dispatchers capture nothing —
 /// `register(in:)` passes them by reference, so there's no retain cycle
 /// between the server and its installed extensions.
-public struct MCPExtensionContribution<Server> {
-    public typealias ToolDispatcher = (String, Server, JSONDictionary) async throws -> Encodable & Sendable
-    public typealias ResourceDispatcher = (
+///
+/// The dispatchers are `@Sendable` (capture-free static-function references) and
+/// every stored metadata type is `Sendable`, so a contribution is itself
+/// `Sendable`. That lets a value-type (`struct`) `@MCPServer` — whose only
+/// injected storage is an array of these — stay trivially `Sendable`.
+public struct MCPExtensionContribution<Server>: Sendable {
+    public typealias ToolDispatcher = @Sendable (String, Server, JSONDictionary) async throws -> Encodable & Sendable
+    public typealias ResourceDispatcher = @Sendable (
         String, Server, JSONDictionary, URL, String?
     ) async throws -> [MCPResourceContent]
-    public typealias PromptDispatcher = (String, Server, JSONDictionary) async throws -> [PromptMessage]
+    public typealias PromptDispatcher = @Sendable (String, Server, JSONDictionary) async throws -> [PromptMessage]
 
     public let toolMetadata: [MCPToolMetadata]
     public let toolDispatcher: ToolDispatcher?

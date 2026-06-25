@@ -11,57 +11,52 @@ import Logging
  - Stdio: Uses standard input/output for command-line integration
  
  - Important: All transport implementations must be thread-safe and handle concurrent requests appropriately.
- 
+
  - Note: Transport implementations should properly clean up resources in their `stop()` method.
- 
+
+ - Note: This is the original, server-coupled transport abstraction. The newer
+   ``MCPConnection``/``MCPTransport`` boundary plus
+   ``MCPServer/serve(over:gracefulShutdownSignals:logger:)`` decouples transports
+   from the server; new transports should prefer that model. `Transport` remains
+   the byte-level primitive that ``Session`` writes outbound bytes through.
+
  ## Example Usage
  ```swift
- class MyTransport: Transport {
+ final class MyTransport: Transport {
      let server: MCPServer
      let logger = Logger(label: "com.example.MyTransport")
-     
+
      init(server: MCPServer) {
          self.server = server
      }
-     
+
      func start() async throws {
          // Initialize and start your transport
      }
-     
+
      func run() async throws {
          try await start()
          // Block until stopped
      }
-     
+
      func stop() async throws {
          // Clean up resources
+     }
+
+     func send(_ data: Data) async throws {
+         // Deliver the bytes to the connected client
      }
  }
  ```
  */
 public protocol Transport: AnyObject, Sendable {
 /**
-     The MCP server instance being exposed by this transport.
-     
-     This server handles the actual processing of requests and maintains the available tools/functions.
-     The transport is responsible for getting requests to and responses from this server instance.
-     */
-    var server: MCPServer { get }
-
-/**
      Logger instance for this transport.
-     
+
      Used to log transport-specific events, errors, and debug information.
      Each transport implementation should use a unique label for its logger.
      */
     var logger: Logger { get }
-
-/**
-     Initialize a new transport with an MCP server.
-     
-     - Parameter server: The MCP server to expose through this transport
-     */
-    init(server: MCPServer)
 
 /**
      Start the transport in a non-blocking way.

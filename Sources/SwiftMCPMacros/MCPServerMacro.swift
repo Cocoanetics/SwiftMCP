@@ -9,7 +9,6 @@ import Foundation
 import SwiftSyntax
 import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
-import SwiftDiagnostics
 
 /**
  Implementation of the MCPServer macro.
@@ -51,8 +50,11 @@ import SwiftDiagnostics
 
  - Throws: MCPToolError if a tool cannot be found or called
 
- - Attention: This macro can only be applied to reference types (classes or actors).
-             Using it on a struct will result in a diagnostic with a fix-it to convert to a class.
+ - Note: The macro can be applied to a `class`, an `actor`, or a `struct`. Pick
+         the kind by whether the server has shared mutable *domain* state:
+         a stateless server can be a `struct` (trivially `Sendable`); a server
+         with shared mutable state should be an `actor` (or a thread-safe
+         `class`). The transport/plumbing no longer forces a reference type.
  */
 public struct MCPServerMacro: MemberMacro, ExtensionMacro, MemberAttributeMacro {
     public static func expansion(
@@ -89,11 +91,6 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro, MemberAttributeMacro 
         providingMembersOf declaration: some DeclGroupSyntax,
         in context: some MacroExpansionContext
     ) throws -> [DeclSyntax] {
-        if let structDecl = declaration.as(StructDeclSyntax.self) {
-            diagnoseStructDecl(structDecl, in: context)
-            return []
-        }
-
         let serverArgs = parseServerArguments(node: node, declaration: declaration)
         let hasAppShortcutsProvider = hasAppShortcutsProvider(declaration: declaration)
 
@@ -104,19 +101,28 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro, MemberAttributeMacro 
         let (mcpResources, resourceFunctions) = collectResourceFunctions(declaration: declaration)
         let (mcpPrompts, promptFunctions) = collectPromptFunctions(declaration: declaration)
 
-        // Extract the class/actor name for typing the per-instance contributions storage.
+        // Extract the host name for typing the per-instance contributions storage.
         let serverTypeName = declaration.as(ClassDeclSyntax.self)?.name.text
             ?? declaration.as(ActorDeclSyntax.self)?.name.text
+            ?? declaration.as(StructDeclSyntax.self)?.name.text
             ?? "Self"
 
-        // Branch the generated code on host kind. Actor hosts keep storage
-        // and metadata getters actor-isolated; class hosts keep the original
-        // non-isolated layout. See `makeExtensionStorageDeclarations`.
-        let isActor = declaration.is(ActorDeclSyntax.self)
+        // Branch the generated code on host kind. Actor hosts keep storage and
+        // metadata getters actor-isolated; class hosts keep the original
+        // non-isolated layout; struct (value-type) hosts use plain storage with
+        // a `mutating` registration method. See `makeExtensionStorageDeclarations`.
+        let host: MCPServerHostKind
+        if declaration.is(ActorDeclSyntax.self) {
+            host = .actorType
+        } else if declaration.is(StructDeclSyntax.self) {
+            host = .structType
+        } else {
+            host = .classType
+        }
 
         var declarations: [DeclSyntax] = makeBaseDeclarations(serverArgs: serverArgs)
         declarations.append(contentsOf:
-            makeExtensionStorageDeclarations(serverTypeName: serverTypeName, isActor: isActor)
+            makeExtensionStorageDeclarations(serverTypeName: serverTypeName, host: host)
                 .map { DeclSyntax(stringLiteral: $0) })
 
         // Always emit the tool machinery: even if no `@MCPTool` is declared
@@ -129,18 +135,18 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro, MemberAttributeMacro 
         declarations.append(DeclSyntax(stringLiteral: makeToolMetadataProperty(
             mcpTools: mcpTools,
             hasAppShortcutsProvider: hasAppShortcutsProvider,
-            isActor: isActor
+            host: host
         )))
 
         // Always emit resource-related machinery: extensions may contribute
         // resources even when the primary type declares none.
-        for resourceDecl in makeResourceDeclarations(mcpResources: mcpResources, isActor: isActor) {
+        for resourceDecl in makeResourceDeclarations(mcpResources: mcpResources, host: host) {
             declarations.append(DeclSyntax(stringLiteral: resourceDecl))
         }
 
         // Always emit prompt-related machinery: extensions may contribute
         // prompts even when the primary type declares none.
-        for promptDecl in makePromptDeclarations(mcpPrompts: mcpPrompts, isActor: isActor) {
+        for promptDecl in makePromptDeclarations(mcpPrompts: mcpPrompts, host: host) {
             declarations.append(DeclSyntax(stringLiteral: promptDecl))
         }
 
@@ -172,28 +178,6 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro, MemberAttributeMacro 
     }
 
     // MARK: - Helpers used by the main expansion
-
-    static func diagnoseStructDecl(
-        _ structDecl: StructDeclSyntax,
-        in context: some MacroExpansionContext
-    ) {
-        let diagnostic = SwiftDiagnostics.Diagnostic(
-            node: Syntax(structDecl.structKeyword),
-            message: MCPServerDiagnostic.requiresReferenceType(typeName: structDecl.name.text),
-            fixIts: [
-                FixIt(
-                    message: MCPServerFixItMessage.replaceWithClass(keyword: "struct"),
-                    changes: [
-                        .replace(
-                            oldNode: Syntax(structDecl.structKeyword),
-                            newNode: Syntax(TokenSyntax.keyword(.class))
-                        )
-                    ]
-                )
-            ]
-        )
-        context.diagnose(diagnostic)
-    }
 
     static func makeBaseDeclarations(serverArgs: ServerArguments) -> [DeclSyntax] {
         let nameProperty = "private let __mcpServerName = \"\(serverArgs.name)\""

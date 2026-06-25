@@ -156,7 +156,9 @@ public macro MCPAppIntentTool(
         named(Client),
         named(__mcpExtensionContributions),
         named(__mcpRegisterExtension),
-        named(__mcpRegisteredExtensionIDs)
+        named(__mcpRegisteredExtensionIDs),
+        named(__MCPExtensionStorage),
+        named(__mcpExtensionStorageBox)
 )
 @attached(memberAttribute)
 @attached(extension, conformances: MCPServer, MCPToolProviding, MCPResourceProviding, MCPPromptProviding)

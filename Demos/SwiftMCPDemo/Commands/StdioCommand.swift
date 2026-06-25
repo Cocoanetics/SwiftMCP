@@ -4,7 +4,6 @@ import ArgumentParser
 import SwiftMCP
 import Logging
 import NIOCore
-import ServiceLifecycle
 
 /**
  A command that processes JSON-RPC requests from standard input and writes responses to standard output.
@@ -59,21 +58,12 @@ struct StdioCommand: AsyncParsableCommand {
             // need to output to stderror or else npx complains
 			logToStderr("MCP Server \(calculator.serverName) (\(calculator.serverVersion)) started with Stdio transport")
 
-            let transport = StdioTransport(server: calculator)
-
-            // A `ServiceGroup` owns the run loop and traps SIGINT/SIGTERM,
-            // driving a graceful shutdown of the transport. The lifecycle logs
-            // go to stderr so they never corrupt the stdout JSON-RPC stream.
-            let group = ServiceGroup(
-                configuration: .init(
-                    services: [
-                        .init(service: transport, successTerminationBehavior: .gracefullyShutdownGroup)
-                    ],
-                    gracefulShutdownSignals: [.sigterm, .sigint],
-                    logger: Self.lifecycleLogger
-                )
-            )
-            try await group.run()
+            // `serve(over:)` owns the run loop, traps SIGINT/SIGTERM, and drives
+            // an ordered graceful shutdown — no hand-built `ServiceGroup`. The
+            // server-less `StdioTransport()` surfaces stdin/stdout as a
+            // connection; the lifecycle logger writes to stderr so it never
+            // corrupts the stdout JSON-RPC stream.
+            try await calculator.serve(over: [StdioTransport()], logger: Self.lifecycleLogger)
         } catch let error as TransportError {
             // Handle transport errors
             let errorMessage = """

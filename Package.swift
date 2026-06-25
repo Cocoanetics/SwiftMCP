@@ -146,7 +146,12 @@ let package = Package(
 				.product(name: "Crypto", package: "swift-crypto", condition: .when(traits: ["Server"])),
 				.product(name: "_CryptoExtras", package: "swift-crypto", condition: .when(traits: ["Server"])),
 				.product(name: "X509", package: "swift-certificates", condition: .when(traits: ["Server"])),
-				.product(name: "ServiceLifecycle", package: "swift-service-lifecycle", condition: .when(traits: ["Server"]))
+				.product(name: "ServiceLifecycle", package: "swift-service-lifecycle", condition: .when(traits: ["Server"])),
+				// `UnixSignal` — the graceful-shutdown signal type named by
+				// `serve(over:)` — lives in this sibling product and is not
+				// re-exported by `ServiceLifecycle`, so it is linked explicitly
+				// (same package, no new external dependency).
+				.product(name: "UnixSignals", package: "swift-service-lifecycle", condition: .when(traits: ["Server"]))
 			]
 		),
 		.executableTarget(

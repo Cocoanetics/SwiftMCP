@@ -27,7 +27,9 @@ extension TCPBonjourTransport {
             listener = try NWListener(using: parameters)
         }
 
-        let advertisedName = serviceName ?? server.serverName
+        // In the connection-based mode `serviceName` is always provided; in the
+        // server-coupled mode it falls back to the server's name.
+        let advertisedName = serviceName ?? server?.serverName ?? "MCP"
         listener.service = NWListener.Service(name: advertisedName, type: serviceType, domain: serviceDomain)
         listener.newConnectionHandler = { [weak self] connection in
             self?.handleNewConnection(connection)
