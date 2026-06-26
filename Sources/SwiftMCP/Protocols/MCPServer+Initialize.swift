@@ -98,7 +98,7 @@ public extension MCPServer {
 
         do {
             let resultDict = try JSONDictionary(encoding: result)
-            return JSONRPCMessage.response(id: id, result: resultDict)
+            return JSONRPCMessage.response(id: id, result: .object(resultDict))
         } catch {
             // Fallback to empty response if encoding fails
             return JSONRPCMessage.response(id: id, result: [:])

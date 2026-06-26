@@ -116,7 +116,7 @@ extension MCPServerProxy {
         let request = JSONRPCMessage.request(
             id: requestId,
             method: "tools/call",
-            params: params
+            params: .object(params)
         )
         let responseMessage = try await send(request)
 
@@ -152,7 +152,7 @@ extension MCPServerProxy {
     ) throws -> JSONDictionary {
         switch responseMessage {
         case .response(let responseData):
-            guard let responseResult = responseData.result else {
+            guard let responseResult = responseData.result?.dictionaryValue else {
                 throw MCPServerProxyError.communicationError(
                     "Invalid response type for tools/call, expected JSONRPCResponse"
                 )

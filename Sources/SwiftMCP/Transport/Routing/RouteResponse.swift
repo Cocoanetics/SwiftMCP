@@ -53,8 +53,7 @@ struct RouteResponse: Sendable {
 		status: HTTPResponse.Status = .ok,
 		sessionId: String? = nil
 	) -> RouteResponse {
-		let encoder = JSONEncoder()
-		encoder.dateEncodingStrategy = .iso8601WithTimeZone
+		let encoder = JSONRPCMessage.makeEncoder()
 		encoder.nonConformingFloatEncodingStrategy = .convertToString(
 			positiveInfinity: "Infinity", negativeInfinity: "-Infinity", nan: "NaN")
 		guard let data = try? encoder.encode(value) else {

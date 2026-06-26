@@ -20,7 +20,7 @@ struct StructuredToolOutputGatingTests {
             await ComplexTypesServer().handleMessage(request)
         }
         guard case .response(let data)? = response else { return nil }
-        return data.result
+        return data.result?.dictionaryValue
     }
 
     private func createContactTool(in tools: [[String: Any]]) throws -> [String: Any] {

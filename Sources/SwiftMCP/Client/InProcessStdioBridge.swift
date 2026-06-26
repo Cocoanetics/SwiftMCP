@@ -87,10 +87,7 @@ final class InProcessStdioBridge: StdioConnection, @unchecked Sendable {
             guard !responses.isEmpty else { return }
 
             let dataToEncode: any Encodable = responses.count == 1 ? responses[0] : responses
-            let encoder = JSONEncoder()
-            encoder.dateEncodingStrategy = .iso8601WithTimeZone
-            encoder.outputFormatting = [.sortedKeys]
-            var data = try encoder.encode(dataToEncode)
+            var data = try JSONRPCMessage.makeEncoder().encode(dataToEncode)
             data.append(0x0A)
             let payload = data
 

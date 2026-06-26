@@ -15,7 +15,7 @@ import Logging
  - Note: Transport implementations should properly clean up resources in their `stop()` method.
 
  - Note: This is the original, server-coupled transport abstraction. The newer
-   ``MCPConnection``/``MCPTransport`` boundary plus
+   ``MCPTransport``/``MCPDispatcher`` boundary plus
    ``MCPServer/serve(over:gracefulShutdownSignals:logger:)`` decouples transports
    from the server; new transports should prefer that model. `Transport` remains
    the byte-level primitive that ``Session`` writes outbound bytes through.

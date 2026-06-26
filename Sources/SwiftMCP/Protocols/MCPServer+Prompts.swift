@@ -160,7 +160,7 @@ public extension MCPServer {
                 "hasMore": .bool(comp.hasMore ?? false)
             ])
         ]
-        return JSONRPCMessage.response(id: id, result: result)
+        return JSONRPCMessage.response(id: id, result: .object(result))
     }
 
     /// Empty completion fallback used when the request doesn't map onto any known resource/prompt.

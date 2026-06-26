@@ -56,7 +56,7 @@ struct ServeOverTransportsTests {
         )
     }
 
-    // MARK: - Single-message routing
+    // MARK: - Routing
 
     @Test("Routes an initialize request to a response")
     func routesInitialize() async throws {
@@ -69,11 +69,11 @@ struct ServeOverTransportsTests {
 
         let connection = transport.accept()
         var outbound = connection.outbound.makeAsyncIterator()
-        connection.clientSends(initializeRequest(id: 1))
+        connection.clientSends([initializeRequest(id: 1)])
 
-        let message = try #require(await outbound.next())
-        guard case .response(let response) = message else {
-            Issue.record("Expected an initialize response, got \(message)")
+        let frame = try #require(await outbound.next())
+        guard case .response(let response) = frame.first else {
+            Issue.record("Expected an initialize response, got \(String(describing: frame.first))")
             transport.stop()
             return
         }
@@ -96,20 +96,20 @@ struct ServeOverTransportsTests {
         let connection = transport.accept()
         var outbound = connection.outbound.makeAsyncIterator()
 
-        connection.clientSends(initializeRequest(id: 1))
-        _ = await outbound.next()   // consume initialize response
+        connection.clientSends([initializeRequest(id: 1)])
+        _ = await outbound.next()   // initialize response frame
 
-        connection.clientSends(
+        connection.clientSends([
             .request(
                 id: 2,
                 method: "tools/call",
                 params: ["name": .string("echo"), "arguments": .object(["text": .string("hi")])]
             )
-        )
+        ])
 
-        let message = try #require(await outbound.next())
-        guard case .response(let response) = message else {
-            Issue.record("Expected a tool-call response, got \(message)")
+        let frame = try #require(await outbound.next())
+        guard case .response(let response) = frame.first else {
+            Issue.record("Expected a tool-call response, got \(String(describing: frame.first))")
             transport.stop()
             return
         }
@@ -124,7 +124,9 @@ struct ServeOverTransportsTests {
     @Test("A tool can make a server→client request mid-call")
     func midCallServerRequest() async throws {
         let server = ServeTestServer()
-        let transport = InMemoryTransport()
+        // Concurrent dispatch (HTTP-like): each frame is handled on its own task,
+        // so the tool's server→client round-trip doesn't block reading its reply.
+        let transport = InMemoryTransport(concurrent: true)
 
         let serveTask = Task {
             try await server.serve(over: [transport], gracefulShutdownSignals: [], logger: Self.logger)
@@ -133,34 +135,32 @@ struct ServeOverTransportsTests {
         let connection = transport.accept()
         var outbound = connection.outbound.makeAsyncIterator()
 
-        connection.clientSends(initializeRequest(id: 1))
+        connection.clientSends([initializeRequest(id: 1)])
         _ = await outbound.next()   // initialize response
 
-        connection.clientSends(
+        connection.clientSends([
             .request(
                 id: 2,
                 method: "tools/call",
                 params: ["name": .string("pingClient"), "arguments": .object([:])]
             )
-        )
+        ])
 
         // The server emits its own request to us mid-call.
-        let serverMessage = try #require(await outbound.next())
-        guard case .request(let serverReq) = serverMessage, serverReq.method == "ping" else {
-            Issue.record("Expected a server→client ping request, got \(serverMessage)")
+        let serverFrame = try #require(await outbound.next())
+        guard case .request(let serverReq) = serverFrame.first, serverReq.method == "ping" else {
+            Issue.record("Expected a server→client ping request, got \(String(describing: serverFrame.first))")
             transport.stop()
             return
         }
 
-        // Under sequential routing the inbound loop would be blocked inside the
-        // tool call here and this response could never be read — the tool would
-        // deadlock. Concurrent message routing lets it through.
-        connection.clientSends(.response(id: serverReq.id, result: [:]))
+        // In ordered dispatch the tool would block until its reply arrived; the
+        // concurrent discipline lets this response through to resume it.
+        connection.clientSends([.response(id: serverReq.id, result: [:])])
 
-        // The tool resumes and its tools/call response arrives.
-        let toolMessage = try #require(await outbound.next())
-        guard case .response(let data) = toolMessage else {
-            Issue.record("Expected the tool response, got \(toolMessage)")
+        let toolFrame = try #require(await outbound.next())
+        guard case .response(let data) = toolFrame.first else {
+            Issue.record("Expected the tool response, got \(String(describing: toolFrame.first))")
             transport.stop()
             return
         }
@@ -184,19 +184,16 @@ struct ServeOverTransportsTests {
         let connection = transport.accept()
         var outbound = connection.outbound.makeAsyncIterator()
 
-        // Both sent back-to-back without waiting for the initialize response.
-        // The gate runs sequentially in the read loop, so `ping` sees the session
-        // already initialized and is dispatched rather than rejected.
-        connection.clientSends(initializeRequest(id: 1))
-        connection.clientSends(.request(id: 2, method: "ping"))
+        connection.clientSends([initializeRequest(id: 1)])
+        connection.clientSends([.request(id: 2, method: "ping")])
 
         var sawPingResult = false
         for _ in 0..<2 {
-            let message = try #require(await outbound.next())
-            if case .response(let response) = message, response.id == .integer(2) {
+            let frame = try #require(await outbound.next())
+            if case .response(let response) = frame.first, response.id == .integer(2) {
                 sawPingResult = true
             }
-            if case .errorResponse(let error) = message, error.id == .integer(2) {
+            if case .errorResponse(let error) = frame.first, error.id == .integer(2) {
                 Issue.record("ping was rejected: \(error.error.message)")
             }
         }
@@ -217,11 +214,11 @@ struct ServeOverTransportsTests {
 
         let connection = transport.accept()
         var outbound = connection.outbound.makeAsyncIterator()
-        connection.clientSends(.request(id: 7, method: "ping"))
+        connection.clientSends([.request(id: 7, method: "ping")])
 
-        let message = try #require(await outbound.next())
-        guard case .errorResponse(let error) = message else {
-            Issue.record("Expected a rejection error, got \(message)")
+        let frame = try #require(await outbound.next())
+        guard case .errorResponse(let error) = frame.first else {
+            Issue.record("Expected a rejection error, got \(String(describing: frame.first))")
             transport.stop()
             return
         }
@@ -232,8 +229,6 @@ struct ServeOverTransportsTests {
         try await serveTask.value
     }
 
-    // MARK: - Batch routing
-
     @Test("A whole batch round-trips as one frame on a batching protocol version")
     func batchRoundTrips() async throws {
         let server = ServeTestServer()
@@ -243,8 +238,8 @@ struct ServeOverTransportsTests {
             try await server.serve(over: [transport], gracefulShutdownSignals: [], logger: Self.logger)
         }
 
-        let connection = transport.acceptBatch()
-        var outbound = connection.outboundFrames.makeAsyncIterator()
+        let connection = transport.accept()
+        var outbound = connection.outbound.makeAsyncIterator()
 
         // 2025-03-26 still supports JSON-RPC batching.
         connection.clientSends([initializeRequest(id: 1, version: "2025-03-26")])
@@ -273,10 +268,9 @@ struct ServeOverTransportsTests {
             try await server.serve(over: [transport], gracefulShutdownSignals: [], logger: Self.logger)
         }
 
-        let connection = transport.acceptBatch()
-        var outbound = connection.outboundFrames.makeAsyncIterator()
+        let connection = transport.accept()
+        var outbound = connection.outbound.makeAsyncIterator()
 
-        // 2025-06-18 removed batching.
         connection.clientSends([initializeRequest(id: 1, version: "2025-06-18")])
         _ = await outbound.next()   // initialize response frame
 
@@ -287,8 +281,8 @@ struct ServeOverTransportsTests {
 
         let frame = try #require(await outbound.next())
         #expect(frame.count == 1)
-        guard case .errorResponse(let error) = frame[0] else {
-            Issue.record("Expected a batch-rejection error, got \(frame[0])")
+        guard case .errorResponse(let error) = frame.first else {
+            Issue.record("Expected a batch-rejection error, got \(String(describing: frame.first))")
             transport.stop()
             return
         }

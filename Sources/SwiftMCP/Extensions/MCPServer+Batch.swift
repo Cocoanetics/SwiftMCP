@@ -11,8 +11,7 @@ public extension MCPServer {
         for message in messages {
             if ignoringEmptyResponses,
                case .response(let responseData) = message,
-               let result = responseData.result,
-               result.isEmpty {
+               responseData.result?.dictionaryValue?.isEmpty == true {
                 continue
             }
 

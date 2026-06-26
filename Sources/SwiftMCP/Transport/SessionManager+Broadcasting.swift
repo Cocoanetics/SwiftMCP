@@ -69,10 +69,7 @@ extension SessionManager {
     /// Route an already-encoded JSON-RPC message to a specific stream.
     @discardableResult
     func sendJSONRPC(_ message: JSONRPCMessage, to streamID: UUID) async throws -> Bool {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601WithTimeZone
-        encoder.outputFormatting = [.sortedKeys]
-        let data = try encoder.encode(message)
+        let data = try JSONRPCMessage.makeEncoder().encode(message)
         let text = String(data: data, encoding: .utf8) ?? ""
         return await sendSSE(SSEMessage(data: text), to: streamID)
     }

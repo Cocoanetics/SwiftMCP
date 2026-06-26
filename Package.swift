@@ -107,7 +107,7 @@ let package = Package(
 		// repo so it can be consumed without SwiftMCP's NIO/crypto graph. Linked
 		// into the core target and re-exported via Exports.swift, so `import
 		// SwiftMCP` still surfaces these types.
-		.package(url: "https://github.com/Cocoanetics/JSONFoundation.git", from: "1.1.0")
+		.package(url: "https://github.com/Cocoanetics/JSONFoundation.git", from: "2.0.0")
     ],
 	targets: [
 		.macro(

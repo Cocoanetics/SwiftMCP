@@ -37,9 +37,7 @@ extension MCPServerProxy {
         guard let messageId = messageId else {
             throw MCPServerProxyError.communicationError("Message must have an ID")
         }
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        let data = try encoder.encode(message)
+        let data = try JSONRPCMessage.makeEncoder().encode(message)
 
         let messageWithNewline = data + Data("\n".utf8)
         guard let lineConnection else {
@@ -84,9 +82,7 @@ extension MCPServerProxy {
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         configureSSEPOSTRequest(&urlRequest, sseConfig: sseConfig)
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        let data = try encoder.encode(message)
+        let data = try JSONRPCMessage.makeEncoder().encode(message)
         urlRequest.httpBody = data
 
         return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<JSONRPCMessage, Error>) in

@@ -18,7 +18,7 @@ struct InitializeNegotiationTests {
         if let version {
             params["protocolVersion"] = .string(version)
         }
-        let request = JSONRPCMessage.request(id: 1, method: "initialize", params: params)
+        let request = JSONRPCMessage.request(id: 1, method: "initialize", params: .object(params))
 
         let message = try #require(await Calculator().handleMessage(request))
         guard case .response(let response) = message else {

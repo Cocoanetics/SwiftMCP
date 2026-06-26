@@ -161,7 +161,10 @@ extension HTTPSSETransport {
 	/// batching (`2025-06-18` onward). For a brand-new session the version is
 	/// declared inside the leading `initialize`, so `messages` is consulted to
 	/// resolve it. Returns a `400` + JSON-RPC `-32600` response, or `nil`.
-	private func batchingRejectionResponse<Body: Sendable>(
+	///
+	/// Shared by the streamable HTTP (`/mcp`) and legacy SSE (`/messages`) POST
+	/// handlers so both endpoints gate batches identically.
+	internal func batchingRejectionResponse<Body: Sendable>(
 		body: Data,
 		request: HTTPRouteRequest<Body>,
 		messages: [JSONRPCMessage],
@@ -183,17 +186,22 @@ extension HTTPSSETransport {
 	}
 
 	/// Dispatch the messages either as a streaming SSE response or buffered accepted response.
+	///
+	/// A request-bearing POST opens a per-request SSE stream, binds it as the
+	/// outbound scope for the duration of dispatch (so the reply *and* any mid-call
+	/// notifications land on it), and closes it afterward — the open stream is
+	/// returned as the POST body. A notification-only POST is dispatched without a
+	/// stream and acknowledged with `202`.
 	private func dispatchStreamable(
 		messages: [JSONRPCMessage],
 		token: String?,
 		context: StreamableHTTPContext
 	) async -> RouteResponse {
-		let sid = context.sessionID.uuidString
 		let session = await sessionManager.session(id: context.sessionID)
 		await bindBearerTokenIfNeeded(token, to: context.sessionID)
-		let containsRequests = batchContainsRequests(messages)
+		let sid = context.sessionID.uuidString
 
-		if containsRequests {
+		if batchContainsRequests(messages) {
 			guard "text/event-stream".matchesAcceptHeader(context.acceptHeader)
 				|| "*/*".matchesAcceptHeader(context.acceptHeader) else {
 				return textResponse(
@@ -208,7 +216,7 @@ extension HTTPSSETransport {
 
 			Task {
 				let responses = await session.work(onStream: streamContext) { _ in
-					await self.server.processBatch(messages, ignoringEmptyResponses: true)
+					await self.processInbound(messages)
 				}
 
 				for response in responses {
@@ -228,11 +236,26 @@ extension HTTPSSETransport {
 			return RouteResponse(status: .ok, headerFields: headerFields, bodyStream: stream, streamInfo: streamInfo)
 		}
 
-		_ = await session.work { _ in
-			await self.server.processBatch(messages, ignoringEmptyResponses: true)
-		}
+		_ = await session.work { _ in await self.processInbound(messages) }
 
 		return RouteResponse(status: .accepted, headerFields: [.mcpSessionID: sid])
+	}
+
+	/// Process an inbound HTTP payload: through the connected ``MCPDispatcher``
+	/// (decoupled mode, where the gate lives) or the transport's own server
+	/// (server-coupled mode, gated upstream at the HTTP layer). Bind the session
+	/// (and any request-stream scope) before calling.
+	internal func processInbound(_ messages: [JSONRPCMessage]) async -> [JSONRPCMessage] {
+		if let dispatcher = self.dispatcher {
+			if messages.count == 1 {
+				if let reply = await dispatcher.handle(messages[0]) {
+					return [reply]
+				}
+				return []
+			}
+			return await dispatcher.handle(messages)
+		}
+		return await self.server?.processBatch(messages, ignoringEmptyResponses: true) ?? []
 	}
 
 	/// Internal errors thrown while resolving the streamable HTTP context.

@@ -20,9 +20,26 @@ import ServiceLifecycle
  - Configurable authorization
  - Keep-alive mechanisms
  */
-public final class HTTPSSETransport: Transport, Service, @unchecked Sendable {
-    /// The MCP server instance that this transport exposes.
-    public let server: MCPServer
+public final class HTTPSSETransport: Transport, MCPTransport, Service, @unchecked Sendable {
+    /// The MCP server instance that this transport exposes in the server-coupled
+    /// mode. `nil` in the decoupled mode, where the ``MCPDispatcher`` connected by
+    /// ``MCPServer/serve(over:gracefulShutdownSignals:logger:)`` owns dispatch.
+    public let server: MCPServer?
+
+    /// The dispatcher `serve` connects in the decoupled mode. `nil` until
+    /// ``connect(to:)`` is called (and in the server-coupled mode). Read by the
+    /// route handlers in `MCPRoutes.swift` / `LegacySSERoutes.swift`.
+    internal var dispatcher: (any MCPDispatcher)?
+
+    /// The server in the server-coupled mode. Routes that introspect the server
+    /// (OpenAPI) are only registered when `server != nil`, so this is only reached
+    /// in that mode.
+    internal var coupledServer: MCPServer {
+        guard let server else {
+            preconditionFailure("server-coupled route reached without a server")
+        }
+        return server
+    }
 
     /// The hostname or IP address on which the HTTP server listens.
     public let host: String
@@ -111,6 +128,25 @@ public final class HTTPSSETransport: Transport, Service, @unchecked Sendable {
 
     public convenience init(server: MCPServer) {
         self.init(server: server, host: ProcessInfo.processInfo.hostName, port: 8080)
+    }
+
+    /// Initializes a decoupled HTTP+SSE transport with no server.
+    ///
+    /// Pass the transport to ``MCPServer/serve(over:gracefulShutdownSignals:logger:)``,
+    /// which connects an ``MCPDispatcher`` and runs it. Each POST binds its
+    /// `Mcp-Session-Id` session and its per-request SSE stream, then calls
+    /// `handle`. OpenAPI endpoints are unavailable in this mode (they introspect
+    /// the server's tools, which the decoupled transport does not hold).
+    public init(host: String = ProcessInfo.processInfo.hostName, port: Int = 8080) {
+        self.server = nil
+        self.host = host
+        self.port = port
+        self.group = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
+    }
+
+    /// Connects the dispatcher `serve` routes inbound POSTs through.
+    public func connect(to dispatcher: any MCPDispatcher) {
+        self.dispatcher = dispatcher
     }
 
     // MARK: - Server Lifecycle

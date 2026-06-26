@@ -29,9 +29,6 @@ extension TCPBonjourTransport {
         } onGracefulShutdown: { [weak self] in
             Task { [weak self] in try? await self?.stop() }
         }
-        // End the connection-based stream so any `serve(over:)` routing loop
-        // consuming `connections` unwinds.
-        connectionsContinuation.finish()
     }
 
     public func stop() async throws {

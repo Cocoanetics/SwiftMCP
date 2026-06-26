@@ -25,9 +25,7 @@ extension MCPServerProxy {
             throw MCPServerProxyError.communicationError("Not connected to server")
         }
 
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        let requestBody = try encoder.encode(message)
+        let requestBody = try JSONRPCMessage.makeEncoder().encode(message)
 
         return try await streamableRequestResponse(
             endpointURL: endpointURL,

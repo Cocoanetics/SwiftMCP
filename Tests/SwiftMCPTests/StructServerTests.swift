@@ -98,7 +98,7 @@ struct StructServerTests {
         let connection = transport.accept()
         var outbound = connection.outbound.makeAsyncIterator()
 
-        connection.clientSends(
+        connection.clientSends([
             .request(
                 id: 1,
                 method: "initialize",
@@ -108,10 +108,10 @@ struct StructServerTests {
                     "clientInfo": .object(["name": .string("Test"), "version": .string("1.0")])
                 ]
             )
-        )
+        ])
         _ = await outbound.next()   // initialize response
 
-        connection.clientSends(
+        connection.clientSends([
             .request(
                 id: 2,
                 method: "tools/call",
@@ -120,11 +120,11 @@ struct StructServerTests {
                     "arguments": .object(["a": .integer(40), "b": .integer(2)])
                 ]
             )
-        )
+        ])
 
-        let message = try #require(await outbound.next())
-        guard case .response(let response) = message else {
-            Issue.record("Expected a tool-call response, got \(message)")
+        let frame = try #require(await outbound.next())
+        guard case .response(let response) = frame.first else {
+            Issue.record("Expected a tool-call response, got \(String(describing: frame.first))")
             transport.stop()
             return
         }

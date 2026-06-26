@@ -17,11 +17,7 @@ public extension Transport {
             dataToEncode = json
         }
 
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601WithTimeZone
-        encoder.outputFormatting = [.sortedKeys]
-
-        let data = try encoder.encode(dataToEncode)
+        let data = try JSONRPCMessage.makeEncoder().encode(dataToEncode)
 
         try await send(data)
     }
