@@ -19,7 +19,7 @@ extension Session {
         if let message = message { params["message"] = .string(message) }
 
         let notification = JSONRPCMessage.notification(method: "notifications/progress",
-                                                       params: params)
+                                                       params: .object(params))
         try? await transport?.send(notification)
     }
 
@@ -34,7 +34,7 @@ extension Session {
         if let logger = message.logger { params["logger"] = .string(logger) }
 
         let notification = JSONRPCMessage.notification(method: "notifications/message",
-                                                       params: params)
+                                                       params: .object(params))
         try? await transport?.send(notification)
     }
 

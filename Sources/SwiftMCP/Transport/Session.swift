@@ -296,7 +296,11 @@ public actor Session {
     /// - Returns: The response message from the client
     /// - Throws: An error if the request fails or if no response is received
     public func request(method: String, params: JSONDictionary? = nil) async throws -> JSONRPCMessage {
-        let message = JSONRPCMessage.request(id: .string(UUID().uuidString), method: method, params: params)
+        let message = JSONRPCMessage.request(
+            id: .string(UUID().uuidString),
+            method: method,
+            params: params.map(JSONValue.object)
+        )
         return try await send(message)
     }
 

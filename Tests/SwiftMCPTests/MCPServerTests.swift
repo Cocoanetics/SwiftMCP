@@ -27,7 +27,7 @@ private func extractInitializeResponseResult(_ message: JSONRPCMessage) throws -
     }
     #expect(response.jsonrpc == "2.0")
     #expect(response.id == .integer(1))
-    guard let result = response.result else {
+    guard let result = response.result?.dictionaryValue else {
         throw TestError("Result is missing")
     }
     return result

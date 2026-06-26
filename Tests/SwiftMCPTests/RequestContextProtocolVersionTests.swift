@@ -13,7 +13,7 @@ struct RequestContextProtocolVersionTests {
         let message = JSONRPCMessage.request(
             id: 1,
             method: "tools/call",
-            params: params.isEmpty ? nil : params
+            params: params.isEmpty ? nil : .object(params)
         )
         return RequestContext(message: message)
     }

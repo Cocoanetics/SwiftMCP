@@ -123,7 +123,7 @@ public extension MCPServer {
         if let structured, includeStructuredContent {
             resultPayload["structuredContent"] = structured
         }
-        return JSONRPCMessage.response(id: requestID, result: resultPayload)
+        return JSONRPCMessage.response(id: requestID, result: .object(resultPayload))
     }
 
     /// Rewrites any `resource_link` content blocks (a 2025-06-18 feature) into

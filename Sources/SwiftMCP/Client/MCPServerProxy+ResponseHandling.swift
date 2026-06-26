@@ -115,13 +115,13 @@ extension MCPServerProxy {
         let request = JSONRPCMessage.request(
             id: requestId,
             method: method,
-            params: requestParams.isEmpty ? nil : requestParams
+            params: requestParams.isEmpty ? nil : .object(requestParams)
         )
         let response = try await send(request)
 
         switch response {
         case .response(let responseData):
-            guard let result = responseData.result else {
+            guard let result = responseData.result?.dictionaryValue else {
                 throw MCPServerProxyError.communicationError("Invalid response type for \(method)")
             }
             if result["isError"]?.boolValue == true {

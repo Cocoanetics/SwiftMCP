@@ -212,12 +212,12 @@ extension MCPServerProxy {
         let request = JSONRPCMessage.request(
             id: requestId,
             method: "initialize",
-            params: params
+            params: .object(params)
         )
         let response = try await send(request)
 
         guard case let .response(responseData) = response,
-              let result = responseData.result else {
+              let result = responseData.result?.dictionaryValue else {
             throw MCPServerProxyError.communicationError("Invalid initialize response")
         }
 
