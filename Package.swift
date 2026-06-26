@@ -7,7 +7,7 @@ import PackageDescription
 let package = Package(
 	name: "SwiftMCP",
 	platforms: [
-		.macOS("12.0"),
+		.macOS("13.0"),
 		.iOS("15.0"),
 		.tvOS("15.0"),
 		.watchOS("8.0"),
@@ -107,7 +107,7 @@ let package = Package(
 		// repo so it can be consumed without SwiftMCP's NIO/crypto graph. Linked
 		// into the core target and re-exported via Exports.swift, so `import
 		// SwiftMCP` still surfaces these types.
-		.package(url: "https://github.com/Cocoanetics/JSONFoundation.git", from: "2.0.0")
+		.package(url: "https://github.com/Cocoanetics/JSONFoundation.git", from: "2.1.0")
     ],
 	targets: [
 		.macro(
