@@ -48,7 +48,11 @@ jobs:
       - name: Ensure the iOS platform is installed (best-effort)
         run: xcodebuild -downloadPlatform iOS || true
       - name: Build (iOS)
-        run: xcodebuild -scheme SwiftMCP -destination 'generic/platform=iOS' build
+        # `-skipMacroValidation`: `@Schema` now comes from the JSONFoundation
+        # *dependency* (not first-party SwiftMCPMacros), and xcodebuild refuses to
+        # run a dependency's macro plugin untrusted in non-interactive CI. The
+        # other jobs use `swift build`, which trusts package macros by default.
+        run: xcodebuild -scheme SwiftMCP -destination 'generic/platform=iOS' -skipMacroValidation build
 
   build-linux:
     runs-on: ubuntu-latest
