@@ -103,12 +103,26 @@ let package = Package(
 		.package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.6.0"),
 		.package(url: "https://github.com/Cocoanetics/SwiftCross.git", from: "1.2.0"),
 		// Foundation-only JSON family (value type + JSON Schema model + JSON-RPC
-		// 2.0 envelope types) in one `JSONFoundation` module. Extracted to its own
-		// repo so it can be consumed without SwiftMCP's NIO/crypto graph. Linked
-		// into the core target and re-exported via Exports.swift, so `import
-		// SwiftMCP` still surfaces these types — including `@Schema`, which now
-		// ships from JSONFoundation's own macro target (2.2.0+) rather than here.
-		.package(url: "https://github.com/Cocoanetics/JSONFoundation.git", from: "2.2.0")
+		// 2.0 envelope types) plus the JSON-RPC *runtime* — a transport-agnostic
+		// `JSONRPCPeer` correlator, the `JSONRPCWire` framing/SSE codecs, and the
+		// stdio/TCP transports — in one `JSONFoundation` package. Extracted to its own
+		// repo so it can be consumed without SwiftMCP's NIO/crypto graph. The model
+		// + runtime modules are linked into the core target and re-exported via
+		// Exports.swift, so `import SwiftMCP` still surfaces these types — including
+		// `@Schema`, which now ships from JSONFoundation's own macro target rather
+		// than here.
+		//
+		// The `Subprocess` trait pulls swift-subprocess (the lock-free child-stdio
+		// transport the client uses to spawn stdio MCP servers). It is enabled only
+		// when SwiftMCP's own `Client` trait is on, so a Server-only / tools-only
+		// consumer never resolves swift-subprocess.
+		.package(
+			url: "https://github.com/Cocoanetics/JSONFoundation.git",
+			from: "2.3.0",
+			traits: [
+				.trait(name: "Subprocess", condition: .when(traits: ["Client"]))
+			]
+		)
     ],
 	targets: [
 		.macro(
@@ -123,6 +137,32 @@ let package = Package(
 			dependencies: [
 				"SwiftMCPMacros",
 				.product(name: "JSONFoundation", package: "JSONFoundation"),
+				// The JSON-RPC runtime shared with LSP and SwiftACP: the
+				// transport-agnostic `JSONRPCPeer` correlator and the `JSONRPCWire`
+				// framing/SSE codecs. Both are pure (Foundation-only, no I/O), so
+				// they live in the always-on core alongside the wire model.
+				.product(name: "JSONRPCPeer", package: "JSONFoundation"),
+				.product(name: "JSONRPCWire", package: "JSONFoundation"),
+				// JSONFoundation's POSIX-socket TCP client transport, used for the
+				// client's direct host:port connections. Zero-dependency (no
+				// Network framework), so it is gated to the `Client` trait only —
+				// the `LoopbackTransport` it pairs with for the in-process path
+				// lives in `JSONRPCPeer` above.
+				.product(
+					name: "JSONRPCTCP",
+					package: "JSONFoundation",
+					condition: .when(traits: ["Client"])
+				),
+				// The swift-subprocess child-stdio transport the client uses to
+				// spawn stdio MCP servers. Gated to the `Client` trait *and* the
+				// desktop platforms that can spawn a process (no `Foundation`
+				// subprocess on iOS-family OSes); it is what activates the
+				// JSONFoundation `Subprocess` trait above.
+				.product(
+					name: "JSONRPCSubprocess",
+					package: "JSONFoundation",
+					condition: .when(platforms: [.macOS, .linux, .windows], traits: ["Client"])
+				),
 				.product(name: "SwiftCross", package: "SwiftCross"),
 				.product(name: "Logging", package: "swift-log"),
 				// Shared HTTP currency types — core dependency (NIO-free,

@@ -34,15 +34,40 @@ extension MCPServerProxy {
 
         switch config {
         case .stdio(let stdioConfig):
-            sessionID = UUID().uuidString
-            lineConnection = MCPServerProcess(config: stdioConfig)
-            try await startLineConnection()
-            try await initialize(clientName: clientName, clientVersion: clientVersion)
+            #if os(macOS) || os(Linux) || os(Windows)
+                sessionID = UUID().uuidString
+                // Spawn the server over JSONFoundation's swift-subprocess stdio
+                // transport — the shared, lock-free child-process transport LSP and
+                // SwiftACP use. The command keeps SwiftMCP's `/bin/zsh -lc` wrapping
+                // so a login shell resolves PATH and the user's environment.
+                let shellCommand = ([stdioConfig.command] + stdioConfig.args)
+                    .joined(separator: " ")
+                let launch = ProcessLaunch(
+                    executable: "/bin/zsh",
+                    arguments: ["-lc", shellCommand],
+                    environment: stdioConfig.environment,
+                    workingDirectory: stdioConfig.workingDirectory
+                )
+                let transport = StdioMessageTransport(
+                    endpoint: .childProcess(launch),
+                    framing: LineFraming()
+                )
+                await startLinePeer(transport: transport)
+                try await initialize(clientName: clientName, clientVersion: clientVersion)
+            #else
+                throw MCPServerProxyError.unsupportedPlatform(
+                    "Stdio-based MCP servers require Process support."
+                )
+            #endif
 
         case .stdioHandles(let server):
             sessionID = UUID().uuidString
-            lineConnection = InProcessStdioBridge(server: server)
-            try await startLineConnection()
+            // Talk to the embedded server over JSONFoundation's in-memory loopback
+            // pair — no OS pipes — with the same peer driving the client end.
+            let loopback = InProcessServerLoopback(server: server)
+            loopback.start()
+            inProcessLoopback = loopback
+            await startLinePeer(transport: loopback.clientTransport)
             try await initialize(clientName: clientName, clientVersion: clientVersion)
 
         case .tcp(let tcpConfig):
@@ -66,17 +91,44 @@ extension MCPServerProxy {
         clientName: String,
         clientVersion: String
     ) async throws {
-        #if canImport(Network)
-            sessionID = UUID().uuidString
-            let resolvedConfig = resolveTcpConfig(tcpConfig)
-            lineConnection = TCPConnection(config: resolvedConfig)
-            try await startLineConnection()
-            try await initialize(clientName: clientName, clientVersion: clientVersion)
-        #else
-            throw MCPServerProxyError.unsupportedPlatform(
-                "TCP connections require the Network framework."
-            )
-        #endif
+        sessionID = UUID().uuidString
+        let resolvedConfig = resolveTcpConfig(tcpConfig)
+        let transport = try await makeTCPTransport(resolvedConfig)
+        await startLinePeer(transport: transport)
+        try await initialize(clientName: clientName, clientVersion: clientVersion)
+    }
+
+    /// Builds the line transport for a TCP connection. A direct host:port uses
+    /// JSONFoundation's POSIX-socket ``TCPClientTransport`` (no Network framework,
+    /// so it works on Linux too); Bonjour discovery stays on the Network-framework
+    /// ``TCPConnection``, wrapped onto the shared transport seam.
+    private func makeTCPTransport(
+        _ config: MCPServerTcpConfig
+    ) async throws -> any JSONRPCMessageTransport {
+        switch config.endpoint {
+        case .direct(let host, let port):
+            #if os(Windows)
+                throw MCPServerProxyError.unsupportedPlatform(
+                    "Direct TCP connections are not supported on this platform."
+                )
+            #else
+                // `TCPClientTransport.init` blocks while it resolves and connects,
+                // so run it off the actor to avoid stalling the proxy.
+                return try await Task.detached {
+                    try TCPClientTransport(host: host, port: port, framing: LineFraming())
+                }.value
+            #endif
+        case .bonjour:
+            #if canImport(Network)
+                let connection = TCPConnection(config: config)
+                try await connection.start()
+                return LineConnectionTransport(connection: connection)
+            #else
+                throw MCPServerProxyError.unsupportedPlatform(
+                    "Bonjour TCP discovery requires the Network framework."
+                )
+            #endif
+        }
     }
 
     private func connectSSE(
@@ -107,8 +159,13 @@ extension MCPServerProxy {
 
         switch config {
         case .stdio, .stdioHandles, .tcp:
-            await lineConnection?.stop()
-            lineConnection = nil
+            // Closing the peer fails its in-flight requests and tears down the
+            // transport it owns (which stops the underlying connection).
+            await linePeer?.close()
+            linePeer = nil
+            lineTransport = nil
+            inProcessLoopback?.stop()
+            inProcessLoopback = nil
         case .sse:
             break
         }
@@ -116,32 +173,50 @@ extension MCPServerProxy {
         sessionID = nil
     }
 
-    internal func startLineConnection() async throws {
-        guard let lineConnection else {
-            throw MCPServerProxyError.communicationError("Not connected to line-based server")
-        }
-        try await lineConnection.start()
-
-        let generation = streamGeneration
-        streamTask = Task {
-            do {
-                let lines = await lineConnection.lines()
-                for try await data in lines {
-                    await processIncomingMessage(data: data)
+    /// Drives a line-based transport (stdio / TCP / in-process) through the shared
+    /// ``JSONRPCPeer`` in pull mode: the peer owns the read loop, correlates our
+    /// requests with their responses by id, dispatches inbound notifications to
+    /// our handlers, and replies to inbound requests (e.g. `ping`).
+    internal func startLinePeer(transport: any JSONRPCMessageTransport) async {
+        let peer = JSONRPCPeer(transport: transport)
+        await peer.setHandlers(
+            request: { [weak self] method, params in
+                guard let self else {
+                    return .failure(.internalError("client released"))
                 }
-                self.handleStreamTermination(
-                    MCPServerProxyError.communicationError(
-                        "Connection closed by server before response was received"
-                    ),
-                    generation: generation
-                )
-            } catch is CancellationError {
-                // Pending requests are cancelled in disconnect().
-            } catch {
-                logger.error("[MCP DEBUG] Stream error: \(error.localizedDescription)")
-                self.handleStreamTermination(error, generation: generation)
+                return await self.handleLinePeerRequest(method: method, params: params)
+            },
+            notification: { [weak self] method, params in
+                await self?.handleNotification(method: method, params: params)
             }
+        )
+        lineTransport = transport
+        linePeer = peer
+        await peer.start()
+    }
+
+    /// Handles a server-initiated request arriving over a line transport. The MCP
+    /// client answers `ping`; anything else it does not implement is rejected with
+    /// method-not-found (rather than silently leaving the server waiting).
+    internal func handleLinePeerRequest(
+        method: String,
+        params: JSONValue?
+    ) async -> Result<JSONValue, JSONRPCError> {
+        switch method {
+        case "ping":
+            return .success(.object([:]))
+        default:
+            logger.debug("[MCP DEBUG] Unhandled client request: \(method)")
+            return .failure(.methodNotFound(method))
         }
+    }
+
+    /// Routes a notification delivered by the line peer through the same handler
+    /// stack the SSE path uses.
+    internal func handleNotification(method: String, params: JSONValue?) async {
+        await handleNotification(
+            JSONRPCMessage.JSONRPCNotificationData(method: method, params: params)
+        )
     }
 
     internal func failPendingResponseTasks(with error: Error) {
@@ -249,16 +324,23 @@ extension MCPServerProxy {
 
     /// Sends a JSON-RPC notification (fire-and-forget, no response expected).
     internal func sendNotification(_ message: JSONRPCMessage) async throws {
-        let data = try JSONRPCMessage.makeEncoder().encode(message)
-
         switch config {
         case .stdio, .stdioHandles, .tcp:
-            guard let lineConnection else {
+            guard let linePeer else {
                 throw MCPServerProxyError.communicationError("Not connected to line-based server")
             }
-            await lineConnection.write(data + Data("\n".utf8))
+            guard case .notification(let notification) = message else {
+                throw MCPServerProxyError.communicationError(
+                    "sendNotification(_:) requires a notification message"
+                )
+            }
+            try await linePeer.sendNotification(
+                method: notification.method,
+                params: notification.params
+            )
 
         case .sse(let sseConfig):
+            let data = try JSONRPCMessage.makeEncoder().encode(message)
             try await sendSSENotification(data: data, sseConfig: sseConfig)
         }
     }
