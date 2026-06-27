@@ -172,31 +172,10 @@ public macro MCPServer(
     generateClient: Bool = true
 ) = #externalMacro(module: "SwiftMCPMacros", type: "MCPServerMacro")
 
-/// A macro that generates schema metadata for a struct.
-///
-/// Apply this macro to structs to generate metadata about their properties,
-/// including property names, types, descriptions, and default values.
-/// The macro extracts documentation from comments and generates a hidden
-/// metadata property that can be used for validation and serialization.
-///
-/// Example:
-/// ```swift
-/// /// A person's contact information
-/// @Schema
-/// struct ContactInfo {
-///     /// The person's full name
-///     let name: String
-///     
-///     /// The person's email address
-///     let email: String
-///     
-///     /// The person's phone number (optional)
-///     let phone: String?
-/// }
-/// ```
-@attached(member, names: named(schemaMetadata), named(MCPClientReturn))
-@attached(extension, conformances: SchemaRepresentable)
-public macro Schema() = #externalMacro(module: "SwiftMCPMacros", type: "SchemaMacro")
+// `@Schema` now lives in JSONFoundation (its own `JSONFoundationMacros` plugin),
+// alongside the schema model it targets (`SchemaMetadata`, `SchemaRepresentable`).
+// `Exports.swift` re-exports JSONFoundation, so `import SwiftMCP` still provides
+// `@Schema` unchanged — it is no longer declared or implemented here.
 
 /// Macro for validating resource functions against a URI template.
 /// 

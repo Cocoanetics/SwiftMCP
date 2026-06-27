@@ -106,8 +106,9 @@ let package = Package(
 		// 2.0 envelope types) in one `JSONFoundation` module. Extracted to its own
 		// repo so it can be consumed without SwiftMCP's NIO/crypto graph. Linked
 		// into the core target and re-exported via Exports.swift, so `import
-		// SwiftMCP` still surfaces these types.
-		.package(url: "https://github.com/Cocoanetics/JSONFoundation.git", from: "2.1.0")
+		// SwiftMCP` still surfaces these types — including `@Schema`, which now
+		// ships from JSONFoundation's own macro target (2.2.0+) rather than here.
+		.package(url: "https://github.com/Cocoanetics/JSONFoundation.git", from: "2.2.0")
     ],
 	targets: [
 		.macro(
