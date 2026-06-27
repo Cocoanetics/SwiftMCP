@@ -8,7 +8,7 @@ extension MCPServerProxy {
         let messageId = message.id
         switch config {
         case .stdio, .stdioHandles, .tcp:
-            return try await sendLineMessage(message, messageId: messageId)
+            return try await sendLineMessage(message)
 
         case .sse(let sseConfig):
             if isStreamableMCPURL(endpointURL ?? sseConfig.url) {
@@ -31,35 +31,29 @@ extension MCPServerProxy {
     }
 
     private func sendLineMessage(
-        _ message: JSONRPCMessage,
-        messageId: JSONRPCID?
+        _ message: JSONRPCMessage
     ) async throws -> JSONRPCMessage {
-        guard let messageId = messageId else {
-            throw MCPServerProxyError.communicationError("Message must have an ID")
-        }
-        let data = try JSONRPCMessage.makeEncoder().encode(message)
-
-        let messageWithNewline = data + Data("\n".utf8)
-        guard let lineConnection else {
+        guard let linePeer else {
             throw MCPServerProxyError.communicationError("Not connected to line-based server")
         }
-
-        if let streamFailure {
-            throw streamFailure
+        guard case .request(let request) = message else {
+            throw MCPServerProxyError.communicationError(
+                "send(_:) requires a request message with an ID"
+            )
         }
 
-        await lineConnection.write(messageWithNewline)
-
-        if let streamFailure {
-            throw streamFailure
-        }
-
-        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<JSONRPCMessage, Error>) in
-            if let streamFailure {
-                continuation.resume(throwing: streamFailure)
-            } else {
-                responseTasks[messageId] = continuation
-            }
+        // The shared peer owns id allocation and correlation; it serializes and
+        // writes through the transport. A JSON-RPC error reply comes back as a
+        // thrown ``JSONRPCError`` — rewrap it into the `errorResponse` envelope the
+        // proxy's callers expect, preserving the caller-facing request id.
+        do {
+            let result = try await linePeer.sendRequest(
+                method: request.method,
+                params: request.params
+            )
+            return .response(id: request.id, result: result)
+        } catch let rpcError as JSONRPCError {
+            return .errorResponse(id: request.id, error: rpcError)
         }
     }
 

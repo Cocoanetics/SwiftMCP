@@ -152,7 +152,18 @@ public final actor MCPServerProxy {
         }
     }
 
-    internal var lineConnection: (any StdioConnection)?
+    /// The shared JSON-RPC correlator driving the line-based transports
+    /// (stdio / TCP / in-process), in pull mode over ``lineTransport``. The
+    /// SSE / streamable-HTTP path keeps its own correlation (``responseTasks``)
+    /// because it needs cross-channel typed termination errors the peer doesn't
+    /// model.
+    internal var linePeer: JSONRPCPeer?
+    /// The line transport the ``linePeer`` owns; retained so it can be closed on
+    /// `disconnect`.
+    internal var lineTransport: (any JSONRPCMessageTransport)?
+    /// The in-process server runner for `.stdioHandles`, retained so its loopback
+    /// server end keeps running and can be torn down on `disconnect`.
+    internal var inProcessLoopback: InProcessServerLoopback?
     internal var endpointContinuation: CheckedContinuation<URL, Error>?
 
     public init(config: MCPServerConfig, cacheToolsList: Bool = false) {

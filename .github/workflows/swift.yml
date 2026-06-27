@@ -17,11 +17,23 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v6
-      # No Xcode pin: macos-latest's default toolchain (Swift 6.1) must be able
-      # to build SwiftMCP, which is what keeps the package 6.1-compatible now
-      # that the SwiftCross dependency is also swift-tools-version 6.1.
+      # The default build enables JSONFoundation's `Subprocess` trait (the client's
+      # swift-subprocess stdio transport). swift-subprocess 0.5.0 ships a
+      # swift-tools-version 6.2 manifest and, per SwiftACP, needs a 6.3 toolchain to
+      # build cleanly under swift-testing — newer than the macos-latest Xcodes (which
+      # top out at 6.2.4). Install the swift.org 6.3 toolchain directly (it layers on
+      # the runner's Xcode for the SDK and exports TOOLCHAINS), same as SwiftACP. The
+      # NIO-free *core/client* still builds with the 6.1 toolchain — see build-traits.
+      - name: Install Swift 6.3
+        uses: SwiftyLab/setup-swift@latest
+        with:
+          swift-version: "6.3.1"
+      # Fail loudly if TOOLCHAINS didn't take and `swift` is still the Xcode default,
+      # rather than letting it resurface as a confusing resolver/Span error.
       - name: Verify Swift version
-        run: swift --version
+        run: |
+          swift --version
+          swift --version | grep -qE "Swift version 6\.3" || { echo "::error::Expected Swift 6.3 (TOOLCHAINS=$TOOLCHAINS)"; exit 1; }
       - name: Build (macOS)
         run: swift build --build-tests -v
       - name: Test (macOS)
@@ -32,14 +44,19 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v6
-      - name: Select Xcode 26.0
+      # swift-subprocess is pulled into the graph during resolution (the default
+      # `Subprocess` trait) even though its product isn't linked on iOS, so the
+      # toolchain must be able to resolve its 6.2 manifest. The old Xcode 26.0 pin
+      # (Swift 6.2.0) can exhaust the resolver on that graph, so select the runner's
+      # newest Xcode instead — matching SwiftACP's iOS job.
+      - name: Select newest Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: "26.0"
+          xcode-version: latest-stable
       # Xcode 16+ ships platform SDKs as on-demand components, so a freshly
-      # rotated `macos-latest` image can have Xcode 26.0 without the iOS
+      # rotated `macos-latest` image can have the selected Xcode without the iOS
       # platform installed — `-destination 'generic/platform=iOS'` then resolves
-      # to zero destinations ("iOS 26.0 is not installed") before anything
+      # to zero destinations ("iOS … is not installed") before anything
       # compiles. Fetch the component when it is missing. This is best-effort
       # (`|| true`): on images that already have the platform the download itself
       # can error ("Unable to connect to simulator"), and the Build step below is
