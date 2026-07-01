@@ -98,6 +98,22 @@ struct ServerDiscoverTests {
         try await serveTask.value
     }
 
+    @Test("Pre-init exemption admits a lone server/discover, never a batch hiding behind it")
+    func preInitExemptionScope() {
+        let discover = JSONRPCMessage.request(id: 1, method: "server/discover", params: nil)
+        let tools = JSONRPCMessage.request(id: 2, method: "tools/list", params: nil)
+        let initMsg = JSONRPCMessage.request(
+            id: 3, method: "initialize", params: .object(["protocolVersion": .string("2025-11-25")])
+        )
+
+        // A standalone discover is exempt; discover leading a batch is NOT — it
+        // would otherwise smuggle `tools/list` past the gate before initialize.
+        #expect(SessionInitializationGate.batchStartsWithPreInitMethod([discover]))
+        #expect(!SessionInitializationGate.batchStartsWithPreInitMethod([discover, tools]))
+        // `initialize` opens the session, so its pipelined batch stays admitted.
+        #expect(SessionInitializationGate.batchStartsWithPreInitMethod([initMsg, tools]))
+    }
+
     @Test("server/discover still answers when carrying an unsupported _meta version")
     func discoverExemptFromGuard() async throws {
         let server = DiscoverTestServer()

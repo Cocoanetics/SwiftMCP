@@ -3,11 +3,6 @@ import Foundation
 enum SessionInitializationGate {
     static let rejectionMessage = "Session not initialized. Send initialize first."
 
-    /// Requests permitted to open a connection before `initialize`: the legacy
-    /// handshake itself, and the modern `server/discover` negotiation entry point
-    /// (which by design has no prior handshake).
-    static let preInitializeMethods: Set<String> = ["initialize", "server/discover"]
-
     static func batchStartsWithInitialize(_ messages: [JSONRPCMessage]) -> Bool {
         guard let first = messages.first, first.isRequest else {
             return false
@@ -15,12 +10,21 @@ enum SessionInitializationGate {
         return first.method == "initialize"
     }
 
-    /// Whether the batch opens with a request allowed before `initialize`.
+    /// Whether the payload may proceed before `initialize`.
+    ///
+    /// `initialize` admits the whole batch — it opens the session, so pipelined
+    /// follow-ups in the same frame are legitimately post-init. `server/discover`
+    /// is sessionless and does **not** open the session, so it is admitted only as
+    /// a *standalone* request: it must never carry additional, still-ungated work
+    /// (e.g. a trailing `tools/call`) past the gate by leading a batch with it.
     static func batchStartsWithPreInitMethod(_ messages: [JSONRPCMessage]) -> Bool {
-        guard let first = messages.first, first.isRequest else {
+        if batchStartsWithInitialize(messages) {
+            return true
+        }
+        guard messages.count == 1, let only = messages.first, only.isRequest else {
             return false
         }
-        return preInitializeMethods.contains(first.method ?? "")
+        return only.method == "server/discover"
     }
 
     /// The `protocolVersion` declared by a leading `initialize` request, if the

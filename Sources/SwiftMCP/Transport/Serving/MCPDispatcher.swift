@@ -70,10 +70,11 @@ struct MCPServerDispatcher<Server: MCPServer & Sendable>: MCPDispatcher {
     /// back when the payload is rejected, or `nil` to proceed with dispatch.
     ///
     /// A payload beginning with `initialize` opens the session (marked here so a
-    /// follow-up admitted afterwards isn't spuriously rejected). `server/discover`
-    /// is also admitted before initialization (it is sessionless and does not open
-    /// the session — see ``SessionInitializationGate/preInitializeMethods``); every
-    /// other request before initialization, and batches on revisions that removed
+    /// follow-up admitted afterwards isn't spuriously rejected). A lone
+    /// `server/discover` is also admitted before initialization (it is sessionless
+    /// and does not open the session — see
+    /// ``SessionInitializationGate/batchStartsWithPreInitMethod(_:)``); every other
+    /// request before initialization, and batches on revisions that removed
     /// batching, are rejected.
     private func gate(_ messages: [JSONRPCMessage], session: Session) async -> [JSONRPCMessage]? {
         if SessionInitializationGate.batchStartsWithInitialize(messages) {
