@@ -85,14 +85,13 @@ extension MCPServerProxy {
                 return
             }
 
-            responseTasks[messageId] = continuation
+            responses.register(messageId, continuation)
 
             Task {
                 await self.dispatchSSESend(
                     session: session,
                     urlRequest: urlRequest,
-                    messageId: messageId,
-                    continuation: continuation
+                    messageId: messageId
                 )
             }
         }
@@ -101,8 +100,7 @@ extension MCPServerProxy {
     private func dispatchSSESend(
         session: URLSession,
         urlRequest: URLRequest,
-        messageId: JSONRPCID,
-        continuation: CheckedContinuation<JSONRPCMessage, Error>
+        messageId: JSONRPCID
     ) async {
         do {
             let (responseData, response) = try await session.data(for: urlRequest)
@@ -121,10 +119,7 @@ extension MCPServerProxy {
                     for: messageId,
                     from: responseData
                 ) {
-                    if responseTasks[messageId] != nil {
-                        responseTasks.removeValue(forKey: messageId)
-                        continuation.resume(returning: responseMessage)
-                    }
+                    _ = responses.resolve(messageId, with: responseMessage)
                     return
                 }
 
@@ -148,10 +143,7 @@ extension MCPServerProxy {
                 )
             }
         } catch {
-            if responseTasks[messageId] != nil {
-                responseTasks.removeValue(forKey: messageId)
-                continuation.resume(throwing: error)
-            }
+            _ = responses.fail(messageId, with: error)
         }
     }
 }

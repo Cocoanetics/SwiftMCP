@@ -123,13 +123,13 @@ extension SessionManager {
             return
         }
 
-        let activeExists = streamIDs.contains { streams[$0]?.isActive == true }
+        let activeExists = streamIDs.contains { hub.isActive(streamID: $0) }
         if activeExists {
             await session.setExpiresAt(nil)
             return
         }
 
-        let latestStreamExpiry = streamIDs.compactMap { streams[$0]?.expiresAt }.max()
+        let latestStreamExpiry = streamIDs.compactMap { hub.info(streamID: $0)?.expiresAt }.max()
         let sessionExpiry = (await session.lastActivityAt).addingTimeInterval(retentionInterval)
         await session.setExpiresAt(max(sessionExpiry, latestStreamExpiry ?? sessionExpiry))
     }
@@ -137,13 +137,8 @@ extension SessionManager {
     internal func cleanupExpiredState() async {
         let now = Date()
 
-        let expiredStreamIDs = streams.compactMap { streamID, record in
-            if let expiresAt = record.expiresAt, expiresAt <= now {
-                return streamID
-            }
-            return nil
-        }
-        for streamID in expiredStreamIDs {
+        let expiredStreamIDs = hub.expiredStreamIDs(now: now)
+        for streamID in expiredStreamIDs where streamMeta[streamID] != nil {
             await removeStream(id: streamID)
         }
 

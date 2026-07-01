@@ -44,10 +44,8 @@ extension MCPServerProxy {
         case .notification(let notification):
             await handleNotification(notification)
         case .response, .errorResponse:
-            if let id = message.id, let waitingContinuation = responseTasks[id] {
-                responseTasks.removeValue(forKey: id)
-                waitingContinuation.resume(returning: message)
-            } else {
+            let delivered = message.id.map { responses.resolve($0, with: message) } ?? false
+            if !delivered {
                 let idString = message.id?.stringValue ?? "nil"
                 logger.error("[MCP DEBUG] No waiting continuation found for ID \(idString)")
             }

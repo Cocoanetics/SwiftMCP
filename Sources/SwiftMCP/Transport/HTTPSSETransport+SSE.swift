@@ -1,6 +1,5 @@
 #if Server
 import Foundation
-import NIOCore
 
 extension HTTPSSETransport {
     // MARK: - Handling SSE Connections
@@ -14,34 +13,6 @@ extension HTTPSSETransport {
         lastEventID: String
     ) async throws -> (AsyncStream<Data>, StreamRouteResponseInfo) {
         try await sessionManager.resumeStream(sessionID: sessionID, after: lastEventID)
-    }
-
-    /// Register the NIO channel for an SSE stream and set up close handling.
-    /// Called by `HTTPHandler` after the route handler returns a streaming response.
-    func registerSSEChannel(_ channel: Channel, sessionID: UUID, streamID: UUID) {
-        Task {
-            guard let connectionToken = await sessionManager.register(
-                channel: channel,
-                sessionID: sessionID,
-                streamID: streamID
-            ) else {
-                return
-            }
-            let count = await sessionManager.channelCount
-            logger.info("New SSE channel registered (total: \(count))")
-
-            channel.closeFuture.whenComplete { [weak self] _ in
-                guard let self = self else { return }
-                Task {
-                    await self.sessionManager.markStreamDisconnected(
-                        streamID: streamID,
-                        connectionToken: connectionToken
-                    )
-                    let count = await self.sessionManager.channelCount
-                    self.logger.info("SSE channel removed (remaining: \(count))")
-                }
-            }
-        }
     }
 
     /// Send a message to a specific client.

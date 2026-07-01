@@ -116,9 +116,12 @@ let package = Package(
 		// transport the client uses to spawn stdio MCP servers). It is enabled only
 		// when SwiftMCP's own `Client` trait is on, so a Server-only / tools-only
 		// consumer never resolves swift-subprocess.
+		//
+		// 2.4.0 adds `JSONRPCSSEServer` (the SSE stream registry the HTTP/SSE
+		// transport delegates to) and `RequestCorrelator` (JSONRPCPeer).
 		.package(
 			url: "https://github.com/Cocoanetics/JSONFoundation.git",
-			from: "2.3.0",
+			from: "2.4.0",
 			traits: [
 				.trait(name: "Subprocess", condition: .when(traits: ["Client"]))
 			]
@@ -143,6 +146,15 @@ let package = Package(
 				// they live in the always-on core alongside the wire model.
 				.product(name: "JSONRPCPeer", package: "JSONFoundation"),
 				.product(name: "JSONRPCWire", package: "JSONFoundation"),
+				// JSONFoundation's transport-agnostic SSE *server* registry (replay,
+				// resume-after-disconnect, retention) — the reusable machinery the
+				// HTTP/SSE `SessionManager` delegates its stream registry to.
+				// Server-trait only.
+				.product(
+					name: "JSONRPCSSEServer",
+					package: "JSONFoundation",
+					condition: .when(traits: ["Server"])
+				),
 				// JSONFoundation's POSIX-socket TCP client transport, used for the
 				// client's direct host:port connections. Zero-dependency (no
 				// Network framework), so it is gated to the `Client` trait only —

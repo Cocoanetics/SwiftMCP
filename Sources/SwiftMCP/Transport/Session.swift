@@ -10,9 +10,6 @@
 //
 
 import Foundation
-#if Server
-import NIO
-#endif
 
 /// Represents a connection session.
 ///
@@ -26,18 +23,23 @@ public actor Session {
     public weak var transport: (any Transport)?
 
     #if Server
-    /// The SSE channel associated with this session, if any.
-    public var channel: Channel?
+    /// The live SSE connection associated with this session, if any.
+    ///
+    /// Backed by whichever transport adapter is in use (NIO, in-memory, …) via the
+    /// ``SSEConnection`` seam — `Session` holds no swift-nio type.
+    public var connection: (any SSEConnection)?
 
     /// Continuation for the SSE response stream.
-    /// When set, `sendSSE` yields formatted event data into this stream
-    /// instead of writing directly to the NIO channel.
+    /// When set, `sendSSE` yields formatted event data into this stream.
     var sseContinuation: AsyncStream<Data>.Continuation?
     #endif
 
     // MARK: - Request/Response Tracking
-    /// Continuations for sent requests, to match up responses
-    internal var responseTasks: [String: CheckedContinuation<JSONRPCMessage, Error>] = [:]
+    /// Correlates the server→client requests this session sent (sampling /
+    /// elicitation / roots / ping) to their replies, by id — JSONFoundation's
+    /// generic JSON-RPC caller primitive, held inside this actor and called
+    /// synchronously. See ``RequestCorrelator``.
+    internal let responses = RequestCorrelator<JSONRPCID, JSONRPCMessage>()
 
     // MARK: - OAuth token (light-weight session storage)
     /// Access-token issued for this session (if any).
@@ -89,10 +91,10 @@ public actor Session {
     /// Creates a new session.
     /// - Parameters:
     ///   - id: The unique session identifier.
-    ///   - channel: The SSE channel associated with this session, if any.
-    public init(id: UUID, channel: Channel? = nil) {
+    ///   - connection: The SSE connection associated with this session, if any.
+    public init(id: UUID, connection: (any SSEConnection)? = nil) {
         self.id = id
-        self.channel = channel
+        self.connection = connection
     }
     #else
     /// Creates a new session.
@@ -141,7 +143,7 @@ public actor Session {
 
     /// Indicates whether this session currently has an active SSE connection.
     public var hasActiveConnection: Bool {
-        sseContinuation != nil && (channel?.isActive ?? false)
+        sseContinuation != nil && (connection?.isConnected ?? false)
     }
 
     /// Send an SSE message through the session's stream continuation.
@@ -181,9 +183,9 @@ public actor Session {
     }
 
     #if Server
-    /// Update the channel associated with this session.
-    public func setChannel(_ channel: Channel?) {
-        self.channel = channel
+    /// Update the connection associated with this session.
+    public func setConnection(_ connection: (any SSEConnection)?) {
+        self.connection = connection
     }
     #endif
 
@@ -242,29 +244,18 @@ public actor Session {
             preconditionFailure("Message requires an id")
         }
 
-        // Extract the string ID for tracking
-        let id: String
-        switch messageId {
-        case .integer(let intId):
-            id = String(intId)
-        case .string(let stringId):
-            id = stringId
-        }
-
         return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<JSONRPCMessage, Error>) in
-            responseTasks[id] = continuation
+            responses.register(messageId, continuation)
 
-            // Send the message via the transport, activating the session context
+            // Send the message via the transport, activating the session context.
             Task {
                 do {
                     try await self.work { _ in
                         try await transport?.send(message)
                     }
                 } catch {
-                    if responseTasks[id] != nil {
-                        responseTasks.removeValue(forKey: id)
-                        continuation.resume(throwing: error)
-                    }
+                    // A no-op if a reply already resolved this id.
+                    _ = self.responses.fail(messageId, with: error)
                 }
             }
         }
@@ -274,19 +265,7 @@ public actor Session {
     /// - Parameter response: The response message to handle
     internal func handleResponse(_ response: JSONRPCMessage) {
         guard let messageId = response.id else { return }
-
-        let id: String
-        switch messageId {
-        case .integer(let intId):
-            id = String(intId)
-        case .string(let stringId):
-            id = stringId
-        }
-
-        if let continuation = responseTasks[id] {
-            responseTasks.removeValue(forKey: id)
-            continuation.resume(returning: response)
-        }
+        responses.resolve(messageId, with: response)
     }
 
     /// Sends a JSON-RPC request with an auto-generated ID and waits for the response.
@@ -311,11 +290,6 @@ public actor Session {
     /// Cancels all waiting continuations when the session is being removed.
     /// This prevents continuation leaks when sessions are disconnected.
     internal func cancelAllWaitingTasks() {
-        let tasks = responseTasks
-        responseTasks.removeAll()
-
-        for (_, continuation) in tasks {
-            continuation.resume(throwing: CancellationError())
-        }
+        responses.failAll()
     }
 }

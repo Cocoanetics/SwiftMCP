@@ -1,17 +1,12 @@
 #if Server
 import Foundation
-import NIO
 
 extension SessionManager {
-    /// Returns the current number of active SSE channels.
+    /// Returns the current number of bound SSE connections.
     var channelCount: Int {
         get async {
             await cleanupExpiredState()
-            return streams.values.reduce(into: 0) { count, record in
-                if record.channel != nil {
-                    count += 1
-                }
-            }
+            return hub.attachedStreamIDs().count
         }
     }
 
@@ -21,20 +16,20 @@ extension SessionManager {
         let session = await session(id: sessionID)
         await session.touchActivity()
 
-        let streamID = UUID()
-        let (stream, continuation) = AsyncStream<Data>.makeStream()
-
-        var record = StreamRecord(id: streamID, sessionID: sessionID, kind: kind, continuation: continuation)
-        record.lastConnectedAt = Date()
-        streams[streamID] = record
+        // The hub assigns the stream id, buffers replayable data events, and emits
+        // the priming event for replayable streams. MCP kind maps to its flags:
+        // legacy general streams are fire-and-forget; request streams stop
+        // accepting once finished; general streams keep accepting.
+        let (stream, streamID) = hub.open(
+            replayable: kind != .legacyGeneral,
+            primed: kind != .legacyGeneral,
+            rejectsSendAfterCompletion: kind == .request
+        )
+        streamMeta[streamID] = StreamMeta(sessionID: sessionID, kind: kind)
         sessionStreams[sessionID, default: []].insert(streamID)
 
         if kind.isGeneral {
             primaryGeneralStreamIDs[sessionID] = streamID
-        }
-
-        if kind != .legacyGeneral {
-            await sendPrimingEvent(to: streamID)
         }
 
         return (stream, StreamRouteResponseInfo(sessionID: sessionID, streamID: streamID))
@@ -47,59 +42,54 @@ extension SessionManager {
     ) async throws -> (AsyncStream<Data>, StreamRouteResponseInfo) {
         await cleanupExpiredState()
 
-        let parsed = try parseEventID(lastEventID)
-        guard var record = streams[parsed.streamID] else {
+        guard let eventID = SSEEventID(lastEventID) else {
+            throw StreamResumeError.malformedEventID
+        }
+        guard let meta = streamMeta[eventID.streamID] else {
             throw StreamResumeError.unknownStream
         }
-        guard record.sessionID == sessionID else {
+        guard meta.sessionID == sessionID else {
             throw StreamResumeError.sessionMismatch
         }
-        guard let replayIndex = record.buffer.firstIndex(where: { $0.id == lastEventID }) else {
+
+        let stream: AsyncStream<Data>
+        do {
+            stream = try hub.resume(streamID: eventID.streamID, after: eventID)
+        } catch SSEStreamResumeError.unknownStream {
+            throw StreamResumeError.unknownStream
+        } catch SSEStreamResumeError.resumePointUnavailable {
             throw StreamResumeError.resumePointUnavailable
         }
-
-        record.continuation?.finish()
-
-        let (stream, continuation) = AsyncStream<Data>.makeStream()
-        record.continuation = continuation
-        record.channel = nil
-        record.connectionToken = nil
-        record.expiresAt = nil
-        record.lastConnectedAt = Date()
-        record.lastActivityAt = Date()
-        streams[parsed.streamID] = record
 
         if let session = sessions[sessionID] {
             await session.touchActivity()
         }
 
-        for buffered in record.buffer[(replayIndex + 1)...] {
-            continuation.yield(buffered.payload)
+        // The hub finishes + retains a stream that was already completed; mirror
+        // the session-side reconciliation the original did via markStreamDisconnected.
+        if let info = hub.info(streamID: eventID.streamID), info.isCompleted {
+            if meta.kind.isGeneral {
+                selectPrimaryGeneralStream(for: sessionID, keepRetainedCurrent: true)
+            }
+            await updateSessionExpiry(for: sessionID)
         }
 
-        if record.isCompleted {
-            continuation.finish()
-            await markStreamDisconnected(streamID: parsed.streamID, connectionToken: nil)
-        }
-
-        return (stream, StreamRouteResponseInfo(sessionID: sessionID, streamID: parsed.streamID))
+        return (stream, StreamRouteResponseInfo(sessionID: sessionID, streamID: eventID.streamID))
     }
 
-    /// Register a new SSE channel for a specific stream.
-    func register(channel: Channel, sessionID: UUID, streamID: UUID) async -> UUID? {
+    /// Register a live connection for a specific stream.
+    func register(connection: any SSEConnection, sessionID: UUID, streamID: UUID) async -> UUID? {
         await cleanupExpiredState()
-        guard var record = streams[streamID], record.sessionID == sessionID else {
+        guard let meta = streamMeta[streamID], meta.sessionID == sessionID else {
             return nil
         }
 
-        let connectionToken = UUID()
-        record.channel = channel
-        record.connectionToken = connectionToken
-        record.expiresAt = nil
-        record.lastConnectedAt = Date()
-        streams[streamID] = record
+        let sink = SSEConnectionSink(connection: connection)
+        guard let connectionToken = hub.attach(sink: sink, streamID: streamID) else {
+            return nil
+        }
 
-        if record.kind.isGeneral {
+        if meta.kind.isGeneral {
             primaryGeneralStreamIDs[sessionID] = streamID
         }
 
@@ -113,72 +103,41 @@ extension SessionManager {
     /// Mark a stream's current connection as closed while retaining its buffer for resume.
     func markStreamDisconnected(streamID: UUID, connectionToken: UUID?) async {
         await cleanupExpiredState()
-        guard var record = streams[streamID] else {
+        guard let meta = streamMeta[streamID] else {
             return
         }
-        if let connectionToken, record.connectionToken != connectionToken {
+        // The hub applies the connection-token dedup guard; a stale signal is a no-op.
+        guard hub.markDisconnected(streamID: streamID, connectionToken: connectionToken) else {
             return
         }
 
-        record.continuation?.finish()
-        record.continuation = nil
-        record.channel = nil
-        record.connectionToken = nil
-        record.expiresAt = Date().addingTimeInterval(retentionInterval)
-        record.lastActivityAt = Date()
-        streams[streamID] = record
-
-        if record.kind.isGeneral {
-            selectPrimaryGeneralStream(for: record.sessionID, keepRetainedCurrent: true)
+        if meta.kind.isGeneral {
+            selectPrimaryGeneralStream(for: meta.sessionID, keepRetainedCurrent: true)
         }
 
-        await updateSessionExpiry(for: record.sessionID)
+        await updateSessionExpiry(for: meta.sessionID)
     }
 
     /// Finish a stream after the server has emitted its terminal response.
     func finishStream(streamID: UUID) async {
         await cleanupExpiredState()
-        guard var record = streams[streamID] else {
+        guard let meta = streamMeta[streamID] else {
             return
         }
 
-        record.isCompleted = true
-        record.expiresAt = Date().addingTimeInterval(retentionInterval)
-        record.lastActivityAt = Date()
-        record.continuation?.finish()
-        record.continuation = nil
-        record.channel = nil
-        record.connectionToken = nil
-        streams[streamID] = record
+        hub.finish(streamID: streamID)
 
-        if record.kind.isGeneral {
-            selectPrimaryGeneralStream(for: record.sessionID, keepRetainedCurrent: true)
+        if meta.kind.isGeneral {
+            selectPrimaryGeneralStream(for: meta.sessionID, keepRetainedCurrent: true)
         }
 
-        await updateSessionExpiry(for: record.sessionID)
+        await updateSessionExpiry(for: meta.sessionID)
     }
 
     /// Return all active stream identifiers.
     func activeStreamIDs() async -> [UUID] {
         await cleanupExpiredState()
-        return streams.values.filter(\.isActive).map(\.id)
-    }
-
-    /// Retrieve the primary general channel for a given session identifier.
-    func getChannel(for sessionID: UUID) async -> Channel? {
-        await cleanupExpiredState()
-        guard let streamID = primaryGeneralStreamIDs[sessionID] else {
-            return nil
-        }
-        return streams[streamID]?.channel
-    }
-
-    /// Close all active channels without removing retained state.
-    func stopAllChannels() async {
-        let activeChannels = streams.values.compactMap(\.channel)
-        for channel in activeChannels {
-            channel.close(promise: nil)
-        }
+        return hub.activeStreamIDs()
     }
 
     /// Check if any stream for a session is currently active.
@@ -187,7 +146,7 @@ extension SessionManager {
         guard let streamIDs = sessionStreams[sessionID] else {
             return false
         }
-        return streamIDs.contains { streams[$0]?.isActive == true }
+        return streamIDs.contains { hub.isActive(streamID: $0) }
     }
 
     /// Check whether the primary general stream is currently active.
@@ -196,7 +155,7 @@ extension SessionManager {
         guard let streamID = primaryGeneralStreamIDs[sessionID] else {
             return false
         }
-        return streams[streamID]?.isActive == true
+        return hub.isActive(streamID: streamID)
     }
 
     func primaryGeneralStreamID(for sessionID: UUID) async -> UUID? {
@@ -207,40 +166,44 @@ extension SessionManager {
     // MARK: - Internal helpers
 
     internal func removeStream(id streamID: UUID) async {
-        guard let record = streams.removeValue(forKey: streamID) else {
+        guard let meta = streamMeta.removeValue(forKey: streamID) else {
             return
         }
 
-        record.continuation?.finish()
-        if let channel = record.channel, channel.isActive {
-            channel.close(promise: nil)
-        }
+        // The hub finishes the continuation and force-closes a live sink.
+        hub.remove(streamID: streamID)
 
-        if var streamIDs = sessionStreams[record.sessionID] {
+        if var streamIDs = sessionStreams[meta.sessionID] {
             streamIDs.remove(streamID)
             if streamIDs.isEmpty {
-                sessionStreams.removeValue(forKey: record.sessionID)
+                sessionStreams.removeValue(forKey: meta.sessionID)
             } else {
-                sessionStreams[record.sessionID] = streamIDs
+                sessionStreams[meta.sessionID] = streamIDs
             }
         }
 
-        if primaryGeneralStreamIDs[record.sessionID] == streamID {
-            selectPrimaryGeneralStream(for: record.sessionID, keepRetainedCurrent: false)
+        if primaryGeneralStreamIDs[meta.sessionID] == streamID {
+            selectPrimaryGeneralStream(for: meta.sessionID, keepRetainedCurrent: false)
         }
 
-        await updateSessionExpiry(for: record.sessionID)
+        await updateSessionExpiry(for: meta.sessionID)
     }
 
+    /// Pick the session's primary general stream. Synchronous — the hub is too —
+    /// so this runs atomically within the actor, never interleaving with another
+    /// stream mutation.
     internal func selectPrimaryGeneralStream(for sessionID: UUID, keepRetainedCurrent: Bool) {
         let currentPrimary = primaryGeneralStreamIDs[sessionID]
-        let generalStreams = (sessionStreams[sessionID] ?? [])
-            .compactMap { streams[$0] }
-            .filter { $0.kind.isGeneral }
+        let entries = (sessionStreams[sessionID] ?? [])
+            .filter { streamMeta[$0]?.kind.isGeneral == true }
+            .compactMap { id -> (id: UUID, info: SSEStreamInfo)? in
+                guard let info = hub.info(streamID: id) else { return nil }
+                return (id, info)
+            }
 
-        let activeGeneral = generalStreams.filter(\.isActive)
+        let activeGeneral = entries.filter { $0.info.isActive }
         if let replacement = activeGeneral.max(by: {
-            ($0.lastConnectedAt ?? .distantPast) < ($1.lastConnectedAt ?? .distantPast)
+            ($0.info.lastConnectedAt ?? .distantPast) < ($1.info.lastConnectedAt ?? .distantPast)
         }) {
             primaryGeneralStreamIDs[sessionID] = replacement.id
             return
@@ -248,12 +211,12 @@ extension SessionManager {
 
         if keepRetainedCurrent,
            let currentPrimary,
-           generalStreams.contains(where: { $0.id == currentPrimary }) {
+           entries.contains(where: { $0.id == currentPrimary }) {
             primaryGeneralStreamIDs[sessionID] = currentPrimary
             return
         }
 
-        if let retained = generalStreams.max(by: { $0.lastActivityAt < $1.lastActivityAt }) {
+        if let retained = entries.max(by: { $0.info.lastActivityAt < $1.info.lastActivityAt }) {
             primaryGeneralStreamIDs[sessionID] = retained.id
         } else {
             primaryGeneralStreamIDs.removeValue(forKey: sessionID)

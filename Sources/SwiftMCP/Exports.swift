@@ -18,6 +18,12 @@
 @_exported import JSONFoundation
 @_exported import JSONRPCPeer
 @_exported import JSONRPCWire
+// The transport-agnostic SSE *server* registry (replay/resume/retention) plus its
+// SSE value types (`SSEMessage` / `SSEEventID`) — the HTTP/SSE `SessionManager`
+// delegates its stream registry to it. Server-only.
+#if Server
+@_exported import JSONRPCSSEServer
+#endif
 // The POSIX-socket TCP client transport — client-only (it backs the client's
 // direct host:port connections).
 #if Client
