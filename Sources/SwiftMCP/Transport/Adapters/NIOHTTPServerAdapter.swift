@@ -261,14 +261,9 @@ final class NIOHTTPChannelHandler: ChannelInboundHandler, @unchecked Sendable {
     // MARK: - Oversize rejection
 
     private func rejectOversizedRequest(context: ChannelHandlerContext, limit: Int) {
-        let fields: HTTPFields = [
-            .connection: "close",
-            .contentType: "text/plain; charset=utf-8"
-        ]
-        let message = "Request body exceeds maximum allowed size of \(limit) bytes."
-        let body = context.channel.allocator.buffer(string: message)
-        let resolved = HTTPResponseDefaults.buffered(fields, bodyLength: body.readableBytes)
-        let head = HTTPResponse(status: .contentTooLarge, headerFields: resolved)
+        let reply = HTTPResponseDefaults.oversizedBody(limit: limit)
+        let head = HTTPResponse(status: reply.status, headerFields: reply.headerFields)
+        let body = context.channel.allocator.buffer(data: reply.body)
         context.channel.write(HTTPResponsePart.head(head), promise: nil)
         context.channel.write(HTTPResponsePart.body(body), promise: nil)
         context.channel.writeAndFlush(HTTPResponsePart.end(nil), promise: nil)

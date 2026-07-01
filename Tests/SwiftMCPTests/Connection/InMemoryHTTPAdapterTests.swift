@@ -68,6 +68,8 @@ struct InMemoryHTTPAdapterTests {
             headerFields: [.accept: "text/event-stream", .mcpSessionID: sessionID]
         )
         #expect(getExchange.status == .ok)
+        // The SSE response carries the adapter's default CORS origin, same as NIO.
+        #expect(getExchange.headerFields[.accessControlAllowOrigin] == "*")
         let connection = try #require(getExchange.connection)
         #expect(connection.isConnected)
 
@@ -84,6 +86,53 @@ struct InMemoryHTTPAdapterTests {
         // Terminating the connection drops it; the engine retains the stream.
         connection.terminate()
         #expect(!connection.isConnected)
+    }
+
+    @Test("Oversized body is rejected with 413 before dispatch — like the NIO adapter")
+    func oversizedBodyRejectedWith413() async throws {
+        let transport = HTTPSSETransport(server: Calculator())
+        transport.maxMessageSize = 16                       // tiny limit for the test
+        let adapter = InMemoryHTTPServerAdapter(engine: transport)
+
+        let big = Data(repeating: 0x41, count: 64)          // 64 bytes > 16
+        let exchange = await adapter.send(method: .post, path: "/mcp", headerFields: jsonHeaders(), body: big)
+
+        #expect(exchange.status == .contentTooLarge)
+        // The rejection is buffered and byte-identical to the NIO path: the message,
+        // `Connection: close`, `text/plain`, plus the default CORS origin.
+        guard case .buffered(let data?) = exchange.body else {
+            Issue.record("expected a buffered 413, got \(exchange.body)")
+            return
+        }
+        let text = String(bytes: data, encoding: .utf8) ?? ""
+        #expect(text == "Request body exceeds maximum allowed size of 16 bytes.")
+        #expect(exchange.headerFields[.connection] == "close")
+        #expect(exchange.headerFields[.contentType] == "text/plain; charset=utf-8")
+        #expect(exchange.headerFields[.accessControlAllowOrigin] == "*")
+    }
+
+    @Test("A body at or under the limit is dispatched normally")
+    func bodyWithinLimitIsDispatched() async throws {
+        let transport = HTTPSSETransport(server: Calculator())
+        let adapter = InMemoryHTTPServerAdapter(engine: transport)
+
+        // Default 4 MB limit — a normal initialize is well under it and must route.
+        let body = try HTTPTransportTestHelpers.encode(HTTPTransportTestHelpers.initializeRequest())
+        let exchange = await adapter.send(method: .post, path: "/mcp", headerFields: jsonHeaders(), body: body)
+        #expect(exchange.status == .ok)
+    }
+
+    @Test("Buffered responses carry the adapter's default headers, like NIO")
+    func bufferedResponseCarriesDefaultHeaders() async throws {
+        let transport = HTTPSSETransport(server: Calculator())
+        let adapter = InMemoryHTTPServerAdapter(engine: transport)
+
+        // A 404 is a buffered reply with no body; the adapter still applies the
+        // default CORS origin and a `Content-Length: 0`, matching the NIO adapter.
+        let exchange = await adapter.send(method: .get, path: "/does-not-exist")
+        #expect(exchange.status == .notFound)
+        #expect(exchange.headerFields[.accessControlAllowOrigin] == "*")
+        #expect(exchange.headerFields[.contentLength] == "0")
     }
 }
 #endif

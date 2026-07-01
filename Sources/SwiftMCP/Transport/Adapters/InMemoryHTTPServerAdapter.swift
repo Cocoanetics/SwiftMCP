@@ -56,6 +56,20 @@ public final class InMemoryHTTPServerAdapter: Sendable {
             path: path, headerFields: headerFields
         )
 
+        // Body-size enforcement is the adapter's job (per `MCPHTTPEngine`), so
+        // reject an oversized body with a 413 *before* dispatching — exactly what
+        // the NIO adapter does. The whole body is known up front here, so a single
+        // check covers both of NIO's gates (declared `Content-Length` + accumulated
+        // bytes). The shared helper keeps the reply byte-identical to NIO's.
+        let sizeLimit = engine.maxBodySize(for: head)
+        if let body, body.count > sizeLimit {
+            let reply = HTTPResponseDefaults.oversizedBody(limit: sizeLimit)
+            return Exchange(
+                status: reply.status, headerFields: reply.headerFields,
+                body: .buffered(reply.body), connection: nil
+            )
+        }
+
         let (bodyStream, bodyContinuation) = AsyncStream<Data>.makeStream()
         if let body, !body.isEmpty {
             bodyContinuation.yield(body)
@@ -64,10 +78,14 @@ public final class InMemoryHTTPServerAdapter: Sendable {
 
         let response = await engine.handle(head: head, bodyStream: bodyStream)
 
+        // Apply the same default response fields the NIO adapter writes (CORS
+        // origin, and `Content-Type`/`Content-Length` for buffered replies), so a
+        // caller observes byte-identical headers through either adapter.
         switch response.body {
         case .buffered(let data):
+            let fields = HTTPResponseDefaults.buffered(response.headerFields, bodyLength: data?.count)
             return Exchange(
-                status: response.status, headerFields: response.headerFields,
+                status: response.status, headerFields: fields,
                 body: .buffered(data), connection: nil
             )
 
@@ -80,8 +98,9 @@ public final class InMemoryHTTPServerAdapter: Sendable {
                 }
                 connection = conn
             }
+            let fields = HTTPResponseDefaults.streaming(response.headerFields)
             return Exchange(
-                status: response.status, headerFields: response.headerFields,
+                status: response.status, headerFields: fields,
                 body: .sse(stream), connection: connection
             )
         }

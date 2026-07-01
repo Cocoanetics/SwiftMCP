@@ -151,5 +151,31 @@ public enum HTTPResponseDefaults {
         }
         return fields
     }
+
+    /// A complete buffered HTTP reply an adapter writes verbatim.
+    public struct BufferedReply: Sendable {
+        public let status: HTTPResponse.Status
+        public let headerFields: HTTPFields
+        public let body: Data
+    }
+
+    /// The `413 Content Too Large` reply an adapter returns when a request body
+    /// exceeds `limit` bytes. Body-size enforcement is the *adapter's*
+    /// responsibility (see ``MCPHTTPEngine/maxBodySize(for:)``), so this lives
+    /// here — shared — to guarantee every adapter (NIO, in-memory, a future
+    /// Network.framework one) rejects byte-identically instead of drifting.
+    public static func oversizedBody(limit: Int) -> BufferedReply {
+        let message = "Request body exceeds maximum allowed size of \(limit) bytes."
+        let body = Data(message.utf8)
+        let fields: HTTPFields = [
+            .connection: "close",
+            .contentType: "text/plain; charset=utf-8"
+        ]
+        return BufferedReply(
+            status: .contentTooLarge,
+            headerFields: buffered(fields, bodyLength: body.count),
+            body: body
+        )
+    }
 }
 #endif
