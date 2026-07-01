@@ -1,26 +1,26 @@
 #if Server
 import Foundation
+import HTTPTypes
 import Logging
-import NIOCore
-import NIOFoundationCompat
-import NIOHTTP1
-import NIOHTTPTypesHTTP1
-import NIOPosix
 import ServiceLifecycle
 
 /**
  A transport that exposes an HTTP server with Server-Sent Events (SSE) and JSON-RPC endpoints.
 
- This transport is built on top of SwiftNIO and allows clients to connect via HTTP to interact
- with the MCPServer. It provides:
+ It provides:
 
  - Server-Sent Events (SSE) for real-time updates
  - JSON-RPC over HTTP for command processing
  - Optional OpenAPI endpoints for API documentation
  - Configurable authorization
  - Keep-alive mechanisms
+
+ The transport is the NIO-free *engine*: it owns routing, sessions, and SSE, and
+ conforms to ``MCPHTTPEngine``. The socket, HTTP framing, and read/write loops live
+ in a pluggable adapter behind that seam (``NIOHTTPServerAdapter`` for 1.x); the
+ engine links no swift-nio. See ``MCPHTTPEngine`` and `Transport/Adapters/`.
  */
-public final class HTTPSSETransport: Transport, MCPTransport, Service, @unchecked Sendable {
+public final class HTTPSSETransport: Transport, MCPTransport, Service, MCPHTTPEngine, @unchecked Sendable {
     /// The MCP server instance that this transport exposes in the server-coupled
     /// mode. `nil` in the decoupled mode, where the ``MCPDispatcher`` connected by
     /// ``MCPServer/serve(over:gracefulShutdownSignals:logger:)`` owns dispatch.
@@ -53,8 +53,10 @@ public final class HTTPSSETransport: Transport, MCPTransport, Service, @unchecke
     /// Logger for logging transport events and errors.
     public let logger = Logger(label: "com.cocoanetics.SwiftMCP.HTTPSSETransport")
 
-    internal let group: EventLoopGroup
-    internal var channel: Channel?
+    /// The socket adapter created in ``start()``. NIO (or any future framework)
+    /// lives entirely behind this; the engine never touches it directly.
+    private var adapter: NIOHTTPServerAdapter?
+
     public var streamRetentionInterval: TimeInterval = 5 * 60
     internal lazy var sessionManager = SessionManager(
         transport: self,
@@ -123,7 +125,6 @@ public final class HTTPSSETransport: Transport, MCPTransport, Service, @unchecke
         self.server = server
         self.host = host
         self.port = port
-        self.group = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
     }
 
     public convenience init(server: MCPServer) {
@@ -141,7 +142,6 @@ public final class HTTPSSETransport: Transport, MCPTransport, Service, @unchecke
         self.server = nil
         self.host = host
         self.port = port
-        self.group = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
     }
 
     /// Connects the dispatcher `serve` routes inbound POSTs through.
@@ -152,64 +152,25 @@ public final class HTTPSSETransport: Transport, MCPTransport, Service, @unchecke
     // MARK: - Server Lifecycle
 
     public func start() async throws {
-        let bootstrap = ServerBootstrap(group: group)
-            .serverChannelOption(ChannelOptions.backlog, value: 256)
-            .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
-            .childChannelInitializer {  channel in
-                return channel.pipeline.configureHTTPServerPipeline().flatMap {
-                    channel.pipeline.addHandler(HTTPLogger())
-                }.flatMap {
-                    // Translate NIO's HTTP/1 request/response parts to and from
-                    // swift-http-types so HTTPHandler works in HTTPRequest /
-                    // HTTPResponse / HTTPFields directly. HTTPLogger stays on the
-                    // NIO side (added before this codec).
-                    channel.pipeline.addHandler(HTTP1ToHTTPServerCodec(secure: false))
-                }.flatMap {
-                    channel.pipeline.addHandler(HTTPHandler(transport: self))
-                }
-            }
-            .childChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
-            .childChannelOption(ChannelOptions.maxMessagesPerRead, value: 16)
-            .childChannelOption(ChannelOptions.allowRemoteHalfClosure, value: true)
-
-        do {
-            self.channel = try await bootstrap.bind(host: host, port: self.port).get()
-            if let actualPort = self.channel?.localAddress?.port {
-                self.port = actualPort
-            }
-            logger.info("Server started and listening on \(host):\(self.port)")
-            startKeepAliveTimer()
-
-            self.channel?.closeFuture.whenComplete { [logger] result in
-                switch result {
-                case .success:
-                    logger.info("Server channel closed normally")
-                case .failure(let error):
-                    logger.error("Server channel closed with error: \(error)")
-                }
-            }
-        } catch let error as IOError {
-            throw bindingError(for: error)
-        } catch {
-            logger.error("Server error: \(error)")
-            throw TransportError.bindingFailed(error.localizedDescription)
-        }
+        let adapter = NIOHTTPServerAdapter(engine: self, logger: logger)
+        self.adapter = adapter
+        // Binding resolves an ephemeral `0` to the actual port.
+        self.port = try await adapter.start()
+        startKeepAliveTimer()
     }
 
     /// Runs the transport and blocks until it is stopped.
     ///
     /// When executed inside a `ServiceGroup`, a graceful shutdown signal (e.g.
-    /// `SIGINT`/`SIGTERM`) closes the listening channel via ``stop()`` so this
-    /// method returns and the group can drain. When called standalone, it
-    /// behaves exactly as before and returns once the channel is closed.
+    /// `SIGINT`/`SIGTERM`) stops the adapter via ``stop()`` so this method returns
+    /// and the group can drain. When called standalone, it returns once the
+    /// listener closes.
     public func run() async throws {
         try await start()
         try await withGracefulShutdownHandler {
-            try await channel?.closeFuture.get()
+            try await adapter?.waitUntilClosed()
         } onGracefulShutdown: { [weak self] in
             // `onGracefulShutdown` is synchronous; bridge to the async `stop()`.
-            // Closing the channel completes `closeFuture`, unblocking the
-            // operation above so `run()` returns.
             Task { [weak self] in try? await self?.stop() }
         }
     }
@@ -217,19 +178,8 @@ public final class HTTPSSETransport: Transport, MCPTransport, Service, @unchecke
     public func stop() async throws {
         logger.info("Stopping server...")
         stopKeepAliveTimer()
-
         await sessionManager.removeAllSessions()
-
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            group.shutdownGracefully { error in
-                if let error = error {
-                    continuation.resume(throwing: error)
-                } else {
-                    continuation.resume()
-                }
-            }
-        }
-
+        try await adapter?.shutdown()
         logger.info("Server stopped")
     }
 
@@ -252,23 +202,124 @@ public final class HTTPSSETransport: Transport, MCPTransport, Service, @unchecke
         }
     }
 
-    // MARK: - Binding helpers
+    // MARK: - MCPHTTPEngine
 
-    private func bindingError(for error: IOError) -> TransportError {
-        let errorMessage: String
-        switch error.errnoCode {
-        case EADDRINUSE:
-            errorMessage = "Port \(port) is already in use. "
-                + "Please choose a different port or ensure no other service is using this port."
-        case EACCES:
-            errorMessage = "Permission denied to bind to port \(port). This port may require elevated privileges."
-        case EADDRNOTAVAIL:
-            errorMessage = "The address \(host) is not available for binding."
-        default:
-            errorMessage = "Failed to bind to \(host):\(port). Error: \(error.localizedDescription)"
+    public var configuredHost: String { host }
+    public var configuredPort: Int { port }
+
+    /// The maximum request-body size for the route matching `head`.
+    public func maxBodySize(for head: HTTPRequest) -> Int {
+        let (path, _) = Self.parseURI(head.path ?? "/")
+        if let match = router.match(method: head.method, path: path),
+           let perRoute = match.route.maxBodySize {
+            return perRoute
         }
-        logger.error("\(errorMessage)")
-        return TransportError.bindingFailed(errorMessage)
+        return maxMessageSize
+    }
+
+    /// Route and dispatch one request, returning the response the adapter writes.
+    public func handle(head: HTTPRequest, bodyStream: AsyncStream<Data>) async -> EngineResponse {
+        let uri = head.path ?? "/"
+        let (path, queryParams) = Self.parseURI(uri)
+
+        guard let routeMatch = router.match(method: head.method, path: path) else {
+            return EngineResponse(status: .notFound, headerFields: [:], body: .buffered(nil))
+        }
+
+        let request = HTTPRouteRequest<AsyncStream<Data>>(
+            method: head.method, uri: uri, path: path,
+            headerFields: Self.requestHeaderFields(from: head), body: bodyStream,
+            pathParams: routeMatch.pathParams, queryParams: queryParams
+        )
+
+        do {
+            let response = try await routeMatch.route.handler(self, request)
+            return Self.engineResponse(from: response)
+        } catch {
+            logger.error("Route handler error: \(error)")
+            return EngineResponse(
+                status: .internalServerError,
+                headerFields: [:],
+                body: .buffered(Data("Internal Server Error".utf8))
+            )
+        }
+    }
+
+    /// Bind a live connection to an SSE stream the engine just opened.
+    public func registerConnection(
+        _ connection: any SSEConnection,
+        for registration: SSERegistration
+    ) async -> SSEConnectionToken? {
+        guard let token = await sessionManager.register(
+            connection: connection,
+            sessionID: registration.sessionID,
+            streamID: registration.streamID
+        ) else {
+            return nil
+        }
+        let count = await sessionManager.channelCount
+        logger.info("New SSE channel registered (total: \(count))")
+        return SSEConnectionToken(streamID: registration.streamID, connectionToken: token)
+    }
+
+    /// Mark an SSE stream disconnected when the adapter reports its socket closed.
+    public func connectionDisconnected(_ token: SSEConnectionToken) async {
+        await sessionManager.markStreamDisconnected(
+            streamID: token.streamID,
+            connectionToken: token.connectionToken
+        )
+        let count = await sessionManager.channelCount
+        logger.info("SSE channel removed (remaining: \(count))")
+    }
+
+    // MARK: - Request helpers (NIO-free, shared by every adapter)
+
+    /// The request's header fields, re-exposing the `Host` header that the HTTP/1
+    /// codec lifts into the `:authority` pseudo-header, so routes that read
+    /// `header("Host")` keep working.
+    static func requestHeaderFields(from request: HTTPRequest) -> HTTPFields {
+        var fields = request.headerFields
+        // `HTTPField.Name.host` is unavailable (HTTP/2 maps Host to `:authority`),
+        // so reconstruct the literal `Host` field name to re-expose it.
+        let hostName = HTTPField.Name("Host")!
+        if let authority = request.authority, fields[hostName] == nil {
+            fields[hostName] = authority
+        }
+        return fields
+    }
+
+    /// Split a URI into its path and decoded query parameters.
+    static func parseURI(_ uri: String) -> (path: String, queryParams: [(String, String)]) {
+        guard let questionMark = uri.firstIndex(of: "?") else {
+            return (uri, [])
+        }
+        let path = String(uri[..<questionMark])
+        let queryString = String(uri[uri.index(after: questionMark)...])
+        let queryParams = queryString.split(separator: "&").compactMap { pair -> (String, String)? in
+            let parts = pair.split(separator: "=", maxSplits: 1)
+            guard let key = parts.first.flatMap({ String($0).removingPercentEncoding }) else { return nil }
+            let value = parts.count > 1 ? (String(parts[1]).removingPercentEncoding ?? "") : ""
+            return (key, value)
+        }
+        return (path, queryParams)
+    }
+
+    private static func engineResponse(from response: RouteResponse) -> EngineResponse {
+        if let stream = response.bodyStream {
+            let registration = response.streamInfo.map {
+                SSERegistration(sessionID: $0.sessionID, streamID: $0.streamID)
+            }
+            return EngineResponse(
+                status: response.status,
+                headerFields: response.headerFields,
+                body: .sse(stream: stream, registration: registration)
+            )
+        }
+        return EngineResponse(
+            status: response.status,
+            headerFields: response.headerFields,
+            body: .buffered(response.body)
+        )
     }
 }
 #endif

@@ -67,7 +67,10 @@ public final actor MCPServerProxy {
         return .integer(requestIdSequence)
     }
 
-    internal var responseTasks: [JSONRPCID: CheckedContinuation<JSONRPCMessage, Error>] = [:]
+    /// Correlates the SSE / streamable-HTTP path's outbound requests to their
+    /// replies, by id — JSONFoundation's ``RequestCorrelator``, held in this actor.
+    /// (The stdio / TCP / in-process paths correlate inside their `JSONRPCPeer`.)
+    internal let responses = RequestCorrelator<JSONRPCID, JSONRPCMessage>()
     internal var streamFailure: Error?
     internal var isDisconnecting = false
 
@@ -154,9 +157,9 @@ public final actor MCPServerProxy {
 
     /// The shared JSON-RPC correlator driving the line-based transports
     /// (stdio / TCP / in-process), in pull mode over ``lineTransport``. The
-    /// SSE / streamable-HTTP path keeps its own correlation (``responseTasks``)
-    /// because it needs cross-channel typed termination errors the peer doesn't
-    /// model.
+    /// SSE / streamable-HTTP path keeps its own request-scoped flow (it needs
+    /// cross-channel typed termination errors the peer doesn't model), but its
+    /// id→reply bookkeeping now also rides ``RequestCorrelator`` (``responses``).
     internal var linePeer: JSONRPCPeer?
     /// The line transport the ``linePeer`` owns; retained so it can be closed on
     /// `disconnect`.

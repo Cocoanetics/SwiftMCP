@@ -220,12 +220,7 @@ extension MCPServerProxy {
     }
 
     internal func failPendingResponseTasks(with error: Error) {
-        let pending = responseTasks
-        responseTasks.removeAll()
-
-        for (_, continuation) in pending {
-            continuation.resume(throwing: error)
-        }
+        responses.failAll(with: error)
     }
 
     /// Retire the active stream task: cancel it and advance the generation so a

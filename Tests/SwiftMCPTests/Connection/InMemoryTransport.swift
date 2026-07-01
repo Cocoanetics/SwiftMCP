@@ -49,7 +49,13 @@ private final class InMemoryOutbound: Transport, @unchecked Sendable {
 final class InMemoryTransport: MCPTransport, @unchecked Sendable {
     let session = Session(id: UUID())
 
+    private let lock = NSLock()
     private var dispatcher: (any MCPDispatcher)?
+    /// Frames the client sent before `serve(over:)` connected the dispatcher.
+    /// `serve(over:)` runs in a `Task` and calls `connect(to:)` asynchronously, so
+    /// a `clientSends` racing it must not be dropped — it is buffered here and
+    /// flushed on `connect(to:)`.
+    private var pendingFrames: [[JSONRPCMessage]] = []
     private let concurrent: Bool
 
     /// Frames the server sent to the client, in order.
@@ -90,7 +96,15 @@ final class InMemoryTransport: MCPTransport, @unchecked Sendable {
     }
 
     func connect(to dispatcher: any MCPDispatcher) {
+        lock.lock()
         self.dispatcher = dispatcher
+        let pending = pendingFrames
+        pendingFrames.removeAll()
+        lock.unlock()
+        // Flush anything the client sent before we were connected, preserving order.
+        for frame in pending {
+            route(frame)
+        }
     }
 
     /// The client handle to drive. A transport owns one client session in these
@@ -100,6 +114,21 @@ final class InMemoryTransport: MCPTransport, @unchecked Sendable {
 
     /// Simulates the client sending a JSON-RPC frame (one message, or a batch).
     func clientSends(_ frame: [JSONRPCMessage]) {
+        lock.lock()
+        if dispatcher == nil {
+            // Not connected yet — buffer until `connect(to:)` flushes us, so the
+            // frame is never silently dropped by `dispatch`.
+            pendingFrames.append(frame)
+            lock.unlock()
+            return
+        }
+        lock.unlock()
+        route(frame)
+    }
+
+    /// Routes a frame to the dispatcher: per-task in concurrent mode (HTTP-like),
+    /// or via the in-order `inbound` queue in ordered mode (stdio-like).
+    private func route(_ frame: [JSONRPCMessage]) {
         if concurrent {
             Task { await dispatch(frame) }
         } else {
@@ -142,7 +171,9 @@ final class InMemoryTransport: MCPTransport, @unchecked Sendable {
     /// Binds the session (so the server's outbound routes back here) and routes
     /// the frame through the dispatcher, surfacing any reply on ``outbound``.
     private func dispatch(_ frame: [JSONRPCMessage]) async {
-        guard let dispatcher else { return }
+        // Scoped locking (not `lock()`/`unlock()`) — the latter is unavailable in
+        // async contexts since a lock must never be held across a suspension.
+        guard let dispatcher = lock.withLock({ self.dispatcher }) else { return }
         await session.setTransport(outboundShim)
         await session.work { _ in
             let replies: [JSONRPCMessage]

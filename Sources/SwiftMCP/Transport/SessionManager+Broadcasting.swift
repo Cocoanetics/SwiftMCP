@@ -80,8 +80,7 @@ extension SessionManager {
         await cleanupExpiredState()
 
         if let preferredStreamID,
-           let record = streams[preferredStreamID],
-           record.sessionID == sessionID {
+           streamMeta[preferredStreamID]?.sessionID == sessionID {
             return await sendSSE(message, to: preferredStreamID)
         }
 
@@ -99,51 +98,18 @@ extension SessionManager {
 
     // MARK: - Internal routing helpers
 
+    /// Hand a message to the hub (which buffers/ids replayable data events and the
+    /// completion guard), then touch the owning session's activity if it was sent.
     @discardableResult
     internal func sendSSE(_ message: SSEMessage, to streamID: UUID) async -> Bool {
-        guard var record = streams[streamID] else {
+        guard let meta = streamMeta[streamID] else {
             return false
         }
-        guard !record.isCompleted || record.kind.isGeneral else {
-            return false
-        }
-
-        var outbound = message
-        if record.kind != .legacyGeneral, outbound.isReplayableDataEvent {
-            if outbound.id == nil {
-                outbound.id = makeEventID(streamID: streamID, sequence: record.nextSequence)
-                record.nextSequence += 1
-            }
-
-            let payload = Data(outbound.description.utf8)
-            record.buffer.append(BufferedEvent(id: outbound.id!, payload: payload))
-            if record.buffer.count > eventBufferCapacity {
-                record.buffer.removeFirst(record.buffer.count - eventBufferCapacity)
-            }
-            record.continuation?.yield(payload)
-        } else {
-            record.continuation?.yield(Data(outbound.description.utf8))
-        }
-
-        record.lastActivityAt = Date()
-        streams[streamID] = record
-
-        if let session = sessions[record.sessionID] {
+        let sent = hub.send(message, to: streamID)
+        if sent, let session = sessions[meta.sessionID] {
             await session.touchActivity()
         }
-
-        return true
-    }
-
-    internal func sendPrimingEvent(to streamID: UUID) async {
-        guard var record = streams[streamID] else {
-            return
-        }
-
-        let eventID = makeEventID(streamID: streamID, sequence: record.nextSequence)
-        record.nextSequence += 1
-        streams[streamID] = record
-        _ = await sendSSE(SSEMessage(data: "", id: eventID), to: streamID)
+        return sent
     }
 }
 #endif

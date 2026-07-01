@@ -11,7 +11,7 @@ struct HTTPHandlerHeaderTests {
 
     @Test("Route-provided CORS and Content-Length headers are not duplicated")
     func routeHeadersAreNotDuplicated() {
-        let fields = HTTPHandler.responseFieldsApplyingDefaults(
+        let fields = HTTPResponseDefaults.buffered(
             [
                 .accessControlAllowOrigin: "https://example.com",
                 .contentType: "text/plain; charset=utf-8",
@@ -31,7 +31,7 @@ struct HTTPHandlerHeaderTests {
 
     @Test("Framework defaults are applied once when headers are missing")
     func frameworkDefaultsAreAppliedWhenMissing() {
-        let fields = HTTPHandler.responseFieldsApplyingDefaults([:], bodyLength: 5)
+        let fields = HTTPResponseDefaults.buffered([:], bodyLength: 5)
 
         #expect(fields[.accessControlAllowOrigin] == "*")
         #expect(fields[.contentLength] == "5")
@@ -40,7 +40,7 @@ struct HTTPHandlerHeaderTests {
 
     @Test("Existing Content-Length is preserved for empty-body responses")
     func existingContentLengthIsPreservedWithoutBody() {
-        let fields = HTTPHandler.responseFieldsApplyingDefaults(
+        let fields = HTTPResponseDefaults.buffered(
             [.contentLength: "0"],
             bodyLength: nil
         )
