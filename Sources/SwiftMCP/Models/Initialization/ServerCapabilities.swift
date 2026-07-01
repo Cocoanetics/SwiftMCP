@@ -32,6 +32,12 @@ public struct ServerCapabilities: Codable, Sendable {
     /// Present if the server offers any tools to call.
     public var tools: ToolsCapabilities?
 
+    /// Negotiated protocol extensions the server supports, keyed by their
+    /// `io.modelcontextprotocol/...` identifier (e.g. tasks, ui). The open-ended
+    /// negotiation seam introduced for the modern era; omitted when the server
+    /// declares no extensions.
+    public var extensions: JSONDictionary?
+
     /// Capabilities related to prompt templates.
     public struct PromptsCapabilities: Codable, Sendable {
         /// Whether this server supports notifications for changes to the prompt list.
@@ -82,7 +88,8 @@ public struct ServerCapabilities: Codable, Sendable {
         completions: JSONValue? = nil,
         prompts: PromptsCapabilities? = nil,
         resources: ResourcesCapabilities? = nil,
-        tools: ToolsCapabilities? = nil
+        tools: ToolsCapabilities? = nil,
+        extensions: JSONDictionary? = nil
     ) {
         self.experimental = experimental
         self.logging = logging
@@ -90,6 +97,7 @@ public struct ServerCapabilities: Codable, Sendable {
         self.prompts = prompts
         self.resources = resources
         self.tools = tools
+        self.extensions = extensions
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -99,6 +107,7 @@ public struct ServerCapabilities: Codable, Sendable {
         case prompts
         case resources
         case tools
+        case extensions
     }
 
     public init(from decoder: Decoder) throws {
@@ -109,5 +118,6 @@ public struct ServerCapabilities: Codable, Sendable {
         prompts = try container.decodeIfPresent(PromptsCapabilities.self, forKey: .prompts)
         resources = try container.decodeIfPresent(ResourcesCapabilities.self, forKey: .resources)
         tools = try container.decodeIfPresent(ToolsCapabilities.self, forKey: .tools)
+        extensions = try container.decodeIfPresent(JSONDictionary.self, forKey: .extensions)
     }
 }

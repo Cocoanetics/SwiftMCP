@@ -26,6 +26,11 @@ public struct ClientCapabilities: Codable, Sendable {
     /// Present if the client supports elicitation functionality.
     public var elicitation: ElicitationCapabilities?
 
+    /// Negotiated protocol extensions the client supports, keyed by their
+    /// `io.modelcontextprotocol/...` identifier. The open-ended negotiation seam
+    /// introduced for the modern era; omitted when the client declares none.
+    public var extensions: JSONDictionary?
+
     /// Capabilities related to roots.
     public struct RootsCapabilities: Codable, Sendable {
         /// Whether this client supports notifications for changes to the roots list.
@@ -50,11 +55,13 @@ public struct ClientCapabilities: Codable, Sendable {
         experimental: JSONDictionary? = nil,
         roots: RootsCapabilities? = nil,
         sampling: SamplingCapabilities? = nil,
-        elicitation: ElicitationCapabilities? = nil
+        elicitation: ElicitationCapabilities? = nil,
+        extensions: JSONDictionary? = nil
     ) {
         self.experimental = experimental
         self.roots = roots
         self.sampling = sampling
         self.elicitation = elicitation
+        self.extensions = extensions
     }
 }

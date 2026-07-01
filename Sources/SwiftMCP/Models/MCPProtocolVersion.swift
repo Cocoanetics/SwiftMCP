@@ -27,4 +27,11 @@ public enum MCPProtocolVersion {
         intermediateHTTP,
         fallbackHTTP
     ]
+
+    /// The negotiable revisions, newest first. Revision strings are ISO dates, so
+    /// a descending lexical sort yields newest-first — a deterministic ordering for
+    /// `server/discover`'s `supportedVersions` and the `-32004` error payload.
+    public static var supportedDescending: [String] {
+        supported.sorted(by: >)
+    }
 }

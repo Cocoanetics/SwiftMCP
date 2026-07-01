@@ -38,6 +38,24 @@ struct InMemoryHTTPAdapterTests {
         #expect(text.contains("protocolVersion"))
     }
 
+    @Test("POST /mcp: server/discover is answered before initialize, with no session")
+    func discoverBeforeInitializeOverHTTP() async throws {
+        let transport = HTTPSSETransport(server: Calculator())
+        let adapter = InMemoryHTTPServerAdapter(engine: transport)
+
+        // No prior initialize and no Mcp-Session-Id: the modern negotiation entry
+        // point must still be answered (the init gate exempts server/discover).
+        let body = try HTTPTransportTestHelpers.encode(
+            JSONRPCMessage.request(id: 1, method: "server/discover", params: nil)
+        )
+        let exchange = await adapter.send(method: .post, path: "/mcp", headerFields: jsonHeaders(), body: body)
+
+        #expect(exchange.status == .ok)
+        let text = await drain(exchange.body)
+        #expect(text.contains("supportedVersions"))   // the discover result
+        #expect(text.contains("serverInfo"))
+    }
+
     @Test("Unknown path returns 404 through the seam")
     func unknownPathReturns404() async throws {
         let transport = HTTPSSETransport(server: Calculator())
