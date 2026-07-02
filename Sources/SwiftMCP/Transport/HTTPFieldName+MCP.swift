@@ -19,6 +19,15 @@ extension HTTPField.Name {
 	/// `MCP-Protocol-Version` — the negotiated MCP protocol version.
 	public static let mcpProtocolVersion = Self("MCP-Protocol-Version")!
 
+	/// `Mcp-Method` — mirrors the JSON-RPC `method` on a modern (`2026-07-28`)
+	/// request, validated against the body.
+	public static let mcpMethod = Self("Mcp-Method")!
+
+	/// `Mcp-Name` — mirrors `params.name` (`tools/call` / `prompts/get`) or
+	/// `params.uri` (`resources/read`) on a modern request, validated against the
+	/// body.
+	public static let mcpName = Self("Mcp-Name")!
+
 	/// `Last-Event-ID` — the SSE resumption cursor used to resume a broken
 	/// streamable-HTTP / legacy-SSE stream.
 	public static let lastEventID = Self("Last-Event-ID")!
