@@ -59,9 +59,10 @@ extension HTTPSSETransport {
 			// sessionless path and being served as legacy.
 			let isModern = SessionInitializationGate.batchIsModern(messages)
 
-			// Modern preflight: required-header validation (400 + -32001) and the
-			// unknown-method check (404 + -32601), both decided before dispatch.
-			if isModern, let preflightError = modernPreflightResponse(request: request, messages: messages) {
+			// Modern preflight: batch-framing rejection (400 + -32600), required-
+			// header validation (400 + -32001), then the unknown-method check
+			// (404 + -32601) — all decided before dispatch.
+			if isModern, let preflightError = modernPreflightResponse(request: request, body: body, messages: messages) {
 				return preflightError
 			}
 

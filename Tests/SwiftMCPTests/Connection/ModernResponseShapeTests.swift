@@ -121,6 +121,35 @@ struct ModernResponseShapeTests {
         #expect(text.contains("-32601"))
     }
 
+    @Test("A single-element array is rejected -32600 for modern, never masked by 404 or headers")
+    func modernSingleElementArrayIsBatchRejected() async throws {
+        let transport = HTTPSSETransport(server: Calculator())
+        let adapter = InMemoryHTTPServerAdapter(engine: transport)
+
+        // A one-element top-level array still classifies as modern (count == 1
+        // after decoding), but modern forbids batching: the framing rejection
+        // (-32600) must win over both the unknown-method 404 and the header
+        // validation -32001.
+        for method in ["frobnicate/run", "tools/list"] {
+            let single = JSONRPCMessage.request(
+                id: 1, method: method,
+                params: .object([
+                    "_meta": .object(["io.modelcontextprotocol/protocolVersion": .string("2026-07-28")])
+                ])
+            )
+            let body = try JSONEncoder().encode([single])   // top-level array
+            let exchange = await adapter.send(
+                method: .post, path: "/mcp",
+                headerFields: modernHeaders(method: method),
+                body: body
+            )
+            #expect(exchange.status == .badRequest, "expected -32600 rejection for \(method)")
+            let text = bufferedText(exchange)
+            #expect(text.contains("-32600"), "expected -32600 for \(method), got \(text)")
+            #expect(!text.contains("-32601"))
+        }
+    }
+
     @Test("A modern notification with an unknown method still gets 202")
     func modernUnknownNotificationIs202() async throws {
         let transport = HTTPSSETransport(server: Calculator())

@@ -11,14 +11,24 @@ import HTTPTypes
 /// only invoked for requests classified modern by their body `_meta`.
 extension HTTPSSETransport {
 
-	/// The full modern pre-dispatch gate: required-header validation (`400` +
-	/// `-32001`) and the unknown-method check (`404` + `-32601`), in that order.
-	/// Both must be decided *before* dispatch — the per-request SSE stream commits
-	/// the HTTP status, so an in-band error can't produce the spec-required codes.
+	/// The full modern pre-dispatch gate, in order: batch-framing rejection
+	/// (`400` + `-32600`), required-header validation (`400` + `-32001`), then the
+	/// unknown-method check (`404` + `-32601`). All must be decided *before*
+	/// dispatch — the per-request SSE stream commits the HTTP status, so an
+	/// in-band error can't produce the spec-required codes.
 	func modernPreflightResponse<Body: Sendable>(
 		request: HTTPRouteRequest<Body>,
+		body: Data,
 		messages: [JSONRPCMessage]
 	) -> RouteResponse? {
+		// Modern forbids JSON-RPC batching, so a top-level array — even with a
+		// single element (which still classifies as modern) — is malformed
+		// *framing*. It must be rejected here, first, or the header validation /
+		// unknown-method checks below would mask the required -32600.
+		if JSONRPCMessage.batchingRejected(body: body, version: MCPProtocolVersion.modern) {
+			let error = JSONRPCMessage.batchingRejectionResponse(version: MCPProtocolVersion.modern)
+			return .json(error, status: .badRequest, sessionId: nil)
+		}
 		if let headerError = validateModernHeaders(request: request, messages: messages) {
 			return headerError
 		}
