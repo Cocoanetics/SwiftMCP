@@ -244,4 +244,21 @@ public extension MCPProtocolVersion {
     static func profile(for version: String) -> ProtocolVersionProfile? {
         allKnownProfiles.first { $0.version == version }
     }
+
+    /// Whether `version` is a known **modern** (stateless, per-request-metadata)
+    /// revision — currently `2026-07-28`.
+    static func isModern(_ version: String) -> Bool {
+        profile(for: version)?.isModern ?? false
+    }
+
+    /// Whether the server will **process** a request declaring `version`, as
+    /// opposed to what it will **advertise** (``supported``). A version is
+    /// servable when it is negotiable (in ``supported``) *or* a known modern
+    /// revision: the modern era is functional-but-unadvertised as it is built, so
+    /// a modern client that declares `2026-07-28` reaches the modern path even
+    /// though `2026-07-28` is not yet in ``supported`` / `server/discover`. The
+    /// final "flip" that advertises modern is simply adding it to ``supported``.
+    static func isServable(_ version: String) -> Bool {
+        supported.contains(version) || isModern(version)
+    }
 }

@@ -18,6 +18,14 @@ extension HTTPSSETransport {
 	/// stream by `Session.sendSSE`.
 	func handleSSE(request: HTTPRouteRequest<Data?>) async throws -> RouteResponse {
 		let isLegacy = request.path == "/sse"
+
+		// The standalone GET SSE stream is a legacy feature (absent in the modern
+		// era). A modern client hitting GET /mcp gets 405; the legacy GET /mcp and
+		// GET /sse streams are unchanged.
+		if !isLegacy, requestDeclaresModern(request) {
+			return textResponse(status: .methodNotAllowed, body: "GET is not supported for stateless (modern) requests.")
+		}
+
 		let sessionHeader = await resolveSessionHeader(for: request)
 
 		let resolved = resolveSSESession(sessionHeader: sessionHeader, isLegacy: isLegacy)

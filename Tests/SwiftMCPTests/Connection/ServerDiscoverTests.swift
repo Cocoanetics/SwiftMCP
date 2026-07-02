@@ -135,5 +135,44 @@ struct ServerDiscoverTests {
         transport.stop()
         try await serveTask.value
     }
+
+    @Test("batchIsModern classifies a lone modern _meta message, never a batch")
+    func batchIsModernDetection() {
+        let modern = JSONRPCMessage.request(id: 1, method: "tools/list", params: metaVersion("2026-07-28"))
+        let legacy = JSONRPCMessage.request(id: 2, method: "tools/list", params: nil)
+        #expect(SessionInitializationGate.batchIsModern([modern]))
+        #expect(!SessionInitializationGate.batchIsModern([legacy]))
+        // Smuggle-safe: a modern-tagged message leading a batch is NOT modern, so
+        // it can't carry sibling items past the gate.
+        #expect(!SessionInitializationGate.batchIsModern([modern, legacy]))
+    }
+
+    @Test("A modern _meta request is served before initialize (gate exemption + reachability)")
+    func modernRequestServedPreInitialize() async throws {
+        let server = DiscoverTestServer()
+        let transport = InMemoryTransport()
+        let serveTask = Task {
+            try await server.serve(over: [transport], gracefulShutdownSignals: [], logger: Self.logger)
+        }
+
+        let connection = transport.accept()
+        var outbound = connection.outbound.makeAsyncIterator()
+        // A modern client: no initialize handshake, a tools/list carrying the
+        // modern `_meta` protocol version. It must be served (not gate-rejected,
+        // not -32004'd), proving `2026-07-28` is reachable while unadvertised.
+        connection.clientSends([request(id: 1, method: "tools/list", params: metaVersion("2026-07-28"))])
+
+        let frame = try #require(await outbound.next())
+        guard case .response(let response) = frame.first else {
+            Issue.record("modern tools/list should be served, got \(String(describing: frame.first))")
+            transport.stop()
+            return
+        }
+        #expect(response.id == .integer(1))
+        #expect(response.result?["tools"] != nil)   // the tools list, not a rejection
+
+        transport.stop()
+        try await serveTask.value
+    }
 }
 #endif

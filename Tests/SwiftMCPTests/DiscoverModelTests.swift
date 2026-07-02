@@ -48,4 +48,24 @@ struct DiscoverModelTests {
     func supportedDescendingOrder() {
         #expect(MCPProtocolVersion.supportedDescending == ["2025-11-25", "2025-06-18", "2025-03-26"])
     }
+
+    @Test("isModern / isServable split advertised from processable versions")
+    func modernAndServable() {
+        // 2026-07-28 is a known modern revision, servable, but NOT advertised.
+        #expect(MCPProtocolVersion.isModern("2026-07-28"))
+        #expect(MCPProtocolVersion.isServable("2026-07-28"))
+        #expect(!MCPProtocolVersion.supported.contains("2026-07-28"))
+
+        // Negotiable legacy revisions: servable, not modern.
+        #expect(!MCPProtocolVersion.isModern("2025-11-25"))
+        #expect(MCPProtocolVersion.isServable("2025-11-25"))
+
+        // A known-but-non-negotiable legacy revision (2024-11-05) is neither.
+        #expect(!MCPProtocolVersion.isModern("2024-11-05"))
+        #expect(!MCPProtocolVersion.isServable("2024-11-05"))
+
+        // An unknown version is neither modern nor servable.
+        #expect(!MCPProtocolVersion.isModern("2099-01-01"))
+        #expect(!MCPProtocolVersion.isServable("2099-01-01"))
+    }
 }

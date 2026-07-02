@@ -77,6 +77,117 @@ struct InMemoryHTTPAdapterTests {
         }
     }
 
+    @Test("POST /mcp: a modern request is served sessionless (no Mcp-Session-Id, not -32004)")
+    func modernPostServedSessionless() async throws {
+        let transport = HTTPSSETransport(server: Calculator())
+        let adapter = InMemoryHTTPServerAdapter(engine: transport)
+
+        // A modern client: MCP-Protocol-Version header + matching `_meta`, no session.
+        let toolsList = JSONRPCMessage.request(
+            id: 1, method: "tools/list",
+            params: .object(["_meta": .object(["io.modelcontextprotocol/protocolVersion": .string("2026-07-28")])])
+        )
+        var headers = jsonHeaders()
+        headers[.mcpProtocolVersion] = "2026-07-28"
+        let body = try HTTPTransportTestHelpers.encode(toolsList)
+        let exchange = await adapter.send(method: .post, path: "/mcp", headerFields: headers, body: body)
+
+        #expect(exchange.status == .ok)
+        #expect(exchange.headerFields[.mcpSessionID] == nil)   // sessionless: no session echoed
+        let text = await drain(exchange.body)
+        #expect(text.contains("tools"))       // the tools/list result was served
+        #expect(!text.contains("-32004"))     // not rejected as an unsupported version
+    }
+
+    @Test("POST /mcp: a modern header without matching _meta is not served sessionless")
+    func modernHeaderWithoutMetaIsNotSessionless() async throws {
+        let transport = HTTPSSETransport(server: Calculator())
+        let adapter = InMemoryHTTPServerAdapter(engine: transport)
+
+        // Modern MCP-Protocol-Version header, but the body carries NO modern _meta.
+        // The authoritative signal is _meta, so this must NOT take the sessionless
+        // path; it falls to the legacy gate (missing session) and is rejected —
+        // without minting an ephemeral session.
+        var headers = jsonHeaders()
+        headers[.mcpProtocolVersion] = "2026-07-28"
+        let body = try HTTPTransportTestHelpers.encode(
+            JSONRPCMessage.request(id: 1, method: "tools/list", params: nil)
+        )
+        let exchange = await adapter.send(method: .post, path: "/mcp", headerFields: headers, body: body)
+
+        #expect(exchange.status == .badRequest)
+        let count = await transport.sessionManager.sessions.count
+        #expect(count == 0)
+    }
+
+    @Test("POST /mcp: a modern request with a non-SSE Accept is rejected cleanly")
+    func modernRequestNonSSEAcceptIsClean() async throws {
+        let transport = HTTPSSETransport(server: Calculator())
+        let adapter = InMemoryHTTPServerAdapter(engine: transport)
+
+        // Accept: application/json (passes the JSON accept gate but not the SSE
+        // requirement for a request-bearing POST). The rejection must mint no
+        // session and expose no Mcp-Session-Id.
+        let toolsList = JSONRPCMessage.request(
+            id: 1, method: "tools/list",
+            params: .object(["_meta": .object(["io.modelcontextprotocol/protocolVersion": .string("2026-07-28")])])
+        )
+        let headers: HTTPFields = [
+            .accept: "application/json", .contentType: "application/json", .mcpProtocolVersion: "2026-07-28"
+        ]
+        let body = try HTTPTransportTestHelpers.encode(toolsList)
+        let exchange = await adapter.send(method: .post, path: "/mcp", headerFields: headers, body: body)
+
+        #expect(exchange.status == .badRequest)
+        #expect(exchange.headerFields[.mcpSessionID] == nil)   // no session exposed
+        let count = await transport.sessionManager.sessions.count
+        #expect(count == 0)                                    // no session leaked
+    }
+
+    @Test("A modern notification leaves no session behind (sessionless cleanup)")
+    func modernNotificationIsSessionless() async throws {
+        let transport = HTTPSSETransport(server: Calculator())
+        let adapter = InMemoryHTTPServerAdapter(engine: transport)
+        var headers = jsonHeaders()
+        headers[.mcpProtocolVersion] = "2026-07-28"
+
+        let note = JSONRPCMessage.notification(
+            method: "notifications/cancelled",
+            params: .object(["_meta": .object(["io.modelcontextprotocol/protocolVersion": .string("2026-07-28")])])
+        )
+        let body = try HTTPTransportTestHelpers.encode(note)
+        let exchange = await adapter.send(method: .post, path: "/mcp", headerFields: headers, body: body)
+
+        #expect(exchange.status == .accepted)
+        #expect(exchange.headerFields[.mcpSessionID] == nil)
+        // The ephemeral session minted for routing is reclaimed synchronously, so
+        // modern traffic accumulates no Session objects.
+        let sessionCount = await transport.sessionManager.sessions.count
+        #expect(sessionCount == 0)
+    }
+
+    @Test("GET /mcp declaring modern is 405 (standalone stream is legacy-only)")
+    func modernGetIs405() async throws {
+        let transport = HTTPSSETransport(server: Calculator())
+        let adapter = InMemoryHTTPServerAdapter(engine: transport)
+
+        let exchange = await adapter.send(
+            method: .get, path: "/mcp", headerFields: [.mcpProtocolVersion: "2026-07-28"]
+        )
+        #expect(exchange.status == .methodNotAllowed)
+    }
+
+    @Test("DELETE /mcp declaring modern is 405 (sessionless has no teardown)")
+    func modernDeleteIs405() async throws {
+        let transport = HTTPSSETransport(server: Calculator())
+        let adapter = InMemoryHTTPServerAdapter(engine: transport)
+
+        let exchange = await adapter.send(
+            method: .delete, path: "/mcp", headerFields: [.mcpProtocolVersion: "2026-07-28"]
+        )
+        #expect(exchange.status == .methodNotAllowed)
+    }
+
     @Test("Unknown path returns 404 through the seam")
     func unknownPathReturns404() async throws {
         let transport = HTTPSSETransport(server: Calculator())
