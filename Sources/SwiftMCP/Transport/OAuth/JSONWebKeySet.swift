@@ -62,8 +62,25 @@ public actor JWKSCache {
         return jwks
     }
 
+    /// Seed the cache with a pre-fetched JWKS for an issuer.
+    ///
+    /// Stores `jwks` as the cached key set for `issuer` so a subsequent
+    /// `getJWKS(for:)` returns it without performing a network fetch (subject to
+    /// the normal cache-validity window). This is useful for warming the cache
+    /// from a key set obtained out-of-band, and for exercising verification in
+    /// tests without depending on a live issuer endpoint.
+    ///
+    /// - Parameters:
+    ///   - jwks: The key set to cache.
+    ///   - issuer: The issuer URL to associate the key set with.
+    ///   - date: The fetch timestamp to record (defaults to now); the entry
+    ///     stays valid for `cacheValidityDuration` after this time.
+    func seed(_ jwks: JSONWebKeySet, for issuer: URL, at date: Date = Date()) {
+        cache[issuer] = (jwks, date)
+    }
+
     /// Clear all cached JWKS entries
-    /// 
+    ///
     /// Use this method to force fresh JWKS fetches on the next request.
     func clearCache() {
         cache.removeAll()
