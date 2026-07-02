@@ -136,12 +136,15 @@ struct ServerDiscoverTests {
         try await serveTask.value
     }
 
-    @Test("batchIsModern detects a leading modern _meta request")
+    @Test("batchIsModern classifies a lone modern _meta message, never a batch")
     func batchIsModernDetection() {
         let modern = JSONRPCMessage.request(id: 1, method: "tools/list", params: metaVersion("2026-07-28"))
         let legacy = JSONRPCMessage.request(id: 2, method: "tools/list", params: nil)
         #expect(SessionInitializationGate.batchIsModern([modern]))
         #expect(!SessionInitializationGate.batchIsModern([legacy]))
+        // Smuggle-safe: a modern-tagged message leading a batch is NOT modern, so
+        // it can't carry sibling items past the gate.
+        #expect(!SessionInitializationGate.batchIsModern([modern, legacy]))
     }
 
     @Test("A modern _meta request is served before initialize (gate exemption + reachability)")

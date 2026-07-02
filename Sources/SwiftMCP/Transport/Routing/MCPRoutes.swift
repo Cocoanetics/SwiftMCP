@@ -34,13 +34,7 @@ extension HTTPSSETransport {
 
 	/// Handle POST /mcp — streamable HTTP endpoint.
 	func handleStreamableHTTP(request: HTTPRouteRequest<Data?>) async throws -> RouteResponse {
-		let isModern = requestDeclaresModern(request)
 		let sessionHeader = await resolveSessionHeader(for: request)
-		// Modern is sessionless: any inbound Mcp-Session-Id is ignored entirely, so
-		// a malformed/unknown session header must not reject a modern request.
-		if !isModern, let earlyResponse = streamableEarlyRejection(for: sessionHeader) {
-			return earlyResponse
-		}
 
 		// Validate Accept header
 		let acceptHeader = request.header("accept") ?? request.header("Accept") ?? ""
@@ -56,6 +50,21 @@ extension HTTPSSETransport {
 		do {
 			let messages = try JSONRPCMessage.decodeMessages(from: body)
 			let token = request.bearerToken
+
+			// A request is modern iff its body's `_meta` declares a modern version —
+			// the authoritative per-request identity, matching how the handler
+			// resolves the era. A modern `MCP-Protocol-Version` header without a
+			// matching `_meta` therefore falls to the legacy path (and its
+			// header/session mismatch is rejected there), rather than taking the
+			// sessionless path and being served as legacy.
+			let isModern = SessionInitializationGate.batchIsModern(messages)
+
+			// Modern is sessionless (no inbound Mcp-Session-Id), so a malformed /
+			// unknown session header only rejects a legacy request. A well-formed
+			// modern request sends no session header, so this is a no-op for it.
+			if !isModern, let earlyResponse = streamableEarlyRejection(for: sessionHeader) {
+				return earlyResponse
+			}
 
 			guard let context = try await resolveStreamableContext(
 				sessionHeader: sessionHeader,
@@ -218,20 +227,22 @@ extension HTTPSSETransport {
 		token: String?,
 		context: StreamableHTTPContext
 	) async -> RouteResponse {
-		let session = await sessionManager.session(id: context.sessionID)
-		await bindBearerTokenIfNeeded(token, to: context.sessionID)
 		let sid = context.sessionID.uuidString
 
 		if batchContainsRequests(messages) {
+			// Validate Accept BEFORE materializing a session, so a rejection mints
+			// nothing (and, for modern, exposes no Mcp-Session-Id).
 			guard "text/event-stream".matchesAcceptHeader(context.acceptHeader)
 				|| "*/*".matchesAcceptHeader(context.acceptHeader) else {
 				return textResponse(
 					status: .badRequest,
 					body: "Client must accept text/event-stream.",
-					sessionID: context.sessionID
+					sessionID: context.isModern ? nil : context.sessionID
 				)
 			}
 
+			let session = await sessionManager.session(id: context.sessionID)
+			await bindBearerTokenIfNeeded(token, to: context.sessionID)
 			let (stream, streamInfo) = await createSSEStream(sessionID: context.sessionID, kind: .request)
 			let streamContext = OutboundStreamContext(streamID: streamInfo.streamID, kind: .request)
 
@@ -267,6 +278,8 @@ extension HTTPSSETransport {
 			return RouteResponse(status: .ok, headerFields: headerFields, bodyStream: stream, streamInfo: streamInfo)
 		}
 
+		let session = await sessionManager.session(id: context.sessionID)
+		await bindBearerTokenIfNeeded(token, to: context.sessionID)
 		_ = await session.work { _ in await self.processInbound(messages) }
 
 		// Modern is sessionless: reclaim the ephemeral session immediately (a
