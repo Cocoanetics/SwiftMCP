@@ -79,16 +79,7 @@ public extension MCPServer {
         // introduced in 2025-06-18; include them only for clients negotiating
         // that revision or later (they share the `.titleField` gate).
         let includeRichIdentity = MCPProtocolVersion.profile(for: protocolVersion)?.has(.titleField) ?? false
-        let icons = (self as? HasIcons)?.icons ?? []
-
-        let serverInfo = Implementation(
-            icons: includeRichIdentity && !icons.isEmpty ? icons : nil,
-            name: serverName,
-            title: includeRichIdentity ? serverTitle : nil,
-            version: serverVersion,
-            description: serverDescription,
-            websiteUrl: includeRichIdentity ? serverWebsiteUrl : nil
-        )
+        let serverInfo = buildServerInfo(includeRichIdentity: includeRichIdentity)
 
         let result = InitializeResult(
             protocolVersion: protocolVersion,

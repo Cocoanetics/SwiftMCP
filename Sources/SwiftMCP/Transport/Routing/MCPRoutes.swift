@@ -118,14 +118,14 @@ extension HTTPSSETransport {
 	) async throws -> StreamableHTTPContext? {
 		switch sessionHeader {
 		case .missing:
-			guard SessionInitializationGate.batchStartsWithInitialize(messages) else {
+			guard SessionInitializationGate.batchStartsWithPreInitMethod(messages) else {
 				logger.warning("Rejected request without session ID before initialize")
 				throw StreamableHTTPError.missingSessionForNonInitialize
 			}
 			return StreamableHTTPContext(sessionID: UUID(), authSessionID: nil, acceptHeader: acceptHeader)
 		case .existing(let existingSessionID):
 			if await sessionNeedsInitialize(existingSessionID),
-			   !SessionInitializationGate.batchStartsWithInitialize(messages) {
+			   !SessionInitializationGate.batchStartsWithPreInitMethod(messages) {
 				logger.warning("Rejected request for uninitialized session \(existingSessionID)")
 				throw StreamableHTTPError.uninitializedSession(existingSessionID)
 			}

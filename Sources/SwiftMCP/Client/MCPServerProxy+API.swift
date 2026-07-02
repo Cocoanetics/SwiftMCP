@@ -2,6 +2,23 @@
 import Foundation
 
 extension MCPServerProxy {
+    /// Sends a modern `server/discover` request and returns what the server can do
+    /// — the revisions it negotiates, its capabilities, and its identity — without
+    /// relying on the `initialize` handshake. The result is cached on
+    /// ``lastDiscover``.
+    ///
+    /// Servers that predate `2026-07-28` may not implement `server/discover` and
+    /// will answer `-32601` (Method not found); the thrown error surfaces that.
+    @discardableResult
+    public func discover() async throws -> DiscoverResult {
+        let result: DiscoverResult = try await requestResult(
+            method: "server/discover",
+            as: DiscoverResult.self
+        )
+        lastDiscover = result
+        return result
+    }
+
     /// Lists all available tools from the server.
     public func listTools() async throws -> [MCPTool] {
         if cacheToolsList, let cachedTools = cachedTools {

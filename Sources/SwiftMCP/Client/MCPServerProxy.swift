@@ -94,6 +94,11 @@ public final actor MCPServerProxy {
     public internal(set) var serverIcons: [Icon] = []
     public internal(set) var serverCapabilities: ServerCapabilities?
 
+    /// The most recent `server/discover` result, cached by ``discover()`` for
+    /// introspection (supported versions, capabilities, server identity). `nil`
+    /// until ``discover()`` is called.
+    public internal(set) var lastDiscover: DiscoverResult?
+
     /// The protocol revision negotiated with the server during `initialize`
     /// (the value the server echoed back, which may be older than the `latest`
     /// the client proposed). `nil` until the handshake completes. The client

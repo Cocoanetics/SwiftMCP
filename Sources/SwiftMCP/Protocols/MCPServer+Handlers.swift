@@ -51,6 +51,17 @@ public extension MCPServer {
      - Returns: A response message if one should be sent, nil otherwise
      */
     internal func handleRequest(_ requestData: JSONRPCMessage.JSONRPCRequestData) async -> JSONRPCMessage? {
+        // Modern negotiation guard: a request that carries a modern `_meta`
+        // `protocolVersion` this server does not support is rejected with `-32004`,
+        // naming the versions it can negotiate. `server/discover` is exempt — it is
+        // the negotiation entry point and must always answer. Legacy requests never
+        // set this `_meta` key, so this never fires for them.
+        if requestData.method != "server/discover",
+           let requested = RequestContext.current?.meta?.protocolVersion,
+           !MCPProtocolVersion.supported.contains(requested) {
+            return unsupportedProtocolVersionError(id: requestData.id, requested: requested)
+        }
+
         if let response = await dispatchInitializationOrMetaRequest(requestData) {
             return response
         }
@@ -81,6 +92,8 @@ public extension MCPServer {
         switch requestData.method {
         case "initialize":
             return await handleInitializeRequest(requestData)
+        case "server/discover":
+            return await handleServerDiscoverRequest(requestData)
         case "ping":
             return createPingResponse(id: requestData.id)
         default:

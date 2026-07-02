@@ -64,7 +64,7 @@ extension HTTPSSETransport {
 
 		do {
 			let messages = try JSONRPCMessage.decodeMessages(from: body)
-			if await sessionNeedsInitialize(sessionID), !SessionInitializationGate.batchStartsWithInitialize(messages) {
+			if await sessionNeedsInitialize(sessionID), !SessionInitializationGate.batchStartsWithPreInitMethod(messages) {
 				logger.warning("Rejected legacy SSE request for uninitialized session \(sessionID)")
 				return textResponse(
 					status: .badRequest,
