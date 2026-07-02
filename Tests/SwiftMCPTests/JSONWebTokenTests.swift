@@ -173,9 +173,17 @@ struct JSONWebTokenTests {
     func testVerifyUsingIssuer() async throws {
         let jwt = try JSONWebToken(token: Self.accessToken)
 
+        // Seed a JWKS cache with the embedded test key set so verification runs
+        // offline. This exercises the same `verify(using: issuer:)` -> claims +
+        // RSA signature-verification path without a live network request to the
+        // issuer's discovery/JWKS endpoint (which was intermittently timing out
+        // on CI and must not gate a unit test).
+        let cache = JWKSCache()
+        await cache.seed(try loadTestJWKS(), for: Self.issuerURL)
+
         // Verify using issuer with valid time
         let validDate = Date(timeIntervalSince1970: 1751206127) // iat time
-        let isValid = try await jwt.verify(using: Self.issuerURL, at: validDate)
+        let isValid = try await jwt.verify(using: Self.issuerURL, at: validDate, jwksCache: cache)
         #expect(isValid == true)
     }
 
