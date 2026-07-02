@@ -1,0 +1,79 @@
+#if Server
+import Foundation
+import HTTPTypes
+
+/// Modern (`2026-07-28`) required-header validation.
+///
+/// A modern POST carries redundant headers that duplicate parts of the JSON-RPC
+/// body so intermediaries can route/inspect without parsing it. The server MUST
+/// validate them against the body and reject a mismatch with `HeaderMismatch`
+/// (JSON-RPC code `-32001`, HTTP `400`). Legacy requests are unaffected — this is
+/// only invoked for requests classified modern by their body `_meta`.
+extension HTTPSSETransport {
+
+	/// Validates the modern required headers against the decoded message, returning
+	/// a `-32001` response on the first missing/mismatched header, or `nil` when all
+	/// match. Modern is a single message (``SessionInitializationGate/batchIsModern``
+	/// requires a lone payload), so only the leading message is checked.
+	func validateModernHeaders<Body: Sendable>(
+		request: HTTPRouteRequest<Body>,
+		messages: [JSONRPCMessage]
+	) -> RouteResponse? {
+		guard let message = messages.first else {
+			return nil
+		}
+
+		// `MCP-Protocol-Version` must be present and equal the `_meta` version.
+		let metaVersion = message.params?["_meta"]?[MCPMetaKey.protocolVersion]?.stringValue
+		guard let headerVersion = request.header("MCP-Protocol-Version"), headerVersion == metaVersion else {
+			return headerMismatchResponse(id: message.id, field: "MCP-Protocol-Version")
+		}
+
+		// `Mcp-Method` must be present and equal the JSON-RPC method (requests and
+		// notifications).
+		guard request.header("Mcp-Method") == message.method else {
+			return headerMismatchResponse(id: message.id, field: "Mcp-Method")
+		}
+
+		// `Mcp-Name` must equal `params.name` (`tools/call` / `prompts/get`) or
+		// `params.uri` (`resources/read`); it is not used by other methods. The
+		// header and body field are compared *as optionals*: a header without the
+		// body field (or vice versa) is a mismatch — only "both absent" passes,
+		// leaving the malformed body to the method handler's own validation.
+		if let bodyName = mcpNameBodyValue(for: message) {
+			guard request.header("Mcp-Name") == bodyName.value else {
+				return headerMismatchResponse(id: message.id, field: "Mcp-Name")
+			}
+		}
+
+		return nil
+	}
+
+	/// The body field `Mcp-Name` mirrors for methods that use it — wrapped so
+	/// "method doesn't use `Mcp-Name`" (`nil`) is distinct from "method uses it
+	/// but the body field is absent" (`.value == nil`, which still must match an
+	/// absent header).
+	private struct McpNameBodyValue {
+		let value: String?
+	}
+
+	private func mcpNameBodyValue(for message: JSONRPCMessage) -> McpNameBodyValue? {
+		switch message.method {
+		case "tools/call", "prompts/get":
+			return McpNameBodyValue(value: message.params?["name"]?.stringValue)
+		case "resources/read":
+			return McpNameBodyValue(value: message.params?["uri"]?.stringValue)
+		default:
+			return nil
+		}
+	}
+
+	private func headerMismatchResponse(id: JSONRPCID?, field: String) -> RouteResponse {
+		let error = JSONRPCMessage.errorResponse(
+			id: id,
+			error: .init(code: -32001, message: "HeaderMismatch: \(field) does not match the request body.")
+		)
+		return .json(error, status: .badRequest, sessionId: nil)
+	}
+}
+#endif

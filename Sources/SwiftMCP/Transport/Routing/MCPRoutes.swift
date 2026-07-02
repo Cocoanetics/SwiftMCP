@@ -59,6 +59,12 @@ extension HTTPSSETransport {
 			// sessionless path and being served as legacy.
 			let isModern = SessionInitializationGate.batchIsModern(messages)
 
+			// Modern POSTs carry redundant headers (MCP-Protocol-Version / Mcp-Method
+			// / Mcp-Name) that must match the body; a mismatch is a 400 + -32001.
+			if isModern, let headerError = validateModernHeaders(request: request, messages: messages) {
+				return headerError
+			}
+
 			// Modern is sessionless (no inbound Mcp-Session-Id), so a malformed /
 			// unknown session header only rejects a legacy request. A well-formed
 			// modern request sends no session header, so this is a no-op for it.

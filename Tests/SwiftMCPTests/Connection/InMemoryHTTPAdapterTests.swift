@@ -89,6 +89,7 @@ struct InMemoryHTTPAdapterTests {
         )
         var headers = jsonHeaders()
         headers[.mcpProtocolVersion] = "2026-07-28"
+        headers[.mcpMethod] = "tools/list"
         let body = try HTTPTransportTestHelpers.encode(toolsList)
         let exchange = await adapter.send(method: .post, path: "/mcp", headerFields: headers, body: body)
 
@@ -133,7 +134,8 @@ struct InMemoryHTTPAdapterTests {
             params: .object(["_meta": .object(["io.modelcontextprotocol/protocolVersion": .string("2026-07-28")])])
         )
         let headers: HTTPFields = [
-            .accept: "application/json", .contentType: "application/json", .mcpProtocolVersion: "2026-07-28"
+            .accept: "application/json", .contentType: "application/json",
+            .mcpProtocolVersion: "2026-07-28", .mcpMethod: "tools/list"
         ]
         let body = try HTTPTransportTestHelpers.encode(toolsList)
         let exchange = await adapter.send(method: .post, path: "/mcp", headerFields: headers, body: body)
@@ -150,6 +152,7 @@ struct InMemoryHTTPAdapterTests {
         let adapter = InMemoryHTTPServerAdapter(engine: transport)
         var headers = jsonHeaders()
         headers[.mcpProtocolVersion] = "2026-07-28"
+        headers[.mcpMethod] = "notifications/cancelled"
 
         let note = JSONRPCMessage.notification(
             method: "notifications/cancelled",
