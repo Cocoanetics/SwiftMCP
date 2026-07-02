@@ -89,6 +89,9 @@ public extension MCPServer {
     }
 
     /// Handles `initialize` / `ping` requests.
+    ///
+    /// See ``ModernRequestMethods`` below for the modern-era request surface the
+    /// HTTP route layer checks before dispatch.
     private func dispatchInitializationOrMetaRequest(
         _ requestData: JSONRPCMessage.JSONRPCRequestData
     ) async -> JSONRPCMessage? {
@@ -226,4 +229,26 @@ public extension MCPServer {
         }
         return nil
     }
+}
+
+/// The request methods a modern (`2026-07-28`) client may call — the closed
+/// modern-era surface of the dispatch functions above. The HTTP route layer
+/// consults this *before* dispatch so an unknown modern method can be answered
+/// with HTTP `404` + `-32601` (the per-request SSE stream commits the status
+/// before dispatch completes, so the decision cannot wait for the in-band
+/// fallback).
+///
+/// Deliberately excluded (legacy-only per `ProtocolVersionProfile`):
+/// `initialize`, `ping`, `logging/setLevel`, `resources/subscribe` /
+/// `resources/unsubscribe`. `subscriptions/listen` joins when Phase 4 implements
+/// it. Keep in sync with the `dispatch*Request` functions — the
+/// "modern method surface matches the dispatcher" test enforces this.
+enum ModernRequestMethods {
+    static let known: Set<String> = [
+        "server/discover",
+        "tools/list", "tools/call",
+        "resources/list", "resources/templates/list", "resources/read",
+        "prompts/list", "prompts/get",
+        "completion/complete"
+    ]
 }

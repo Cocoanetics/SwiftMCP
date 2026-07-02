@@ -31,4 +31,8 @@ extension HTTPField.Name {
 	/// `Last-Event-ID` — the SSE resumption cursor used to resume a broken
 	/// streamable-HTTP / legacy-SSE stream.
 	public static let lastEventID = Self("Last-Event-ID")!
+
+	/// `X-Accel-Buffering` — set to `no` on modern per-request SSE responses so
+	/// buffering reverse proxies (nginx et al.) pass events through immediately.
+	public static let xAccelBuffering = Self("X-Accel-Buffering")!
 }

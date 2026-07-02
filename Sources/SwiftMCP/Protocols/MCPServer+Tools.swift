@@ -44,8 +44,13 @@ public extension MCPServer {
 
         guard let params = request.params,
               let toolName = params["name"]?.stringValue else {
-            // Invalid request: missing tool name
-            return nil
+            // The method itself is known — a missing/non-string tool name is an
+            // Invalid Params error, not the "Method not found" the nil
+            // fallthrough used to produce.
+            return JSONRPCMessage.errorResponse(
+                id: request.id,
+                error: .init(code: -32602, message: "Invalid params: missing tool name")
+            )
         }
 
         // Extract arguments from the request

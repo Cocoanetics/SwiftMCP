@@ -11,7 +11,16 @@ extension SessionManager {
     }
 
     /// Create a new SSE stream for the given session and return the AsyncStream to write to the response.
-    func createStream(sessionID: UUID, kind: SSEStreamKind) async -> (AsyncStream<Data>, StreamRouteResponseInfo) {
+    ///
+    /// `resumable: false` (the modern era's per-request streams) opens the hub
+    /// stream without a replay buffer or priming anchor: no `id:` fields reach the
+    /// wire and nothing is retained for a `Last-Event-ID` resume — modern streams
+    /// must not advertise or support resumability.
+    func createStream(
+        sessionID: UUID,
+        kind: SSEStreamKind,
+        resumable: Bool = true
+    ) async -> (AsyncStream<Data>, StreamRouteResponseInfo) {
         await cleanupExpiredState()
         let session = await session(id: sessionID)
         await session.touchActivity()
@@ -21,8 +30,8 @@ extension SessionManager {
         // legacy general streams are fire-and-forget; request streams stop
         // accepting once finished; general streams keep accepting.
         let (stream, streamID) = hub.open(
-            replayable: kind != .legacyGeneral,
-            primed: kind != .legacyGeneral,
+            replayable: resumable && kind != .legacyGeneral,
+            primed: resumable && kind != .legacyGeneral,
             rejectsSendAfterCompletion: kind == .request
         )
         streamMeta[streamID] = StreamMeta(sessionID: sessionID, kind: kind)

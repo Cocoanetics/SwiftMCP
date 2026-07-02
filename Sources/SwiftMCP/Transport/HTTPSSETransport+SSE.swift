@@ -4,8 +4,12 @@ import Foundation
 extension HTTPSSETransport {
     // MARK: - Handling SSE Connections
 
-    func createSSEStream(sessionID: UUID, kind: SSEStreamKind) async -> (AsyncStream<Data>, StreamRouteResponseInfo) {
-        await sessionManager.createStream(sessionID: sessionID, kind: kind)
+    func createSSEStream(
+        sessionID: UUID,
+        kind: SSEStreamKind,
+        resumable: Bool = true
+    ) async -> (AsyncStream<Data>, StreamRouteResponseInfo) {
+        await sessionManager.createStream(sessionID: sessionID, kind: kind, resumable: resumable)
     }
 
     func resumeSSEStream(
