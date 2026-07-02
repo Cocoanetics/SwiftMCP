@@ -39,9 +39,12 @@ extension HTTPSSETransport {
 		// `params.uri` (`resources/read`); it is not used by other methods. The
 		// header and body field are compared *as optionals*: a header without the
 		// body field (or vice versa) is a mismatch — only "both absent" passes,
-		// leaving the malformed body to the method handler's own validation.
+		// leaving the missing body field to the method handler's own validation. A
+		// present-but-non-string body field can never be mirrored by a header, so
+		// it is always a mismatch (rather than degrading to "absent" and letting a
+		// headerless request slip past validation).
 		if let bodyName = mcpNameBodyValue(for: message) {
-			guard request.header("Mcp-Name") == bodyName.value else {
+			guard !bodyName.malformed, request.header("Mcp-Name") == bodyName.value else {
 				return headerMismatchResponse(id: message.id, field: "Mcp-Name")
 			}
 		}
@@ -52,20 +55,26 @@ extension HTTPSSETransport {
 	/// The body field `Mcp-Name` mirrors for methods that use it — wrapped so
 	/// "method doesn't use `Mcp-Name`" (`nil`) is distinct from "method uses it
 	/// but the body field is absent" (`.value == nil`, which still must match an
-	/// absent header).
+	/// absent header). `malformed` marks a field that is present but not a string.
 	private struct McpNameBodyValue {
 		let value: String?
+		let malformed: Bool
 	}
 
 	private func mcpNameBodyValue(for message: JSONRPCMessage) -> McpNameBodyValue? {
+		let rawField: JSONValue?
 		switch message.method {
 		case "tools/call", "prompts/get":
-			return McpNameBodyValue(value: message.params?["name"]?.stringValue)
+			rawField = message.params?["name"]
 		case "resources/read":
-			return McpNameBodyValue(value: message.params?["uri"]?.stringValue)
+			rawField = message.params?["uri"]
 		default:
 			return nil
 		}
+		return McpNameBodyValue(
+			value: rawField?.stringValue,
+			malformed: rawField != nil && rawField?.stringValue == nil
+		)
 	}
 
 	private func headerMismatchResponse(id: JSONRPCID?, field: String) -> RouteResponse {

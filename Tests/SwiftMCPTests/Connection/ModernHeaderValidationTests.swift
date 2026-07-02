@@ -109,6 +109,30 @@ struct ModernHeaderValidationTests {
         #expect(isHeaderMismatch(exchange))
     }
 
+    @Test("Non-string params.name is a mismatch, with or without an Mcp-Name header")
+    func nonStringNameIsMalformed() async throws {
+        // A present-but-non-string body field can never be mirrored by a header —
+        // it must not degrade to "absent" and slip past a headerless request.
+        let headerless = baseHeaders([.mcpProtocolVersion: "2026-07-28", .mcpMethod: "tools/call"])
+        let noHeader = try await send(headerless, method: "tools/call", extra: ["name": .integer(42)])
+        #expect(isHeaderMismatch(noHeader))
+
+        let withHeader = baseHeaders([
+            .mcpProtocolVersion: "2026-07-28", .mcpMethod: "tools/call", .mcpName: "42"
+        ])
+        let mirrored = try await send(withHeader, method: "tools/call", extra: ["name": .integer(42)])
+        #expect(isHeaderMismatch(mirrored))
+    }
+
+    @Test("A non-string _meta.protocolVersion classifies the request as legacy")
+    func nonStringMetaVersionIsLegacy() {
+        let message = JSONRPCMessage.request(
+            id: 1, method: "tools/list",
+            params: .object(["_meta": .object(["io.modelcontextprotocol/protocolVersion": .integer(2026)])])
+        )
+        #expect(!SessionInitializationGate.batchIsModern([message]))
+    }
+
     @Test("prompts/get: missing Mcp-Name → -32001; matched → passes")
     func promptsGetNameValidation() async throws {
         let missing = baseHeaders([.mcpProtocolVersion: "2026-07-28", .mcpMethod: "prompts/get"])
