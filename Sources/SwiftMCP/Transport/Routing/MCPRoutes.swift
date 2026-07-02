@@ -26,12 +26,19 @@ extension HTTPSSETransport {
 		let sessionID: UUID
 		let authSessionID: UUID?
 		let acceptHeader: String
+		/// A modern (stateless) request: no `Mcp-Session-Id` is required inbound or
+		/// echoed outbound; `sessionID` is an ephemeral id used only to route this
+		/// request's SSE stream internally.
+		let isModern: Bool
 	}
 
 	/// Handle POST /mcp — streamable HTTP endpoint.
 	func handleStreamableHTTP(request: HTTPRouteRequest<Data?>) async throws -> RouteResponse {
+		let isModern = requestDeclaresModern(request)
 		let sessionHeader = await resolveSessionHeader(for: request)
-		if let earlyResponse = streamableEarlyRejection(for: sessionHeader) {
+		// Modern is sessionless: any inbound Mcp-Session-Id is ignored entirely, so
+		// a malformed/unknown session header must not reject a modern request.
+		if !isModern, let earlyResponse = streamableEarlyRejection(for: sessionHeader) {
 			return earlyResponse
 		}
 
@@ -53,7 +60,8 @@ extension HTTPSSETransport {
 			guard let context = try await resolveStreamableContext(
 				sessionHeader: sessionHeader,
 				messages: messages,
-				acceptHeader: acceptHeader
+				acceptHeader: acceptHeader,
+				isModern: isModern
 			) else {
 				return textResponse(status: .internalServerError, body: "Session validation failed.")
 			}
@@ -114,15 +122,27 @@ extension HTTPSSETransport {
 	private func resolveStreamableContext(
 		sessionHeader: SessionHeaderResolution,
 		messages: [JSONRPCMessage],
-		acceptHeader: String
+		acceptHeader: String,
+		isModern: Bool
 	) async throws -> StreamableHTTPContext? {
+		// Modern is stateless: no inbound session is required and none is surfaced.
+		// An ephemeral id backs this request's SSE-stream routing only. The init
+		// gate does not apply (modern has no `initialize`).
+		if isModern {
+			return StreamableHTTPContext(
+				sessionID: UUID(), authSessionID: nil, acceptHeader: acceptHeader, isModern: true
+			)
+		}
+
 		switch sessionHeader {
 		case .missing:
 			guard SessionInitializationGate.batchStartsWithPreInitMethod(messages) else {
 				logger.warning("Rejected request without session ID before initialize")
 				throw StreamableHTTPError.missingSessionForNonInitialize
 			}
-			return StreamableHTTPContext(sessionID: UUID(), authSessionID: nil, acceptHeader: acceptHeader)
+			return StreamableHTTPContext(
+				sessionID: UUID(), authSessionID: nil, acceptHeader: acceptHeader, isModern: false
+			)
 		case .existing(let existingSessionID):
 			if await sessionNeedsInitialize(existingSessionID),
 			   !SessionInitializationGate.batchStartsWithPreInitMethod(messages) {
@@ -132,7 +152,8 @@ extension HTTPSSETransport {
 			return StreamableHTTPContext(
 				sessionID: existingSessionID,
 				authSessionID: existingSessionID,
-				acceptHeader: acceptHeader
+				acceptHeader: acceptHeader,
+				isModern: false
 			)
 		case .malformed, .unknown:
 			return nil
@@ -224,21 +245,38 @@ extension HTTPSSETransport {
 				}
 
 				await self.finishSSEStream(streamInfo.streamID)
+
+				// Modern is sessionless: once this request's stream is done, drop the
+				// ephemeral session so modern traffic doesn't accumulate `Session`
+				// objects (there is no client `DELETE` to reclaim them).
+				if context.isModern {
+					await self.sessionManager.removeSession(id: context.sessionID)
+				}
 			}
 
-			let headerFields: HTTPFields = [
+			var headerFields: HTTPFields = [
 				.contentType: "text/event-stream",
 				.cacheControl: "no-cache",
-				.connection: "keep-alive",
-				.mcpSessionID: sid
+				.connection: "keep-alive"
 			]
+			// Modern is sessionless — never echo Mcp-Session-Id.
+			if !context.isModern {
+				headerFields[.mcpSessionID] = sid
+			}
 
 			return RouteResponse(status: .ok, headerFields: headerFields, bodyStream: stream, streamInfo: streamInfo)
 		}
 
 		_ = await session.work { _ in await self.processInbound(messages) }
 
-		return RouteResponse(status: .accepted, headerFields: [.mcpSessionID: sid])
+		// Modern is sessionless: reclaim the ephemeral session immediately (a
+		// notification-only request opens no stream, so nothing else would).
+		if context.isModern {
+			await sessionManager.removeSession(id: context.sessionID)
+		}
+
+		let ackHeaders: HTTPFields = context.isModern ? [:] : [.mcpSessionID: sid]
+		return RouteResponse(status: .accepted, headerFields: ackHeaders)
 	}
 
 	/// Process an inbound HTTP payload: through the connected ``MCPDispatcher``
@@ -295,6 +333,12 @@ extension HTTPSSETransport {
 
 	/// Handle DELETE /mcp — remove a session.
 	func handleDeleteSession(request: HTTPRouteRequest<Data?>) async throws -> RouteResponse {
+		// DELETE is a session-teardown verb; the modern (sessionless) era has no
+		// sessions, so a modern client using it gets 405 Method Not Allowed.
+		if requestDeclaresModern(request) {
+			return textResponse(status: .methodNotAllowed, body: "DELETE is not supported for stateless (modern) requests.")
+		}
+
 		switch await resolveSessionHeader(for: request) {
 		case .missing, .malformed:
 			return textResponse(status: .badRequest, body: "Valid Mcp-Session-Id header required.")

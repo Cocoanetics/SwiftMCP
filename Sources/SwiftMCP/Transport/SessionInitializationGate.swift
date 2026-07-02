@@ -37,8 +37,25 @@ enum SessionInitializationGate {
         return messages.first?.params?["protocolVersion"]?.stringValue
     }
 
+    /// Whether the payload declares the modern era via the leading request's
+    /// `_meta` protocol version. Modern is stateless and has no `initialize`
+    /// handshake, so such requests must not be held by the init gate. This is
+    /// safe against batch-smuggling: modern revisions forbid JSON-RPC batching, so
+    /// a multi-item modern payload is independently rejected by the batching gate
+    /// (which runs after this check).
+    static func batchIsModern(_ messages: [JSONRPCMessage]) -> Bool {
+        guard let first = messages.first, first.isRequest,
+              let version = first.params?["_meta"]?[MCPMetaKey.protocolVersion]?.stringValue else {
+            return false
+        }
+        return MCPProtocolVersion.isModern(version)
+    }
+
     static func shouldReject(_ messages: [JSONRPCMessage], for session: Session) async -> Bool {
-        !(await session.hasReceivedInitializeRequest) && !batchStartsWithPreInitMethod(messages)
+        guard !(await session.hasReceivedInitializeRequest) else {
+            return false
+        }
+        return !batchStartsWithPreInitMethod(messages) && !batchIsModern(messages)
     }
 
     /// Builds one error response per *request* in the batch.

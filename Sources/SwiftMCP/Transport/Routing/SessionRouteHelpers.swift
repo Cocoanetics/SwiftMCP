@@ -26,6 +26,17 @@ extension HTTPSSETransport {
         return .unknown(sessionID)
     }
 
+    /// Whether an inbound HTTP request declares the modern era, from its
+    /// `MCP-Protocol-Version` header. Modern is stateless/sessionless, so the
+    /// header (not a session) is the reliable per-request era signal at the
+    /// transport layer, before any body `_meta` is parsed.
+    func requestDeclaresModern<Body: Sendable>(_ request: HTTPRouteRequest<Body>) -> Bool {
+        guard let headerVersion = request.header("MCP-Protocol-Version") else {
+            return false
+        }
+        return MCPProtocolVersion.isModern(headerVersion)
+    }
+
     func sessionNeedsInitialize(_ sessionID: UUID) async -> Bool {
         guard let session = await sessionManager.existingSession(id: sessionID) else {
             return false
@@ -48,7 +59,7 @@ extension HTTPSSETransport {
         sessionID: UUID?
     ) async -> RouteResponse? {
         if let headerVersion = request.header("MCP-Protocol-Version") {
-            guard MCPProtocolVersion.supported.contains(headerVersion) else {
+            guard MCPProtocolVersion.isServable(headerVersion) else {
                 return textResponse(status: .badRequest, body: "Invalid or unsupported MCP-Protocol-Version header.")
             }
 
@@ -75,7 +86,7 @@ extension HTTPSSETransport {
         messages: [JSONRPCMessage] = []
     ) async -> String {
         if let headerVersion = request.header("MCP-Protocol-Version"),
-           MCPProtocolVersion.supported.contains(headerVersion) {
+           MCPProtocolVersion.isServable(headerVersion) {
             return headerVersion
         }
 
