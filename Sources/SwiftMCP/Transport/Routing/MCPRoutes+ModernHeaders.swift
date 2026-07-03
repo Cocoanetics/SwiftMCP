@@ -11,6 +11,45 @@ import HTTPTypes
 /// only invoked for requests classified modern by their body `_meta`.
 extension HTTPSSETransport {
 
+	/// The full modern pre-dispatch gate, in order: batch-framing rejection
+	/// (`400` + `-32600`), required-header validation (`400` + `-32001`), then the
+	/// unknown-method check (`404` + `-32601`). All must be decided *before*
+	/// dispatch — the per-request SSE stream commits the HTTP status, so an
+	/// in-band error can't produce the spec-required codes.
+	func modernPreflightResponse<Body: Sendable>(
+		request: HTTPRouteRequest<Body>,
+		body: Data,
+		messages: [JSONRPCMessage]
+	) -> RouteResponse? {
+		// Modern forbids JSON-RPC batching, so a top-level array — even with a
+		// single element (which still classifies as modern) — is malformed
+		// *framing*. It must be rejected here, first, or the header validation /
+		// unknown-method checks below would mask the required -32600.
+		if JSONRPCMessage.batchingRejected(body: body, version: MCPProtocolVersion.modern) {
+			let error = JSONRPCMessage.batchingRejectionResponse(version: MCPProtocolVersion.modern)
+			return .json(error, status: .badRequest, sessionId: nil)
+		}
+		if let headerError = validateModernHeaders(request: request, messages: messages) {
+			return headerError
+		}
+		return modernUnknownMethodResponse(messages: messages)
+	}
+
+	/// A `404` + `-32601` for a modern *request* whose method is outside the
+	/// modern-era surface (``ModernRequestMethods``). Notifications never 404
+	/// (they get a `202` as usual); legacy keeps its in-band `-32601` over `200`.
+	private func modernUnknownMethodResponse(messages: [JSONRPCMessage]) -> RouteResponse? {
+		guard let message = messages.first, message.isRequest,
+		      let method = message.method, !ModernRequestMethods.known.contains(method) else {
+			return nil
+		}
+		let error = JSONRPCMessage.errorResponse(
+			id: message.id,
+			error: .init(code: -32601, message: "Method not found: \(method)")
+		)
+		return .json(error, status: .notFound, sessionId: nil)
+	}
+
 	/// Validates the modern required headers against the decoded message, returning
 	/// a `-32001` response on the first missing/mismatched header, or `nil` when all
 	/// match. Modern is a single message (``SessionInitializationGate/batchIsModern``

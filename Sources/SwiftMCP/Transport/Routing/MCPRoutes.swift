@@ -59,10 +59,11 @@ extension HTTPSSETransport {
 			// sessionless path and being served as legacy.
 			let isModern = SessionInitializationGate.batchIsModern(messages)
 
-			// Modern POSTs carry redundant headers (MCP-Protocol-Version / Mcp-Method
-			// / Mcp-Name) that must match the body; a mismatch is a 400 + -32001.
-			if isModern, let headerError = validateModernHeaders(request: request, messages: messages) {
-				return headerError
+			// Modern preflight: batch-framing rejection (400 + -32600), required-
+			// header validation (400 + -32001), then the unknown-method check
+			// (404 + -32601) — all decided before dispatch.
+			if isModern, let preflightError = modernPreflightResponse(request: request, body: body, messages: messages) {
+				return preflightError
 			}
 
 			// Modern is sessionless (no inbound Mcp-Session-Id), so a malformed /
@@ -249,7 +250,12 @@ extension HTTPSSETransport {
 
 			let session = await sessionManager.session(id: context.sessionID)
 			await bindBearerTokenIfNeeded(token, to: context.sessionID)
-			let (stream, streamInfo) = await createSSEStream(sessionID: context.sessionID, kind: .request)
+			// Modern per-request streams are non-resumable: no replay buffer, no
+			// `id:` resume anchors on the wire (resume itself is GET-only, which
+			// modern already answers with 405).
+			let (stream, streamInfo) = await createSSEStream(
+				sessionID: context.sessionID, kind: .request, resumable: !context.isModern
+			)
 			let streamContext = OutboundStreamContext(streamID: streamInfo.streamID, kind: .request)
 
 			Task {
@@ -276,8 +282,12 @@ extension HTTPSSETransport {
 				.cacheControl: "no-cache",
 				.connection: "keep-alive"
 			]
-			// Modern is sessionless — never echo Mcp-Session-Id.
-			if !context.isModern {
+			// Modern is sessionless (no Mcp-Session-Id echoed) and tells buffering
+			// reverse proxies to pass per-request events through immediately; legacy
+			// keeps echoing the session id.
+			if context.isModern {
+				headerFields[.xAccelBuffering] = "no"
+			} else {
 				headerFields[.mcpSessionID] = sid
 			}
 
