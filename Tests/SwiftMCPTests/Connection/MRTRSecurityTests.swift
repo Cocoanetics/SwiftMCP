@@ -7,6 +7,73 @@ import HTTPTypes
 @Suite("MRTR requestState security")
 struct MRTRSecurityTests {
 
+    @Test("A retry cannot overwrite an answer already fixed in the signed state")
+    func accumulatorIsAuthoritative() async throws {
+        let transport = HTTPSSETransport(server: MRTRTestServer())
+        let adapter = InMemoryHTTPServerAdapter(engine: transport)
+
+        let round1 = try await mrtrSend(adapter, headers: mrtrCallHeaders(tool: "askTwo"),
+                                        body: mrtrCallBody(tool: "askTwo"))
+        let state1 = try #require(round1["requestState"]?.stringValue)
+
+        let round2 = try await mrtrSend(adapter, headers: mrtrCallHeaders(tool: "askTwo"), body: mrtrCallBody(
+            tool: "askTwo",
+            extraParams: [
+                "inputResponses": .object(["input-0": mrtrAcceptResponse(["a": .string("one")])]),
+                "requestState": .string(state1)
+            ]
+        ))
+        let state2 = try #require(round2["requestState"]?.stringValue)
+
+        // The final retry answers input-1 but ALSO resends input-0 with a
+        // different value — the signed accumulator must win.
+        let final = try await mrtrSend(adapter, headers: mrtrCallHeaders(tool: "askTwo"), body: mrtrCallBody(
+            tool: "askTwo",
+            extraParams: [
+                "inputResponses": .object([
+                    "input-0": mrtrAcceptResponse(["a": .string("evil")]),
+                    "input-1": mrtrAcceptResponse(["b": .string("two")])
+                ]),
+                "requestState": .string(state2)
+            ]
+        ))
+        let content = final["content"]?.arrayValue?.first?.dictionaryValue
+        #expect(content?["text"]?.stringValue == "one+two")
+    }
+
+    @Test("The principal binds to the HTTP bearer token, not just _meta")
+    func httpBearerPrincipalBinding() async throws {
+        let transport = HTTPSSETransport(server: MRTRTestServer())
+        let adapter = InMemoryHTTPServerAdapter(engine: transport)
+
+        var authedHeaders = mrtrCallHeaders(tool: "askName")
+        authedHeaders[.authorization] = "Bearer tok-A"
+        let first = try await mrtrSend(adapter, headers: authedHeaders, body: mrtrCallBody(tool: "askName"))
+        #expect(first["resultType"]?.stringValue == "input_required")
+        let state = try #require(first["requestState"]?.stringValue)
+
+        // A retry WITHOUT the bearer token is a different principal → rejected.
+        let anonymous = try await mrtrSend(adapter, headers: mrtrCallHeaders(tool: "askName"), body: mrtrCallBody(
+            tool: "askName",
+            extraParams: [
+                "inputResponses": .object(["input-0": mrtrAcceptResponse(["name": .string("x")])]),
+                "requestState": .string(state)
+            ]
+        ))
+        #expect(anonymous["__error_code"]?.intValue == -32602)
+
+        // The same bearer token passes.
+        let sameCaller = try await mrtrSend(adapter, headers: authedHeaders, body: mrtrCallBody(
+            tool: "askName",
+            extraParams: [
+                "inputResponses": .object(["input-0": mrtrAcceptResponse(["name": .string("Oliver")])]),
+                "requestState": .string(state)
+            ]
+        ))
+        let content = sameCaller["content"]?.arrayValue?.first?.dictionaryValue
+        #expect(content?["text"]?.stringValue == "Hello Oliver")
+    }
+
     @Test("Tampered requestState → -32602; state replayed on another tool → -32602")
     func stateVerification() async throws {
         let transport = HTTPSSETransport(server: MRTRTestServer())

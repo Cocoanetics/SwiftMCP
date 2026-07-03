@@ -40,7 +40,7 @@ extension MCPServer {
             guard let payloadData = mrtrRequestStateSigner.verify(state),
                   let payload = try? JSONDecoder().decode(MRTRRequestStatePayload.self, from: payloadData),
                   payload.exp > Date().timeIntervalSince1970,
-                  payload.principal == MRTRRequestState.principal(accessToken: context.meta?.accessToken),
+                  payload.principal == MRTRRequestState.principal(accessToken: await mrtrPrincipalToken(context)),
                   payload.requestDigest == MRTRRequestState.requestDigest(
                     method: request.method, params: request.params
                   ) else {
@@ -61,13 +61,31 @@ extension MCPServer {
         }
 
         if let inputResponses = context.inputResponses {
-            merged.merge(inputResponses) { _, retry in retry }
+            // The signed accumulator is authoritative: an answer already fixed in
+            // `requestState` cannot be overwritten by a later retry resending the
+            // same id with a different value — only ids the state doesn't carry
+            // are taken from the retry.
+            merged.merge(inputResponses) { state, _ in state }
         }
 
         if !merged.isEmpty {
             await context.mrtr.setResponses(merged)
         }
         return nil
+    }
+
+    /// The token identifying the caller for `requestState` principal binding.
+    ///
+    /// Modern HTTP clients authenticate with an `Authorization: Bearer` header,
+    /// which the route layer validates and stores on the (ephemeral) session
+    /// *before* dispatch — `_meta.accessToken` is only a fallback for callers
+    /// that tunnel the token in-band. Both issuance and verification derive the
+    /// principal through this one helper so they can never disagree.
+    internal func mrtrPrincipalToken(_ context: RequestContext) async -> String? {
+        if let sessionToken = await Session.current?.accessToken {
+            return sessionToken
+        }
+        return context.meta?.accessToken
     }
 
     /// Converts an ``MRTRInvalidInputResponse`` into the spec's `-32602`
@@ -101,7 +119,7 @@ extension MCPServer {
             let payload = MRTRRequestStatePayload(
                 iat: now,
                 exp: now + MRTRRequestState.timeToLive,
-                principal: MRTRRequestState.principal(accessToken: context.meta?.accessToken),
+                principal: MRTRRequestState.principal(accessToken: await mrtrPrincipalToken(context)),
                 requestDigest: MRTRRequestState.requestDigest(method: request.method, params: request.params),
                 responses: await context.mrtr.allResponses()
             )
