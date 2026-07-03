@@ -40,6 +40,9 @@ enum MCPToolDiagnostic: DiagnosticMessage {
     /// surfaced or dispatched at runtime.
     case missingMCPExtensionAttribute(macroName: String)
 
+    /// Error when `headerParameters` names a parameter the function does not have.
+    case unknownHeaderParameter(paramName: String, functionName: String)
+
     var message: String {
         switch self {
         case .onlyFunctions:
@@ -60,6 +63,9 @@ enum MCPToolDiagnostic: DiagnosticMessage {
         case .missingMCPExtensionAttribute(let macroName):
             // swiftlint:disable:next line_length
             return "@\(macroName) inside an extension requires @MCPExtension on the enclosing extension. Add @MCPExtension(\"<Name>\") (or @MCPExtension to derive the name from the filename) to surface this declaration at runtime."
+        case .unknownHeaderParameter(let paramName, let functionName):
+            // swiftlint:disable:next line_length
+            return "headerParameters names '\(paramName)', which is not a parameter of '\(functionName)'. Header annotations must match parameter names exactly."
         }
     }
 
@@ -70,7 +76,8 @@ enum MCPToolDiagnostic: DiagnosticMessage {
              .invalidDefaultValueType,
              .closureTypeNotSupported,
              .optionalParameterNeedsDefault,
-             .missingMCPExtensionAttribute:
+             .missingMCPExtensionAttribute,
+             .unknownHeaderParameter:
             return .error
         case .missingDescription:
             return .warning
@@ -93,6 +100,8 @@ enum MCPToolDiagnostic: DiagnosticMessage {
             return MessageID(domain: "SwiftMCP", id: "optionalParameterNeedsDefault")
         case .missingMCPExtensionAttribute:
             return MessageID(domain: "SwiftMCP", id: "missingMCPExtensionAttribute")
+        case .unknownHeaderParameter:
+            return MessageID(domain: "SwiftMCP", id: "unknownHeaderParameter")
         }
     }
 }

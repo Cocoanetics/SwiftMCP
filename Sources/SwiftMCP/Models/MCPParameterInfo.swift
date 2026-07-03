@@ -17,6 +17,11 @@ public struct MCPParameterInfo: Sendable {
     /// Whether the parameter is required (no default value)
     public let isRequired: Bool
 
+    /// Whether modern (`2026-07-28`) clients should mirror this parameter into an
+    /// `Mcp-Param-{name}` HTTP header (the `x-mcp-header` inputSchema annotation),
+    /// declared via `@MCPTool(headerParameters:)`.
+    public let isMirroredToHeader: Bool
+
     /// Whether the parameter is optional (has a default value)
     public var isOptional: Bool {
         return !isRequired
@@ -24,25 +29,29 @@ public struct MCPParameterInfo: Sendable {
 
 /**
      Creates a new parameter info with the specified name, type, description, and default value.
-     
+
      - Parameters:
        - name: The name of the parameter
        - type: The type of the parameter
        - description: An optional description of the parameter
        - defaultValue: An optional default value for the parameter
        - isRequired: Whether the parameter is required (no default value)
+       - isMirroredToHeader: Whether modern clients mirror the parameter into an
+         `Mcp-Param-{name}` header (`x-mcp-header`)
      */
     public init(
         name: String,
         type: Sendable.Type,
         description: String? = nil,
         defaultValue: Sendable? = nil,
-        isRequired: Bool
+        isRequired: Bool,
+        isMirroredToHeader: Bool = false
     ) {
         self.name = name
         self.type = type
         self.description = description
         self.defaultValue = defaultValue
         self.isRequired = isRequired
+        self.isMirroredToHeader = isMirroredToHeader
     }
 }

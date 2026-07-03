@@ -94,6 +94,13 @@ public final class HTTPSSETransport: Transport, MCPTransport, Service, MCPHTTPEn
     /// served with the corresponding metadata.
     public var oauthConfiguration: OAuthConfiguration?
 
+    /// Opt-in `Origin` allowlist (DNS-rebinding protection, per the MCP
+    /// streamable-HTTP spec). `nil` (the default) disables validation. When set,
+    /// any request on any route — including CORS preflights — whose `Origin`
+    /// header is not in the set is rejected with `403`; requests *without* an
+    /// `Origin` header (curl, native clients) always pass.
+    public var allowedOrigins: Set<String>?
+
     /// Defines the available keep-alive modes for maintaining connections.
     public enum KeepAliveMode: Sendable {
         case none
@@ -221,6 +228,23 @@ public final class HTTPSSETransport: Transport, MCPTransport, Service, MCPHTTPEn
     public func handle(head: HTTPRequest, bodyStream: AsyncStream<Data>) async -> EngineResponse {
         let uri = head.path ?? "/"
         let (path, queryParams) = Self.parseURI(uri)
+
+        // Origin allowlist: enforced before route matching so it covers every
+        // route — MCP, legacy SSE, OAuth, OpenAPI, custom, and the OPTIONS CORS
+        // preflight. Only requests that *carry* an Origin header are checked.
+        // Comparison is case-insensitive (RFC 6454: scheme and host compare
+        // case-insensitively, and intermediaries may re-case what browsers send
+        // lowercase).
+        if let allowedOrigins,
+           let origin = head.headerFields[.origin]?.lowercased(),
+           !allowedOrigins.contains(where: { $0.lowercased() == origin }) {
+            logger.warning("Rejected request from disallowed Origin \(origin)")
+            return EngineResponse(
+                status: .forbidden,
+                headerFields: [.contentType: "text/plain; charset=utf-8"],
+                body: .buffered(Data("Origin not allowed.".utf8))
+            )
+        }
 
         guard let routeMatch = router.match(method: head.method, path: path) else {
             return EngineResponse(status: .notFound, headerFields: [:], body: .buffered(nil))

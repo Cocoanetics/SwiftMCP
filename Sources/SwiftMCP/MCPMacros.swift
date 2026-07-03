@@ -81,6 +81,9 @@ public enum MCPToolNaming {
 ///     (deprecated - use hints: [.idempotent])
 ///   - openWorldHint: If true, tool may interact with external entities
 ///     (deprecated - use hints: [.openWorld])
+///   - headerParameters: Names of parameters that modern (`2026-07-28`) clients
+///     mirror into `Mcp-Param-{name}` HTTP headers (the `x-mcp-header`
+///     inputSchema annotation). Each name must match a parameter of the function.
 @attached(peer, names: prefixed(__mcpMetadata_), prefixed(__mcpCall_))
 public macro MCPTool(
     name: String? = nil,
@@ -90,7 +93,8 @@ public macro MCPTool(
     readOnlyHint: Bool? = nil,
     destructiveHint: Bool? = nil,
     idempotentHint: Bool? = nil,
-    openWorldHint: Bool? = nil
+    openWorldHint: Bool? = nil,
+    headerParameters: [String] = []
 ) = #externalMacro(module: "SwiftMCPMacros", type: "MCPToolMacro")
 
 /// A macro that exposes an AppIntent as an MCP tool.
