@@ -138,8 +138,11 @@ struct MCPServerProxyStreamableHTTPTests {
         #expect(!tools.isEmpty)
     }
 
+    /// Async-condition sibling of `HTTPTransportTestHelpers.waitForCondition`; the
+    /// generous deadline is a failure bound, not a wait (returns as soon as the
+    /// condition holds) — sized for loaded CI runners racing real localhost I/O.
     private func waitForCondition(
-        timeoutNanoseconds: UInt64 = 2_000_000_000,
+        timeoutNanoseconds: UInt64 = 15_000_000_000,
         pollNanoseconds: UInt64 = 50_000_000,
         _ condition: @escaping @Sendable () async -> Bool
     ) async -> Bool {
