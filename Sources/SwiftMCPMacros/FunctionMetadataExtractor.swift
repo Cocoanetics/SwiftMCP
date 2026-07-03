@@ -34,14 +34,17 @@ struct ParsedParameter {
     let isOptionalType: Bool // Whether the parameter type is optional
 
     /// Creates MCPParameterInfo from this parsed parameter
-    func toMCPParameterInfo() -> String {
+    func toMCPParameterInfo(mirroredToHeader: Bool = false) -> String {
         let descriptionString = description ?? "nil"
         // A parameter is required if it has no default value AND is not optional
         let isRequired = defaultValueClause == nil && !isOptionalType
+        // `isMirroredToHeader` is emitted only when set, so expansions for tools
+        // without header parameters stay byte-identical.
+        let headerSuffix = mirroredToHeader ? ", isMirroredToHeader: true" : ""
         return "MCPParameterInfo(name: \"\(name)\", type: \(baseTypeString).self, "
             + "description: \(descriptionString), "
             + "defaultValue: \(defaultValueForMetadata), "
-            + "isRequired: \(isRequired))"
+            + "isRequired: \(isRequired)\(headerSuffix))"
     }
 }
 

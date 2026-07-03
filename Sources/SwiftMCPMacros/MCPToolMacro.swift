@@ -55,6 +55,7 @@ public struct MCPToolMacro: PeerMacro {
         var destructiveHintArg: String?
         var idempotentHintArg: String?
         var openWorldHintArg: String?
+        var headerParameters: [String] = []
     }
 
     /**
@@ -84,20 +85,14 @@ public struct MCPToolMacro: PeerMacro {
         let functionName = commonMetadata.functionName
 
         var attrArgs = parseAttributeArguments(node: node)
+        resolveDescription(&attrArgs, commonMetadata: commonMetadata, funcDecl: funcDecl, context: context)
 
-        if attrArgs.descriptionArg == "nil" && !commonMetadata.documentation.description.isEmpty {
-            attrArgs.descriptionArg = "\"\(commonMetadata.documentation.description.escapedForSwiftString)\""
+        let headerParams = validatedHeaderParameters(
+            attrArgs.headerParameters, commonMetadata: commonMetadata, funcDecl: funcDecl, context: context
+        )
+        let parameterInfoStrings = commonMetadata.parameters.map {
+            $0.toMCPParameterInfo(mirroredToHeader: headerParams.contains($0.name))
         }
-
-        if attrArgs.descriptionArg == "nil" && functionName != "missingDescription" {
-            let diagnostic = Diagnostic(
-                node: Syntax(funcDecl.name),
-                message: MCPToolDiagnostic.missingDescription(functionName: functionName)
-            )
-            context.diagnose(diagnostic)
-        }
-
-        let parameterInfoStrings = commonMetadata.parameters.map { $0.toMCPParameterInfo() }
         let annotationsArg = buildAnnotationsArg(args: attrArgs)
         let toolName = attrArgs.customName ?? functionName
 
@@ -169,6 +164,8 @@ public struct MCPToolMacro: PeerMacro {
             if let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
                 args.isConsequentialArg = boolLiteral.literal.text
             }
+        case "headerParameters":
+            args.headerParameters = parseStringArray(argument.expression)
         default:
             applyLegacyHintArgument(label: label, expression: argument.expression, to: &args)
         }
@@ -292,5 +289,72 @@ nonisolated private let __mcpMetadata_\(inputs.functionName) = MCPToolMetadata(
             return "nil"
         }
         return "MCPToolAnnotations(hints: [\(allHints.sorted().joined(separator: ", "))])"
+    }
+}
+
+// MARK: - @MCPTool argument helpers
+
+private extension MCPToolMacro {
+    /// Defaults `descriptionArg` from the doc comment and diagnoses a missing
+    /// description (except for the `missingDescription` test fixture).
+    static func resolveDescription(
+        _ attrArgs: inout ToolAttributeArgs,
+        commonMetadata: ExtractedFunctionMetadata,
+        funcDecl: FunctionDeclSyntax,
+        context: some MacroExpansionContext
+    ) {
+        if attrArgs.descriptionArg == "nil" && !commonMetadata.documentation.description.isEmpty {
+            attrArgs.descriptionArg = "\"\(commonMetadata.documentation.description.escapedForSwiftString)\""
+        }
+
+        if attrArgs.descriptionArg == "nil" && commonMetadata.functionName != "missingDescription" {
+            let diagnostic = Diagnostic(
+                node: Syntax(funcDecl.name),
+                message: MCPToolDiagnostic.missingDescription(functionName: commonMetadata.functionName)
+            )
+            context.diagnose(diagnostic)
+        }
+    }
+
+    /// String literals of an array-literal expression (non-literals are skipped).
+    /// A literal containing interpolation keeps its raw source text, so it can
+    /// never match a parameter name and the `unknownHeaderParameter` diagnostic
+    /// surfaces it (with the interpolation syntax visible) instead of silently
+    /// annotating nothing.
+    static func parseStringArray(_ expression: ExprSyntax) -> [String] {
+        guard let arrayExpr = expression.as(ArrayExprSyntax.self) else { return [] }
+        return arrayExpr.elements.compactMap { element in
+            guard let literal = element.expression.as(StringLiteralExprSyntax.self) else { return nil }
+            var text = ""
+            for segment in literal.segments {
+                guard let stringSegment = segment.as(StringSegmentSyntax.self) else {
+                    return literal.segments.description   // interpolated → raw source
+                }
+                text += stringSegment.content.text
+            }
+            return text
+        }
+    }
+
+    /// The validated `headerParameters` set: names that match no function
+    /// parameter get an error diagnostic (a typo would otherwise silently
+    /// annotate nothing).
+    static func validatedHeaderParameters(
+        _ headerParameters: [String],
+        commonMetadata: ExtractedFunctionMetadata,
+        funcDecl: FunctionDeclSyntax,
+        context: some MacroExpansionContext
+    ) -> Set<String> {
+        let parameterNames = Set(commonMetadata.parameters.map { $0.name })
+        for headerParam in headerParameters where !parameterNames.contains(headerParam) {
+            let diagnostic = Diagnostic(
+                node: Syntax(funcDecl.name),
+                message: MCPToolDiagnostic.unknownHeaderParameter(
+                    paramName: headerParam, functionName: commonMetadata.functionName
+                )
+            )
+            context.diagnose(diagnostic)
+        }
+        return Set(headerParameters)
     }
 }

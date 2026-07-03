@@ -20,15 +20,60 @@ public extension MCPServer {
 
         // `outputSchema` is a 2025-06-18 feature; omit it for older clients.
         let includeOutputSchema = await RequestContext.current?.supports(.structuredToolOutput) ?? true
+        // The `x-mcp-header` inputSchema annotation is modern-only (2026-07-28).
+        let includeHeaderAnnotations = await RequestContext.current?.supports(.xMcpHeader) ?? false
         let toolMetadata = await toolProvider.mcpToolMetadata
         let tools = toolMetadata.convertedToTools(includeOutputSchema: includeOutputSchema)
-        if let encoded = try? JSONValue(encoding: tools) {
+        if var encoded = try? JSONValue(encoding: tools) {
+            if includeHeaderAnnotations {
+                encoded = Self.annotatingHeaderParameters(encoded, metadata: toolMetadata)
+            }
             return JSONRPCMessage.response(id: id, result: ["tools": encoded])
         }
         return JSONRPCMessage.errorResponse(
             id: id,
             error: .init(code: -32603, message: "Failed to encode tools list")
         )
+    }
+
+    /// Injects `"x-mcp-header": true` into the encoded `inputSchema` properties of
+    /// parameters declared via `@MCPTool(headerParameters:)`.
+    ///
+    /// The vendor keyword is merged into the already-encoded `JSONValue` tree
+    /// because the `JSONSchema` model (JSONFoundation) is a closed enum with no
+    /// vendor-keyword storage — the wire shape is SwiftMCP's to decorate.
+    internal static func annotatingHeaderParameters(
+        _ encodedTools: JSONValue,
+        metadata: [MCPToolMetadata]
+    ) -> JSONValue {
+        let flaggedByTool: [String: Set<String>] = metadata.reduce(into: [:]) { result, meta in
+            let flagged = meta.parameters.filter { $0.isMirroredToHeader }.map { $0.name }
+            if !flagged.isEmpty {
+                result[meta.name] = Set(flagged)
+            }
+        }
+        guard !flaggedByTool.isEmpty, case .array(let tools) = encodedTools else {
+            return encodedTools
+        }
+
+        let annotated = tools.map { tool -> JSONValue in
+            guard var toolDict = tool.dictionaryValue,
+                  let name = toolDict["name"]?.stringValue,
+                  let flagged = flaggedByTool[name],
+                  var schemaDict = toolDict["inputSchema"]?.dictionaryValue,
+                  var properties = schemaDict["properties"]?.dictionaryValue else {
+                return tool
+            }
+            for paramName in flagged {
+                guard var property = properties[paramName]?.dictionaryValue else { continue }
+                property["x-mcp-header"] = .bool(true)
+                properties[paramName] = .object(property)
+            }
+            schemaDict["properties"] = .object(properties)
+            toolDict["inputSchema"] = .object(schemaDict)
+            return .object(toolDict)
+        }
+        return .array(annotated)
     }
 
     /**

@@ -88,7 +88,85 @@ extension HTTPSSETransport {
 			}
 		}
 
+		// `Mcp-Param-{name}` headers mirror `tools/call` arguments (`x-mcp-header`);
+		// every *present* one must equal the body argument. Presence is not
+		// required — the server obligation is header==body, and requiring annotated
+		// params to be mirrored would need tool metadata pre-dispatch. Requests
+		// only: a notification gets no error response, so there is nothing coherent
+		// to reject it with (matching the unknown-method check's scoping).
+		if message.isRequest, message.method == "tools/call",
+		   let paramError = validateMirroredParamHeaders(request: request, message: message) {
+			return paramError
+		}
+
 		return nil
+	}
+
+	/// Validates every `Mcp-Param-{name}` header against the corresponding
+	/// `tools/call` argument. The parameter-name match is case-insensitive (HTTP
+	/// header names are case-insensitive and proxies may re-case them); a header
+	/// naming no argument, a malformed base64 sentinel, or a value that doesn't
+	/// equal the stringified argument is a mismatch.
+	private func validateMirroredParamHeaders<Body: Sendable>(
+		request: HTTPRouteRequest<Body>,
+		message: JSONRPCMessage
+	) -> RouteResponse? {
+		let arguments = message.params?["arguments"]?.dictionaryValue ?? [:]
+
+		let prefix = "mcp-param-"
+		for field in request.headerFields where field.name.rawName.lowercased().hasPrefix(prefix) {
+			let paramName = String(field.name.rawName.dropFirst(prefix.count))
+			guard let argument = Self.matchedArgument(named: paramName, in: arguments),
+			      let headerValue = Self.decodedParamHeaderValue(field.value),
+			      headerValue == Self.stringifiedArgument(argument) else {
+				return headerMismatchResponse(id: message.id, field: field.name.rawName)
+			}
+		}
+		return nil
+	}
+
+	/// The argument a `Mcp-Param-{name}` header refers to: an exact-name match
+	/// wins; otherwise a case-insensitive match is accepted only when it is
+	/// unambiguous (proxies may re-case header names, but two arguments differing
+	/// only by case must not resolve nondeterministically — ambiguity rejects).
+	private static func matchedArgument(named name: String, in arguments: JSONDictionary) -> JSONValue? {
+		if let exact = arguments[name] {
+			return exact
+		}
+		let lowercased = name.lowercased()
+		let candidates = arguments.filter { $0.key.lowercased() == lowercased }
+		return candidates.count == 1 ? candidates.first?.value : nil
+	}
+
+	/// Decodes an `Mcp-Param-*` header value: a `=?base64?…?=` sentinel wraps
+	/// non-ASCII values and is decoded to UTF-8; anything else is taken verbatim.
+	/// Returns `nil` for a malformed sentinel (invalid base64 or non-UTF-8 bytes).
+	private static func decodedParamHeaderValue(_ value: String) -> String? {
+		guard value.hasPrefix("=?base64?"), value.hasSuffix("?=") else {
+			return value
+		}
+		let encoded = String(value.dropFirst("=?base64?".count).dropLast("?=".count))
+		guard let data = Data(base64Encoded: encoded) else {
+			return nil
+		}
+		return String(bytes: data, encoding: .utf8)
+	}
+
+	/// The string form of a `tools/call` argument a mirroring header must carry:
+	/// strings verbatim, everything else as its compact JSON text (`42`, `true`).
+	/// Keys are sorted so object-valued arguments have a deterministic text form —
+	/// without it, dictionary-order nondeterminism would randomly reject a
+	/// correctly mirrored object parameter.
+	private static func stringifiedArgument(_ value: JSONValue) -> String? {
+		if let string = value.stringValue {
+			return string
+		}
+		let encoder = JSONEncoder()
+		encoder.outputFormatting = [.sortedKeys]
+		guard let data = try? encoder.encode(value) else {
+			return nil
+		}
+		return String(bytes: data, encoding: .utf8)
 	}
 
 	/// The body field `Mcp-Name` mirrors for methods that use it — wrapped so
