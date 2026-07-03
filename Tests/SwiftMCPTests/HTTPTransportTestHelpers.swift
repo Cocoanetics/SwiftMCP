@@ -133,8 +133,17 @@ enum HTTPTransportTestHelpers {
         return HTTPTransportStreamCapture(response: responseBox, events: eventsBox, task: task)
     }
 
+    /// Polls until `condition` holds or the deadline passes.
+    ///
+    /// The default deadline is a *failure* bound, not a wait: the helper returns
+    /// the moment the condition holds, so a healthy run costs only the actual
+    /// event latency. It is sized generously because every caller is a positive
+    /// wait racing real localhost networking (URLSession cold start + TCP connect
+    /// + SSE delivery), which can far exceed a tight bound on a loaded CI runner —
+    /// a 2s deadline made `expiredRequestStreamResume` flake on macos-latest.
+    /// Do NOT use this helper to assert a condition *stays* false.
     static func waitForCondition(
-        timeoutNanoseconds: UInt64 = 2_000_000_000,
+        timeoutNanoseconds: UInt64 = 15_000_000_000,
         pollNanoseconds: UInt64 = 50_000_000,
         _ condition: @escaping @Sendable () -> Bool
     ) async -> Bool {
