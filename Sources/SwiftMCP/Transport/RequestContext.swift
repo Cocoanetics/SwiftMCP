@@ -60,6 +60,16 @@ public final class RequestContext: Sendable {
     /// Optional metadata for the message.
     public let meta: Meta?
 
+    /// The raw `params.inputResponses` from an MRTR retry (modern, 2026-07-28).
+    public let inputResponses: JSONDictionary?
+    /// The opaque `params.requestState` echoed by an MRTR retry.
+    public let requestState: String?
+
+    /// Per-execution MRTR bookkeeping: the merged input responses the era-aware
+    /// `sample`/`elicit`/`listRoots` consult, and the ordinal counter that gives
+    /// each call site a deterministic id across re-executions.
+    let mrtr = MRTRExecutionState()
+
     /// Creates a new request context for the given message.
     public init(message: JSONRPCMessage) {
         switch message {
@@ -72,6 +82,8 @@ public final class RequestContext: Sendable {
             } else {
                 meta = nil
             }
+            inputResponses = data.params?["inputResponses"]?.dictionaryValue
+            requestState = data.params?["requestState"]?.stringValue
         case .notification(let data):
             id = nil
             method = data.method
@@ -81,19 +93,54 @@ public final class RequestContext: Sendable {
             } else {
                 meta = nil
             }
+            inputResponses = nil
+            requestState = nil
         case .response(let data):
             id = data.id
             method = nil
             meta = nil
+            inputResponses = nil
+            requestState = nil
         case .errorResponse(let data):
             id = data.id
             method = nil
             meta = nil
+            inputResponses = nil
+            requestState = nil
         }
     }
 
     @TaskLocal
     internal static var taskContext: RequestContext?
+
+    /// Mutable MRTR execution state, isolated in an actor so the Sendable
+    /// context can carry it. The ordinal counter makes each `sample`/`elicit`/
+    /// `listRoots` call site yield the same id (`input-N`) on every re-execution
+    /// of the handler, so a retry's responses land at the right call sites.
+    actor MRTRExecutionState {
+        private var ordinal = 0
+        private var responses: [String: JSONValue] = [:]
+
+        /// Installs the merged response map (signed-state accumulator ∪ the
+        /// retry's `inputResponses`) before the handler runs.
+        func setResponses(_ merged: [String: JSONValue]) {
+            responses = merged
+        }
+
+        /// The next deterministic input id.
+        func nextOrdinalID() -> String {
+            defer { ordinal += 1 }
+            return "input-\(ordinal)"
+        }
+
+        func response(for id: String) -> JSONValue? {
+            responses[id]
+        }
+
+        func allResponses() -> [String: JSONValue] {
+            responses
+        }
+    }
 
     /// Accessor for the current context stored in task local storage.
     public static var current: RequestContext! { taskContext }
@@ -103,6 +150,37 @@ public final class RequestContext: Sendable {
         try await Self.$taskContext.withValue(self) {
             try await operation(self)
         }
+    }
+
+    /// MRTR resolution for a modern server→client input request: the call site
+    /// takes its deterministic ordinal id; when the retry (or the signed-state
+    /// accumulator) already carries the answer it is returned immediately,
+    /// otherwise ``InputRequiredSignal`` aborts the handler so the dispatcher
+    /// can reply `input_required`. On the client's retry the handler re-runs and
+    /// the same call site finds its answer under the same id.
+    ///
+    /// - Important: MRTR re-executes the handler from scratch on every retry, so
+    ///   a handler's *sequence* of `sample`/`elicit`/`listRoots` calls must be
+    ///   deterministic with respect to its inputs (no branching on time or
+    ///   randomness before an input call). A skewed sequence makes a stored
+    ///   answer decode into the wrong shape, which rejects the retry with
+    ///   `-32602` rather than silently misdelivering data.
+    func resolveModernInput<Response: Decodable & Sendable>(
+        method: String,
+        params: JSONValue?,
+        as type: Response.Type
+    ) async throws -> Response {
+        let ordinalID = await mrtr.nextOrdinalID()
+        if let answer = await mrtr.response(for: ordinalID) {
+            do {
+                return try answer.decoded(type)
+            } catch {
+                // A present-but-undecodable response is a malformed client
+                // input (spec: protocol error), not a tool failure.
+                throw MRTRInvalidInputResponse(id: ordinalID, underlying: error)
+            }
+        }
+        throw InputRequiredSignal(id: ordinalID, request: InputRequest(method: method, params: params))
     }
 
     /// Send a progress notification if a progress token was provided.
@@ -124,11 +202,25 @@ public final class RequestContext: Sendable {
     /// - Returns: The generated sampling response
     /// - Throws: An error if the sampling request fails
     public func sample(_ request: SamplingCreateMessageRequest) async throws -> SamplingCreateMessageResponse {
+        // Modern (2026-07-28): live server→client requests are illegal — resolve
+        // from the MRTR retry's input responses, or signal `input_required`.
+        // Capabilities come from the request's `_meta` (there is no session).
+        if await protocolProfile.has(.mrtr) {
+            guard await effectiveClientCapabilities?.sampling != nil else {
+                throw MCPServerError.clientHasNoSamplingSupport
+            }
+            let params = try JSONDictionary(encoding: request)
+            return try await resolveModernInput(
+                method: "sampling/createMessage", params: .object(params),
+                as: SamplingCreateMessageResponse.self
+            )
+        }
+
         guard let session = Session.current else {
             throw MCPServerError.noActiveSession
         }
 
-        // Check if client supports sampling  
+        // Check if client supports sampling
         guard await session.clientCapabilities?.sampling != nil else {
             throw MCPServerError.clientHasNoSamplingSupport
         }
@@ -200,6 +292,19 @@ public final class RequestContext: Sendable {
     /// - Returns: The elicitation response with user action and optional content
     /// - Throws: An error if the elicitation request fails
     public func elicit(_ request: ElicitationCreateRequest) async throws -> ElicitationCreateResponse {
+        // Modern (2026-07-28): resolve from the MRTR retry's input responses, or
+        // signal `input_required`. Capability comes from the request's `_meta`.
+        if await protocolProfile.has(.mrtr) {
+            guard await effectiveClientCapabilities?.elicitation != nil else {
+                throw MCPServerError.clientHasNoElicitationSupport
+            }
+            let params = try JSONDictionary(encoding: request)
+            return try await resolveModernInput(
+                method: "elicitation/create", params: .object(params),
+                as: ElicitationCreateResponse.self
+            )
+        }
+
         guard let session = Session.current else {
             throw MCPServerError.noActiveSession
         }
