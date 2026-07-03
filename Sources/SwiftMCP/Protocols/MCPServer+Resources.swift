@@ -67,6 +67,12 @@ public extension MCPServer {
             )
         }
 
+        // MRTR (modern): verify an echoed requestState and stage the retry's
+        // input responses before execution.
+        if let rejection = await mrtrPrepareExecution(request) {
+            return rejection
+        }
+
         do {
             // Try to get the resource content
             let resourceContentArray = try await resourceProvider.getResource(uri: uri)
@@ -78,27 +84,19 @@ public extension MCPServer {
                 // The not-found code is version-sensitive: modern revisions align
                 // with JSON-RPC and use -32602 (Invalid Params); legacy keeps
                 // SwiftMCP's historical -32001.
-                let profile = await RequestContext.current?.protocolProfile ?? .v20251125
-                return JSONRPCMessage.errorResponse(
-                    id: id,
-                    error: .init(
-                        code: profile.resourceNotFoundCode,
-                        message: "Resource not found: \(uri.absoluteString)"
-                    )
-                )
+                return await Self.resourceNotFoundResponse(id: id, uri: uri.absoluteString)
             }
+        } catch let signal as InputRequiredSignal {
+            // MRTR (modern): the resource needs client input — answer
+            // input_required and let the client retry with the responses.
+            return await mrtrInputRequiredResponse(for: signal, request: request)
+        } catch let invalid as MRTRInvalidInputResponse {
+            return mrtrInvalidInputResponse(for: invalid, request: request)
         } catch MCPResourceError.notFound(let missingURI) {
             // A provider that *throws* not-found means the same thing as one that
             // returns no content — both use the version-sensitive not-found code
             // instead of a generic -32000.
-            let profile = await RequestContext.current?.protocolProfile ?? .v20251125
-            return JSONRPCMessage.errorResponse(
-                id: id,
-                error: .init(
-                    code: profile.resourceNotFoundCode,
-                    message: "Resource not found: \(missingURI)"
-                )
-            )
+            return await Self.resourceNotFoundResponse(id: id, uri: missingURI)
         } catch {
             return JSONRPCMessage.errorResponse(
                 id: id,
@@ -108,6 +106,20 @@ public extension MCPServer {
                 )
             )
         }
+    }
+
+    /// The version-sensitive resource-not-found error: modern aligns with
+    /// JSON-RPC (`-32602` Invalid Params); legacy keeps SwiftMCP's historical
+    /// `-32001`.
+    internal static func resourceNotFoundResponse(id: JSONRPCID, uri: String) async -> JSONRPCMessage {
+        let profile = await RequestContext.current?.protocolProfile ?? .v20251125
+        return JSONRPCMessage.errorResponse(
+            id: id,
+            error: .init(
+                code: profile.resourceNotFoundCode,
+                message: "Resource not found: \(uri)"
+            )
+        )
     }
 
     /**

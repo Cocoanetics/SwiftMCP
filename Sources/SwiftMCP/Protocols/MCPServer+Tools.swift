@@ -98,6 +98,12 @@ public extension MCPServer {
             )
         }
 
+        // MRTR (modern): verify an echoed requestState and stage the retry's
+        // input responses before execution.
+        if let rejection = await mrtrPrepareExecution(request) {
+            return rejection
+        }
+
         // Extract arguments from the request
         let arguments = params["arguments"]?.dictionaryValue ?? [:]
 
@@ -121,6 +127,12 @@ public extension MCPServer {
                 includeStructuredContent: includeStructuredContent,
                 includeResourceLinks: includeResourceLinks
             )
+        } catch let signal as InputRequiredSignal {
+            // MRTR (modern): the tool needs client input — answer input_required
+            // instead of an error, and let the client retry with the responses.
+            return await mrtrInputRequiredResponse(for: signal, request: request)
+        } catch let invalid as MRTRInvalidInputResponse {
+            return mrtrInvalidInputResponse(for: invalid, request: request)
         } catch {
             return JSONRPCMessage.response(
                 id: request.id,

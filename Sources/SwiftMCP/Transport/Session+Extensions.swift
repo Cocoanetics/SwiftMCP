@@ -42,6 +42,20 @@ extension Session {
     /// - Returns: The list of roots available to the client
     /// - Throws: An error if the request fails
     public func listRoots() async throws -> [Root] {
+        // Modern (2026-07-28): live server→client requests are illegal — resolve
+        // from the MRTR retry's input responses, or signal `input_required`.
+        if let context = RequestContext.current, await context.protocolProfile.has(.mrtr) {
+            guard await context.effectiveClientCapabilities?.roots != nil else {
+                // Same lenient posture as legacy: no roots capability → empty.
+                return []
+            }
+            let result = try await context.resolveModernInput(
+                method: "roots/list", params: .object([:]),
+                as: RootsListResult.self
+            )
+            return result.roots
+        }
+
         // Check if client supports roots
         guard clientCapabilities?.roots != nil else {
             // Return empty array when client doesn't support roots
