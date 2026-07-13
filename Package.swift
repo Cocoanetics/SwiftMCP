@@ -113,18 +113,31 @@ let package = Package(
 		// than here.
 		//
 		// The `Subprocess` trait pulls swift-subprocess (the lock-free child-stdio
-		// transport the client uses to spawn stdio MCP servers). It is enabled only
-		// when SwiftMCP's own `Client` trait is on, so a Server-only / tools-only
-		// consumer never resolves swift-subprocess.
+		// transport the client uses to spawn stdio MCP servers). Forwarded here
+		// unconditionally rather than `.when(traits: ["Client"])` — the conditional
+		// form previously used made JSONFoundation's *own* trait state (and thus
+		// whether swift-subprocess resolves at all) depend on SwiftMCP's `Client`
+		// trait, which for any downstream consumer that depends on SwiftMCP with
+		// *implicit* default traits (i.e. no `traits: [...]` argument on the
+		// SwiftMCP line) made SwiftPM 6.3's solver oscillate and fail outright:
+		// "exhausted attempts to resolve the dependencies graph … swift-subprocess
+		// unresolved". Forwarding unconditionally removes that ambiguity.
+		//
+		// This does NOT make Server-only / tools-only consumers link swift-subprocess:
+		// that's already governed independently by the `JSONRPCSubprocess` product
+		// dependency on the `SwiftMCP` target below (`.when(traits: ["Client"])`) and
+		// the matching `#if Client` guard in Exports.swift — SwiftPM prunes targets
+		// unreferenced by the requested build regardless of resolved trait state.
+		// Verified both directions: `swift build --target SwiftMCP
+		// --disable-default-traits` does not compile the `Subprocess` module;
+		// `swift build --target SwiftMCP --traits Client` does.
 		//
 		// 2.4.0 adds `JSONRPCSSEServer` (the SSE stream registry the HTTP/SSE
 		// transport delegates to) and `RequestCorrelator` (JSONRPCPeer).
 		.package(
 			url: "https://github.com/Cocoanetics/JSONFoundation.git",
 			from: "2.4.0",
-			traits: [
-				.trait(name: "Subprocess", condition: .when(traits: ["Client"]))
-			]
+			traits: ["Subprocess"]
 		)
     ],
 	targets: [
