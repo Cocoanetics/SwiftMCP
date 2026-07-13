@@ -35,17 +35,25 @@ final class InProcessServerLoopback: @unchecked Sendable {
         task = Task {
             do {
                 for try await message in serverTransport.makeInboundStream() {
-                    let replies = await session.work { _ -> [JSONRPCMessage] in
-                        // The in-process bridge is internal infrastructure, not an
-                        // external wire, so it applies the init gate but is not
-                        // version-gated for batching — matching the previous bridge.
-                        if await SessionInitializationGate.shouldReject([message], for: session) {
-                            return SessionInitializationGate.rejectionResponses(for: [message])
+                    // Each message gets its own task, like the pipe-based bridge's
+                    // task-per-line dispatch: a handler that suspends mid-call (a
+                    // long-running or deliberately deferred tool) must not stall
+                    // the read loop, or every later request deadlocks behind it.
+                    // `LoopbackTransport.send` is lock-protected, so replies from
+                    // concurrent handlers are safe to write as they finish.
+                    Task {
+                        let replies = await session.work { _ -> [JSONRPCMessage] in
+                            // The in-process bridge is internal infrastructure, not an
+                            // external wire, so it applies the init gate but is not
+                            // version-gated for batching — matching the previous bridge.
+                            if await SessionInitializationGate.shouldReject([message], for: session) {
+                                return SessionInitializationGate.rejectionResponses(for: [message])
+                            }
+                            return await server.processBatch([message])
                         }
-                        return await server.processBatch([message])
-                    }
-                    for reply in replies {
-                        try? serverTransport.send(reply)
+                        for reply in replies {
+                            try? serverTransport.send(reply)
+                        }
                     }
                 }
             } catch {
