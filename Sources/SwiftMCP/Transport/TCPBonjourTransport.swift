@@ -46,15 +46,6 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
     public let preferIPv4: Bool
     public internal(set) var port: UInt16?
 
-    internal var advertisedServiceName: String {
-        serviceName ?? server?.serverName ?? "MCP"
-    }
-
-    internal var legacyServiceType: String? {
-        guard serviceType == TCPBonjourTransport.serviceType else { return nil }
-        return TCPBonjourTransport.serviceType(for: server?.serverName ?? advertisedServiceName)
-    }
-
     internal let queue = DispatchQueue(label: "com.cocoanetics.SwiftMCP.TCPBonjourTransport")
     internal let state = TransportState()
     internal lazy var sessionManager = SessionManager(transport: self)
@@ -350,4 +341,15 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
     }
 }
 #endif
+
+extension TCPBonjourTransport {
+    internal var advertisedServiceName: String {
+        serviceName ?? server?.serverName ?? "MCP"
+    }
+
+    internal var legacyServiceType: String? {
+        guard serviceType == TCPBonjourTransport.serviceType else { return nil }
+        return TCPBonjourTransport.serviceType(for: server?.serverName ?? advertisedServiceName)
+    }
+}
 #endif
