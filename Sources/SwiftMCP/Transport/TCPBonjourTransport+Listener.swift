@@ -27,10 +27,11 @@ extension TCPBonjourTransport {
             listener = try NWListener(using: parameters)
         }
 
-        // In the decoupled mode `serviceName` is always provided; in the
-        // server-coupled mode it falls back to the server's name.
-        let advertisedName = serviceName ?? server?.serverName ?? "MCP"
-        listener.service = NWListener.Service(name: advertisedName, type: serviceType, domain: serviceDomain)
+        listener.service = NWListener.Service(
+            name: advertisedServiceName,
+            type: serviceType,
+            domain: serviceDomain
+        )
         listener.newConnectionHandler = { [weak self] connection in
             self?.handleNewConnection(connection)
         }
@@ -56,10 +57,12 @@ extension TCPBonjourTransport {
         case .ready:
             if let boundPort = await state.listenerReady(generation: generation) {
                 port = boundPort
+                await publishLegacyService(on: boundPort, generation: generation)
             }
             logger.info("TCP+Bonjour transport ready on port \(port.map(String.init) ?? "unknown")")
 
         case .failed(let error):
+            await state.removeLegacyRegistration(generation: generation)
             if Self.isRetryableError(error) {
                 guard let delay = await state.listenerFailed(generation: generation) else {
                     return  // stopped or stale generation
@@ -75,6 +78,26 @@ extension TCPBonjourTransport {
 
         default:
             break
+        }
+    }
+
+    internal func publishLegacyService(on port: UInt16, generation: UInt64) async {
+        guard let legacyServiceType else { return }
+
+        do {
+            let registration = try LegacyBonjourRegistration(
+                name: advertisedServiceName,
+                type: legacyServiceType,
+                domain: serviceDomain,
+                port: port
+            )
+            guard await state.setLegacyRegistration(registration, generation: generation) else {
+                registration.stop()
+                return
+            }
+            logger.info("Also advertising legacy Bonjour service type \(legacyServiceType)")
+        } catch {
+            logger.warning("Could not advertise legacy Bonjour service type \(legacyServiceType): \(error)")
         }
     }
 

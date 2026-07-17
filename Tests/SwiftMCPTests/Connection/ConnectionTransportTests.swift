@@ -25,6 +25,7 @@ struct ConnectionTransportConstructionTests {
         #expect(transport.server == nil)
         #expect(transport.serviceName == "acpx")
         #expect(transport.serviceType == MCPBonjourServiceType.base)
+        #expect(transport.legacyServiceType == MCPBonjourServiceType.forServer("acpx"))
         let _: any MCPTransport = transport
     }
 
@@ -33,6 +34,17 @@ struct ConnectionTransportConstructionTests {
         let transport = TCPBonjourTransport(server: StructCalculator())
         #expect(transport.server != nil)
         #expect(transport.serviceType == MCPBonjourServiceType.base)
+        #expect(
+            transport.legacyServiceType
+                == MCPBonjourServiceType.forServer(StructCalculator().serverName)
+        )
+    }
+
+    @Test("An explicit TCP service type disables legacy advertisement")
+    func tcpCustomServiceType() {
+        let transport = TCPBonjourTransport(serviceName: "acpx", serviceType: "_custom._tcp")
+        #expect(transport.serviceType == "_custom._tcp")
+        #expect(transport.legacyServiceType == nil)
     }
 }
 #endif
@@ -52,9 +64,32 @@ struct TCPBonjourConfigurationTests {
     func clientUsesBaseType() {
         #expect(MCPServerTcpConfig().serviceType == MCPBonjourServiceType.base)
         #expect(MCPServerTcpConfig(serviceName: "Mission Control").serviceType == MCPBonjourServiceType.base)
+        #expect(MCPServerTcpConfig().bonjourServiceTypes == [MCPBonjourServiceType.base])
+        #expect(
+            MCPServerTcpConfig(serviceName: "Mission Control").bonjourServiceTypes
+                == [MCPBonjourServiceType.base, MCPBonjourServiceType.forServer("Mission Control")]
+        )
         #expect(
             MCPServerTcpConfig(serviceName: "Mission Control", serviceType: "_legacy._tcp").serviceType
                 == "_legacy._tcp"
+        )
+        #expect(
+            MCPServerTcpConfig(
+                serviceName: "Mission Control",
+                serviceType: "_legacy._tcp"
+            ).bonjourServiceTypes == ["_legacy._tcp"]
+        )
+    }
+
+    @Test("A proxy-inferred name retains the legacy fallback")
+    func proxyInferredNameUsesFallback() async {
+        let config = MCPServerTcpConfig()
+        let proxy = MCPServerProxy(config: .tcp(config: config))
+        await proxy.setServiceForTesting("Mission Control")
+        let resolved = await proxy.resolveTcpConfig(config)
+        #expect(
+            resolved.bonjourServiceTypes
+                == [MCPBonjourServiceType.base, MCPBonjourServiceType.forServer("Mission Control")]
         )
     }
     #endif
@@ -98,6 +133,14 @@ struct TCPBonjourResultSelectionTests {
     func namelessSelection() {
         #expect(TCPConnection.selectBonjourEndpoint(from: [missionControl], serviceName: nil) != nil)
         #expect(TCPConnection.selectBonjourEndpoint(from: [missionControl, swiftMCP], serviceName: nil) == nil)
+    }
+}
+#endif
+
+#if Client
+extension MCPServerProxy {
+    fileprivate func setServiceForTesting(_ service: String) {
+        self.service = service
     }
 }
 #endif

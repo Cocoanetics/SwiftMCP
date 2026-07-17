@@ -46,6 +46,15 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
     public let preferIPv4: Bool
     public internal(set) var port: UInt16?
 
+    internal var advertisedServiceName: String {
+        serviceName ?? server?.serverName ?? "MCP"
+    }
+
+    internal var legacyServiceType: String? {
+        guard serviceType == TCPBonjourTransport.serviceType else { return nil }
+        return TCPBonjourTransport.serviceType(for: server?.serverName ?? advertisedServiceName)
+    }
+
     internal let queue = DispatchQueue(label: "com.cocoanetics.SwiftMCP.TCPBonjourTransport")
     internal let state = TransportState()
     internal lazy var sessionManager = SessionManager(transport: self)
@@ -62,6 +71,7 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
         private var connections: [UUID: NWConnection] = [:]
         private var runContinuation: CheckedContinuation<Void, Never>?
         private var retryTask: Task<Void, Never>?
+        private var legacyRegistration: LegacyBonjourRegistration?
         private(set) var retryAttempt: Int = 0
 
         func running() -> Bool {
@@ -77,6 +87,8 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
             isRunning = true
             retryAttempt = 0
             cancelRetryTask()
+            legacyRegistration?.stop()
+            legacyRegistration = nil
             return generation
         }
 
@@ -87,6 +99,8 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
                 return nil
             }
             listener?.cancel()
+            legacyRegistration?.stop()
+            legacyRegistration = nil
             generation += 1
             self.listener = newListener
             return generation
@@ -99,6 +113,8 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
             retryAttempt = 0
             listener?.cancel()
             listener = nil
+            legacyRegistration?.stop()
+            legacyRegistration = nil
             for connection in connections.values {
                 connection.cancel()
             }
@@ -123,6 +139,22 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
             retryAttempt = 0
             cancelRetryTask()
             return listener?.port?.rawValue
+        }
+
+        func setLegacyRegistration(
+            _ registration: LegacyBonjourRegistration,
+            generation listenerGen: UInt64
+        ) -> Bool {
+            guard listenerGen == generation, isRunning else { return false }
+            legacyRegistration?.stop()
+            legacyRegistration = registration
+            return true
+        }
+
+        func removeLegacyRegistration(generation listenerGen: UInt64) {
+            guard listenerGen == generation else { return }
+            legacyRegistration?.stop()
+            legacyRegistration = nil
         }
 
         /// Called when the listener fails with a retryable error.

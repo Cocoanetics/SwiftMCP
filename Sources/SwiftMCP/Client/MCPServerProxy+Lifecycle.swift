@@ -371,7 +371,7 @@ extension MCPServerProxy {
         return MCPServerTcpConfig(
             serviceName: service,
             domain: domain,
-            serviceType: config.serviceType,
+            serviceType: config.usesDefaultServiceType ? nil : config.serviceType,
             timeout: config.timeout,
             preferIPv4: config.preferIPv4
         )
