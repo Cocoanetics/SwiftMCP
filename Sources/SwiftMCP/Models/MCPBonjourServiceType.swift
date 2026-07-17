@@ -15,10 +15,17 @@ public enum MCPBonjourServiceType {
     /// Base DNS-SD service type for MCP over TCP.
     public static let base = "_mcp._tcp"
 
-    /// Returns a server-specific service type derived from the server name,
-    /// e.g. `"Post"` → `"_post-mcp._tcp"`. This prevents Bonjour collisions
-    /// between unrelated MCP servers on the same network.
+    /// Returns a valid server-specific service type derived from the server name.
+    ///
+    /// Invalid characters are replaced with hyphens and the service label is
+    /// limited to the DNS-SD maximum of 15 characters.
     public static func forServer(_ serverName: String) -> String {
-        "_\(serverName.lowercased())-mcp._tcp"
+        let components = serverName.lowercased().unicodeScalars.split {
+            !((97...122).contains($0.value) || (48...57).contains($0.value))
+        }
+        let sanitized = components.map(String.init).joined(separator: "-")
+        let prefix = String(sanitized.prefix(11)).trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        let name = prefix.isEmpty ? "server" : String(prefix)
+        return "_\(name)-mcp._tcp"
     }
 }

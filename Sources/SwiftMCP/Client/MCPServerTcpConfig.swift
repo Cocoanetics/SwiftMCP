@@ -18,6 +18,17 @@ public struct MCPServerTcpConfig: Sendable {
     /// The Bonjour service type to browse for.
     public let serviceType: String
 
+    /// The legacy server-derived service type to browse during migration.
+    internal let fallbackServiceType: String?
+    internal let usesDefaultServiceType: Bool
+
+    internal var bonjourServiceTypes: [String] {
+        if let fallbackServiceType {
+            return [serviceType, fallbackServiceType]
+        }
+        return [serviceType]
+    }
+
     /// Timeout for Bonjour discovery and connection establishment.
     public let timeout: TimeInterval
 
@@ -26,9 +37,9 @@ public struct MCPServerTcpConfig: Sendable {
 
     /// Create a Bonjour-based configuration.
     ///
-    /// When `serviceType` is nil and a `serviceName` is provided, the service type
-    /// is automatically derived as `_<name>-mcp._tcp` (e.g. `"Post"` → `"_post-mcp._tcp"`).
-    /// This prevents Bonjour collisions between unrelated MCP servers.
+    /// When `serviceType` is nil, the base MCP service type (`_mcp._tcp`) is used.
+    /// A `serviceName` filters discovered services by their Bonjour instance name
+    /// and also enables browsing the legacy server-derived type during migration.
     public init(
         serviceName: String? = nil,
         domain: String = "local.",
@@ -39,10 +50,12 @@ public struct MCPServerTcpConfig: Sendable {
         self.endpoint = .bonjour(serviceName: serviceName, domain: domain)
         if let serviceType {
             self.serviceType = serviceType
-        } else if let serviceName {
-            self.serviceType = MCPBonjourServiceType.forServer(serviceName)
+            self.fallbackServiceType = nil
+            self.usesDefaultServiceType = false
         } else {
             self.serviceType = MCPBonjourServiceType.base
+            self.fallbackServiceType = serviceName.map(MCPBonjourServiceType.forServer)
+            self.usesDefaultServiceType = true
         }
         self.timeout = timeout
         self.preferIPv4 = preferIPv4
@@ -58,6 +71,8 @@ public struct MCPServerTcpConfig: Sendable {
     ) {
         self.endpoint = .direct(host: host, port: port)
         self.serviceType = serviceType
+        self.fallbackServiceType = nil
+        self.usesDefaultServiceType = false
         self.timeout = timeout
         self.preferIPv4 = preferIPv4
     }

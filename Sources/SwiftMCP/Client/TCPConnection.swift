@@ -17,13 +17,27 @@ public final actor TCPConnection: StdioConnection {
         }
     }
 
+    private actor BrowseFailures {
+        private let browserCount: Int
+        private var failureCount = 0
+
+        init(browserCount: Int) {
+            self.browserCount = browserCount
+        }
+
+        func record(_ error: Error) -> Error? {
+            failureCount += 1
+            return failureCount == browserCount ? error : nil
+        }
+    }
+
     private let config: MCPServerTcpConfig
     private let logger = Logger(label: "com.cocoanetics.SwiftMCP.Client.TCPConnection")
     private let lineBuffer = LineBuffer()
     private let queue = DispatchQueue(label: "com.cocoanetics.SwiftMCP.Client.TCPConnection")
 
     private var connection: NWConnection?
-    private var browser: NWBrowser?
+    private var browsers: [NWBrowser] = []
 
     public init(config: MCPServerTcpConfig) {
         self.config = config
@@ -89,8 +103,8 @@ public final actor TCPConnection: StdioConnection {
     public func stop() async {
         connection?.cancel()
         connection = nil
-        browser?.cancel()
-        browser = nil
+        browsers.forEach { $0.cancel() }
+        browsers.removeAll()
     }
 
     private func makeParameters() -> NWParameters {
@@ -116,12 +130,14 @@ public final actor TCPConnection: StdioConnection {
     }
 
     private func resolveBonjourEndpoint(serviceName: String?, domain: String) async throws -> NWEndpoint {
-        let parameters = makeParameters()
-        let browser = NWBrowser(for: .bonjour(type: config.serviceType, domain: domain), using: parameters)
-        self.browser = browser
+        let browsers = config.bonjourServiceTypes.map { serviceType in
+            NWBrowser(for: .bonjour(type: serviceType, domain: domain), using: makeParameters())
+        }
+        self.browsers = browsers
 
         return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<NWEndpoint, Error>) in
             let oneShot = OneShot()
+            let failures = BrowseFailures(browserCount: browsers.count)
             let finish: @Sendable (Result<NWEndpoint, Error>) -> Void = { result in
                 Task {
                     await oneShot.run {
@@ -132,35 +148,27 @@ public final actor TCPConnection: StdioConnection {
                 }
             }
 
-            browser.browseResultsChangedHandler = { results, _ in
-                let matching = results.compactMap { result -> NWEndpoint? in
-                    switch result.endpoint {
-                    case .service(let name, _, _, _):
-                        if let serviceName,
-                           !name.localizedCaseInsensitiveContains(serviceName) {
-                            return nil
-                        }
-                        return result.endpoint
-                    default:
-                        return nil
+            for browser in browsers {
+                browser.browseResultsChangedHandler = { results, _ in
+                    if let endpoint = Self.selectBonjourEndpoint(
+                        from: results.map(\.endpoint),
+                        serviceName: serviceName
+                    ) {
+                        finish(.success(endpoint))
                     }
                 }
 
-                if let endpoint = matching.first {
-                    finish(.success(endpoint))
-                } else if serviceName == nil, let endpoint = results.first?.endpoint {
-                    // Only use unfiltered fallback when no specific service was requested
-                    finish(.success(endpoint))
+                browser.stateUpdateHandler = { state in
+                    guard case .failed(let error) = state else { return }
+                    Task {
+                        if let finalError = await failures.record(error) {
+                            finish(.failure(finalError))
+                        }
+                    }
                 }
-            }
 
-            browser.stateUpdateHandler = { state in
-                if case .failed(let error) = state {
-                    finish(.failure(error))
-                }
+                browser.start(queue: queue)
             }
-
-            browser.start(queue: queue)
 
             if config.timeout > 0 {
                 Task {
@@ -172,12 +180,31 @@ public final actor TCPConnection: StdioConnection {
         }
     }
 
+    internal static func selectBonjourEndpoint(
+        from endpoints: [NWEndpoint],
+        serviceName: String?
+    ) -> NWEndpoint? {
+        let services = endpoints.compactMap { endpoint -> (name: String, endpoint: NWEndpoint)? in
+            guard case .service(let name, _, _, _) = endpoint else { return nil }
+            return (name, endpoint)
+        }
+
+        if let serviceName {
+            return services.first {
+                $0.name.localizedCaseInsensitiveCompare(serviceName) == .orderedSame
+            }?.endpoint
+        }
+
+        guard services.count == 1 else { return nil }
+        return services[0].endpoint
+    }
+
     private func finishBonjour(
         _ result: Result<NWEndpoint, Error>,
         continuation: CheckedContinuation<NWEndpoint, Error>
     ) async {
-        browser?.cancel()
-        browser = nil
+        browsers.forEach { $0.cancel() }
+        browsers.removeAll()
         continuation.resume(with: result)
     }
 
