@@ -26,9 +26,8 @@ public struct MCPServerTcpConfig: Sendable {
 
     /// Create a Bonjour-based configuration.
     ///
-    /// When `serviceType` is nil and a `serviceName` is provided, the service type
-    /// is automatically derived as `_<name>-mcp._tcp` (e.g. `"Post"` → `"_post-mcp._tcp"`).
-    /// This prevents Bonjour collisions between unrelated MCP servers.
+    /// When `serviceType` is nil, the base MCP service type (`_mcp._tcp`) is used.
+    /// A `serviceName` filters discovered services by their Bonjour instance name.
     public init(
         serviceName: String? = nil,
         domain: String = "local.",
@@ -37,13 +36,7 @@ public struct MCPServerTcpConfig: Sendable {
         preferIPv4: Bool = true
     ) {
         self.endpoint = .bonjour(serviceName: serviceName, domain: domain)
-        if let serviceType {
-            self.serviceType = serviceType
-        } else if let serviceName {
-            self.serviceType = MCPBonjourServiceType.forServer(serviceName)
-        } else {
-            self.serviceType = MCPBonjourServiceType.base
-        }
+        self.serviceType = serviceType ?? MCPBonjourServiceType.base
         self.timeout = timeout
         self.preferIPv4 = preferIPv4
     }

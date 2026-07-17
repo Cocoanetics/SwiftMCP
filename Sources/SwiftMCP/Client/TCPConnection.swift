@@ -133,23 +133,10 @@ public final actor TCPConnection: StdioConnection {
             }
 
             browser.browseResultsChangedHandler = { results, _ in
-                let matching = results.compactMap { result -> NWEndpoint? in
-                    switch result.endpoint {
-                    case .service(let name, _, _, _):
-                        if let serviceName,
-                           !name.localizedCaseInsensitiveContains(serviceName) {
-                            return nil
-                        }
-                        return result.endpoint
-                    default:
-                        return nil
-                    }
-                }
-
-                if let endpoint = matching.first {
-                    finish(.success(endpoint))
-                } else if serviceName == nil, let endpoint = results.first?.endpoint {
-                    // Only use unfiltered fallback when no specific service was requested
+                if let endpoint = Self.selectBonjourEndpoint(
+                    from: results.map(\.endpoint),
+                    serviceName: serviceName
+                ) {
                     finish(.success(endpoint))
                 }
             }
@@ -170,6 +157,25 @@ public final actor TCPConnection: StdioConnection {
                 }
             }
         }
+    }
+
+    internal static func selectBonjourEndpoint(
+        from endpoints: [NWEndpoint],
+        serviceName: String?
+    ) -> NWEndpoint? {
+        let services = endpoints.compactMap { endpoint -> (name: String, endpoint: NWEndpoint)? in
+            guard case .service(let name, _, _, _) = endpoint else { return nil }
+            return (name, endpoint)
+        }
+
+        if let serviceName {
+            return services.first {
+                $0.name.localizedCaseInsensitiveCompare(serviceName) == .orderedSame
+            }?.endpoint
+        }
+
+        guard services.count == 1 else { return nil }
+        return services[0].endpoint
     }
 
     private func finishBonjour(

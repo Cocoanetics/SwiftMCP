@@ -21,9 +21,8 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
     /// Base DNS-SD service type for MCP over TCP.
     public static let serviceType = MCPBonjourServiceType.base
 
-    /// Returns a server-specific service type derived from the server name,
-    /// e.g. `"Post"` → `"_post-mcp._tcp"`.  This prevents Bonjour collisions
-    /// between unrelated MCP servers on the same network.
+    /// Returns a valid server-specific service type derived from the server name.
+    /// Use this when interoperating with clients that browse derived service types.
     public static func serviceType(for serverName: String) -> String {
         MCPBonjourServiceType.forServer(serverName)
     }
@@ -173,8 +172,7 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
     ) {
         self.server = server
         self.serviceName = serviceName
-        // Default to a server-specific service type derived from the server name
-        self.serviceType = serviceType ?? TCPBonjourTransport.serviceType(for: server.serverName)
+        self.serviceType = serviceType ?? TCPBonjourTransport.serviceType
         self.serviceDomain = serviceDomain
         self.port = port
         self.acceptLocalOnly = acceptLocalOnly
@@ -197,13 +195,11 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
     ///
     /// Pass the transport to ``MCPServer/serve(over:gracefulShutdownSignals:logger:)``,
     /// which connects an ``MCPDispatcher`` and runs it. The Bonjour service name
-    /// (and the derived service type) come from `serviceName` rather than a
-    /// server.
+    /// comes from `serviceName` rather than a server.
     ///
     /// - Parameters:
     ///   - serviceName: The Bonjour service name to advertise.
-    ///   - serviceType: Optional DNS-SD service type. Defaults to one derived
-    ///     from `serviceName`.
+    ///   - serviceType: Optional DNS-SD service type. Defaults to `_mcp._tcp`.
     ///   - serviceDomain: Bonjour domain. Defaults to `"local."`.
     ///   - port: TCP port, or `nil` to pick automatically.
     ///   - acceptLocalOnly: Restrict to the local link. Defaults to `true`.
@@ -218,7 +214,7 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
     ) {
         self.server = nil
         self.serviceName = serviceName
-        self.serviceType = serviceType ?? TCPBonjourTransport.serviceType(for: serviceName)
+        self.serviceType = serviceType ?? TCPBonjourTransport.serviceType
         self.serviceDomain = serviceDomain
         self.port = port
         self.acceptLocalOnly = acceptLocalOnly
@@ -237,8 +233,8 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
     /// Base DNS-SD service type for MCP over TCP.
     public static let serviceType = MCPBonjourServiceType.base
 
-    /// Returns a server-specific service type derived from the server name,
-    /// e.g. `"Post"` → `"_post-mcp._tcp"`.
+    /// Returns a valid server-specific service type derived from the server name.
+    /// Use this when interoperating with clients that browse derived service types.
     public static func serviceType(for serverName: String) -> String {
         MCPBonjourServiceType.forServer(serverName)
     }
@@ -266,7 +262,7 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
     ) {
         self.server = server
         self.serviceName = serviceName
-        self.serviceType = serviceType ?? TCPBonjourTransport.serviceType(for: server.serverName)
+        self.serviceType = serviceType ?? TCPBonjourTransport.serviceType
         self.serviceDomain = serviceDomain
         self.port = port
         self.acceptLocalOnly = acceptLocalOnly
@@ -297,7 +293,7 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
     ) {
         self.server = nil
         self.serviceName = serviceName
-        self.serviceType = serviceType ?? TCPBonjourTransport.serviceType(for: serviceName)
+        self.serviceType = serviceType ?? TCPBonjourTransport.serviceType
         self.serviceDomain = serviceDomain
         self.port = port
         self.acceptLocalOnly = acceptLocalOnly
