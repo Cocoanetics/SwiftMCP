@@ -2,7 +2,9 @@ import Foundation
 import SwiftMCP
 
 enum IntentsDemoServerFactory {
-    static func makeServer() -> MCPServer? {
+    // `& Sendable` so the commands can hand the server to
+    // `MCPServer.serve(over:)`, which requires `Self: Sendable`.
+    static func makeServer() -> (any MCPServer & Sendable)? {
 #if canImport(AppIntents)
         if #available(iOS 16.0, macOS 13.0, tvOS 16.0, watchOS 9.0, *) {
             return IntentsDemoServer()
