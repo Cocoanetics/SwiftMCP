@@ -3,7 +3,6 @@ import Foundation
 import ArgumentParser
 import SwiftMCP
 import Logging
-import ServiceLifecycle
 
 /**
  A command that starts an HTTP server with Server-Sent Events (SSE) support for SwiftMCP.
@@ -134,24 +133,18 @@ final class HTTPSSECommand: AsyncParsableCommand {
         try configureAuthentication(on: transport)
         transport.serveOpenAPI = openapi
 
-        // Each transport is a `Service`. The `ServiceGroup` starts them, traps
-        // SIGINT/SIGTERM, and drives an ordered graceful shutdown (with a
-        // timeout) — replacing the bespoke signal handler.
-        var services: [ServiceGroupConfiguration.ServiceConfiguration] = [
-            .init(service: transport, successTerminationBehavior: .gracefullyShutdownGroup)
-        ]
+        // `serve(over:)` owns the run loop, traps SIGINT/SIGTERM, and drives an
+        // ordered graceful shutdown of every transport — no hand-built
+        // `ServiceGroup`.
+        var transports: [any MCPTransport] = [transport]
         if let tcpTransport = makeTCPTransportIfNeeded(server: calculator) {
-            services.append(.init(service: tcpTransport, successTerminationBehavior: .gracefullyShutdownGroup))
+            transports.append(tcpTransport)
         }
 
-        let group = ServiceGroup(
-            configuration: .init(
-                services: services,
-                gracefulShutdownSignals: [.sigterm, .sigint],
-                logger: Logging.Logger(label: "com.cocoanetics.SwiftMCP.ServiceGroup")
-            )
+        try await calculator.serve(
+            over: transports,
+            logger: Logging.Logger(label: "com.cocoanetics.SwiftMCP.Serve")
         )
-        try await group.run()
     }
 
     private func configureAuthentication(on transport: HTTPSSETransport) throws {
@@ -210,7 +203,7 @@ final class HTTPSSECommand: AsyncParsableCommand {
     }
 
     /// Builds the optional TCP+Bonjour transport. It is returned unstarted —
-    /// the `ServiceGroup` starts it by calling `run()`.
+    /// `serve(over:)` starts it by calling `run()`.
     private func makeTCPTransportIfNeeded(server: DemoServer) -> TCPBonjourTransport? {
         guard tcp else { return nil }
         print("MCP Server \(server.serverName) will also expose a TCP+Bonjour transport")

@@ -3,7 +3,6 @@ import Foundation
 import ArgumentParser
 import SwiftMCP
 import Logging
-import ServiceLifecycle
 
 /**
  A command that exposes the AppIntents demo server over TCP with Bonjour discovery.
@@ -47,27 +46,21 @@ struct TCPBonjourCommand: AsyncParsableCommand {
             logToStderr("MCP Server \(server.serverName) (\(server.serverVersion)) started with TCP+Bonjour transport")
 
             let bindPort = port == 0 ? nil : port
+            // A server-less transport handed to `serve(over:)`: the framework
+            // owns the run loop, SIGINT/SIGTERM trapping, and ordered graceful
+            // shutdown — the consumer no longer hand-wires a `ServiceGroup`.
             let transport = TCPBonjourTransport(
-                server: server,
-                serviceName: name,
+                serviceName: name ?? server.serverName,
                 serviceDomain: domain,
                 port: bindPort,
                 acceptLocalOnly: true,
                 preferIPv4: ipv4Only
             )
 
-            // A `ServiceGroup` owns the run loop and traps SIGINT/SIGTERM to
-            // drive a graceful shutdown of the transport.
-            let group = ServiceGroup(
-                configuration: .init(
-                    services: [
-                        .init(service: transport, successTerminationBehavior: .gracefullyShutdownGroup)
-                    ],
-                    gracefulShutdownSignals: [.sigterm, .sigint],
-                    logger: Logging.Logger(label: "com.cocoanetics.SwiftMCP.ServiceGroup")
-                )
+            try await server.serve(
+                over: [transport],
+                logger: Logging.Logger(label: "com.cocoanetics.SwiftMCP.Serve")
             )
-            try await group.run()
         } catch let error as TransportError {
             let errorMessage = """
                 Transport Error: \(error.localizedDescription)

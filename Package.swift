@@ -220,12 +220,22 @@ let package = Package(
 				.product(name: "UnixSignals", package: "swift-service-lifecycle", condition: .when(traits: ["Server"]))
 			]
 		),
+		// The demo executables deliberately declare no swift-service-lifecycle
+		// product of their own: they run their transports via
+		// `MCPServer.serve(over:)`, which owns the `ServiceGroup`. Each
+		// swift-service-lifecycle product is therefore declared by exactly one
+		// target (the core). Duplicating the trait-conditional `ServiceLifecycle`
+		// product across the demo targets was also the most frequent trigger of
+		// Xcode 26.2's warm-state validation race ("product 'ServiceLifecycle'
+		// required by … 'SwiftMCPIntentsDemo' not found in package
+		// 'swift-service-lifecycle'") — note the race itself is an Xcode/SwiftPM
+		// defect that can still hit any trait-conditional product dependency
+		// (e.g. NIOCore above), so this only narrows the surface.
 		.executableTarget(
 			name: "SwiftMCPDemo",
 			dependencies: [
 				"SwiftMCP",
-				.product(name: "ArgumentParser", package: "swift-argument-parser"),
-				.product(name: "ServiceLifecycle", package: "swift-service-lifecycle", condition: .when(traits: ["Server"]))
+				.product(name: "ArgumentParser", package: "swift-argument-parser")
 			],
 			path: "Demos/SwiftMCPDemo"
 		),
@@ -233,8 +243,7 @@ let package = Package(
 			name: "SwiftMCPIntentsDemo",
 			dependencies: [
 				"SwiftMCP",
-				.product(name: "ArgumentParser", package: "swift-argument-parser"),
-				.product(name: "ServiceLifecycle", package: "swift-service-lifecycle", condition: .when(traits: ["Server"]))
+				.product(name: "ArgumentParser", package: "swift-argument-parser")
 			],
 			path: "Demos/SwiftMCPIntentsDemo"
 		),
