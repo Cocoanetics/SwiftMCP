@@ -39,6 +39,15 @@ struct MCPServerProxyStreamableHTTPTests {
 
         try await proxy.connect()
         let connectedSession = try #require(await proxy.urlSession)
+        let defaultConfiguration = URLSessionConfiguration.default
+        #expect(
+            connectedSession.configuration.timeoutIntervalForRequest
+                == defaultConfiguration.timeoutIntervalForRequest
+        )
+        #expect(
+            connectedSession.configuration.timeoutIntervalForResource
+                == MCPServerProxy.streamTimeout
+        )
 
         try await proxy.ping()
         let sessionAfterPing = try #require(await proxy.urlSession)

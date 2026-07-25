@@ -19,7 +19,8 @@ extension MCPServerProxy {
         }
 
         let configuration = URLSessionConfiguration.default
-        configuration.timeoutIntervalForRequest = Self.streamTimeout
+        // Keep the default finite request timeout for legacy POSTs. Streaming
+        // requests override it on their URLRequest below.
         configuration.timeoutIntervalForResource = Self.streamTimeout
         let session = URLSession(configuration: configuration)
         urlSession = session
@@ -97,6 +98,7 @@ extension MCPServerProxy {
         sseConfig: MCPServerSseConfig,
         lastEventID: String? = nil
     ) {
+        request.timeoutInterval = Self.streamTimeout
         applyConfiguredSSEHeaders(&request, sseConfig: sseConfig)
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
 

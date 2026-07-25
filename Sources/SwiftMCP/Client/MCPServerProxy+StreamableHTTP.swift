@@ -49,6 +49,7 @@ extension MCPServerProxy {
         let session = sharedURLSession()
         var request = URLRequest(url: endpointURL)
         request.httpMethod = requestBody == nil ? "GET" : "POST"
+        request.timeoutInterval = Self.streamTimeout
 
         if let requestBody {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
