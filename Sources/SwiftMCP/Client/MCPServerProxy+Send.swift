@@ -71,7 +71,7 @@ extension MCPServerProxy {
         guard let messageId = messageId else {
             throw MCPServerProxyError.communicationError("Message must have an ID")
         }
-        let session = URLSession(configuration: .default)
+        let session = sharedURLSession()
         var urlRequest = URLRequest(url: endpointURL)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")

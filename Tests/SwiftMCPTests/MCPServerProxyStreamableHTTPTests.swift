@@ -29,6 +29,34 @@ struct MCPServerProxyStreamableHTTPTests {
         #expect(!tools.isEmpty)
     }
 
+    @Test("Proxy reuses one URLSession until disconnect")
+    func reusesURLSessionUntilDisconnect() async throws {
+        let (transport, url) = try await startTransport()
+        defer { Task { try? await transport.stop() } }
+
+        let proxy = MCPServerProxy(config: .sse(config: MCPServerSseConfig(url: url)))
+        defer { Task { await proxy.disconnect() } }
+
+        try await proxy.connect()
+        let connectedSession = try #require(await proxy.urlSession)
+
+        try await proxy.ping()
+        let sessionAfterPing = try #require(await proxy.urlSession)
+        #expect(sessionAfterPing === connectedSession)
+
+        _ = try await proxy.listTools()
+        let sessionAfterListTools = try #require(await proxy.urlSession)
+        #expect(sessionAfterListTools === connectedSession)
+
+        await proxy.disconnect()
+        #expect(await proxy.urlSession == nil)
+
+        try await proxy.connect()
+        let reconnectedSession = try #require(await proxy.urlSession)
+        #expect(reconnectedSession !== connectedSession)
+        try await proxy.ping()
+    }
+
     @Test("Proxy captures the negotiated protocol version and keeps sending matching headers")
     func capturesNegotiatedVersion() async throws {
         let (transport, url) = try await startTransport()

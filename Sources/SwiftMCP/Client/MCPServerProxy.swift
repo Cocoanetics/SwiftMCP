@@ -73,6 +73,9 @@ public final actor MCPServerProxy {
     internal let responses = RequestCorrelator<JSONRPCID, JSONRPCMessage>()
     internal var streamFailure: Error?
     internal var isDisconnecting = false
+    /// The shared HTTP connection pool for every SSE / streamable-HTTP request
+    /// made by this proxy. Created lazily and replaced after `disconnect()`.
+    internal var urlSession: URLSession?
 
     public internal(set) var endpointURL: URL?
     public internal(set) var sessionID: String?

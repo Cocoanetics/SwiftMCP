@@ -13,6 +13,19 @@ extension MCPServerProxy {
     /// `Int`.
     static let streamTimeout: TimeInterval = TimeInterval(1 << 53)
 
+    internal func sharedURLSession() -> URLSession {
+        if let urlSession {
+            return urlSession
+        }
+
+        let configuration = URLSessionConfiguration.default
+        configuration.timeoutIntervalForRequest = Self.streamTimeout
+        configuration.timeoutIntervalForResource = Self.streamTimeout
+        let session = URLSession(configuration: configuration)
+        urlSession = session
+        return session
+    }
+
     // MARK: - URL helpers
 
     internal func isStreamableMCPURL(_ url: URL) -> Bool {
@@ -113,11 +126,7 @@ extension MCPServerProxy {
             return
         }
 
-        let sessionConfig = URLSessionConfiguration.default
-        sessionConfig.timeoutIntervalForRequest = Self.streamTimeout
-        sessionConfig.timeoutIntervalForResource = Self.streamTimeout
-
-        let session = URLSession(configuration: sessionConfig)
+        let session = sharedURLSession()
         var request = URLRequest(url: sseConfig.url)
         request.httpMethod = "GET"
         configureSSEGETRequest(&request, sseConfig: sseConfig)
@@ -158,17 +167,13 @@ extension MCPServerProxy {
     // swiftlint:disable:next function_body_length
     internal func startStreamableGeneralSSE(sseConfig: MCPServerSseConfig) {
         let generation = streamGeneration
+        let session = sharedURLSession()
         streamTask = Task {
             var lastEventID: String?
             var retryMilliseconds = 1000
 
             while !self.isDisconnecting {
                 do {
-                    let sessionConfig = URLSessionConfiguration.default
-                    sessionConfig.timeoutIntervalForRequest = Self.streamTimeout
-                    sessionConfig.timeoutIntervalForResource = Self.streamTimeout
-
-                    let session = URLSession(configuration: sessionConfig)
                     var request = URLRequest(url: sseConfig.url)
                     request.httpMethod = "GET"
                     self.configureSSEGETRequest(
