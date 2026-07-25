@@ -74,8 +74,7 @@ extension MCPServerProxy {
         guard let endpointURL = endpointURL else { return }
         guard case .sse(let sseConfig) = config else { return }
         let response = JSONRPCMessage.response(id: request.id, result: [:])
-        let sessionConfig = URLSessionConfiguration.default
-        let session = URLSession(configuration: sessionConfig)
+        let session = sharedURLSession()
         var urlRequest = URLRequest(url: endpointURL)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
