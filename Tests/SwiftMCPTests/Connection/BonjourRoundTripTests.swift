@@ -27,105 +27,110 @@ struct BonjourRoundTripTests {
         "SwiftMCPTest-\(UUID().uuidString.prefix(8))"
     }
 
-    private func startedTransport(
-        base: String,
-        scope: DiscoveryScope
-    ) async throws -> TCPBonjourTransport {
+    /// Runs `body` against a started transport, then always tears it down.
+    ///
+    /// Waits on the actual readiness signal — the registration being confirmed —
+    /// rather than sleeping a guessed interval. That is both faster and no longer
+    /// a race: a fixed sleep is either wasted time or an intermittent failure, and
+    /// on a loaded CI runner it is usually both.
+    private func withTransport(
+        scope: DiscoveryScope,
+        _ body: (TCPBonjourTransport, String) async throws -> Void
+    ) async throws {
+        let base = uniqueBaseName()
         let transport = TCPBonjourTransport(server: StructCalculator(), instanceName: base, scope: scope)
         try await transport.start()
-        // Give mDNSResponder a beat to confirm the registration.
-        try await Task.sleep(nanoseconds: 500_000_000)
-        return transport
+
+        let deadline = Date().addingTimeInterval(3)
+        while transport.resolvedInstanceName == nil, Date() < deadline {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+
+        do {
+            try await body(transport, base)
+        } catch {
+            try? await transport.stop()
+            throw error
+        }
+        try await transport.stop()
     }
 
     @Test("A local-user server is found by a local-user client")
     func localUserRoundTrip() async throws {
-        let base = uniqueBaseName()
-        let transport = try await startedTransport(base: base, scope: .localUser)
-        defer { Task { try? await transport.stop() } }
+        try await withTransport(scope: .localUser) { transport, base in
+            #expect(transport.port != nil)
+            #expect(transport.resolvedInstanceName != nil)
 
-        #expect(transport.port != nil)
-        #expect(transport.resolvedInstanceName != nil)
-
-        // The whole point: the client derives the same advertised name from the
-        // same base name, with no shared state beyond the base string.
-        let config = MCPServerTcpConfig(instanceName: base, scope: .localUser, timeout: 5)
-        let connection = TCPConnection(config: config)
-        try await connection.start()
-        await connection.stop()
+            // The whole point: the client derives the same advertised name from
+            // the same base name, with no shared state beyond the base string.
+            let config = MCPServerTcpConfig(instanceName: base, scope: .localUser, timeout: 5)
+            let connection = TCPConnection(config: config)
+            try await connection.start()
+            await connection.stop()
+        }
     }
 
     @Test("A local-machine server is found by a local-machine client")
     func localMachineRoundTrip() async throws {
-        let base = uniqueBaseName()
-        let transport = try await startedTransport(base: base, scope: .localMachine)
-        defer { Task { try? await transport.stop() } }
-
-        let config = MCPServerTcpConfig(instanceName: base, scope: .localMachine, timeout: 5)
-        let connection = TCPConnection(config: config)
-        try await connection.start()
-        await connection.stop()
+        try await withTransport(scope: .localMachine) { _, base in
+            let config = MCPServerTcpConfig(instanceName: base, scope: .localMachine, timeout: 5)
+            let connection = TCPConnection(config: config)
+            try await connection.start()
+            await connection.stop()
+        }
     }
 
     @Test("The advertised name is the one the scope derives")
     func advertisedNameMatchesScope() async throws {
-        let base = uniqueBaseName()
-        let transport = try await startedTransport(base: base, scope: .localUser)
-        defer { Task { try? await transport.stop() } }
-
-        #expect(transport.advertisedInstanceName == DiscoveryScope.localUser.instanceName(for: base))
-        // No conflict is possible on a unique base name, so the registered name
-        // should come back unchanged rather than renamed.
-        #expect(transport.resolvedInstanceName == transport.advertisedInstanceName)
+        try await withTransport(scope: .localUser) { transport, base in
+            #expect(transport.advertisedInstanceName == DiscoveryScope.localUser.instanceName(for: base))
+            // No conflict is possible on a unique base name, so the registered
+            // name should come back unchanged rather than renamed.
+            #expect(transport.resolvedInstanceName == transport.advertisedInstanceName)
+        }
     }
 
     @Test("The TXT record is readable for a local-scope service")
     func localScopeTXTIsResolvable() async throws {
-        // NWBrowser cannot deliver TXT for a local-only registration, so this goes
-        // through the resolver. If that path regresses, TXT silently becomes
-        // unavailable at exactly the scope that is the default.
-        let base = uniqueBaseName()
-        let transport = try await startedTransport(base: base, scope: .localUser)
-        defer { Task { try? await transport.stop() } }
-
-        let record = BonjourTXTResolver.resolve(
-            instanceName: transport.advertisedInstanceName, scope: .localUser, timeout: 3
-        )
-        let resolved = try #require(record)
-        #expect(resolved.serverName == StructCalculator().serverName)
-        #expect(resolved.processID == ProcessIdentity.processID)
-        #expect(resolved.isPublisherAlive == true)
+        // NWBrowser cannot deliver TXT for a local-only registration, so this
+        // goes through the resolver. If that path regresses, TXT silently
+        // becomes unavailable at exactly the scope that is the default.
+        try await withTransport(scope: .localUser) { transport, _ in
+            let record = BonjourTXTResolver.resolve(
+                instanceName: transport.advertisedInstanceName, scope: .localUser, timeout: 2
+            )
+            let resolved = try #require(record)
+            #expect(resolved.serverName == StructCalculator().serverName)
+            #expect(resolved.processID == ProcessIdentity.processID)
+            #expect(resolved.isPublisherAlive == true)
+        }
     }
 
     @Test("A wrong name is reported as not-found, not as a hang")
     func wrongNameFailsFast() async throws {
-        let base = uniqueBaseName()
-        let transport = try await startedTransport(base: base, scope: .localUser)
-        defer { Task { try? await transport.stop() } }
-
-        let config = MCPServerTcpConfig(instanceName: base + "-absent", scope: .localUser, timeout: 2)
-        let connection = TCPConnection(config: config)
-        await #expect(throws: MCPServerProxyError.self) {
-            try await connection.start()
+        try await withTransport(scope: .localUser) { _, base in
+            let config = MCPServerTcpConfig(instanceName: base + "-absent", scope: .localUser, timeout: 1)
+            let connection = TCPConnection(config: config)
+            await #expect(throws: MCPServerProxyError.self) {
+                try await connection.start()
+            }
+            await connection.stop()
         }
-        await connection.stop()
     }
 
     @Test("A scope mismatch does not silently resolve")
     func scopeMismatchIsNotFound() async throws {
-        // A local-only registration must not be reachable by a client browsing the
-        // network scope — if it were, "advertise no wider than you serve" would be
-        // a comment rather than a property.
-        let base = uniqueBaseName()
-        let transport = try await startedTransport(base: base, scope: .localUser)
-        defer { Task { try? await transport.stop() } }
-
-        let config = MCPServerTcpConfig(instanceName: base, scope: .localNetwork, timeout: 2)
-        let connection = TCPConnection(config: config)
-        await #expect(throws: MCPServerProxyError.self) {
-            try await connection.start()
+        // A local-only registration must not be reachable by a client browsing
+        // the network scope — if it were, "advertise no wider than you serve"
+        // would be a comment rather than a property.
+        try await withTransport(scope: .localUser) { _, base in
+            let config = MCPServerTcpConfig(instanceName: base, scope: .localNetwork, timeout: 1)
+            let connection = TCPConnection(config: config)
+            await #expect(throws: MCPServerProxyError.self) {
+                try await connection.start()
+            }
+            await connection.stop()
         }
-        await connection.stop()
     }
 }
 #endif
