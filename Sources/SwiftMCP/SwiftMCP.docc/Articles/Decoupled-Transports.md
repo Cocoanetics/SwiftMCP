@@ -77,7 +77,7 @@ stdio and TCP, whose outbound has a single destination, bind nothing extra.
 Hand the server one or more transports and let it run:
 
 ```swift
-let transport = TCPBonjourTransport(serviceName: "acpx")   // no server reference
+let transport = TCPBonjourTransport(instanceName: "acpx")   // no server reference
 try await server.serve(over: [transport], logger: log)
 ```
 
@@ -85,7 +85,7 @@ That single call replaces the hand-built `ServiceGroup` consumers used to write:
 
 ```swift
 // Before — every consumer re-derived this, including the shutdown details.
-let transport = TCPBonjourTransport(server: server, serviceName: "acpx")
+let transport = TCPBonjourTransport(server: server, instanceName: "acpx")
 let group = ServiceGroup(configuration: .init(
     services: [.init(service: transport,
                      successTerminationBehavior: .gracefullyShutdownGroup,
@@ -178,12 +178,12 @@ final class MyTransport: Transport, MCPTransport, @unchecked Sendable {
 
 All three bundled transports support both modes: construct them with a server
 (`init(server:)`) to run them yourself, or server-less
-(`StdioTransport()` / `TCPBonjourTransport(serviceName:)` / `HTTPSSETransport(host:port:)`)
+(`StdioTransport()` / `TCPBonjourTransport(instanceName:)` / `HTTPSSETransport(host:port:)`)
 to hand them to `serve`:
 
 ```swift
 let http = HTTPSSETransport(host: "0.0.0.0", port: 8080)   // no server
-let tcp  = TCPBonjourTransport(serviceName: "acpx")
+let tcp  = TCPBonjourTransport(instanceName: "acpx")
 try await server.serve(over: [http, tcp], logger: log)     // one call, both transports
 ```
 

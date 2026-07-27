@@ -10,22 +10,19 @@ import Network
 ///
 /// `TCPBonjourTransport` works in two modes:
 ///
-/// - **Server-coupled (legacy):** construct it with `init(server:)` and run it
-///   directly (e.g. inside your own `ServiceGroup`). It dispatches through the
-///   server itself.
-/// - **Decoupled:** construct it with `init(serviceName:)` (no server) and hand
+/// - **Server-coupled:** construct it with `init(server:)` and run it directly
+///   (e.g. inside your own `ServiceGroup`). It dispatches through the server
+///   itself, and derives its advertised name and TXT record from the server.
+/// - **Decoupled:** construct it with `init(instanceName:)` (no server) and hand
 ///   it to ``MCPServer/serve(over:gracefulShutdownSignals:logger:)``, which
 ///   connects an ``MCPDispatcher`` via ``connect(to:)``. Each accepted TCP
 ///   connection binds its own session and routes inbound lines through `handle`.
+///
+/// The service type is always ``MCPBonjour/serviceType``. Identity lives in the
+/// Bonjour instance name, and how far that name reaches is ``DiscoveryScope``.
 public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unchecked Sendable {
-    /// Base DNS-SD service type for MCP over TCP.
-    public static let serviceType = MCPBonjourServiceType.base
-
-    /// Returns a valid server-specific service type derived from the server name.
-    /// Use this when interoperating with clients that browse derived service types.
-    public static func serviceType(for serverName: String) -> String {
-        MCPBonjourServiceType.forServer(serverName)
-    }
+    /// DNS-SD service type for MCP over TCP. Always `_mcp._tcp`.
+    public static let serviceType = MCPBonjour.serviceType
 
     /// The MCP server exposed in the server-coupled mode. `nil` in the decoupled
     /// mode, where the ``MCPDispatcher`` connected by `serve(over:)` owns dispatch.
@@ -37,14 +34,37 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
     internal var dispatcher: (any MCPDispatcher)?
     public let logger = Logger(label: "com.cocoanetics.SwiftMCP.TCPBonjourTransport")
 
-    /// Optional override for the advertised Bonjour service name.
-    /// When nil, the transport uses `server.serverName`.
-    public let serviceName: String?
-    public let serviceType: String
-    public let serviceDomain: String
-    public let acceptLocalOnly: Bool
+    /// The **base** instance name. The advertised name is derived from it by the
+    /// scope — see ``advertisedInstanceName``. When nil, `server.serverName` is used.
+    public let instanceName: String?
+
+    /// How far this service is advertised, and what it binds to.
+    public let scope: DiscoveryScope
+
     public let preferIPv4: Bool
     public internal(set) var port: UInt16?
+
+    /// The instance name mDNSResponder actually registered.
+    ///
+    /// Normally equal to ``advertisedInstanceName``, but mDNS resolves conflicts by
+    /// renaming — a second `Post (oliver)` becomes `Post (oliver) (2)`. Once identity
+    /// lives in the instance name, a server that cannot report the name it actually
+    /// published cannot be diagnosed, so this is read back from the registration.
+    /// `nil` until the listener is ready.
+    public internal(set) var resolvedInstanceName: String?
+
+    /// `port/path` at which the same server is also reachable over HTTP/SSE.
+    ///
+    /// Populated by ``MCPServer/serve(over:gracefulShutdownSignals:logger:)`` from
+    /// the sibling transports it was given — serving one server over several
+    /// transports at once is normal, and a client should not have to guess where
+    /// the other one is. Not app-supplied.
+    public internal(set) var httpEndpoint: String?
+
+    /// Server name and version for the TXT record in the decoupled mode, where
+    /// there is no `server` to read them from.
+    internal var declaredServerName: String?
+    internal var declaredServerVersion: String?
 
     internal let queue = DispatchQueue(label: "com.cocoanetics.SwiftMCP.TCPBonjourTransport")
     internal let state = TransportState()
@@ -62,7 +82,7 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
         private var connections: [UUID: NWConnection] = [:]
         private var runContinuation: CheckedContinuation<Void, Never>?
         private var retryTask: Task<Void, Never>?
-        private var legacyRegistration: LegacyBonjourRegistration?
+        private var localRegistration: LocalOnlyRegistration?
         private(set) var retryAttempt: Int = 0
 
         func running() -> Bool {
@@ -78,8 +98,8 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
             isRunning = true
             retryAttempt = 0
             cancelRetryTask()
-            legacyRegistration?.stop()
-            legacyRegistration = nil
+            localRegistration?.stop()
+            localRegistration = nil
             return generation
         }
 
@@ -90,8 +110,8 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
                 return nil
             }
             listener?.cancel()
-            legacyRegistration?.stop()
-            legacyRegistration = nil
+            localRegistration?.stop()
+            localRegistration = nil
             generation += 1
             self.listener = newListener
             return generation
@@ -104,8 +124,8 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
             retryAttempt = 0
             listener?.cancel()
             listener = nil
-            legacyRegistration?.stop()
-            legacyRegistration = nil
+            localRegistration?.stop()
+            localRegistration = nil
             for connection in connections.values {
                 connection.cancel()
             }
@@ -132,20 +152,20 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
             return listener?.port?.rawValue
         }
 
-        func setLegacyRegistration(
-            _ registration: LegacyBonjourRegistration,
+        func setLocalRegistration(
+            _ registration: LocalOnlyRegistration,
             generation listenerGen: UInt64
         ) -> Bool {
             guard listenerGen == generation, isRunning else { return false }
-            legacyRegistration?.stop()
-            legacyRegistration = registration
+            localRegistration?.stop()
+            localRegistration = registration
             return true
         }
 
-        func removeLegacyRegistration(generation listenerGen: UInt64) {
+        func removeLocalRegistration(generation listenerGen: UInt64) {
             guard listenerGen == generation else { return }
-            legacyRegistration?.stop()
-            legacyRegistration = nil
+            localRegistration?.stop()
+            localRegistration = nil
         }
 
         /// Called when the listener fails with a retryable error.
@@ -184,67 +204,69 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
 
     // MARK: - Init
 
+    /// Creates a server-coupled transport.
+    ///
+    /// - Parameters:
+    ///   - server: The MCP server to expose. Supplies the default instance name
+    ///     and the TXT record.
+    ///   - instanceName: Base instance name. Defaults to `server.serverName`.
+    ///     The scope derives the advertised name from it.
+    ///   - scope: How far to advertise. Defaults to ``DiscoveryScope/localUser``.
+    ///   - port: TCP port, or `nil` to pick automatically.
+    ///   - preferIPv4: Prefer IPv4 when binding. Defaults to `true`.
     public init(
         server: MCPServer,
-        serviceName: String? = nil,
-        serviceType: String? = nil,
-        serviceDomain: String = "local.",
+        instanceName: String? = nil,
+        scope: DiscoveryScope = .localUser,
         port: UInt16? = nil,
-        acceptLocalOnly: Bool = true,
         preferIPv4: Bool = true
     ) {
         self.server = server
-        self.serviceName = serviceName
-        self.serviceType = serviceType ?? TCPBonjourTransport.serviceType
-        self.serviceDomain = serviceDomain
+        self.instanceName = instanceName
+        self.scope = scope
         self.port = port
-        self.acceptLocalOnly = acceptLocalOnly
         self.preferIPv4 = preferIPv4
+        self.declaredServerName = nil
+        self.declaredServerVersion = nil
     }
 
-    public convenience init(server: MCPServer) {
-        self.init(
-            server: server,
-            serviceName: nil,
-            serviceType: nil,
-            serviceDomain: "local.",
-            port: nil,
-            acceptLocalOnly: true,
-            preferIPv4: true
-        )
-    }
-
-    /// Initializes a decoupled TCP+Bonjour transport with no server.
+    /// Creates a decoupled transport with no server.
     ///
     /// Pass the transport to ``MCPServer/serve(over:gracefulShutdownSignals:logger:)``,
-    /// which connects an ``MCPDispatcher`` and runs it. The Bonjour service name
-    /// comes from `serviceName` rather than a server.
+    /// which connects an ``MCPDispatcher`` and runs it.
+    ///
+    /// There is no server to read TXT metadata from here, so pass `serverName` and
+    /// `serverVersion` if you want them advertised — otherwise the TXT record
+    /// carries only the instance name.
     ///
     /// - Parameters:
-    ///   - serviceName: The Bonjour service name to advertise.
-    ///   - serviceType: Optional DNS-SD service type. Defaults to `_mcp._tcp`.
-    ///   - serviceDomain: Bonjour domain. Defaults to `"local."`.
+    ///   - instanceName: Base instance name. The scope derives the advertised name.
+    ///   - scope: How far to advertise. Defaults to ``DiscoveryScope/localUser``.
+    ///   - serverName: Server name for the TXT record. Defaults to `instanceName`.
+    ///   - serverVersion: Server version for the TXT record.
     ///   - port: TCP port, or `nil` to pick automatically.
-    ///   - acceptLocalOnly: Restrict to the local link. Defaults to `true`.
     ///   - preferIPv4: Prefer IPv4 when binding. Defaults to `true`.
     public init(
-        serviceName: String,
-        serviceType: String? = nil,
-        serviceDomain: String = "local.",
+        instanceName: String,
+        scope: DiscoveryScope = .localUser,
+        serverName: String? = nil,
+        serverVersion: String? = nil,
         port: UInt16? = nil,
-        acceptLocalOnly: Bool = true,
         preferIPv4: Bool = true
     ) {
         self.server = nil
-        self.serviceName = serviceName
-        self.serviceType = serviceType ?? TCPBonjourTransport.serviceType
-        self.serviceDomain = serviceDomain
+        self.instanceName = instanceName
+        self.scope = scope
         self.port = port
-        self.acceptLocalOnly = acceptLocalOnly
         self.preferIPv4 = preferIPv4
+        self.declaredServerName = serverName
+        self.declaredServerVersion = serverVersion
     }
 
     /// Connects the dispatcher `serve` routes inbound TCP lines through.
+    ///
+    /// In the decoupled mode this is also where the server becomes known, so a
+    /// TXT record that could not be built at construction time is completed here.
     public func connect(to dispatcher: any MCPDispatcher) {
         self.dispatcher = dispatcher
     }
@@ -253,74 +275,55 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
 
 /// Stub implementation for platforms without Network framework.
 public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unchecked Sendable {
-    /// Base DNS-SD service type for MCP over TCP.
-    public static let serviceType = MCPBonjourServiceType.base
-
-    /// Returns a valid server-specific service type derived from the server name.
-    /// Use this when interoperating with clients that browse derived service types.
-    public static func serviceType(for serverName: String) -> String {
-        MCPBonjourServiceType.forServer(serverName)
-    }
+    /// DNS-SD service type for MCP over TCP. Always `_mcp._tcp`.
+    public static let serviceType = MCPBonjour.serviceType
 
     public let server: MCPServer?
     public let logger = Logger(label: "com.cocoanetics.SwiftMCP.TCPBonjourTransport")
 
-    /// Optional override for the advertised Bonjour service name.
-    /// When nil, the transport uses `server.serverName`.
-    public let serviceName: String?
-    public let serviceType: String
-    public let serviceDomain: String
-    public let acceptLocalOnly: Bool
+    public let instanceName: String?
+    public let scope: DiscoveryScope
     public let preferIPv4: Bool
     public private(set) var port: UInt16?
+    public private(set) var resolvedInstanceName: String?
+    public internal(set) var httpEndpoint: String?
+
+    internal var declaredServerName: String?
+    internal var declaredServerVersion: String?
 
     public init(
         server: MCPServer,
-        serviceName: String? = nil,
-        serviceType: String? = nil,
-        serviceDomain: String = "local.",
+        instanceName: String? = nil,
+        scope: DiscoveryScope = .localUser,
         port: UInt16? = nil,
-        acceptLocalOnly: Bool = true,
         preferIPv4: Bool = true
     ) {
         self.server = server
-        self.serviceName = serviceName
-        self.serviceType = serviceType ?? TCPBonjourTransport.serviceType
-        self.serviceDomain = serviceDomain
+        self.instanceName = instanceName
+        self.scope = scope
         self.port = port
-        self.acceptLocalOnly = acceptLocalOnly
         self.preferIPv4 = preferIPv4
-    }
-
-    public convenience init(server: MCPServer) {
-        self.init(
-            server: server,
-            serviceName: nil,
-            serviceType: nil,
-            serviceDomain: "local.",
-            port: nil,
-            acceptLocalOnly: true,
-            preferIPv4: true
-        )
+        self.declaredServerName = nil
+        self.declaredServerVersion = nil
     }
 
     /// Decoupled initializer. Building/running fails at runtime on platforms
     /// without the Network framework.
     public init(
-        serviceName: String,
-        serviceType: String? = nil,
-        serviceDomain: String = "local.",
+        instanceName: String,
+        scope: DiscoveryScope = .localUser,
+        serverName: String? = nil,
+        serverVersion: String? = nil,
         port: UInt16? = nil,
-        acceptLocalOnly: Bool = true,
         preferIPv4: Bool = true
     ) {
         self.server = nil
-        self.serviceName = serviceName
-        self.serviceType = serviceType ?? TCPBonjourTransport.serviceType
-        self.serviceDomain = serviceDomain
+        self.instanceName = instanceName
+        self.scope = scope
         self.port = port
-        self.acceptLocalOnly = acceptLocalOnly
         self.preferIPv4 = preferIPv4
+        self.declaredServerName = serverName
+        self.declaredServerVersion = serverVersion
     }
 
     /// No-op on platforms without the Network framework; the transport cannot run.
@@ -343,13 +346,42 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
 #endif
 
 extension TCPBonjourTransport {
-    internal var advertisedServiceName: String {
-        serviceName ?? server?.serverName ?? "MCP"
+    /// The base name before the scope decorates it.
+    internal var baseInstanceName: String {
+        instanceName ?? server?.serverName ?? declaredServerName ?? "MCP"
     }
 
-    internal var legacyServiceType: String? {
-        guard serviceType == TCPBonjourTransport.serviceType else { return nil }
-        return TCPBonjourTransport.serviceType(for: server?.serverName ?? advertisedServiceName)
+    /// The instance name this transport asks mDNSResponder to register.
+    ///
+    /// Derived from ``baseInstanceName`` by the scope. For the local scopes a
+    /// client on the same machine derives the identical string from the same base
+    /// name, which is what lets a named lookup succeed without any lookup table.
+    public var advertisedInstanceName: String {
+        scope.instanceName(for: baseInstanceName)
+    }
+
+    /// Records what ``MCPServer/serve(over:gracefulShutdownSignals:logger:)`` knows
+    /// and the transport cannot: the server's identity when this transport was built
+    /// decoupled, and where a sibling transport serves the same server over HTTP.
+    ///
+    /// Called before the listener starts, so the TXT record is complete when the
+    /// service is first published.
+    internal func advertise(server: any MCPServer, httpEndpoint: String?) {
+        if declaredServerName == nil { declaredServerName = server.serverName }
+        if declaredServerVersion == nil { declaredServerVersion = server.serverVersion }
+        if let httpEndpoint { self.httpEndpoint = httpEndpoint }
+    }
+
+    /// The TXT record to advertise.
+    internal var txtRecord: BonjourTXTRecord {
+        BonjourTXTRecord(
+            serverName: server?.serverName ?? declaredServerName ?? baseInstanceName,
+            serverVersion: server?.serverVersion ?? declaredServerVersion,
+            protocolVersion: MCPProtocolVersion.latest,
+            // A pid is only meaningful to a client on the same machine.
+            processID: scope.isLocalOnly ? getpid() : nil,
+            httpEndpoint: httpEndpoint
+        )
     }
 }
 #endif

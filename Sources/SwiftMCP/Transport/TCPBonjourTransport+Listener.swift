@@ -8,10 +8,23 @@ extension TCPBonjourTransport {
     // MARK: - Listener Creation
 
     /// Creates a new NWListener with the transport's configuration.
+    ///
+    /// The scope decides both how the socket binds and who advertises:
+    ///
+    /// - **Local scopes** bind loopback and are advertised by ``LocalOnlyRegistration``,
+    ///   because `NWListener.Service` has no interface-scope parameter and would
+    ///   publish to the whole link regardless of how the socket is bound. That
+    ///   mismatch — serving narrow while advertising wide — is the bug this
+    ///   redesign exists to remove.
+    /// - **`.localNetwork`** is advertised by `NWListener` itself, with TXT.
     internal func createListener() throws -> NWListener {
         let parameters = NWParameters.tcp
-        parameters.acceptLocalOnly = acceptLocalOnly
         parameters.includePeerToPeer = false
+        if scope.isLocalOnly {
+            // Not `acceptLocalOnly` — that means the directly attached link, i.e.
+            // the LAN, which is exactly the misreading this replaces.
+            parameters.requiredInterfaceType = .loopback
+        }
         if preferIPv4,
            let ipOptions = parameters.defaultProtocolStack.internetProtocol as? NWProtocolIP.Options {
             ipOptions.version = .v4
@@ -27,11 +40,20 @@ extension TCPBonjourTransport {
             listener = try NWListener(using: parameters)
         }
 
-        listener.service = NWListener.Service(
-            name: advertisedServiceName,
-            type: serviceType,
-            domain: serviceDomain
-        )
+        if !scope.isLocalOnly {
+            listener.service = NWListener.Service(
+                name: advertisedInstanceName,
+                type: MCPBonjour.serviceType,
+                domain: scope.domain,
+                txtRecord: NWTXTRecord(txtRecord.entries)
+            )
+            listener.serviceRegistrationUpdateHandler = { [weak self] change in
+                guard case .add(let endpoint) = change,
+                      case .service(let name, _, _, _) = endpoint else { return }
+                self?.resolvedInstanceName = name
+            }
+        }
+
         listener.newConnectionHandler = { [weak self] connection in
             self?.handleNewConnection(connection)
         }
@@ -57,12 +79,15 @@ extension TCPBonjourTransport {
         case .ready:
             if let boundPort = await state.listenerReady(generation: generation) {
                 port = boundPort
-                await publishLegacyService(on: boundPort, generation: generation)
+                await publishLocalService(on: boundPort, generation: generation)
             }
-            logger.info("TCP+Bonjour transport ready on port \(port.map(String.init) ?? "unknown")")
+            logger.info("""
+                TCP+Bonjour transport ready on port \(port.map(String.init) ?? "unknown") \
+                as "\(resolvedInstanceName ?? advertisedInstanceName)" (\(scope))
+                """)
 
         case .failed(let error):
-            await state.removeLegacyRegistration(generation: generation)
+            await state.removeLocalRegistration(generation: generation)
             if Self.isRetryableError(error) {
                 guard let delay = await state.listenerFailed(generation: generation) else {
                     return  // stopped or stale generation
@@ -81,23 +106,27 @@ extension TCPBonjourTransport {
         }
     }
 
-    internal func publishLegacyService(on port: UInt16, generation: UInt64) async {
-        guard let legacyServiceType else { return }
+    /// Publishes the local-only DNS-SD registration for the local scopes.
+    ///
+    /// `.localNetwork` is advertised by `NWListener` itself, so this is a no-op there.
+    internal func publishLocalService(on port: UInt16, generation: UInt64) async {
+        guard scope.isLocalOnly else { return }
 
         do {
-            let registration = try LegacyBonjourRegistration(
-                name: advertisedServiceName,
-                type: legacyServiceType,
-                domain: serviceDomain,
-                port: port
+            let registration = try LocalOnlyRegistration(
+                name: advertisedInstanceName,
+                type: MCPBonjour.serviceType,
+                domain: scope.domain,
+                port: port,
+                txtRecord: txtRecord
             )
-            guard await state.setLegacyRegistration(registration, generation: generation) else {
+            guard await state.setLocalRegistration(registration, generation: generation) else {
                 registration.stop()
                 return
             }
-            logger.info("Also advertising legacy Bonjour service type \(legacyServiceType)")
+            resolvedInstanceName = registration.resolvedName ?? advertisedInstanceName
         } catch {
-            logger.warning("Could not advertise legacy Bonjour service type \(legacyServiceType): \(error)")
+            logger.error("Could not advertise local-only Bonjour service: \(error)")
         }
     }
 

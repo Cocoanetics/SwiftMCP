@@ -12,7 +12,7 @@ struct ProxyDemoCLI: AsyncParsableCommand {
     @Option(name: .long, help: "SSE endpoint URL for a running demo server.")
     var sse: String?
 
-    @Option(name: .long, help: "Bonjour service name for TCP discovery (defaults to first _mcp._tcp service).")
+    @Option(name: .long, help: "Bonjour instance name for TCP discovery (defaults to the sole _mcp._tcp service).")
     var tcpService: String?
 
     @Option(name: .long, help: "TCP host for direct connection.")
@@ -21,7 +21,7 @@ struct ProxyDemoCLI: AsyncParsableCommand {
     @Option(name: .long, help: "TCP port for direct connection.")
     var tcpPort: Int?
 
-    @Flag(name: .long, help: "Browse Bonjour and connect to the first _mcp._tcp service (prefers proxy server name).")
+    @Flag(name: .long, help: "Browse Bonjour and connect to the demo server by name.")
     var tcpBonjour: Bool = false
 
     @Option(name: .long, help: "Shell command to launch the demo server over stdio.")
@@ -70,12 +70,12 @@ struct ProxyDemoCLI: AsyncParsableCommand {
         }
 
         if tcpService != nil {
-            let tcpConfig = MCPServerTcpConfig(serviceName: tcpService)
+            let tcpConfig = MCPServerTcpConfig(instanceName: tcpService)
             return .tcp(config: tcpConfig)
         }
 
         if tcpBonjour {
-            let tcpConfig = MCPServerTcpConfig(serviceName: SwiftMCPDemoProxy.serverName)
+            let tcpConfig = MCPServerTcpConfig(instanceName: SwiftMCPDemoProxy.serverName)
             return .tcp(config: tcpConfig)
         }
 

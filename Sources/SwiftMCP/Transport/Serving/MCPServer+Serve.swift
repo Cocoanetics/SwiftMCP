@@ -59,6 +59,7 @@ public extension MCPServer {
         for transport in transports {
             transport.connect(to: dispatcher)
         }
+        Self.crossPopulateAdvertisements(server: self, transports: transports)
 
         let group = ServiceGroup(
             configuration: .init(
@@ -89,6 +90,31 @@ public extension MCPServer {
         await shutdown()
 
         try outcome.get()
+    }
+
+    /// Lets an advertising transport describe the server and its sibling endpoints.
+    ///
+    /// Serving one MCP server over several transports at once is normal, and a
+    /// client that discovers the Bonjour advertisement should not have to guess
+    /// where the HTTP endpoint is — the TCP port is typically ephemeral and
+    /// different. `serve(over:)` already holds the whole transport list, so it is
+    /// the one place that knows. Apps contribute nothing.
+    ///
+    /// This is also where a decoupled `TCPBonjourTransport` — built with
+    /// `init(instanceName:)` and no server — learns the server's name and version
+    /// for its TXT record.
+    private static func crossPopulateAdvertisements(
+        server: any MCPServer,
+        transports: [any MCPTransport]
+    ) {
+        let httpEndpoint = transports.lazy.compactMap { transport -> String? in
+            guard let http = transport as? HTTPSSETransport, http.port > 0 else { return nil }
+            return "\(http.port)/mcp"
+        }.first
+
+        for case let bonjour as TCPBonjourTransport in transports {
+            bonjour.advertise(server: server, httpEndpoint: httpEndpoint)
+        }
     }
 }
 #endif
