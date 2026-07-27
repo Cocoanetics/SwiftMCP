@@ -104,8 +104,9 @@ struct DiscoveryScopeTests {
     func localUserDisambiguates() {
         // Instance names are machine-wide: two accounts advertising the same base
         // name would collide, and the loser's client would bind to the winner.
-        #expect(DiscoveryScope.localUser.instanceName(for: "Post") != DiscoveryScope.localMachine.instanceName(for: "Post"))
-        #expect(DiscoveryScope.localUser.instanceName(for: "Post").contains(DiscoveryScope.userLabel))
+        let perUser = DiscoveryScope.localUser.instanceName(for: "Post")
+        #expect(perUser != DiscoveryScope.localMachine.instanceName(for: "Post"))
+        #expect(perUser.contains(DiscoveryScope.userLabel))
     }
 
     @Test("Instance-name matching is NFC-normalized and locale-independent")

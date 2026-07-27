@@ -379,7 +379,7 @@ extension TCPBonjourTransport {
             serverVersion: server?.serverVersion ?? declaredServerVersion,
             protocolVersion: MCPProtocolVersion.latest,
             // A pid is only meaningful to a client on the same machine.
-            processID: scope.isLocalOnly ? getpid() : nil,
+            processID: scope.isLocalOnly ? ProcessIdentity.processID : nil,
             httpEndpoint: httpEndpoint
         )
     }

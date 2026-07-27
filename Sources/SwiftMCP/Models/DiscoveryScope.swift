@@ -82,7 +82,9 @@ extension DiscoveryScope {
     /// when the login name is unavailable (daemon contexts without a home).
     static var userLabel: String {
         let name = NSUserName()
-        return name.isEmpty ? "uid \(getuid())" : name
+        guard name.isEmpty else { return name }
+        guard let userID = ProcessIdentity.userID else { return "user" }
+        return "uid \(userID)"
     }
 
     /// The host, for `.localNetwork` names. `ProcessInfo.hostName` rather than

@@ -83,7 +83,7 @@ public struct BonjourTXTRecord: Sendable, Hashable {
     /// failure this catches.
     public var isPublisherAlive: Bool? {
         guard let processID else { return nil }
-        return kill(processID, 0) == 0 || errno == EPERM
+        return ProcessIdentity.isRunning(processID)
     }
 
     // MARK: Wire format
@@ -112,9 +112,11 @@ public struct BonjourTXTRecord: Sendable, Hashable {
             let length = Int(bytes[index])
             index += 1
             guard length > 0, index + length <= count else { index += length; continue }
-            let pair = String(decoding: UnsafeBufferPointer(start: bytes + index, count: length), as: UTF8.self)
+            // Failable rather than lossy: an entry that is not valid UTF-8 is
+            // dropped, not silently rewritten with replacement characters.
+            let pair = String(bytes: UnsafeBufferPointer(start: bytes + index, count: length), encoding: .utf8)
             index += length
-            guard let separator = pair.firstIndex(of: "=") else { continue }
+            guard let pair, let separator = pair.firstIndex(of: "=") else { continue }
             entries[String(pair[pair.startIndex..<separator])] = String(pair[pair.index(after: separator)...])
         }
         return BonjourTXTRecord(entries: entries)
