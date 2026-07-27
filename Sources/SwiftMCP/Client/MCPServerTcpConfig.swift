@@ -5,29 +5,29 @@ import Foundation
 public struct MCPServerTcpConfig: Sendable {
     /// Defines how the TCP endpoint should be resolved.
     public enum Endpoint: Sendable {
-        /// Discover a service via Bonjour.
-        case bonjour(serviceName: String? = nil, domain: String = "local.")
+        /// Discover a service via Bonjour by its **base** instance name.
+        ///
+        /// The name is the same base the server was given; ``DiscoveryScope``
+        /// derives the advertised form on both sides. Pass `nil` to browse for
+        /// every MCP service in scope and let the caller choose.
+        case bonjour(instanceName: String? = nil)
 
-        /// Connect directly to a host and port.
+        /// Connect directly to a host and port, with no discovery.
+        ///
+        /// The escape hatch when discovery fails or is unavailable. Worth exposing
+        /// from any CLI that relies on Bonjour, so a discovery regression is
+        /// recoverable without a rebuild.
         case direct(host: String, port: UInt16)
     }
 
     /// The endpoint resolution strategy.
     public let endpoint: Endpoint
 
-    /// The Bonjour service type to browse for.
-    public let serviceType: String
+    /// How far to look. Must match the scope the server advertises at.
+    public let scope: DiscoveryScope
 
-    /// The legacy server-derived service type to browse during migration.
-    internal let fallbackServiceType: String?
-    internal let usesDefaultServiceType: Bool
-
-    internal var bonjourServiceTypes: [String] {
-        if let fallbackServiceType {
-            return [serviceType, fallbackServiceType]
-        }
-        return [serviceType]
-    }
+    /// The DNS-SD service type browsed for. Always ``MCPBonjour/serviceType``.
+    public var serviceType: String { MCPBonjour.serviceType }
 
     /// Timeout for Bonjour discovery and connection establishment.
     public let timeout: TimeInterval
@@ -37,26 +37,20 @@ public struct MCPServerTcpConfig: Sendable {
 
     /// Create a Bonjour-based configuration.
     ///
-    /// When `serviceType` is nil, the base MCP service type (`_mcp._tcp`) is used.
-    /// A `serviceName` filters discovered services by their Bonjour instance name
-    /// and also enables browsing the legacy server-derived type during migration.
+    /// - Parameters:
+    ///   - instanceName: The server's **base** instance name, or `nil` to browse
+    ///     for all MCP services in scope.
+    ///   - scope: Must match the server's scope. Defaults to ``DiscoveryScope/localUser``.
+    ///   - timeout: Discovery and connection timeout.
+    ///   - preferIPv4: Prefer IPv4 when connecting.
     public init(
-        serviceName: String? = nil,
-        domain: String = "local.",
-        serviceType: String? = nil,
+        instanceName: String? = nil,
+        scope: DiscoveryScope = .localUser,
         timeout: TimeInterval = 10,
         preferIPv4: Bool = true
     ) {
-        self.endpoint = .bonjour(serviceName: serviceName, domain: domain)
-        if let serviceType {
-            self.serviceType = serviceType
-            self.fallbackServiceType = nil
-            self.usesDefaultServiceType = false
-        } else {
-            self.serviceType = MCPBonjourServiceType.base
-            self.fallbackServiceType = serviceName.map(MCPBonjourServiceType.forServer)
-            self.usesDefaultServiceType = true
-        }
+        self.endpoint = .bonjour(instanceName: instanceName)
+        self.scope = scope
         self.timeout = timeout
         self.preferIPv4 = preferIPv4
     }
@@ -65,16 +59,28 @@ public struct MCPServerTcpConfig: Sendable {
     public init(
         host: String,
         port: UInt16,
-        serviceType: String = MCPBonjourServiceType.base,
         timeout: TimeInterval = 10,
         preferIPv4: Bool = true
     ) {
         self.endpoint = .direct(host: host, port: port)
-        self.serviceType = serviceType
-        self.fallbackServiceType = nil
-        self.usesDefaultServiceType = false
+        self.scope = .localUser
         self.timeout = timeout
         self.preferIPv4 = preferIPv4
+    }
+
+    /// The instance name to match against browse results.
+    ///
+    /// `nil` only for a nameless browse. Every scope derives symmetrically, so
+    /// this is the same string the server asked mDNS to register.
+    internal var derivedInstanceName: String? {
+        guard case .bonjour(let base) = endpoint, let base else { return nil }
+        return scope.instanceName(for: base)
+    }
+
+    /// The base name as configured, before the scope derives from it.
+    internal var baseInstanceName: String? {
+        guard case .bonjour(let base) = endpoint else { return nil }
+        return base
     }
 }
 #endif

@@ -202,9 +202,52 @@ let result = try await client.add(a: 2, b: 3)
 For TCP+Bonjour discovery:
 
 ```swift
-let config = MCPServerConfig.tcp(config: MCPServerTcpConfig(serviceName: "SwiftMCP Demo"))
+let config = MCPServerConfig.tcp(config: MCPServerTcpConfig(instanceName: "SwiftMCP Demo"))
 let proxy = MCPServerProxy(config: config)
 try await proxy.connect()
+```
+
+### Discovery scope
+
+Every MCP service advertises on the single service type `_mcp._tcp`. Identity lives
+in the Bonjour **instance name**, and how far that name reaches is one decision:
+
+| scope | reach | advertised name for base `Post` |
+|---|---|---|
+| `.localUser` *(default)* | loopback, name qualified by user | `Post (oliver)` |
+| `.localMachine` | loopback, bare name | `Post` |
+| `.localNetwork` | the attached link, bare name | `Post` |
+
+Only `.localUser` decorates the name, and only because the decoration is derivable
+on *both* sides — client and server are the same user on the same machine. Nothing
+qualifies by host: DNS-SD already resolves a service to its target host, and a
+hostname changes when the machine is renamed. Two machines advertising the same
+name are separated by mDNS, which renames the second to `Post (2)`.
+
+The scope drives binding, advertising, **and** browsing together, so a service can
+never be advertised more widely than it is served. Client and server pass the same
+*base* name and let the scope derive the rest:
+
+```swift
+// server
+let transport = TCPBonjourTransport(server: server)               // .localUser
+// client
+let config = MCPServerTcpConfig(instanceName: server.serverName)  // .localUser
+```
+
+`.localUser` is the default because instance names are machine-wide: two accounts
+running the same server would otherwise collide, and the second user's client would
+silently connect to the first user's process. It prevents that mis-binding — it is
+not an access boundary, since a loopback socket is visible to every account on the
+machine. Authenticate if you need one.
+
+`.localNetwork` is opt-in — the TCP transport has no authorization hook, so anything
+reachable there is reachable unauthenticated unless you add your own layer.
+
+When discovery isn't an option, connect directly and skip it:
+
+```swift
+let config = MCPServerTcpConfig(host: "127.0.0.1", port: 8181)
 ```
 
 Notes:

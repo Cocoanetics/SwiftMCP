@@ -12,6 +12,16 @@ public enum MCPServerProxyError: Error, LocalizedError {
     /// is dead and cannot be revived by retrying; the proxy must reconnect (call
     /// `connect()` again, or create a fresh proxy) to obtain a new session.
     case sessionInvalidated
+    /// No MCP service with the requested name appeared within the timeout.
+    ///
+    /// Distinct from a bare timeout: the browse ran and found nothing matching,
+    /// which points at the server not running rather than at the network.
+    case serviceNotFound(instanceName: String?)
+    /// A nameless browse found more than one MCP service, so there is no single
+    /// right answer. Name the one you want, or browse and choose.
+    case ambiguousService(candidates: [String])
+    /// The advertised publisher process is gone — a stale or wedged advertisement.
+    case publisherNotRunning(processID: Int32)
 
     public var errorDescription: String? {
         switch self {
@@ -25,6 +35,18 @@ public enum MCPServerProxyError: Error, LocalizedError {
             return "Unsupported platform: \(message)"
         case .sessionInvalidated:
             return "MCP session is no longer valid; reconnect to start a new session."
+        case .serviceNotFound(let instanceName):
+            if let instanceName {
+                return "No MCP service named \"\(instanceName)\" was found. Is the server running?"
+            }
+            return "No MCP service was found. Is the server running?"
+        case .ambiguousService(let candidates):
+            return """
+                Several MCP services are available (\(candidates.joined(separator: ", "))). \
+                Specify which one to connect to.
+                """
+        case .publisherNotRunning(let processID):
+            return "The advertised MCP server (pid \(processID)) is no longer running."
         }
     }
 }

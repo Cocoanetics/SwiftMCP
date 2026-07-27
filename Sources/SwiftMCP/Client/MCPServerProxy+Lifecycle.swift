@@ -364,16 +364,17 @@ extension MCPServerProxy {
         }
     }
 
+    /// Fills in the proxy's configured service name for a nameless Bonjour config,
+    /// turning an ambiguous browse into a direct lookup.
     internal func resolveTcpConfig(_ config: MCPServerTcpConfig) -> MCPServerTcpConfig {
-        guard case .bonjour(let serviceName, let domain) = config.endpoint,
-              serviceName == nil,
+        guard case .bonjour(let instanceName) = config.endpoint,
+              instanceName == nil,
               let service else {
             return config
         }
         return MCPServerTcpConfig(
-            serviceName: service,
-            domain: domain,
-            serviceType: config.usesDefaultServiceType ? nil : config.serviceType,
+            instanceName: service,
+            scope: config.scope,
             timeout: config.timeout,
             preferIPv4: config.preferIPv4
         )

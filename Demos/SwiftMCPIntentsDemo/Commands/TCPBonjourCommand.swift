@@ -20,11 +20,11 @@ struct TCPBonjourCommand: AsyncParsableCommand {
 """
     )
 
-    @Option(name: .long, help: "Bonjour service name to advertise (defaults to server name).")
+    @Option(name: .long, help: "Base Bonjour instance name (defaults to server name).")
     var name: String?
 
-    @Option(name: .long, help: "Bonjour domain (default: local.).")
-    var domain: String = "local."
+    @Option(name: .long, help: "How far to advertise: local-user, local-machine, or local-network.")
+    var scope: DiscoveryScope = .localUser
 
     @Option(name: .long, help: "TCP port (0 = automatic).")
     var port: UInt16 = 0
@@ -50,10 +50,9 @@ struct TCPBonjourCommand: AsyncParsableCommand {
             // owns the run loop, SIGINT/SIGTERM trapping, and ordered graceful
             // shutdown — the consumer no longer hand-wires a `ServiceGroup`.
             let transport = TCPBonjourTransport(
-                serviceName: name ?? server.serverName,
-                serviceDomain: domain,
+                instanceName: name ?? server.serverName,
+                scope: scope,
                 port: bindPort,
-                acceptLocalOnly: true,
                 preferIPv4: ipv4Only
             )
 
