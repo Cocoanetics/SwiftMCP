@@ -17,18 +17,31 @@ import Foundation
 /// than you serve is unrepresentable. This replaces the previous split between
 /// `acceptLocalOnly` (server-side, and misleadingly named — it restricts to the
 /// directly attached link, not to loopback) and `domain` (client-side).
+///
+/// **Reach is not access control.** A scope bounds who can *discover and route
+/// to* a service, not who is *allowed* to use it. `TCPBonjourTransport` has no
+/// authorization hook, so anything that can reach the port can speak to the
+/// server. Both local scopes are machine-scoped; neither is a user boundary.
+/// If you need one, authenticate.
 public enum DiscoveryScope: Sendable, Hashable, CaseIterable {
-    /// Same machine, same user. Registered local-only and bound to loopback.
+    /// Loopback-bound and registered local-only, with the instance name
+    /// qualified by the current user.
     ///
-    /// The default, because Bonjour instance names are machine-wide: two user
-    /// accounts each running the same server would otherwise collide, and the
-    /// second user's client would silently bind to the first user's process.
+    /// The default, because Bonjour instance names are machine-wide: two accounts
+    /// running the same server would otherwise advertise the same name, mDNS would
+    /// rename the loser, and the second user's client — asking for the unqualified
+    /// name — would bind to the first user's process.
+    ///
+    /// The qualification prevents that **mis-binding**. It is not isolation: a
+    /// loopback socket and a local-only registration are visible to every account
+    /// on the machine, so another user can browse the qualified name and connect
+    /// to it deliberately. Use authentication for a real boundary.
     case localUser
 
-    /// Same machine, any user. Registered local-only and bound to loopback.
+    /// Loopback-bound and registered local-only, advertised under the bare name.
     ///
-    /// For a deliberate service-account or multi-tenant daemon. The app takes
-    /// on disambiguation itself.
+    /// For a deliberate service-account or multi-tenant daemon, where a single
+    /// well-known name is wanted and the app handles any disambiguation itself.
     case localMachine
 
     /// The directly attached link. Registered and browsed over multicast.
@@ -38,6 +51,9 @@ public enum DiscoveryScope: Sendable, Hashable, CaseIterable {
     case localNetwork
 
     /// Whether this scope keeps the service off the network entirely.
+    ///
+    /// True for both machine-local scopes. Note this says nothing about *which
+    /// user* on the machine may connect — see the note on ``DiscoveryScope``.
     public var isLocalOnly: Bool {
         switch self {
         case .localUser, .localMachine: return true

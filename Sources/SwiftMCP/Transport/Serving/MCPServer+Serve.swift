@@ -107,10 +107,16 @@ public extension MCPServer {
         server: any MCPServer,
         transports: [any MCPTransport]
     ) {
-        let httpEndpoint = transports.lazy.compactMap { transport -> String? in
-            guard let http = transport as? HTTPSSETransport, http.port > 0 else { return nil }
-            return "\(http.port)/mcp"
-        }.first
+        // Resolved lazily, not snapshotted: an HTTP sibling configured with port 0
+        // has no real port until it binds, which happens after this runs. Reading
+        // it here would permanently omit `http` for every ephemeral HTTP server.
+        var httpEndpoint: (@Sendable () -> String?)?
+        if let http = transports.first(where: { $0 is HTTPSSETransport }) as? HTTPSSETransport {
+            httpEndpoint = { [weak http] in
+                guard let http, http.port > 0 else { return nil }
+                return "\(http.port)/mcp"
+            }
+        }
 
         for case let bonjour as TCPBonjourTransport in transports {
             bonjour.advertise(server: server, httpEndpoint: httpEndpoint)

@@ -53,13 +53,21 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
     /// `nil` until the listener is ready.
     public internal(set) var resolvedInstanceName: String?
 
+    /// Resolves the sibling HTTP endpoint, or nil when there is none yet.
+    ///
+    /// A closure rather than a stored string because a sibling `HTTPSSETransport`
+    /// may be configured with port `0`: its real port only exists after it binds,
+    /// which is after `serve(over:)` wires the transports together. Snapshotting
+    /// the value there would permanently omit `http` for every ephemeral server.
+    internal var httpEndpointProvider: (@Sendable () -> String?)?
+
     /// `port/path` at which the same server is also reachable over HTTP/SSE.
     ///
     /// Populated by ``MCPServer/serve(over:gracefulShutdownSignals:logger:)`` from
     /// the sibling transports it was given — serving one server over several
     /// transports at once is normal, and a client should not have to guess where
     /// the other one is. Not app-supplied.
-    public internal(set) var httpEndpoint: String?
+    public var httpEndpoint: String? { httpEndpointProvider?() }
 
     /// Server name and version for the TXT record in the decoupled mode, where
     /// there is no `server` to read them from.
@@ -160,6 +168,13 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
             localRegistration?.stop()
             localRegistration = registration
             return true
+        }
+
+        /// Replaces the listener's advertised service, e.g. to publish a TXT record
+        /// that could not be complete when the listener was created.
+        func updateService(_ service: NWListener.Service, generation listenerGen: UInt64) {
+            guard listenerGen == generation, isRunning else { return }
+            listener?.service = service
         }
 
         func removeLocalRegistration(generation listenerGen: UInt64) {
@@ -286,7 +301,8 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
     public let preferIPv4: Bool
     public private(set) var port: UInt16?
     public private(set) var resolvedInstanceName: String?
-    public internal(set) var httpEndpoint: String?
+    internal var httpEndpointProvider: (@Sendable () -> String?)?
+    public var httpEndpoint: String? { httpEndpointProvider?() }
 
     internal var declaredServerName: String?
     internal var declaredServerVersion: String?
@@ -344,44 +360,4 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
     }
 }
 #endif
-
-extension TCPBonjourTransport {
-    /// The base name before the scope decorates it.
-    internal var baseInstanceName: String {
-        instanceName ?? server?.serverName ?? declaredServerName ?? "MCP"
-    }
-
-    /// The instance name this transport asks mDNSResponder to register.
-    ///
-    /// Derived from ``baseInstanceName`` by the scope. For the local scopes a
-    /// client on the same machine derives the identical string from the same base
-    /// name, which is what lets a named lookup succeed without any lookup table.
-    public var advertisedInstanceName: String {
-        scope.instanceName(for: baseInstanceName)
-    }
-
-    /// Records what ``MCPServer/serve(over:gracefulShutdownSignals:logger:)`` knows
-    /// and the transport cannot: the server's identity when this transport was built
-    /// decoupled, and where a sibling transport serves the same server over HTTP.
-    ///
-    /// Called before the listener starts, so the TXT record is complete when the
-    /// service is first published.
-    internal func advertise(server: any MCPServer, httpEndpoint: String?) {
-        if declaredServerName == nil { declaredServerName = server.serverName }
-        if declaredServerVersion == nil { declaredServerVersion = server.serverVersion }
-        if let httpEndpoint { self.httpEndpoint = httpEndpoint }
-    }
-
-    /// The TXT record to advertise.
-    internal var txtRecord: BonjourTXTRecord {
-        BonjourTXTRecord(
-            serverName: server?.serverName ?? declaredServerName ?? baseInstanceName,
-            serverVersion: server?.serverVersion ?? declaredServerVersion,
-            protocolVersion: MCPProtocolVersion.latest,
-            // A pid is only meaningful to a client on the same machine.
-            processID: scope.isLocalOnly ? ProcessIdentity.processID : nil,  // meaningful only same-machine
-            httpEndpoint: httpEndpoint
-        )
-    }
-}
 #endif

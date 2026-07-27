@@ -3,6 +3,16 @@ import Foundation
 @testable import SwiftMCP
 
 #if Server
+/// A port that becomes known later, standing in for an ephemeral HTTP sibling.
+private final class LockedPort: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: Int?
+    var value: Int? {
+        get { lock.withLock { stored } }
+        set { lock.withLock { stored = newValue } }
+    }
+}
+
 @Suite("Decoupled transport construction")
 struct ConnectionTransportConstructionTests {
     @Test("A decoupled stdio transport has no server")
@@ -73,10 +83,25 @@ struct ConnectionTransportConstructionTests {
         #expect(transport.txtRecord.serverVersion == nil)
         #expect(transport.txtRecord.httpEndpoint == nil)
 
-        transport.advertise(server: StructCalculator(), httpEndpoint: "8090/mcp")
+        transport.advertise(server: StructCalculator(), httpEndpoint: { "8090/mcp" })
 
         #expect(transport.txtRecord.serverName == StructCalculator().serverName)
         #expect(transport.txtRecord.serverVersion == StructCalculator().serverVersion)
+        #expect(transport.txtRecord.httpEndpoint == "8090/mcp")
+    }
+
+    @Test("The HTTP endpoint is resolved late, not snapshotted")
+    func httpEndpointResolvesLazily() {
+        // A sibling on an ephemeral port has no real port when serve(over:) wires
+        // the transports together. Reading it eagerly would omit `http` forever.
+        let boundPort = LockedPort()
+        let transport = TCPBonjourTransport(instanceName: "mc")
+        transport.advertise(server: StructCalculator(), httpEndpoint: {
+            boundPort.value.map { "\($0)/mcp" }
+        })
+
+        #expect(transport.txtRecord.httpEndpoint == nil)
+        boundPort.value = 8090
         #expect(transport.txtRecord.httpEndpoint == "8090/mcp")
     }
 }
@@ -261,6 +286,35 @@ struct TCPBonjourResultSelectionTests {
             from: [remote], derivedName: nil, baseName: "Post", scope: .localNetwork
         )
         #expect(match?.instanceName == "Post on Mac-Studio")
+    }
+
+    @Test("Several hosts advertising the same server are ambiguous, not first-wins")
+    func networkMultipleHostsAreAmbiguous() {
+        // Every host running `Post` publishes the same TXT name and a different
+        // qualified instance name. Browse order is not a host-selection mechanism
+        // — taking the first would bind to whichever machine answered soonest.
+        let hosts = [
+            service("Post on Mac-Studio", loopback: false, txt: BonjourTXTRecord(serverName: "Post")),
+            service("Post on MacBook", loopback: false, txt: BonjourTXTRecord(serverName: "Post"))
+        ]
+        #expect(throws: MCPServerProxyError.self) {
+            _ = try TCPConnection.selectService(
+                from: hosts, derivedName: nil, baseName: "Post", scope: .localNetwork
+            )
+        }
+    }
+
+    @Test("Naming the qualified instance selects one host outright")
+    func networkExactInstanceNameWins() throws {
+        // The escape hatch from the ambiguity above: name the host you mean.
+        let hosts = [
+            service("Post on Mac-Studio", loopback: false, txt: BonjourTXTRecord(serverName: "Post")),
+            service("Post on MacBook", loopback: false, txt: BonjourTXTRecord(serverName: "Post"))
+        ]
+        let match = try TCPConnection.selectService(
+            from: hosts, derivedName: nil, baseName: "Post on MacBook", scope: .localNetwork
+        )
+        #expect(match?.instanceName == "Post on MacBook")
     }
 
     @Test("Missing TXT falls back to the name prefix rather than rejecting")

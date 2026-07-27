@@ -24,6 +24,12 @@ extension TCPBonjourTransport {
             // Not `acceptLocalOnly` — that means the directly attached link, i.e.
             // the LAN, which is exactly the misreading this replaces.
             parameters.requiredInterfaceType = .loopback
+        } else {
+            // `.localNetwork` means the attached link, so bound the socket to it.
+            // Leaving this at its default would accept connections arriving over
+            // routed interfaces — wider than what is advertised, and the transport
+            // has no authorization hook to make up the difference.
+            parameters.acceptLocalOnly = true
         }
         if preferIPv4,
            let ipOptions = parameters.defaultProtocolStack.internetProtocol as? NWProtocolIP.Options {
@@ -79,7 +85,9 @@ extension TCPBonjourTransport {
         case .ready:
             if let boundPort = await state.listenerReady(generation: generation) {
                 port = boundPort
+                await waitForSiblingHTTPEndpoint()
                 await publishLocalService(on: boundPort, generation: generation)
+                await republishNetworkService(generation: generation)
             }
             logger.info("""
                 TCP+Bonjour transport ready on port \(port.map(String.init) ?? "unknown") \
@@ -106,10 +114,57 @@ extension TCPBonjourTransport {
         }
     }
 
+    /// Gives a sibling HTTP transport a brief chance to bind before TXT is built.
+    ///
+    /// `serve(over:)` starts transports in order, so an HTTP sibling is usually
+    /// bound by the time this listener is ready — but "usually" is not a guarantee,
+    /// and a sibling on an ephemeral port publishes nothing until it binds. Waiting
+    /// briefly here is the difference between advertising the `http` endpoint and
+    /// silently omitting it forever.
+    ///
+    /// Bounded and best-effort: if no sibling was configured there is nothing to
+    /// wait for, and if one never binds the advertisement simply goes out without
+    /// the key rather than blocking the transport.
+    private func waitForSiblingHTTPEndpoint(timeout: TimeInterval = 2) async {
+        guard httpEndpointProvider != nil, httpEndpoint == nil else { return }
+        let deadline = Date().addingTimeInterval(timeout)
+        while httpEndpoint == nil, Date() < deadline {
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+        if httpEndpoint == nil {
+            logger.debug("Sibling HTTP endpoint not bound in time; advertising without the http entry.")
+        }
+    }
+
+    /// Re-publishes the `.localNetwork` advertisement once the port is known.
+    ///
+    /// That scope is advertised by `NWListener`, whose service is configured
+    /// before anything binds — so its TXT record is built too early to include a
+    /// sibling HTTP endpoint. Re-assigning the service updates the advertisement
+    /// in place.
+    private func republishNetworkService(generation: UInt64) async {
+        guard !scope.isLocalOnly, httpEndpoint != nil else { return }
+        await state.updateService(
+            NWListener.Service(
+                name: advertisedInstanceName,
+                type: MCPBonjour.serviceType,
+                domain: scope.domain,
+                txtRecord: NWTXTRecord(txtRecord.entries)
+            ),
+            generation: generation
+        )
+    }
+
     /// Publishes the local-only DNS-SD registration for the local scopes.
     ///
     /// `.localNetwork` is advertised by `NWListener` itself, so this is a no-op there.
-    internal func publishLocalService(on port: UInt16, generation: UInt64) async {
+    ///
+    /// A failure here is retried rather than merely logged. An unadvertised
+    /// listener looks healthy from the server side while every client reports
+    /// `serviceNotFound` — the same "working server, blamed network" shape this
+    /// redesign exists to remove — and mDNSResponder being briefly unavailable is
+    /// exactly the transient the listener path already retries.
+    internal func publishLocalService(on port: UInt16, generation: UInt64, attempt: Int = 0) async {
         guard scope.isLocalOnly else { return }
 
         do {
@@ -125,8 +180,37 @@ extension TCPBonjourTransport {
                 return
             }
             resolvedInstanceName = registration.resolvedName ?? advertisedInstanceName
+            if attempt > 0 {
+                logger.info("Local-only Bonjour registration succeeded after \(attempt) retries.")
+            }
         } catch {
-            logger.error("Could not advertise local-only Bonjour service: \(error)")
+            let delay = min(UInt64(1) << UInt64(min(attempt, 5)), TCPBonjourTransport.maxRetryDelay)
+            logger.error("""
+                Could not advertise local-only Bonjour service "\(advertisedInstanceName)": \(error). \
+                The listener is up on port \(port) but undiscoverable; retrying in \(delay)s.
+                """)
+            scheduleRegistrationRetry(
+                afterDelay: delay, port: port, generation: generation, attempt: attempt + 1
+            )
+        }
+    }
+
+    /// Retries a failed local-only registration, leaving the listener in place.
+    private func scheduleRegistrationRetry(
+        afterDelay delay: UInt64, port: UInt16, generation: UInt64, attempt: Int
+    ) {
+        let task = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: delay * 1_000_000_000)
+            } catch {
+                return  // cancelled
+            }
+            guard let self, await self.state.running() else { return }
+            await self.publishLocalService(on: port, generation: generation, attempt: attempt)
+        }
+
+        Task {
+            await state.setRetryTask(task)
         }
     }
 

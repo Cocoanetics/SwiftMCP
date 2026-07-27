@@ -237,16 +237,34 @@ public final actor TCPConnection: StdioConnection {
 
         if let baseName {
             // .localNetwork: the server qualified with its own host name, which we
-            // cannot reconstruct. Match the TXT `name` entry, falling back to the
-            // qualified-name prefix when TXT has not arrived — absent metadata means
-            // unknown, never mismatched.
-            return candidates.first { service in
+            // cannot reconstruct.
+            //
+            // An exact instance-name match wins, so a caller that knows the host
+            // can name it outright ("Post on Mac-Studio") and get a direct lookup.
+            if let exact = candidates.first(where: { $0.instanceName.matchesInstanceName(baseName) }) {
+                return exact
+            }
+
+            // Otherwise match the TXT `name` entry, falling back to the qualified
+            // prefix when TXT has not arrived — absent metadata means unknown,
+            // never mismatched.
+            let matches = candidates.filter { service in
                 if let advertised = service.txtRecord?.serverName {
                     return advertised.matchesInstanceName(baseName)
                 }
                 return service.instanceName.normalizedInstanceName
                     .hasPrefix(baseName.normalizedInstanceName)
             }
+            guard !matches.isEmpty else { return nil }
+            // Several hosts running the same server all advertise the same TXT
+            // `name`. Browse order is not a host-selection mechanism — taking the
+            // first would silently bind to whichever machine answered soonest.
+            guard matches.count == 1 else {
+                throw MCPServerProxyError.ambiguousService(
+                    candidates: matches.map(\.instanceName).sorted()
+                )
+            }
+            return matches[0]
         }
 
         // Nameless browse: only unambiguous when exactly one service is in scope.
