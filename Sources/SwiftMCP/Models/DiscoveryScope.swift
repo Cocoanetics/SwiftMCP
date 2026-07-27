@@ -70,29 +70,26 @@ public enum DiscoveryScope: Sendable, Hashable, CaseIterable {
 extension DiscoveryScope {
     /// The instance name a server advertises for `base` under this scope.
     ///
-    /// For the local scopes this is **symmetric**: a client on the same machine
-    /// computes the identical string from the same base name, with no lookup and
-    /// no configuration. That symmetry is load-bearing — if the two sides derived
-    /// differently they would never meet.
+    /// **Always symmetric**: a client computes the identical string from the same
+    /// base name, with no lookup and no configuration. That is load-bearing — if
+    /// the two sides derived differently they would never meet, which is the
+    /// failure this whole design exists to remove.
     ///
-    /// `.localNetwork` is deliberately *not* symmetric: the server qualifies with
-    /// its own host name, which a remote client cannot know. Clients at that scope
-    /// match on the TXT `name` entry instead — see ``canDeriveInstanceName``.
+    /// Only `.localUser` decorates, and only because the decoration is *derivable
+    /// on both sides*: client and server are the same user on the same machine.
+    /// Nothing qualifies by host. DNS-SD already resolves a service to its target
+    /// host through SRV, so putting it in the name duplicates a fact the protocol
+    /// carries — and a hostname changes when the machine is renamed or moves
+    /// networks, silently changing the service's identity. Collisions between
+    /// hosts are mDNS's job: it renames the loser to `Post (2)`.
     public func instanceName(for base: String) -> String {
         switch self {
         case .localUser:
             return "\(base) (\(DiscoveryScope.userLabel))"
-        case .localMachine:
+        case .localMachine, .localNetwork:
             return base
-        case .localNetwork:
-            return "\(base) on \(DiscoveryScope.hostLabel)"
         }
     }
-
-    /// Whether a client can derive the server's advertised instance name from the
-    /// base name alone. False for `.localNetwork`, where the host component is
-    /// unknowable remotely and matching goes through the TXT `name` entry.
-    public var canDeriveInstanceName: Bool { isLocalOnly }
 
     /// The current user, for `.localUser` names. Falls back to the numeric uid
     /// when the login name is unavailable (daemon contexts without a home).
@@ -101,16 +98,6 @@ extension DiscoveryScope {
         guard name.isEmpty else { return name }
         guard let userID = ProcessIdentity.userID else { return "user" }
         return "uid \(userID)"
-    }
-
-    /// The host, for `.localNetwork` names. `ProcessInfo.hostName` rather than
-    /// `Host.current().localizedName` — the latter is typically "Oliver's Mac",
-    /// i.e. the owner's name broadcast to every device on the link.
-    static var hostLabel: String {
-        var host = ProcessInfo.processInfo.hostName
-        if host.hasSuffix(".local") { host.removeLast(6) }
-        if host.hasSuffix(".") { host.removeLast() }
-        return host.isEmpty ? "unknown host" : host
     }
 }
 

@@ -51,9 +51,12 @@ struct ConnectionTransportConstructionTests {
         let machine = TCPBonjourTransport(instanceName: "Post", scope: .localMachine)
         let network = TCPBonjourTransport(instanceName: "Post", scope: .localNetwork)
 
+        // Only .localUser decorates, and only because both sides can derive it.
+        // Nothing qualifies by host: DNS-SD already resolves a service to its
+        // target host, and a hostname changes when the machine is renamed.
         #expect(user.advertisedInstanceName == "Post (\(DiscoveryScope.userLabel))")
         #expect(machine.advertisedInstanceName == "Post")
-        #expect(network.advertisedInstanceName == "Post on \(DiscoveryScope.hostLabel)")
+        #expect(network.advertisedInstanceName == "Post")
     }
 
     @Test("A pid is advertised only where it means something")
@@ -116,13 +119,16 @@ struct DiscoveryScopeTests {
         #expect(!DiscoveryScope.localNetwork.isLocalOnly)
     }
 
-    @Test("Only the local scopes derive a name a client can reconstruct")
+    @Test("Every scope derives the advertised name symmetrically")
     func nameDerivability() {
-        // `.localNetwork` qualifies with the server's own host, which a remote
-        // client cannot know — it matches the TXT `name` entry instead.
-        #expect(DiscoveryScope.localUser.canDeriveInstanceName)
-        #expect(DiscoveryScope.localMachine.canDeriveInstanceName)
-        #expect(!DiscoveryScope.localNetwork.canDeriveInstanceName)
+        // Load-bearing: if the two sides derived differently they would never
+        // meet, which is the failure this design exists to remove.
+        for scope in DiscoveryScope.allCases {
+            #expect(scope.instanceName(for: "Post") == scope.instanceName(for: "Post"))
+        }
+        // Only the user scope decorates, because only it is derivable on both ends.
+        #expect(DiscoveryScope.localNetwork.instanceName(for: "Post") == "Post")
+        #expect(DiscoveryScope.localUser.instanceName(for: "Post") != "Post")
     }
 
     @Test("The user scope separates accounts that would otherwise collide")
@@ -202,19 +208,18 @@ struct TCPBonjourConfigurationTests {
         #expect(MCPServerTcpConfig(instanceName: "Mission Control").serviceType == MCPBonjour.serviceType)
     }
 
-    @Test("Local scopes derive the name; localNetwork cannot")
+    @Test("Every scope derives the same name the server registers")
     func derivedNames() {
-        let user = MCPServerTcpConfig(instanceName: "Post", scope: .localUser)
-        #expect(user.derivedInstanceName == DiscoveryScope.localUser.instanceName(for: "Post"))
+        // The client derives what the server advertised, for every scope — no
+        // lookup, no configuration, nothing that can drift out of sync.
+        for scope in DiscoveryScope.allCases {
+            let config = MCPServerTcpConfig(instanceName: "Post", scope: scope)
+            #expect(config.derivedInstanceName == scope.instanceName(for: "Post"))
+            #expect(config.baseInstanceName == "Post")
+        }
 
-        let machine = MCPServerTcpConfig(instanceName: "Post", scope: .localMachine)
-        #expect(machine.derivedInstanceName == "Post")
-
-        // Remote host qualification is unknowable client-side, so matching falls
-        // through to the TXT `name` entry.
-        let network = MCPServerTcpConfig(instanceName: "Post", scope: .localNetwork)
-        #expect(network.derivedInstanceName == nil)
-        #expect(network.baseInstanceName == "Post")
+        #expect(MCPServerTcpConfig(instanceName: "Post", scope: .localMachine).derivedInstanceName == "Post")
+        #expect(MCPServerTcpConfig(instanceName: "Post", scope: .localNetwork).derivedInstanceName == "Post")
     }
 
     @Test("A nameless config has no name to derive")
@@ -257,14 +262,14 @@ struct TCPBonjourResultSelectionTests {
     func namedSelection() throws {
         let services = [service("SwiftMCP"), service("Post (oliver)")]
         let match = try TCPConnection.selectService(
-            from: services, derivedName: "post (OLIVER)", baseName: "Post", scope: .localUser
+            from: services, derivedName: "post (OLIVER)", scope: .localUser
         )
         #expect(match?.instanceName == "Post (oliver)")
 
         // A prefix is not a match — substring matching is how a client ends up on
         // the wrong server.
         #expect(try TCPConnection.selectService(
-            from: services, derivedName: "Post", baseName: "Post", scope: .localUser
+            from: services, derivedName: "Post", scope: .localUser
         ) == nil)
     }
 
@@ -272,71 +277,60 @@ struct TCPBonjourResultSelectionTests {
     func loopbackFilter() throws {
         let offBox = [service("Post (oliver)", loopback: false)]
         #expect(try TCPConnection.selectService(
-            from: offBox, derivedName: "Post (oliver)", baseName: "Post", scope: .localUser
+            from: offBox, derivedName: "Post (oliver)", scope: .localUser
         ) == nil)
     }
 
-    @Test("localNetwork matches the TXT name, not the qualified instance name")
-    func networkMatchesTXTName() throws {
-        let remote = service(
-            "Post on Mac-Studio", loopback: false,
-            txt: BonjourTXTRecord(serverName: "Post")
-        )
+    @Test("localNetwork matches the plain name, with no host qualification")
+    func networkMatchesPlainName() throws {
+        // Nothing is qualified by host. DNS-SD already resolves a service to its
+        // target host through SRV, so encoding it in the name would duplicate a
+        // fact the protocol carries — and would break the moment the machine is
+        // renamed or changes networks.
+        let remote = service("Post", loopback: false, txt: BonjourTXTRecord(serverName: "Post"))
         let match = try TCPConnection.selectService(
-            from: [remote], derivedName: nil, baseName: "Post", scope: .localNetwork
+            from: [remote], derivedName: "Post", scope: .localNetwork
         )
-        #expect(match?.instanceName == "Post on Mac-Studio")
+        #expect(match?.instanceName == "Post")
     }
 
-    @Test("Several hosts advertising the same server are ambiguous, not first-wins")
-    func networkMultipleHostsAreAmbiguous() {
-        // Every host running `Post` publishes the same TXT name and a different
-        // qualified instance name. Browse order is not a host-selection mechanism
-        // — taking the first would bind to whichever machine answered soonest.
-        let hosts = [
-            service("Post on Mac-Studio", loopback: false, txt: BonjourTXTRecord(serverName: "Post")),
-            service("Post on MacBook", loopback: false, txt: BonjourTXTRecord(serverName: "Post"))
-        ]
-        #expect(throws: MCPServerProxyError.self) {
-            _ = try TCPConnection.selectService(
-                from: hosts, derivedName: nil, baseName: "Post", scope: .localNetwork
-            )
-        }
+    @Test("Two hosts are distinguished by mDNS, not by us")
+    func networkConflictRenamingDistinguishesHosts() throws {
+        // A second host advertising `Post` is renamed to `Post (2)` by mDNS —
+        // that is what conflict resolution is for. The names are distinct, so a
+        // named lookup stays unambiguous and browse order decides nothing.
+        let hosts = [service("Post", loopback: false), service("Post (2)", loopback: false)]
+        let match = try TCPConnection.selectService(
+            from: hosts, derivedName: "Post", scope: .localNetwork
+        )
+        #expect(match?.instanceName == "Post")
+
+        let second = try TCPConnection.selectService(
+            from: hosts, derivedName: "Post (2)", scope: .localNetwork
+        )
+        #expect(second?.instanceName == "Post (2)")
     }
 
-    @Test("Naming the qualified instance selects one host outright")
-    func networkExactInstanceNameWins() throws {
-        // The escape hatch from the ambiguity above: name the host you mean.
-        let hosts = [
-            service("Post on Mac-Studio", loopback: false, txt: BonjourTXTRecord(serverName: "Post")),
-            service("Post on MacBook", loopback: false, txt: BonjourTXTRecord(serverName: "Post"))
-        ]
+    @Test("Selection does not depend on TXT having arrived")
+    func networkDoesNotRequireTXT() throws {
+        // TXT can land after the first browse callback. Matching on the instance
+        // name alone means a timing race cannot reject a working server.
+        let remote = service("Post", loopback: false, txt: nil)
         let match = try TCPConnection.selectService(
-            from: hosts, derivedName: nil, baseName: "Post on MacBook", scope: .localNetwork
+            from: [remote], derivedName: "Post", scope: .localNetwork
         )
-        #expect(match?.instanceName == "Post on MacBook")
-    }
-
-    @Test("Missing TXT falls back to the name prefix rather than rejecting")
-    func networkFailsOpenWithoutTXT() throws {
-        // TXT can arrive after the first browse callback. Treating absent metadata
-        // as a mismatch would reject a working server because of a timing race.
-        let remote = service("Post on Mac-Studio", loopback: false, txt: nil)
-        let match = try TCPConnection.selectService(
-            from: [remote], derivedName: nil, baseName: "Post", scope: .localNetwork
-        )
-        #expect(match?.instanceName == "Post on Mac-Studio")
+        #expect(match?.instanceName == "Post")
     }
 
     @Test("Nameless discovery selects a sole instance")
     func namelessSelection() throws {
         let sole = try TCPConnection.selectService(
-            from: [service("Post (oliver)")], derivedName: nil, baseName: nil, scope: .localUser
+            from: [service("Post (oliver)")], derivedName: nil, scope: .localUser
         )
         #expect(sole != nil)
 
         #expect(try TCPConnection.selectService(
-            from: [], derivedName: nil, baseName: nil, scope: .localUser
+            from: [], derivedName: nil, scope: .localUser
         ) == nil)
     }
 
@@ -347,7 +341,7 @@ struct TCPBonjourResultSelectionTests {
         #expect(throws: MCPServerProxyError.self) {
             _ = try TCPConnection.selectService(
                 from: [service("Post (oliver)"), service("SwiftMCP (oliver)")],
-                derivedName: nil, baseName: nil, scope: .localUser
+                derivedName: nil, scope: .localUser
             )
         }
     }
@@ -359,7 +353,7 @@ struct TCPBonjourResultSelectionTests {
         // named lookup connect without waiting for the browse to settle.
         let services = [service("Post (oliver)"), service("SwiftMCP (oliver)")]
         let match = try TCPConnection.selectService(
-            from: services, derivedName: "Post (oliver)", baseName: "Post", scope: .localUser
+            from: services, derivedName: "Post (oliver)", scope: .localUser
         )
         #expect(match?.instanceName == "Post (oliver)")
     }

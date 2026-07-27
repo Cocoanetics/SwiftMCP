@@ -183,7 +183,7 @@ public final actor TCPConnection: StdioConnection {
                 let services = results.compactMap(DiscoveredService.init(result:))
                 do {
                     if let match = try Self.selectService(
-                        from: services, derivedName: derivedName, baseName: baseName, scope: scope
+                        from: services, derivedName: derivedName, scope: scope
                     ) {
                         finish(.success(match.endpoint))
                     }
@@ -224,47 +224,17 @@ public final actor TCPConnection: StdioConnection {
     internal static func selectService(
         from services: [DiscoveredService],
         derivedName: String?,
-        baseName: String?,
         scope: DiscoveryScope
     ) throws -> DiscoveredService? {
         // At local scope, anything not reachable on loopback is not ours.
         let candidates = scope.isLocalOnly ? services.filter(\.isLoopback) : services
 
         if let derivedName {
-            // Local scopes: the advertised name is derivable, so match it exactly.
+            // Every scope derives the advertised name symmetrically, so an exact
+            // match is the whole rule. mDNS guarantees instance names are unique
+            // per (type, domain) — it renames conflicts — so one match is the
+            // answer the moment it arrives, with no settle period to wait out.
             return candidates.first { $0.instanceName.matchesInstanceName(derivedName) }
-        }
-
-        if let baseName {
-            // .localNetwork: the server qualified with its own host name, which we
-            // cannot reconstruct.
-            //
-            // An exact instance-name match wins, so a caller that knows the host
-            // can name it outright ("Post on Mac-Studio") and get a direct lookup.
-            if let exact = candidates.first(where: { $0.instanceName.matchesInstanceName(baseName) }) {
-                return exact
-            }
-
-            // Otherwise match the TXT `name` entry, falling back to the qualified
-            // prefix when TXT has not arrived — absent metadata means unknown,
-            // never mismatched.
-            let matches = candidates.filter { service in
-                if let advertised = service.txtRecord?.serverName {
-                    return advertised.matchesInstanceName(baseName)
-                }
-                return service.instanceName.normalizedInstanceName
-                    .hasPrefix(baseName.normalizedInstanceName)
-            }
-            guard !matches.isEmpty else { return nil }
-            // Several hosts running the same server all advertise the same TXT
-            // `name`. Browse order is not a host-selection mechanism — taking the
-            // first would silently bind to whichever machine answered soonest.
-            guard matches.count == 1 else {
-                throw MCPServerProxyError.ambiguousService(
-                    candidates: matches.map(\.instanceName).sorted()
-                )
-            }
-            return matches[0]
         }
 
         // Nameless browse: only unambiguous when exactly one service is in scope.

@@ -214,9 +214,15 @@ in the Bonjour **instance name**, and how far that name reaches is one decision:
 
 | scope | reach | advertised name for base `Post` |
 |---|---|---|
-| `.localUser` *(default)* | loopback, same user | `Post (oliver)` |
-| `.localMachine` | loopback, any user | `Post` |
-| `.localNetwork` | the attached link | `Post on Mac-Studio` |
+| `.localUser` *(default)* | loopback, name qualified by user | `Post (oliver)` |
+| `.localMachine` | loopback, bare name | `Post` |
+| `.localNetwork` | the attached link, bare name | `Post` |
+
+Only `.localUser` decorates the name, and only because the decoration is derivable
+on *both* sides — client and server are the same user on the same machine. Nothing
+qualifies by host: DNS-SD already resolves a service to its target host, and a
+hostname changes when the machine is renamed. Two machines advertising the same
+name are separated by mDNS, which renames the second to `Post (2)`.
 
 The scope drives binding, advertising, **and** browsing together, so a service can
 never be advertised more widely than it is served. Client and server pass the same
@@ -231,7 +237,9 @@ let config = MCPServerTcpConfig(instanceName: server.serverName)  // .localUser
 
 `.localUser` is the default because instance names are machine-wide: two accounts
 running the same server would otherwise collide, and the second user's client would
-silently connect to the first user's process.
+silently connect to the first user's process. It prevents that mis-binding — it is
+not an access boundary, since a loopback socket is visible to every account on the
+machine. Authenticate if you need one.
 
 `.localNetwork` is opt-in — the TCP transport has no authorization hook, so anything
 reachable there is reachable unauthenticated unless you add your own layer.

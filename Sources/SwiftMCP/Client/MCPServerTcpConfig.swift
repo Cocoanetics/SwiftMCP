@@ -68,18 +68,16 @@ public struct MCPServerTcpConfig: Sendable {
         self.preferIPv4 = preferIPv4
     }
 
-    /// The instance name to match against browse results, when derivable.
+    /// The instance name to match against browse results.
     ///
-    /// `nil` for a nameless browse, and `nil` at ``DiscoveryScope/localNetwork``
-    /// where the server qualifies with its own host name — a remote client cannot
-    /// reconstruct that, so it matches on the TXT `name` entry instead.
+    /// `nil` only for a nameless browse. Every scope derives symmetrically, so
+    /// this is the same string the server asked mDNS to register.
     internal var derivedInstanceName: String? {
         guard case .bonjour(let base) = endpoint, let base else { return nil }
-        guard scope.canDeriveInstanceName else { return nil }
         return scope.instanceName(for: base)
     }
 
-    /// The base name a `.localNetwork` browse matches against TXT `name`.
+    /// The base name as configured, before the scope derives from it.
     internal var baseInstanceName: String? {
         guard case .bonjour(let base) = endpoint else { return nil }
         return base
