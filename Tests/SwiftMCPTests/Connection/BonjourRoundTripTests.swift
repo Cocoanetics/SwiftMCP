@@ -93,7 +93,7 @@ struct BonjourRoundTripTests {
         )
         let resolved = try #require(record)
         #expect(resolved.serverName == StructCalculator().serverName)
-        #expect(resolved.processID == getpid())
+        #expect(resolved.processID == ProcessIdentity.processID)
         #expect(resolved.isPublisherAlive == true)
     }
 

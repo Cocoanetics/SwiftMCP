@@ -155,8 +155,17 @@ struct BonjourTXTRecordTests {
     @Test("Liveness is unknown when no pid was published")
     func livenessWithoutPID() {
         #expect(BonjourTXTRecord(serverName: "Post").isPublisherAlive == nil)
-        #expect(BonjourTXTRecord(serverName: "Post", processID: getpid()).isPublisherAlive == true)
     }
+
+    #if canImport(Darwin)
+    @Test("A published pid resolves to its liveness")
+    func livenessWithPID() {
+        // Darwin-only: liveness needs `kill(pid, 0)`, and every platform that can
+        // actually advertise over Bonjour has it.
+        let record = BonjourTXTRecord(serverName: "Post", processID: ProcessIdentity.processID)
+        #expect(record.isPublisherAlive == true)
+    }
+    #endif
 }
 
 #if Client

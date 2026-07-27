@@ -2,64 +2,59 @@
 //  ProcessIdentity.swift
 //  SwiftMCP
 //
-//  POSIX process identity, behind one platform-conditional surface.
+//  Process identity for the Bonjour TXT record and the `.localUser` instance
+//  name, behind one surface that compiles everywhere.
 //
-//  These values feed the Bonjour TXT record and the `.localUser` instance name,
-//  both of which live in the always-on core and therefore compile on every
-//  platform SwiftMCP supports — including Windows and Android, where the raw
-//  POSIX calls are not in scope. Rather than sprinkling `#if os(...)` through the
-//  call sites, everything unavailable resolves to `nil` here and the callers
-//  degrade honestly: no pid in the TXT record, no uid in a fallback name.
+//  Both callers live in the always-on core, so they build on every platform
+//  SwiftMCP supports — including Windows and Android, where the raw POSIX calls
+//  are not in scope and the C-library overlay module is spelled differently on
+//  each. Guessing at that spelling is how this broke the first time; the pid now
+//  comes from Foundation, which is portable by construction, and the two values
+//  with no Foundation equivalent are Darwin-gated.
 //
-//  Nothing is lost in practice — the Bonjour transport needs the Network
-//  framework, so the platforms missing these calls cannot advertise anyway.
+//  Nothing is lost by that gating: `TCPBonjourTransport` needs the Network
+//  framework, so no other platform can advertise or discover in the first place.
 //
 
 import Foundation
 
 #if canImport(Darwin)
 import Darwin
-#elseif canImport(Bionic)
-import Bionic
-#elseif canImport(Android)
-import Android
-#elseif canImport(Glibc)
-import Glibc
-#elseif canImport(Musl)
-import Musl
 #endif
 
-/// The current process's POSIX identity, where the platform has one.
+/// The current process's identity, where the platform can answer.
 internal enum ProcessIdentity {
-    /// The current process id, or `nil` on platforms without POSIX pids.
-    internal static var processID: Int32? {
-        #if os(Windows)
-        return nil
-        #else
-        return getpid()
-        #endif
-    }
-
-    /// The current user id, or `nil` on platforms without POSIX uids.
-    internal static var userID: UInt32? {
-        #if os(Windows)
-        return nil
-        #else
-        return UInt32(getuid())
-        #endif
-    }
-
-    /// Whether `processID` names a live process.
+    /// The current process id.
     ///
-    /// `nil` when the platform cannot answer. `EPERM` counts as alive: the
-    /// process exists, we simply do not own it — treating that as dead would
-    /// discard a perfectly good advertisement from another user's daemon.
-    internal static func isRunning(_ processID: Int32) -> Bool? {
-        #if os(Windows)
-        return nil
+    /// Foundation's, not `getpid()` — same value, no platform-specific import.
+    internal static var processID: Int32 {
+        ProcessInfo.processInfo.processIdentifier
+    }
+
+    /// The current user id, or `nil` where POSIX uids are unavailable.
+    ///
+    /// Only ever a fallback: `.localUser` names come from `NSUserName()`, which
+    /// is portable and non-empty in every context that can run the transport.
+    internal static var userID: UInt32? {
+        #if canImport(Darwin)
+        return UInt32(getuid())
         #else
+        return nil
+        #endif
+    }
+
+    /// Whether `processID` names a live process, or `nil` where the platform
+    /// cannot answer.
+    ///
+    /// `EPERM` counts as alive: the process exists, we simply do not own it.
+    /// Reporting that as dead would discard a working advertisement published by
+    /// another user's daemon.
+    internal static func isRunning(_ processID: Int32) -> Bool? {
+        #if canImport(Darwin)
         if kill(processID, 0) == 0 { return true }
         return errno == EPERM
+        #else
+        return nil
         #endif
     }
 }
