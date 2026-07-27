@@ -25,8 +25,29 @@ internal final class LocalOnlyRegistration: @unchecked Sendable {
     private var reference: DNSServiceRef?
     private let nameBox = NameBox()
 
+    /// Serial queue libdispatch pumps the DNS-SD socket on.
+    ///
+    /// Never block a Swift-concurrency cooperative thread on mDNSResponder: the
+    /// pool is sized to the core count, and stalling one of its threads on a
+    /// system round trip starves every other async task in the process. That is
+    /// not hypothetical — it showed up as an unrelated, timing-bounded test
+    /// failing intermittently on CI.
+    private let queue = DispatchQueue(label: "com.cocoanetics.SwiftMCP.LocalOnlyRegistration")
+
     /// The instance name mDNSResponder actually registered, once confirmed.
     internal var resolvedName: String? { nameBox.name }
+
+    /// Waits for the registration to be confirmed, without blocking a thread.
+    ///
+    /// Returns the confirmed name, or `nil` if mDNSResponder stays silent — the
+    /// caller advertises under the requested name in that case rather than failing.
+    internal func awaitResolvedName(timeout: TimeInterval = 2) async -> String? {
+        let deadline = Date().addingTimeInterval(timeout)
+        while nameBox.name == nil, Date() < deadline {
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        return nameBox.name
+    }
 
     /// `kDNSServiceInterfaceIndexLocalOnly` (-1), which is not surfaced to Swift
     /// as a typed constant.
@@ -67,15 +88,16 @@ internal final class LocalOnlyRegistration: @unchecked Sendable {
         }
         self.reference = reference
 
-        // Pump once so the confirmation callback lands; the name is wanted for
-        // logging right away, not eventually.
-        DNSServiceProcessResult(reference)
+        // libdispatch pumps the socket and delivers the confirmation callback,
+        // rather than this thread blocking in DNSServiceProcessResult.
+        DNSServiceSetDispatchQueue(reference, queue)
     }
 
     internal func stop() {
         guard let reference else { return }
         self.reference = nil
-        DNSServiceRefDeallocate(reference)
+        // Deallocation must happen on the queue the service was bound to.
+        queue.async { DNSServiceRefDeallocate(reference) }
     }
 
     deinit {

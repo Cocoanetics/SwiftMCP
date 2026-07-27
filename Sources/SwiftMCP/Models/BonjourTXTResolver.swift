@@ -25,6 +25,15 @@ internal enum BonjourTXTResolver {
     /// `kDNSServiceInterfaceIndexAny` (0).
     internal static let anyInterfaceIndex: UInt32 = 0
 
+    /// Queue libdispatch pumps resolve sockets on.
+    ///
+    /// The blocking `select()` loop this replaces ran on whatever thread called
+    /// it — including Swift-concurrency cooperative threads, whose pool is sized
+    /// to the core count. Stalling one on an mDNS round trip starves every other
+    /// async task in the process, which is exactly how this surfaced: an
+    /// unrelated timing-bounded test failing intermittently on a small CI runner.
+    private static let queue = DispatchQueue(label: "com.cocoanetics.SwiftMCP.BonjourTXTResolver")
+
     /// Resolves one service's TXT record.
     ///
     /// Returns `nil` on timeout rather than throwing. Absent TXT means *unknown*,
@@ -36,8 +45,15 @@ internal enum BonjourTXTResolver {
         scope: DiscoveryScope,
         type: String = MCPBonjour.serviceType,
         timeout: TimeInterval = 2
-    ) -> BonjourTXTRecord? {
-        final class Box: @unchecked Sendable { var record: BonjourTXTRecord? }
+    ) async -> BonjourTXTRecord? {
+        final class Box: @unchecked Sendable {
+            private let lock = NSLock()
+            private var stored: BonjourTXTRecord?
+            var record: BonjourTXTRecord? {
+                get { lock.withLock { stored } }
+                set { lock.withLock { stored = newValue } }
+            }
+        }
         let box = Box()
         let context = Unmanaged.passUnretained(box).toOpaque()
 
@@ -58,23 +74,13 @@ internal enum BonjourTXTResolver {
             instanceName, type, scope.domain, callback, context
         )
         guard status == kDNSServiceErr_NoError, let reference else { return nil }
-        defer { DNSServiceRefDeallocate(reference) }
+        DNSServiceSetDispatchQueue(reference, queue)
+        defer { queue.async { DNSServiceRefDeallocate(reference) } }
 
-        let descriptor = DNSServiceRefSockFD(reference)
-        guard descriptor >= 0 else { return nil }
+        // Yields instead of blocking: the callback lands on `queue`.
         let deadline = Date().addingTimeInterval(timeout)
-
         while box.record == nil, Date() < deadline {
-            var readSet = fd_set()
-            bzero(&readSet, MemoryLayout<fd_set>.size)
-            withUnsafeMutablePointer(to: &readSet) { pointer in
-                pointer.withMemoryRebound(to: Int32.self, capacity: MemoryLayout<fd_set>.size / 4) { words in
-                    words[Int(descriptor / 32)] |= Int32(1 << (descriptor % 32))
-                }
-            }
-            var remaining = timeval(tv_sec: 0, tv_usec: 100_000)
-            guard select(descriptor + 1, &readSet, nil, nil, &remaining) > 0 else { continue }
-            guard DNSServiceProcessResult(reference) == kDNSServiceErr_NoError else { break }
+            try? await Task.sleep(nanoseconds: 20_000_000)
         }
         return box.record
     }

@@ -179,7 +179,7 @@ extension TCPBonjourTransport {
                 registration.stop()
                 return
             }
-            resolvedInstanceName = registration.resolvedName ?? advertisedInstanceName
+            resolvedInstanceName = await registration.awaitResolvedName() ?? advertisedInstanceName
             if attempt > 0 {
                 logger.info("Local-only Bonjour registration succeeded after \(attempt) retries.")
             }

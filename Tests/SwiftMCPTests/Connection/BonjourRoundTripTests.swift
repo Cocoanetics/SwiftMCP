@@ -96,7 +96,7 @@ struct BonjourRoundTripTests {
         // goes through the resolver. If that path regresses, TXT silently
         // becomes unavailable at exactly the scope that is the default.
         try await withTransport(scope: .localUser) { transport, _ in
-            let record = BonjourTXTResolver.resolve(
+            let record = await BonjourTXTResolver.resolve(
                 instanceName: transport.advertisedInstanceName, scope: .localUser, timeout: 2
             )
             let resolved = try #require(record)
