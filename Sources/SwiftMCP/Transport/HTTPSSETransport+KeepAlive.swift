@@ -4,6 +4,8 @@ import Foundation
 extension HTTPSSETransport {
     /// Start the keep-alive timer that sends messages every 60 seconds.
     internal func startKeepAliveTimer() {
+        // A resumed DispatchSourceTimer must be cancelled, not just overwritten.
+        stopKeepAliveTimer()
         keepAliveTimer = DispatchSource.makeTimerSource(queue: DispatchQueue.global())
         keepAliveTimer?.schedule(deadline: .now(), repeating: .seconds(60))
         keepAliveTimer?.setEventHandler { [weak self] in

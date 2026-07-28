@@ -17,6 +17,7 @@ extension TCPBonjourTransport {
         let generation = await state.start(listener: listener)
         installStateHandler(on: listener, generation: generation)
         listener.start(queue: queue)
+        startDescriptorWatchdog()
     }
 
     public func run() async throws {
@@ -24,8 +25,10 @@ extension TCPBonjourTransport {
         // Inside a `ServiceGroup`, a graceful shutdown signal calls `stop()`,
         // which cancels the listener/connections and resumes `waitUntilStopped()`
         // so this method returns. Standalone callers drive shutdown via `stop()`.
-        await withGracefulShutdownHandler {
-            await state.waitUntilStopped()
+        // An unrecoverable failure (dead listener, descriptor exhaustion) is
+        // rethrown here, so embedders learn about it instead of parking forever.
+        try await withGracefulShutdownHandler {
+            try await state.waitUntilStopped()
         } onGracefulShutdown: { [weak self] in
             Task { [weak self] in try? await self?.stop() }
         }

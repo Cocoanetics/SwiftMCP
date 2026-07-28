@@ -1,5 +1,12 @@
 import Foundation
 
+/// Carries the non-Sendable `MCPServer` existential into the cancellable
+/// request task. See the comment in `processCancellableRequest` for why the
+/// sharing is sound.
+private struct UncheckedServerBox: @unchecked Sendable {
+    let server: any MCPServer
+}
+
 // MARK: - JSON-RPC Message Dispatch
 public extension MCPServer {
     /**
@@ -30,7 +37,7 @@ public extension MCPServer {
             // First switch on message type
             switch message {
             case .request(let requestData):
-                return await handleRequest(requestData)
+                return await processCancellableRequest(requestData)
 
             case .notification(let notificationData):
                 return await handleNotification(notificationData)
@@ -42,6 +49,53 @@ public extension MCPServer {
                 return await handleErrorResponse(errorResponseData)
             }
         }
+    }
+
+    /**
+     Runs `handleRequest` as a task registered with the session under the
+     request id, making the request cancellable from outside:
+
+     - `notifications/cancelled` looks the id up on the session and cancels it.
+     - A transport tearing down a disconnected connection cancels the dispatch
+       task, and the handler forwards that cancellation into the request task —
+       so a long-running tool body stops instead of working for a client that
+       is gone.
+
+     The task is unstructured on purpose (a structured child cannot be
+     cancelled from outside), but inherits the `Session`/`RequestContext`
+     task-locals. Without a current session there is nobody to deliver a
+     cancellation, so the request runs directly.
+
+     - Parameter requestData: The request data
+     - Returns: The response, or nil when the request was cancelled (its
+       response must be suppressed per the MCP cancellation spec)
+     */
+    internal func processCancellableRequest(
+        _ requestData: JSONRPCMessage.JSONRPCRequestData
+    ) async -> JSONRPCMessage? {
+        guard let session = Session.current else {
+            return await handleRequest(requestData)
+        }
+
+        // `MCPServer` is not statically Sendable, but every transport already
+        // dispatches into it from concurrent per-connection tasks (through
+        // `@unchecked Sendable` transports) — concurrent use is the de-facto
+        // contract of server implementations. The unstructured task moves the
+        // same call one task deeper; it adds no new kind of sharing. Boxed (and
+        // erased, so the generic `Self.Type` metatype is not captured either)
+        // to carry it past the `sending` closure check.
+        let box = UncheckedServerBox(server: self)
+        let task = Task { await box.server.handleRequest(requestData) }
+        await session.registerInFlightRequest(id: requestData.id) { task.cancel() }
+
+        let response = await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+
+        let wasCancelled = await session.unregisterInFlightRequest(id: requestData.id)
+        return wasCancelled ? nil : response
     }
 
     /**
@@ -184,7 +238,8 @@ public extension MCPServer {
             return nil
 
         case "notifications/cancelled":
-            // Client has cancelled a request
+            // Client has cancelled a request — cancel it if it is still running.
+            await handleCancelledNotification(notificationData)
             return nil
 
         case "notifications/roots/list_changed":
@@ -196,6 +251,30 @@ public extension MCPServer {
             // Unknown notification - log it but don't respond
             return nil
         }
+    }
+
+    /// Cancels the in-flight request identified by a `notifications/cancelled`
+    /// notification on the current session. `requestId` may be a string or an
+    /// integer; unknown ids are a no-op per the MCP cancellation spec.
+    private func handleCancelledNotification(
+        _ notificationData: JSONRPCMessage.JSONRPCNotificationData
+    ) async {
+        guard let session = Session.current,
+              case .object(let params)? = notificationData.params else {
+            return
+        }
+
+        let requestID: JSONRPCID
+        switch params["requestId"] {
+        case .string(let value):
+            requestID = .string(value)
+        case .integer(let value):
+            requestID = .integer(value)
+        default:
+            return
+        }
+
+        await session.cancelInFlightRequest(id: requestID)
     }
 
     /**

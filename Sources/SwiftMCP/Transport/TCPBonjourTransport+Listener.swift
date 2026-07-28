@@ -35,6 +35,17 @@ extension TCPBonjourTransport {
            let ipOptions = parameters.defaultProtocolStack.internetProtocol as? NWProtocolIP.Options {
             ipOptions.version = .v4
         }
+        // TCP keepalive: session expiry never fires for this transport (it is
+        // driven by SSE hub streams, which TCP never creates), so a peer that
+        // vanishes without FIN/RST would otherwise pin its descriptor and its
+        // session forever. Keepalive turns a dead peer into a receive error,
+        // which reaches `cleanupConnection`.
+        if let tcpOptions = parameters.defaultProtocolStack.transportProtocol as? NWProtocolTCP.Options {
+            tcpOptions.enableKeepalive = true
+            tcpOptions.keepaliveIdle = 60
+            tcpOptions.keepaliveInterval = 15
+            tcpOptions.keepaliveCount = 4
+        }
 
         let listener: NWListener
         if let port {
@@ -103,7 +114,13 @@ extension TCPBonjourTransport {
                 logger.warning("Bonjour listener failed (mDNSResponder unavailable): \(error). Retrying in \(delay)s.")
                 scheduleRetry(afterDelay: delay, failedGeneration: generation)
             } else {
-                logger.error("TCP+Bonjour listener failed: \(error)")
+                // Terminal: without this, `isRunning` stays true and `run()`
+                // parks forever on a transport that serves nothing. `NWListener`
+                // fails *asynchronously* (an async bind conflict arrives here
+                // after `start()` already returned success), so rethrowing from
+                // `run()` is the only way the embedder ever learns.
+                logger.critical("TCP+Bonjour listener failed unrecoverably: \(error)")
+                await state.fail(generation: generation, error)
             }
 
         case .cancelled:
