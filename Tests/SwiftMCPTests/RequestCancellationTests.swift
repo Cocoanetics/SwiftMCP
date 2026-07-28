@@ -55,6 +55,15 @@ final class HangingServer: @unchecked Sendable {
         await observer.markCancelled()
         return "cancelled"
     }
+
+    /// Takes a moment, then answers — long enough for a client to half-close
+    /// while it is still computing.
+    @MCPTool(description: "Answers after a short delay")
+    func slow() async -> String {
+        await observer.markStarted()
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        return "slow-done"
+    }
 }
 
 @Suite("Request cancellation")
@@ -97,6 +106,34 @@ struct RequestCancellationTests {
         #expect(await server.observer.cancelled)
         // The client stopped listening for this response; it must be suppressed.
         #expect(response == nil)
+    }
+
+    @Test("A cancellation that overtakes its request still cancels it")
+    func preemptiveCancellation() async throws {
+        let server = HangingServer()
+        let session = Session(id: UUID())
+
+        // Dispatch tasks are unordered, so a cancellation can reach the
+        // session before its request registers. It must be retained and fire
+        // the moment the request shows up — not dropped as unknown.
+        let cancelNotification = JSONRPCMessage.notification(
+            method: "notifications/cancelled",
+            params: .object(["requestId": .integer(9)])
+        )
+        _ = await session.work { _ in await server.handleMessage(cancelNotification) }
+
+        let request = JSONRPCMessage.request(
+            id: .integer(9),
+            method: "tools/call",
+            params: .object([
+                "name": .string("hang"),
+                "arguments": .object([:])
+            ])
+        )
+        let response = await session.work { _ in await server.handleMessage(request) }
+
+        #expect(response == nil)
+        #expect(await server.observer.cancelled)
     }
 
     @Test("A cancellation for an unknown request id is a no-op")

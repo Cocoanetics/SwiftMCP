@@ -89,6 +89,11 @@ public actor Session {
     /// unregister so the now-unwanted response can be suppressed.
     private var cancelledRequestIDs: Set<JSONRPCID> = []
 
+    /// Cancellations that raced ahead of their request's registration
+    /// (dispatch tasks are unordered); consumed on registration so the
+    /// request is cancelled the moment it registers.
+    private var pendingCancellations: Set<JSONRPCID> = []
+
     /// Timestamp of the most recent activity associated with this session.
     public var lastActivityAt: Date = Date()
 
@@ -304,9 +309,15 @@ public actor Session {
     // MARK: - In-Flight Request Cancellation
 
     /// Registers a cancellation hook for a request this session is currently
-    /// processing, so a later `notifications/cancelled` can reach it. See
-    /// `MCPServer.processCancellableRequest`.
+    /// processing, so a later `notifications/cancelled` can reach it. A
+    /// cancellation that raced ahead of this registration fires immediately.
+    /// See `MCPServer.processCancellableRequest`.
     internal func registerInFlightRequest(id: JSONRPCID, cancel: @escaping @Sendable () -> Void) {
+        if pendingCancellations.remove(id) != nil {
+            cancelledRequestIDs.insert(id)
+            cancel()
+            return
+        }
         inFlightRequests[id] = cancel
     }
 
@@ -315,16 +326,28 @@ public actor Session {
     /// suppress the response the client stopped listening for.
     internal func unregisterInFlightRequest(id: JSONRPCID) -> Bool {
         inFlightRequests.removeValue(forKey: id)
+        // A cancellation that arrived after completion lost the race the spec
+        // allows; drop it rather than let it linger against a finished id.
+        pendingCancellations.remove(id)
         return cancelledRequestIDs.remove(id) != nil
     }
 
     /// Cancels the in-flight request with the given id. The request's task
-    /// sees ordinary Swift cooperative cancellation. Unknown or completed ids
-    /// are a no-op, as the MCP cancellation spec requires (the notification
-    /// races the response by design).
+    /// sees ordinary Swift cooperative cancellation. An id that has not
+    /// registered yet is retained briefly (dispatch tasks are unordered, so
+    /// the notification can overtake its request); ids are never legitimately
+    /// reused within a session, so retention cannot misfire. A completed id
+    /// is a no-op, as the MCP cancellation spec requires.
     public func cancelInFlightRequest(id: JSONRPCID) {
-        guard let cancel = inFlightRequests.removeValue(forKey: id) else { return }
-        cancelledRequestIDs.insert(id)
-        cancel()
+        if let cancel = inFlightRequests.removeValue(forKey: id) {
+            cancelledRequestIDs.insert(id)
+            cancel()
+            return
+        }
+        // Bounded: only a peer streaming cancellations for requests that never
+        // existed could grow this, and such a peer gets no cancellation
+        // guarantees anyway.
+        guard pendingCancellations.count < 128 else { return }
+        pendingCancellations.insert(id)
     }
 }

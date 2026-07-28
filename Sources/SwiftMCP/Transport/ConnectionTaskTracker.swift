@@ -47,6 +47,27 @@ final class ConnectionTaskTracker: @unchecked Sendable {
         }
     }
 
+    var isEmpty: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return tasks.isEmpty
+    }
+
+    /// Waits until every tracked task has finished, or the deadline passes.
+    ///
+    /// Used by the clean-EOF teardown path: a half-closing peer keeps its read
+    /// side open for replies to requests already in flight, so those handlers
+    /// get to finish before the socket is cancelled. Polling rather than
+    /// awaiting task values keeps this deadlock-free regardless of which task
+    /// calls it, and the deadline bounds a hung handler (the subsequent
+    /// `cancelAll()` reaps it).
+    func drain(timeout: TimeInterval) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !isEmpty, Date() < deadline {
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+    }
+
     private func remove(_ id: UUID) {
         lock.lock()
         tasks.removeValue(forKey: id)

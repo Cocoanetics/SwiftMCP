@@ -19,78 +19,78 @@ import Foundation
 import Network
 @testable import SwiftMCP
 
+/// A minimal blocking TCP client on raw POSIX sockets. Deliberately not
+/// Network.framework: the tests need deterministic close semantics (FIN on
+/// `close`, half-close via `shutdown`) and their own descriptors excluded
+/// from what the transport is being measured on.
+private struct TestTCPClient {
+    let sock: Int32
+
+    init(port: UInt16) throws {
+        sock = socket(AF_INET, SOCK_STREAM, 0)
+        guard sock >= 0 else {
+            throw POSIXError(.init(rawValue: errno) ?? .EIO)
+        }
+
+        var timeout = timeval(tv_sec: 5, tv_usec: 0)
+        setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+
+        var address = sockaddr_in()
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_port = port.bigEndian
+        address.sin_addr = in_addr(s_addr: inet_addr("127.0.0.1"))
+
+        let result = withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                connect(sock, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        guard result == 0 else {
+            let code = errno
+            close(sock)
+            throw POSIXError(.init(rawValue: code) ?? .EIO)
+        }
+    }
+
+    func send(_ string: String) {
+        let bytes = Array(string.utf8)
+        var sent = 0
+        while sent < bytes.count {
+            let written = bytes[sent...].withUnsafeBufferPointer {
+                write(sock, $0.baseAddress, $0.count)
+            }
+            guard written > 0 else { return }
+            sent += written
+        }
+    }
+
+    /// Half-close: FIN the write side while keeping the read side open.
+    func shutdownWrite() {
+        shutdown(sock, SHUT_WR)
+    }
+
+    /// Reads until the first newline (or EOF / receive timeout).
+    func readLine() -> String? {
+        var received = Data()
+        var byte: UInt8 = 0
+        while read(sock, &byte, 1) == 1 {
+            if byte == 0x0A {
+                return String(data: received, encoding: .utf8)
+            }
+            received.append(byte)
+        }
+        return received.isEmpty ? nil : String(data: received, encoding: .utf8)
+    }
+
+    func closeSocket() {
+        close(sock)
+    }
+}
+
 @Suite("TCP transport teardown", .serialized)
 struct TCPTransportTeardownTests {
 
     // MARK: - Helpers
-
-    /// A minimal blocking TCP client on raw POSIX sockets. Deliberately not
-    /// Network.framework: the tests need deterministic close semantics (FIN on
-    /// `close`, half-close via `shutdown`) and their own descriptors excluded
-    /// from what the transport is being measured on.
-    private struct TestTCPClient {
-        let sock: Int32
-
-        init(port: UInt16) throws {
-            sock = socket(AF_INET, SOCK_STREAM, 0)
-            guard sock >= 0 else {
-                throw POSIXError(.init(rawValue: errno) ?? .EIO)
-            }
-
-            var timeout = timeval(tv_sec: 5, tv_usec: 0)
-            setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
-
-            var address = sockaddr_in()
-            address.sin_family = sa_family_t(AF_INET)
-            address.sin_port = port.bigEndian
-            address.sin_addr = in_addr(s_addr: inet_addr("127.0.0.1"))
-
-            let result = withUnsafePointer(to: &address) {
-                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                    connect(sock, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
-                }
-            }
-            guard result == 0 else {
-                let code = errno
-                close(sock)
-                throw POSIXError(.init(rawValue: code) ?? .EIO)
-            }
-        }
-
-        func send(_ string: String) {
-            let bytes = Array(string.utf8)
-            var sent = 0
-            while sent < bytes.count {
-                let written = bytes[sent...].withUnsafeBufferPointer {
-                    write(sock, $0.baseAddress, $0.count)
-                }
-                guard written > 0 else { return }
-                sent += written
-            }
-        }
-
-        /// Half-close: FIN the write side while keeping the read side open.
-        func shutdownWrite() {
-            shutdown(sock, SHUT_WR)
-        }
-
-        /// Reads until the first newline (or EOF / receive timeout).
-        func readLine() -> String? {
-            var received = Data()
-            var byte: UInt8 = 0
-            while read(sock, &byte, 1) == 1 {
-                if byte == 0x0A {
-                    return String(data: received, encoding: .utf8)
-                }
-                received.append(byte)
-            }
-            return received.isEmpty ? nil : String(data: received, encoding: .utf8)
-        }
-
-        func closeSocket() {
-            close(sock)
-        }
-    }
 
     private func uniqueBaseName() -> String {
         "SwiftMCPTest-\(UUID().uuidString.prefix(8))"
@@ -204,7 +204,12 @@ struct TCPTransportTeardownTests {
     @Test("A client disconnect cancels a running tool")
     func disconnectCancelsRunningTool() async throws {
         let server = HangingServer()
-        try await withStartedTransport(server: server) { _, port in
+        try await withStartedTransport(server: server) { transport, port in
+            // A FIN takes the clean-EOF path, which grants in-flight handlers
+            // a drain window before cancelling. Shorten it so the test bounds
+            // "cancelled after the grace period", not a 30s default.
+            transport.eofDrainTimeout = 0.5
+
             let client = try TestTCPClient(port: port)
 
             client.send(Self.initializeLine + "\n")
@@ -222,6 +227,35 @@ struct TCPTransportTeardownTests {
                 await server.observer.waitUntilCancelled(),
                 "the tool kept running after its client disconnected"
             )
+        }
+    }
+
+    @Test("A half-closing client still receives the reply to an in-flight request")
+    func halfCloseKeepsInFlightReply() async throws {
+        let server = HangingServer()
+        try await withStartedTransport(server: server) { _, port in
+            let client = try TestTCPClient(port: port)
+            defer { client.closeSocket() }
+
+            client.send(Self.initializeLine + "\n")
+            _ = client.readLine()
+
+            // The request arrives in its own receive callback and is still
+            // computing when the FIN lands. Teardown must drain it — cancelling
+            // here would lose the reply the peer's open read side is waiting for.
+            client.send("""
+                {"jsonrpc":"2.0","id":2,"method":"tools/call",\
+                "params":{"name":"slow","arguments":{}}}\n
+                """)
+            #expect(await server.observer.waitUntilStarted())
+            client.shutdownWrite()
+
+            let responseLine = try #require(client.readLine())
+            let response = try JSONDecoder().decode(
+                JSONRPCMessage.self, from: Data(responseLine.utf8)
+            )
+            #expect(response.id == .integer(2))
+            #expect(responseLine.contains("slow-done"))
         }
     }
 

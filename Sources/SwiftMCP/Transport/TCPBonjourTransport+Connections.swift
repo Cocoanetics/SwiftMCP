@@ -114,14 +114,20 @@ extension TCPBonjourTransport {
                 if let remaining = framer.remainder() {
                     lines.append(remaining)
                 }
-                // Dispatch before cleanup, in the same task: the reply to a
-                // request that arrived immediately before EOF must be written
-                // before the connection is torn down.
+                // A clean EOF is a half-close, not an abort: the peer may keep
+                // its read side open for replies still being computed. Dispatch
+                // the final lines, then let the handlers from earlier callbacks
+                // drain (bounded — a hung one is reaped by cleanup's cancel)
+                // before the socket is torn down. Untracked on purpose: this
+                // task waits on the tracked ones, so tracking it would have it
+                // wait on itself.
                 let pending = lines
-                tracker.spawn {
+                let drainTimeout = self.eofDrainTimeout
+                Task {
                     for line in pending {
                         await self.handleLine(line, session: session)
                     }
+                    await tracker.drain(timeout: drainTimeout)
                     await self.cleanupConnection(id: connectionID)
                 }
                 return

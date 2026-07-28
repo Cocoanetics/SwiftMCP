@@ -81,6 +81,12 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
     /// Maximum delay between retry attempts (in seconds).
     internal static let maxRetryDelay: UInt64 = 60
 
+    /// How long a clean EOF waits for in-flight request handlers to finish
+    /// before tearing the connection down. A half-closing peer is still
+    /// reading replies; an abortive close (error path) skips this entirely.
+    /// Internal so tests can shorten the wait.
+    internal var eofDrainTimeout: TimeInterval = 30
+
     // MARK: - Init
 
     /// Creates a server-coupled transport.
