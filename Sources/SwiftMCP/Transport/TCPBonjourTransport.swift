@@ -81,142 +81,6 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
     /// Maximum delay between retry attempts (in seconds).
     internal static let maxRetryDelay: UInt64 = 60
 
-    // MARK: - Transport State
-
-    internal actor TransportState {
-        private(set) var isRunning: Bool = false
-        private(set) var generation: UInt64 = 0
-        private var listener: NWListener?
-        private var connections: [UUID: NWConnection] = [:]
-        private var runContinuation: CheckedContinuation<Void, Never>?
-        private var retryTask: Task<Void, Never>?
-        private var localRegistration: LocalOnlyRegistration?
-        private(set) var retryAttempt: Int = 0
-
-        func running() -> Bool {
-            isRunning
-        }
-
-        /// Start a new listener generation.
-        /// Returns the generation token for this listener.
-        @discardableResult
-        func start(listener: NWListener) -> UInt64 {
-            generation += 1
-            self.listener = listener
-            isRunning = true
-            retryAttempt = 0
-            cancelRetryTask()
-            localRegistration?.stop()
-            localRegistration = nil
-            return generation
-        }
-
-        /// Replace the current listener with a new one during retry recovery.
-        /// Returns the new generation token, or nil if the transport is stopped.
-        func replaceListener(_ newListener: NWListener, expectedGeneration: UInt64) -> UInt64? {
-            guard isRunning, generation == expectedGeneration else {
-                return nil
-            }
-            listener?.cancel()
-            localRegistration?.stop()
-            localRegistration = nil
-            generation += 1
-            self.listener = newListener
-            return generation
-        }
-
-        func stop() {
-            isRunning = false
-            generation += 1  // invalidate any in-flight retry / state callbacks
-            cancelRetryTask()
-            retryAttempt = 0
-            listener?.cancel()
-            listener = nil
-            localRegistration?.stop()
-            localRegistration = nil
-            for connection in connections.values {
-                connection.cancel()
-            }
-            connections.removeAll()
-            if let continuation = runContinuation {
-                runContinuation = nil
-                continuation.resume()
-            }
-        }
-
-        func waitUntilStopped() async {
-            guard isRunning else { return }
-            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-                runContinuation = continuation
-            }
-        }
-
-        /// Called when the listener reaches `.ready`.
-        /// Resets backoff, clears any pending retry, and returns the bound port (if available).
-        func listenerReady(generation listenerGen: UInt64) -> UInt16? {
-            guard listenerGen == generation, isRunning else { return nil }
-            retryAttempt = 0
-            cancelRetryTask()
-            return listener?.port?.rawValue
-        }
-
-        func setLocalRegistration(
-            _ registration: LocalOnlyRegistration,
-            generation listenerGen: UInt64
-        ) -> Bool {
-            guard listenerGen == generation, isRunning else { return false }
-            localRegistration?.stop()
-            localRegistration = registration
-            return true
-        }
-
-        /// Replaces the listener's advertised service, e.g. to publish a TXT record
-        /// that could not be complete when the listener was created.
-        func updateService(_ service: NWListener.Service, generation listenerGen: UInt64) {
-            guard listenerGen == generation, isRunning else { return }
-            listener?.service = service
-        }
-
-        func removeLocalRegistration(generation listenerGen: UInt64) {
-            guard listenerGen == generation else { return }
-            localRegistration?.stop()
-            localRegistration = nil
-        }
-
-        /// Called when the listener fails with a retryable error.
-        /// Increments the backoff attempt and returns the delay in seconds,
-        /// or nil if the transport is stopped or the generation is stale.
-        func listenerFailed(generation listenerGen: UInt64) -> UInt64? {
-            guard listenerGen == generation, isRunning else { return nil }
-            retryAttempt += 1
-            let delay = min(UInt64(1) << UInt64(min(retryAttempt - 1, 5)), TCPBonjourTransport.maxRetryDelay)
-            return delay
-        }
-
-        /// Store a retry task. Cancels any existing one first.
-        func setRetryTask(_ task: Task<Void, Never>) {
-            cancelRetryTask()
-            retryTask = task
-        }
-
-        private func cancelRetryTask() {
-            retryTask?.cancel()
-            retryTask = nil
-        }
-
-        func addConnection(id: UUID, connection: NWConnection) {
-            connections[id] = connection
-        }
-
-        func removeConnection(id: UUID) {
-            connections.removeValue(forKey: id)
-        }
-
-        func connection(for id: UUID) -> NWConnection? {
-            connections[id]
-        }
-    }
-
     // MARK: - Init
 
     /// Creates a server-coupled transport.
@@ -243,6 +107,10 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
         self.preferIPv4 = preferIPv4
         self.declaredServerName = nil
         self.declaredServerVersion = nil
+        // Force the lazy manager on the constructing thread: instance `lazy` is a
+        // non-atomic check-then-store, and its first touch would otherwise be a
+        // per-connection task — concurrent first connections could double-create it.
+        _ = sessionManager
     }
 
     /// Creates a decoupled transport with no server.
@@ -276,6 +144,17 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
         self.preferIPv4 = preferIPv4
         self.declaredServerName = serverName
         self.declaredServerVersion = serverVersion
+        // See the server-coupled initializer.
+        _ = sessionManager
+    }
+
+    deinit {
+        // A transport released without `stop()` must not orphan its listener:
+        // an orphaned `NWListener` keeps accepting (and thus leaking) connections
+        // with no owner left to ever cancel them. `TransportState` is an actor,
+        // so hop onto it; the task retains the actor until the sweep completes.
+        let state = self.state
+        Task { await state.stop() }
     }
 
     /// Connects the dispatcher `serve` routes inbound TCP lines through.

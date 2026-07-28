@@ -10,52 +10,77 @@ extension TCPBonjourTransport {
 
     internal func handleNewConnection(_ connection: NWConnection) {
         let connectionID = UUID()
+        let tracker = ConnectionTaskTracker()
+
+        // Installed before the first suspension: a connection that fails while
+        // its session is still being created must already have a cleanup path.
+        connection.stateUpdateHandler = { [weak self] state in
+            guard let self else { return }
+            switch state {
+            case .ready:
+                self.logger.info("TCP connection ready: \(connectionID)")
+            case .failed(let error):
+                self.logger.error("TCP connection failed (\(connectionID)): \(error)")
+                Task {
+                    await self.cleanupConnection(id: connectionID)
+                    await self.escalateIfDescriptorExhaustion(error)
+                }
+            case .cancelled:
+                Task {
+                    await self.cleanupConnection(id: connectionID)
+                }
+            default:
+                break
+            }
+        }
 
         Task {
             // One session per TCP connection; `SessionManager` attaches this
             // transport so outbound bytes route back over the same socket.
             let session = await sessionManager.session(id: connectionID)
 
-            connection.stateUpdateHandler = { [weak self] state in
-                guard let self else { return }
-                switch state {
-                case .ready:
-                    self.logger.info("TCP connection ready: \(connectionID)")
-                case .failed(let error):
-                    self.logger.error("TCP connection failed (\(connectionID)): \(error)")
-                    Task {
-                        await self.cleanupConnection(id: connectionID)
-                    }
-                case .cancelled:
-                    Task {
-                        await self.cleanupConnection(id: connectionID)
-                    }
-                default:
-                    break
-                }
+            guard await state.addConnection(id: connectionID, connection: connection, tasks: tracker) else {
+                // The transport stopped while this connection was being set up.
+                // Every early return on this path must cancel: the kernel already
+                // allocated the descriptor at accept, and only `cancel()` frees it.
+                connection.cancel()
+                await sessionManager.removeSession(id: connectionID)
+                return
             }
-
-            await state.addConnection(id: connectionID, connection: connection)
             connection.start(queue: queue)
-            startReceiveLoop(connection: connection, session: session, connectionID: connectionID)
+            startReceiveLoop(
+                connection: connection, session: session,
+                connectionID: connectionID, tracker: tracker
+            )
         }
     }
 
     internal func cleanupConnection(id: UUID) async {
+        // `removeConnection` cancels the `NWConnection` (releasing its socket)
+        // and every in-flight dispatch task for this connection.
         await state.removeConnection(id: id)
         await sessionManager.removeSession(id: id)
     }
 
-    internal func startReceiveLoop(connection: NWConnection, session: Session, connectionID: UUID) {
-        let lineBuffer = LineBuffer()
-        receiveNext(connection: connection, session: session, connectionID: connectionID, lineBuffer: lineBuffer)
+    internal func startReceiveLoop(
+        connection: NWConnection,
+        session: Session,
+        connectionID: UUID,
+        tracker: ConnectionTaskTracker
+    ) {
+        let framer = LineFramer()
+        receiveNext(
+            connection: connection, session: session,
+            connectionID: connectionID, framer: framer, tracker: tracker
+        )
     }
 
     internal func receiveNext(
         connection: NWConnection,
         session: Session,
         connectionID: UUID,
-        lineBuffer: LineBuffer
+        framer: LineFramer,
+        tracker: ConnectionTaskTracker
     ) {
         connection.receive(
             minimumIncompleteLength: 1,
@@ -63,18 +88,19 @@ extension TCPBonjourTransport {
         ) { [weak self] data, _, isComplete, error in
             guard let self else { return }
 
+            // Line assembly happens synchronously on the connection's serial
+            // queue: receive callbacks arrive in order here, whereas hopping
+            // each chunk into a task would let two chunks interleave mid-line.
+            // Only the dispatch of complete lines leaves the queue.
+            var lines: [String] = []
             if let data, !data.isEmpty {
-                Task {
-                    await lineBuffer.append(data)
-                    let lines = await lineBuffer.processLines()
-                    for line in lines {
-                        await self.handleLine(line, session: session)
-                    }
-                }
+                framer.append(data)
+                lines = framer.extractLines()
             }
 
             if let error {
                 self.logger.error("TCP receive error (\(connectionID)): \(error)")
+                self.dispatchLines(lines, session: session, tracker: tracker)
                 Task {
                     await self.cleanupConnection(id: connectionID)
                 }
@@ -82,22 +108,69 @@ extension TCPBonjourTransport {
             }
 
             if isComplete {
-                Task {
-                    if let remaining = await lineBuffer.getRemaining() {
-                        await self.handleLine(remaining, session: session)
+                // All appends happened on this queue, so the final unterminated
+                // line is complete here — flushing from a racing task could run
+                // before the data callback and silently drop it.
+                if let remaining = framer.remainder() {
+                    lines.append(remaining)
+                }
+                // Dispatch before cleanup, in the same task: the reply to a
+                // request that arrived immediately before EOF must be written
+                // before the connection is torn down.
+                let pending = lines
+                tracker.spawn {
+                    for line in pending {
+                        await self.handleLine(line, session: session)
                     }
                     await self.cleanupConnection(id: connectionID)
                 }
                 return
             }
 
+            self.dispatchLines(lines, session: session, tracker: tracker)
             self.receiveNext(
                 connection: connection,
                 session: session,
                 connectionID: connectionID,
-                lineBuffer: lineBuffer
+                framer: framer,
+                tracker: tracker
             )
         }
+    }
+
+    /// Dispatches already-extracted lines on a task tracked by the connection,
+    /// so teardown can cancel whatever they started.
+    private func dispatchLines(_ lines: [String], session: Session, tracker: ConnectionTaskTracker) {
+        guard !lines.isEmpty else { return }
+        tracker.spawn {
+            for line in lines {
+                await self.handleLine(line, session: session)
+            }
+        }
+    }
+
+    /// Escalates descriptor exhaustion to a terminal transport failure.
+    ///
+    /// Out of descriptors, this process cannot accept anything anymore — and the
+    /// listener itself reports nothing in that state (it stays `.ready` and
+    /// silently stops accepting), so the failure must be caught wherever it does
+    /// surface. Failing terminally makes `run()` throw, so a supervised daemon
+    /// exits and gets restarted instead of serving nothing forever.
+    internal func escalateIfDescriptorExhaustion(_ error: NWError) async {
+        guard Self.isDescriptorExhaustion(error) else { return }
+        logger.critical("Out of file descriptors (\(error)); failing the TCP+Bonjour transport terminally.")
+        await state.failTerminally(TransportError.resourceExhausted(
+            "The process is out of file descriptors; the TCP+Bonjour transport cannot accept connections."
+        ))
+    }
+
+    /// `true` for POSIX `EMFILE` (per-process) / `ENFILE` (system-wide)
+    /// descriptor-table exhaustion.
+    internal static func isDescriptorExhaustion(_ error: NWError) -> Bool {
+        if case .posix(let code) = error, code == .EMFILE || code == .ENFILE {
+            return true
+        }
+        return false
     }
 
     /// Decodes one newline-delimited line and routes it. The session is bound as

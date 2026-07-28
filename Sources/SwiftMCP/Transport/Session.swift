@@ -81,6 +81,14 @@ public actor Session {
     /// URIs that this session has subscribed to for resource-updated notifications.
     internal var subscribedResourceURIs: Set<String> = []
 
+    /// Cancellation hooks for the requests currently being processed on this
+    /// session, keyed by JSON-RPC id. Fired by `notifications/cancelled`.
+    private var inFlightRequests: [JSONRPCID: @Sendable () -> Void] = [:]
+
+    /// Ids whose in-flight request was explicitly cancelled; consumed on
+    /// unregister so the now-unwanted response can be suppressed.
+    private var cancelledRequestIDs: Set<JSONRPCID> = []
+
     /// Timestamp of the most recent activity associated with this session.
     public var lastActivityAt: Date = Date()
 
@@ -291,5 +299,32 @@ public actor Session {
     /// This prevents continuation leaks when sessions are disconnected.
     internal func cancelAllWaitingTasks() {
         responses.failAll()
+    }
+
+    // MARK: - In-Flight Request Cancellation
+
+    /// Registers a cancellation hook for a request this session is currently
+    /// processing, so a later `notifications/cancelled` can reach it. See
+    /// `MCPServer.processCancellableRequest`.
+    internal func registerInFlightRequest(id: JSONRPCID, cancel: @escaping @Sendable () -> Void) {
+        inFlightRequests[id] = cancel
+    }
+
+    /// Removes the hook once processing finished. Returns `true` when the
+    /// request was explicitly cancelled while in flight, so the caller can
+    /// suppress the response the client stopped listening for.
+    internal func unregisterInFlightRequest(id: JSONRPCID) -> Bool {
+        inFlightRequests.removeValue(forKey: id)
+        return cancelledRequestIDs.remove(id) != nil
+    }
+
+    /// Cancels the in-flight request with the given id. The request's task
+    /// sees ordinary Swift cooperative cancellation. Unknown or completed ids
+    /// are a no-op, as the MCP cancellation spec requires (the notification
+    /// races the response by design).
+    public func cancelInFlightRequest(id: JSONRPCID) {
+        guard let cancel = inFlightRequests.removeValue(forKey: id) else { return }
+        cancelledRequestIDs.insert(id)
+        cancel()
     }
 }

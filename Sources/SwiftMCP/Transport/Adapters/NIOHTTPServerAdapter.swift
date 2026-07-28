@@ -74,11 +74,18 @@ final class NIOHTTPServerAdapter: @unchecked Sendable {
                 }
             }
             return boundPort
-        } catch let error as IOError {
-            throw bindingError(for: error, host: engine.configuredHost, port: engine.configuredPort)
         } catch {
-            logger.error("Server error: \(error)")
-            throw TransportError.bindingFailed(error.localizedDescription)
+            // The group was created in `init`; a failed bind is the only path
+            // on which nobody will ever call `shutdown()`, and each leaked
+            // group is `System.coreCount` threads plus a kqueue descriptor.
+            try? await shutdown()
+            switch error {
+            case let ioError as IOError:
+                throw bindingError(for: ioError, host: engine.configuredHost, port: engine.configuredPort)
+            default:
+                logger.error("Server error: \(error)")
+                throw TransportError.bindingFailed(error.localizedDescription)
+            }
         }
     }
 

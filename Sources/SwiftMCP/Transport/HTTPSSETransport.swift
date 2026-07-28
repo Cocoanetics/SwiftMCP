@@ -159,10 +159,25 @@ public final class HTTPSSETransport: Transport, MCPTransport, Service, MCPHTTPEn
     // MARK: - Server Lifecycle
 
     public func start() async throws {
+        // Keyed off a successful bind: `self.adapter` is only ever a *bound*
+        // adapter. Assigning before binding would strand the previous adapter's
+        // listener (and its event-loop group) unreachable on a repeated start,
+        // while the new bind fails with EADDRINUSE against it.
+        guard self.adapter == nil else { return }
+
+        // Force the lazy router and session manager on this task, before any
+        // connection can race the non-atomic `lazy` check-then-store. Done here
+        // rather than in `init` because both are built from configuration set
+        // between `init` and `start()` (`serveOpenAPI`, custom routes,
+        // `streamRetentionInterval`).
+        _ = router
+        _ = sessionManager
+
         let adapter = NIOHTTPServerAdapter(engine: self, logger: logger)
-        self.adapter = adapter
-        // Binding resolves an ephemeral `0` to the actual port.
+        // Binding resolves an ephemeral `0` to the actual port. On failure the
+        // adapter has shut its own event-loop group down before rethrowing.
         self.port = try await adapter.start()
+        self.adapter = adapter
         startKeepAliveTimer()
     }
 
@@ -186,6 +201,10 @@ public final class HTTPSSETransport: Transport, MCPTransport, Service, MCPHTTPEn
         logger.info("Stopping server...")
         stopKeepAliveTimer()
         await sessionManager.removeAllSessions()
+        // Cleared before the throwing shutdown: if shutdown throws, the adapter
+        // must not linger as if it were still serving.
+        let adapter = self.adapter
+        self.adapter = nil
         try await adapter?.shutdown()
         logger.info("Server stopped")
     }
