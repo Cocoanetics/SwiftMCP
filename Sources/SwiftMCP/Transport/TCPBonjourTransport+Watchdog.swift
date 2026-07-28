@@ -52,26 +52,34 @@ extension TCPBonjourTransport {
         }
     }
 
+    /// How many descriptor-table slots one sample scans at most.
+    internal static let watchdogScanCeiling = 65536
+
     /// Counts live descriptors against the process limit.
     ///
     /// Counting is `fcntl(fd, F_GETFD)` over the table — deliberately not
     /// `F_GETPATH` (returns `EBADF` for sockets, i.e. blind to exactly the leak
     /// this guards against) and not `proc_pidinfo` (reports table capacity, not
-    /// usage). The scan is clamped: an effectively unlimited `rlim_cur` cannot
-    /// be exhausted by sockets in practice, and scanning billions of slots
-    /// every sample is not an option.
+    /// usage). The *scan* is clamped (scanning billions of slots every sample
+    /// is not an option), but `limit` is the real `rlim_cur`: comparing the
+    /// threshold against the clamp would terminally fail a healthy deployment
+    /// that raised `RLIMIT_NOFILE` and legitimately holds many descriptors.
+    /// When the limit exceeds the scan window the watchdog is naturally inert —
+    /// a clamped scan cannot prove proximity to a limit it cannot see, and an
+    /// effectively unlimited `rlim_cur` cannot be exhausted by sockets anyway.
     internal static func descriptorUsage() -> (used: Int, limit: Int)? {
         var limits = rlimit()
         guard getrlimit(RLIMIT_NOFILE, &limits) == 0 else { return nil }
 
-        let ceiling = min(Int(clamping: limits.rlim_cur), 65536)
-        guard ceiling > 0 else { return nil }
+        let limit = Int(clamping: limits.rlim_cur)
+        let scanCeiling = min(limit, watchdogScanCeiling)
+        guard scanCeiling > 0 else { return nil }
 
         var used = 0
-        for descriptor in 0..<Int32(ceiling) where fcntl(descriptor, F_GETFD) != -1 {
+        for descriptor in 0..<Int32(scanCeiling) where fcntl(descriptor, F_GETFD) != -1 {
             used += 1
         }
-        return (used, ceiling)
+        return (used, limit)
     }
 }
 #endif

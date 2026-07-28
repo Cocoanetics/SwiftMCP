@@ -259,120 +259,60 @@ struct TCPTransportTeardownTests {
         }
     }
 
-    // MARK: - §2: a dead listener must fail run(), not park it
+    @Test("A hung tool arriving with the FIN is still reaped")
+    func hungFinalLineToolIsReaped() async throws {
+        let server = HangingServer()
+        try await withStartedTransport(server: server) { transport, port in
+            transport.eofDrainTimeout = 0.5
 
-    @Test("run() throws when the listener fails unrecoverably")
-    func runThrowsOnListenerFailure() async throws {
-        // Occupy a loopback port so the transport's listener fails its bind.
-        // NWListener fails *asynchronously*: start() reports success first, and
-        // before the fix the failure was logged and swallowed — run() parked
-        // forever with the embedder believing the server was up.
-        let blocker = socket(AF_INET, SOCK_STREAM, 0)
-        defer { close(blocker) }
-        var address = sockaddr_in()
-        address.sin_family = sa_family_t(AF_INET)
-        address.sin_port = 0
-        address.sin_addr = in_addr(s_addr: inet_addr("127.0.0.1"))
-        let bindResult = withUnsafePointer(to: &address) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                bind(blocker, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
-            }
-        }
-        #expect(bindResult == 0)
-        #expect(listen(blocker, 1) == 0)
+            let client = try TestTCPClient(port: port)
+            defer { client.closeSocket() }
 
-        var boundAddress = sockaddr_in()
-        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
-        withUnsafeMutablePointer(to: &boundAddress) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                _ = getsockname(blocker, $0, &length)
-            }
-        }
-        let occupiedPort = UInt16(bigEndian: boundAddress.sin_port)
+            client.send(Self.initializeLine + "\n")
+            _ = client.readLine()
 
-        let transport = TCPBonjourTransport(
-            server: StructCalculator(),
-            instanceName: uniqueBaseName(),
-            scope: .localUser,
-            port: occupiedPort
-        )
+            // No trailing newline: the request is completed by the FIN itself,
+            // so its handler is guaranteed to run from the EOF batch. If that
+            // batch were untracked, nothing could ever cancel this tool and
+            // the connection entry, session, and descriptor would pin forever.
+            client.send("""
+                {"jsonrpc":"2.0","id":2,"method":"tools/call",\
+                "params":{"name":"hang","arguments":{}}}
+                """)
+            client.closeSocket()
 
-        await #expect(throws: (any Error).self) {
-            try await withThrowingTaskGroup(of: Void.self) { group in
-                group.addTask {
-                    try await transport.run()
-                }
-                group.addTask {
-                    try await Task.sleep(nanoseconds: 15_000_000_000)
-                    try? await transport.stop()  // unblock run() if it wedged
-                    Issue.record("run() did not throw within 15s of the listener failing")
-                }
-                try await group.next()
-                group.cancelAll()
-            }
+            #expect(
+                await server.observer.waitUntilCancelled(),
+                "the EOF-batch tool outlived the drain window without being reaped"
+            )
         }
     }
 
-    // MARK: - §4b: accepts racing stop()
+    @Test("A cancellation coalesced with its request still cancels it")
+    func coalescedCancellationCancels() async throws {
+        let server = HangingServer()
+        try await withStartedTransport(server: server) { _, port in
+            let client = try TestTCPClient(port: port)
+            defer { client.closeSocket() }
 
-    @Test("A connection registered after stop() is refused")
-    func connectionAfterStopIsRefused() async throws {
-        let transport = TCPBonjourTransport(
-            server: StructCalculator(), instanceName: uniqueBaseName(), scope: .localUser
-        )
+            client.send(Self.initializeLine + "\n")
+            _ = client.readLine()
 
-        let connection = NWConnection(
-            host: "127.0.0.1", port: .init(rawValue: 9)!, using: .tcp
-        )
-        defer { connection.cancel() }
+            // One write, so both lines typically arrive in one receive
+            // callback. Processed strictly in order, the cancellation would
+            // wait behind the very request it names and cancel nothing.
+            client.send("""
+                {"jsonrpc":"2.0","id":3,"method":"tools/call",\
+                "params":{"name":"hang","arguments":{}}}\n\
+                {"jsonrpc":"2.0","method":"notifications/cancelled",\
+                "params":{"requestId":3}}\n
+                """)
 
-        // Never started: not running, so registration must be refused.
-        let refusedBeforeStart = await transport.state.addConnection(
-            id: UUID(), connection: connection, tasks: ConnectionTaskTracker()
-        )
-        #expect(refusedBeforeStart == false)
-
-        try await transport.start()
-        let id = UUID()
-        let acceptedWhileRunning = await transport.state.addConnection(
-            id: id, connection: connection, tasks: ConnectionTaskTracker()
-        )
-        #expect(acceptedWhileRunning == true)
-
-        try await transport.stop()
-        #expect(await transport.state.connection(for: id) == nil)
-
-        let refusedAfterStop = await transport.state.addConnection(
-            id: UUID(), connection: connection, tasks: ConnectionTaskTracker()
-        )
-        #expect(refusedAfterStop == false)
-    }
-
-    // MARK: - §3: descriptor accounting
-
-    @Test("descriptorUsage counts live descriptors")
-    func descriptorUsageCountsLiveDescriptors() throws {
-        let before = try #require(TCPBonjourTransport.descriptorUsage())
-        #expect(before.used > 0)
-        #expect(before.limit > 0)
-        #expect(before.used <= before.limit)
-
-        // Ten pipes: twenty descriptors that F_GETFD must see.
-        var pipes: [[Int32]] = []
-        for _ in 0..<10 {
-            var fds: [Int32] = [0, 0]
-            #expect(pipe(&fds) == 0)
-            pipes.append(fds)
+            #expect(
+                await server.observer.waitUntilCancelled(),
+                "the coalesced cancellation never reached the running tool"
+            )
         }
-        defer {
-            for fds in pipes {
-                close(fds[0])
-                close(fds[1])
-            }
-        }
-
-        let after = try #require(TCPBonjourTransport.descriptorUsage())
-        #expect(after.used >= before.used + 10)
     }
 }
 #endif

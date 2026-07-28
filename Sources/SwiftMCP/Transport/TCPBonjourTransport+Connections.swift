@@ -114,19 +114,20 @@ extension TCPBonjourTransport {
                 if let remaining = framer.remainder() {
                     lines.append(remaining)
                 }
+                // The final lines dispatch tracked like every other batch — a
+                // one-shot client delivers request and FIN in the same read,
+                // and an untracked handler here would be unreapable: a hung
+                // tool would block cleanup forever with nothing able to cancel
+                // it. The drain below bounds it exactly like earlier handlers.
+                self.dispatchLines(lines, session: session, tracker: tracker)
                 // A clean EOF is a half-close, not an abort: the peer may keep
-                // its read side open for replies still being computed. Dispatch
-                // the final lines, then let the handlers from earlier callbacks
-                // drain (bounded — a hung one is reaped by cleanup's cancel)
-                // before the socket is torn down. Untracked on purpose: this
-                // task waits on the tracked ones, so tracking it would have it
-                // wait on itself.
-                let pending = lines
+                // its read side open for replies still being computed. Let the
+                // tracked handlers drain (bounded) before the socket is torn
+                // down; cleanup's cancel reaps whatever outlived the timeout.
+                // Untracked on purpose: this task waits on the tracked ones,
+                // so tracking it would have it wait on itself.
                 let drainTimeout = self.eofDrainTimeout
                 Task {
-                    for line in pending {
-                        await self.handleLine(line, session: session)
-                    }
                     await tracker.drain(timeout: drainTimeout)
                     await self.cleanupConnection(id: connectionID)
                 }
@@ -146,13 +147,46 @@ extension TCPBonjourTransport {
 
     /// Dispatches already-extracted lines on a task tracked by the connection,
     /// so teardown can cancel whatever they started.
+    ///
+    /// Cancellation notifications go first: coalesced into the same read as
+    /// the request they name (one client flush, Nagle, a single 64 KB read),
+    /// they would otherwise wait in this sequential loop behind that request's
+    /// completion and cancel nothing. Handled first, the session retains them
+    /// until the request registers and cancels it on the spot.
     private func dispatchLines(_ lines: [String], session: Session, tracker: ConnectionTaskTracker) {
         guard !lines.isEmpty else { return }
         tracker.spawn {
-            for line in lines {
+            let (cancellations, rest) = Self.partitionCancellations(lines)
+            for line in cancellations {
+                await self.handleLine(line, session: session)
+            }
+            for line in rest {
                 await self.handleLine(line, session: session)
             }
         }
+    }
+
+    /// Splits out `notifications/cancelled` lines, preserving relative order
+    /// within each partition. The substring test is only a cheap pre-filter;
+    /// a line moves only when it actually decodes to that lone notification.
+    internal static func partitionCancellations(
+        _ lines: [String]
+    ) -> (cancellations: [String], rest: [String]) {
+        var cancellations: [String] = []
+        var rest: [String] = []
+        for line in lines {
+            if line.contains("notifications/cancelled"),
+               let data = line.data(using: .utf8),
+               let messages = try? JSONRPCMessage.decodeMessages(from: data),
+               messages.count == 1,
+               case .notification(let notification) = messages[0],
+               notification.method == "notifications/cancelled" {
+                cancellations.append(line)
+            } else {
+                rest.append(line)
+            }
+        }
+        return (cancellations, rest)
     }
 
     /// Escalates descriptor exhaustion to a terminal transport failure.
