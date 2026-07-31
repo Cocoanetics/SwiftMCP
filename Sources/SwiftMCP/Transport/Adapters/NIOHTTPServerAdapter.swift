@@ -257,8 +257,19 @@ final class NIOHTTPChannelHandler: ChannelInboundHandler, @unchecked Sendable {
             }
 
             for await chunk in stream {
-                channel.write(HTTPResponsePart.body(channel.allocator.buffer(data: chunk)), promise: nil)
-                channel.flush()
+                // Await each write. Fire-and-forget writes let a fast producer
+                // queue an entire large body in the channel's outbound buffer
+                // while a slow client drains it — memory grows by the full
+                // response size — and writes to a closed channel fail silently,
+                // so the loop would keep pulling the rest of the stream into a
+                // dead connection. A failed write stops the pull, which is what
+                // carries backpressure (and client aborts) to the producer.
+                let buffer = channel.allocator.buffer(data: chunk)
+                do {
+                    try await channel.writeAndFlush(HTTPResponsePart.body(buffer)).get()
+                } catch {
+                    return
+                }
             }
 
             channel.writeAndFlush(HTTPResponsePart.end(nil), promise: nil)
