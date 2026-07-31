@@ -24,6 +24,7 @@ final class InboundBodyBuffer: @unchecked Sendable {
         var chunks: [Data] = []
         var bufferedBytes = 0
         var finished = false
+        var aborted = false
         var readsPaused = false
         var waiter: CheckedContinuation<Data?, Never>?
     }
@@ -55,6 +56,18 @@ final class InboundBodyBuffer: @unchecked Sendable {
     /// Bytes currently buffered (for tests and diagnostics).
     var bufferedByteCount: Int {
         lock.withLock { state.bufferedBytes }
+    }
+
+    /// Whether the body was aborted (oversize rejection, dead connection).
+    ///
+    /// When `true`, the channel-read layer owns the connection's fate — it
+    /// has already answered (413) or the peer is gone. The dispatched route
+    /// handler must not write a response of its own: a second response for
+    /// the same request trips NIO's HTTP pipeline handler `fatalError`
+    /// ("Unexpectedly received a response in state idle") and kills the
+    /// process.
+    var wasAborted: Bool {
+        lock.withLock { state.aborted }
     }
 
     // MARK: - Producer side (event loop)
@@ -100,6 +113,7 @@ final class InboundBodyBuffer: @unchecked Sendable {
             if discardBuffered {
                 state.chunks.removeAll()
                 state.bufferedBytes = 0
+                state.aborted = true
             }
             state.finished = true
             if let waiter = state.waiter {

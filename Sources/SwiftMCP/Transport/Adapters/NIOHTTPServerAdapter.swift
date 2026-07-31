@@ -208,7 +208,7 @@ final class NIOHTTPChannelHandler: ChannelInboundHandler, @unchecked Sendable {
             )
             requestState = .streaming(head: head, body: body, bytesWritten: 0)
             requestGeneration &+= 1
-            dispatchRoute(context: context, head: head, bodyStream: body.stream)
+            dispatchRoute(context: context, head: head, body: body)
 
         // BODY — append chunk to the buffer
         case (.body(let buffer), .streaming(let head, let body, let bytesWritten)):
@@ -247,12 +247,17 @@ final class NIOHTTPChannelHandler: ChannelInboundHandler, @unchecked Sendable {
 
     // MARK: - Dispatch
 
-    private func dispatchRoute(context: ChannelHandlerContext, head: HTTPRequest, bodyStream: AsyncStream<Data>) {
+    private func dispatchRoute(context: ChannelHandlerContext, head: HTTPRequest, body: InboundBodyBuffer) {
         let channel = context.channel
         let engine = self.engine
         let generation = requestGeneration
         Task {
-            let response = await engine.handle(head: head, bodyStream: bodyStream)
+            let response = await engine.handle(head: head, bodyStream: body.stream)
+            // An aborted body means the channel-read layer owns the
+            // connection: it already answered (413 oversize) or the peer is
+            // gone. Writing a second response for the same request trips
+            // NIO's pipeline handler `fatalError` and kills the process.
+            guard !body.wasAborted else { return }
             await self.writeEngineResponse(response, to: channel, engine: engine)
             // A handler that responded without consuming its body to the end
             // leaves the connection unresynchronizable (and, with reads
