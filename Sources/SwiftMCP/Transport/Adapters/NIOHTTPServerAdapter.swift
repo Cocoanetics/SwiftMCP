@@ -135,6 +135,10 @@ final class NIOHTTPChannelHandler: ChannelInboundHandler, @unchecked Sendable {
     typealias OutboundOut = HTTPResponsePart
 
     private var requestState: RequestState = .idle
+    /// Increments per request head; lets the post-response check recognize
+    /// whether a `.streaming` state still belongs to *its* request or to a
+    /// pipelined successor.
+    private var requestGeneration = 0
     private let engine: any MCPHTTPEngine
     private let logger: Logger
 
@@ -144,11 +148,23 @@ final class NIOHTTPChannelHandler: ChannelInboundHandler, @unchecked Sendable {
     }
 
     func channelInactive(context: ChannelHandlerContext) {
+        abortInFlightRequestBody()
         context.fireChannelInactive()
     }
 
     func errorCaught(context: ChannelHandlerContext, error: Error) {
+        abortInFlightRequestBody()
         context.close(promise: nil)
+    }
+
+    /// Ends a mid-request body stream when the connection dies. Without this,
+    /// a handler consuming an upload would wait for the next chunk forever —
+    /// leaking the handler task and everything it holds open.
+    private func abortInFlightRequestBody() {
+        if case .streaming(_, let body, _) = requestState {
+            body.abort()
+        }
+        requestState = .idle
     }
 
     func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
@@ -175,30 +191,45 @@ final class NIOHTTPChannelHandler: ChannelInboundHandler, @unchecked Sendable {
                 return
             }
 
-            let (stream, continuation) = AsyncStream<Data>.makeStream()
-            requestState = .streaming(head: head, continuation: continuation, bytesWritten: 0)
-            dispatchRoute(context: context, head: head, bodyStream: stream)
+            // Watermarked handoff: pausing reads when the consumer lags lets
+            // TCP flow control push back on the sender, instead of a fast
+            // upload with a slow downstream (e.g. Drive) queueing the entire
+            // body in memory.
+            let channel = context.channel
+            let body = InboundBodyBuffer(
+                pauseReads: {
+                    channel.setOption(ChannelOptions.autoRead, value: false).whenComplete { _ in }
+                },
+                resumeReads: {
+                    channel.setOption(ChannelOptions.autoRead, value: true).whenComplete { _ in
+                        channel.read()
+                    }
+                }
+            )
+            requestState = .streaming(head: head, body: body, bytesWritten: 0)
+            requestGeneration &+= 1
+            dispatchRoute(context: context, head: head, bodyStream: body.stream)
 
-        // BODY — yield chunk into the stream
-        case (.body(let buffer), .streaming(let head, let continuation, let bytesWritten)):
+        // BODY — append chunk to the buffer
+        case (.body(let buffer), .streaming(let head, let body, let bytesWritten)):
             let sizeLimit = engine.maxBodySize(for: head)
             let newTotal = bytesWritten + buffer.readableBytes
             guard newTotal <= sizeLimit else {
                 logger.warning("Rejecting request: body size \(newTotal) > max \(sizeLimit)")
-                continuation.finish()
+                body.abort()
                 rejectOversizedRequest(context: context, limit: sizeLimit)
                 requestState = .rejected
                 return
             }
             if let bytes = buffer.getBytes(at: buffer.readerIndex, length: buffer.readableBytes) {
-                continuation.yield(Data(bytes))
+                body.append(Data(bytes))
             }
-            requestState = .streaming(head: head, continuation: continuation, bytesWritten: newTotal)
+            requestState = .streaming(head: head, body: body, bytesWritten: newTotal)
 
         // END — finish the stream
-        case (.end, .streaming(_, let continuation, _)):
+        case (.end, .streaming(_, let body, _)):
             defer { requestState = .idle }
-            continuation.finish()
+            body.finish()
 
         // Rejection / unexpected states
         case (.body, .rejected), (.end, .rejected):
@@ -219,9 +250,21 @@ final class NIOHTTPChannelHandler: ChannelInboundHandler, @unchecked Sendable {
     private func dispatchRoute(context: ChannelHandlerContext, head: HTTPRequest, bodyStream: AsyncStream<Data>) {
         let channel = context.channel
         let engine = self.engine
+        let generation = requestGeneration
         Task {
             let response = await engine.handle(head: head, bodyStream: bodyStream)
             await self.writeEngineResponse(response, to: channel, engine: engine)
+            // A handler that responded without consuming its body to the end
+            // leaves the connection unresynchronizable (and, with reads
+            // paused at the watermark, wedged). Close it — but only when the
+            // streaming state still belongs to this request, not a pipelined
+            // successor.
+            channel.eventLoop.execute {
+                if case .streaming = self.requestState, self.requestGeneration == generation {
+                    self.abortInFlightRequestBody()
+                    channel.close(promise: nil)
+                }
+            }
         }
     }
 

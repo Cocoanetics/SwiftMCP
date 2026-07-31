@@ -14,28 +14,18 @@ import HTTPTypes
 extension HTTPRouteResponse where Body == AsyncStream<Data> {
 
 	/// Stream a file from disk in chunks.
+	///
+	/// The stream is pull-based: each chunk is read only when the consumer
+	/// demands the next element. An eager producer would queue the entire
+	/// file into the stream whenever the client drains slower than disk
+	/// reads — body-sized memory growth that consumer-side backpressure
+	/// cannot prevent.
 	public static func file(_ url: URL, contentType: String, chunkSize: Int = 65536) -> Self {
-		let (stream, continuation) = AsyncStream<Data>.makeStream()
-
-		// Read the file in a background task
-		Task {
-			defer { continuation.finish() }
-			guard let handle = try? FileHandle(forReadingFrom: url) else {
-				return
-			}
-			defer { try? handle.close() }
-
-			while true {
-				let chunk = handle.readData(ofLength: chunkSize)
-				if chunk.isEmpty { break }
-				continuation.yield(chunk)
-			}
-		}
-
+		let reader = ChunkedFileReader(url: url, chunkSize: chunkSize)
 		return HTTPRouteResponse(
 			status: .ok,
 			headerFields: [.contentType: contentType],
-			body: stream
+			body: AsyncStream(unfolding: { await reader.next() })
 		)
 	}
 
