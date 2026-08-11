@@ -24,9 +24,26 @@ struct HTTPTransportStreamCapture {
 }
 
 /// Thread-safe box for capturing values from @Sendable closures.
+///
+/// The lock is load-bearing: the URLSession task appends events while
+/// `waitForCondition` polls from another thread, so unsynchronized access
+/// is a data race (and can hide appended events from the poller).
 final class HTTPTransportBox<T: Sendable>: @unchecked Sendable {
-    var value: T
-    init(_ value: T) { self.value = value }
+    private let lock = NSLock()
+    private var storage: T
+
+    init(_ value: T) { storage = value }
+
+    var value: T {
+        get { lock.lock(); defer { lock.unlock() }; return storage }
+        set { lock.lock(); defer { lock.unlock() }; storage = newValue }
+    }
+
+    func modify(_ body: (inout T) -> Void) {
+        lock.lock()
+        defer { lock.unlock() }
+        body(&storage)
+    }
 }
 
 enum HTTPTransportTestHelpers {
@@ -102,9 +119,11 @@ enum HTTPTransportTestHelpers {
         return request
     }
 
-    static func readFiniteSSEResponse(_ request: URLRequest) async throws -> (HTTPURLResponse, [SSEClientMessage]) {
-        let session = URLSession(configuration: .ephemeral)
-        let (bytes, response) = try await session.bytes(for: request)
+    static func readFiniteSSEResponse(
+        _ request: URLRequest,
+        urlSession: URLSession = URLSession(configuration: .ephemeral)
+    ) async throws -> (HTTPURLResponse, [SSEClientMessage]) {
+        let (bytes, response) = try await urlSession.bytes(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw TestError("Expected HTTPURLResponse")
         }
@@ -117,16 +136,18 @@ enum HTTPTransportTestHelpers {
         return (httpResponse, events)
     }
 
-    static func openStreamingRequest(_ request: URLRequest) -> HTTPTransportStreamCapture {
+    static func openStreamingRequest(
+        _ request: URLRequest,
+        urlSession: URLSession = URLSession(configuration: .ephemeral)
+    ) -> HTTPTransportStreamCapture {
         let responseBox = HTTPTransportBox<HTTPURLResponse?>(nil)
         let eventsBox = HTTPTransportBox<[SSEClientMessage]>([])
 
         let task = Task {
-            let session = URLSession(configuration: .ephemeral)
-            let (bytes, response) = try await session.bytes(for: request)
+            let (bytes, response) = try await urlSession.bytes(for: request)
             responseBox.value = response as? HTTPURLResponse
             for try await message in bytes.lines.sseMessages() {
-                eventsBox.value.append(message)
+                eventsBox.modify { $0.append(message) }
             }
         }
 
@@ -140,10 +161,13 @@ enum HTTPTransportTestHelpers {
     /// event latency. It is sized generously because every caller is a positive
     /// wait racing real localhost networking (URLSession cold start + TCP connect
     /// + SSE delivery), which can far exceed a tight bound on a loaded CI runner —
-    /// a 2s deadline made `expiredRequestStreamResume` flake on macos-latest.
+    /// a 2s deadline made `expiredRequestStreamResume` flake on macos-latest,
+    /// and a 15s one lost to a ~13s whole-VM starvation stall on the same
+    /// runner image (the deadline is monotonic, so it keeps counting while
+    /// nothing — including the server under test — gets scheduled).
     /// Do NOT use this helper to assert a condition *stays* false.
     static func waitForCondition(
-        timeoutNanoseconds: UInt64 = 15_000_000_000,
+        timeoutNanoseconds: UInt64 = 30_000_000_000,
         pollNanoseconds: UInt64 = 50_000_000,
         _ condition: @escaping @Sendable () -> Bool
     ) async -> Bool {
@@ -157,9 +181,12 @@ enum HTTPTransportTestHelpers {
         return condition()
     }
 
-    static func initializeSession(url: URL) async throws -> (String, [SSEClientMessage]) {
+    static func initializeSession(
+        url: URL,
+        urlSession: URLSession = URLSession(configuration: .ephemeral)
+    ) async throws -> (String, [SSEClientMessage]) {
         let request = try streamablePOSTRequest(url: url, message: initializeRequest())
-        let (response, events) = try await readFiniteSSEResponse(request)
+        let (response, events) = try await readFiniteSSEResponse(request, urlSession: urlSession)
         guard let sessionID = response.value(forHTTPHeaderField: "Mcp-Session-Id") else {
             throw TestError("Expected Mcp-Session-Id header")
         }
