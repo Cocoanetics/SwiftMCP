@@ -8,17 +8,24 @@ struct MCPReturnSchemaInfo: Sendable {
 extension MCPToolMetadata {
     private static let outputArrayWrapperKey = "items"
 
-    private var shouldWrapOutputArray: Bool {
+    var returnTypeIsContent: Bool {
         guard let returnType else { return false }
-
-        if returnType is [MCPText].Type
+        return returnType is MCPText.Type
+            || returnType is MCPImage.Type
+            || returnType is MCPAudio.Type
+            || returnType is MCPResourceLink.Type
+            || returnType is MCPEmbeddedResource.Type
+            || returnType is [MCPText].Type
             || returnType is [MCPImage].Type
             || returnType is [MCPAudio].Type
             || returnType is [MCPResourceLink].Type
             || returnType is [MCPEmbeddedResource].Type
-            || returnType is [any MCPResourceContent].Type {
-            return false
-        }
+            || returnType is any MCPResourceContent.Type
+            || returnType is [any MCPResourceContent].Type
+    }
+
+    private var shouldWrapOutputArray: Bool {
+        guard !returnTypeIsContent else { return false }
 
         guard case .array(let items, _, _, _) = returnSchemaInfo.schema else { return false }
         switch items {
@@ -153,6 +160,7 @@ extension MCPToolMetadata {
     }
 
     var outputSchema: JSONSchema? {
+        guard !returnTypeIsContent else { return nil }
         let schema = returnSchemaInfo.schema.withoutRequired
         switch schema {
         case .object, .oneOf:

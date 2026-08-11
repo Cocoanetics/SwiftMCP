@@ -118,7 +118,7 @@ public extension MCPServer {
         do {
             let result = try await toolProvider.callTool(toolName, arguments: arguments)
             let wrappedResult = try metadata?.wrapOutputIfNeeded(result) ?? result
-            let expectsToolResult = metadata?.expectsToolResultReturn ?? false
+            let expectsToolResult = metadata?.returnTypeIsContent ?? false
 
             return try buildToolCallResponse(
                 requestID: request.id,
@@ -335,28 +335,5 @@ public extension MCPServer {
         #endif
 
         return nil
-    }
-}
-
-// MARK: - MCPToolMetadata helpers
-
-extension MCPToolMetadata {
-    /// True when the declared return type is an MCP content type (or array thereof),
-    /// indicating that the caller expects a tool-result content envelope even when
-    /// the runtime value happens to be an empty array.
-    fileprivate var expectsToolResultReturn: Bool {
-        guard let returnType = returnType else { return false }
-        return returnType is MCPText.Type
-            || returnType is MCPImage.Type
-            || returnType is MCPAudio.Type
-            || returnType is MCPResourceLink.Type
-            || returnType is MCPEmbeddedResource.Type
-            || returnType is [MCPText].Type
-            || returnType is [MCPImage].Type
-            || returnType is [MCPAudio].Type
-            || returnType is [MCPResourceLink].Type
-            || returnType is [MCPEmbeddedResource].Type
-            || returnType is any MCPResourceContent.Type
-            || returnType is [any MCPResourceContent].Type
     }
 }
