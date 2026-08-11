@@ -65,21 +65,7 @@ struct HTTPTransportOpenAPITests {
         )
 
         let capture = HTTPTransportTestHelpers.openStreamingRequest(
-            try HTTPTransportTestHelpers.streamablePOSTRequest(
-                url: url,
-                message: .request(
-                    id: 9,
-                    method: "tools/call",
-                    params: [
-                        "name": .string("slowPing"),
-                        "arguments": .object([:]),
-                        "_meta": .object([
-                            "progressToken": .string("expiring-request")
-                        ])
-                    ]
-                ),
-                sessionID: sessionID
-            ),
+            try Self.slowPingRequest(url: url, sessionID: sessionID),
             urlSession: sharedSession
         )
 
@@ -113,6 +99,26 @@ struct HTTPTransportOpenAPITests {
         #expect((response as! HTTPURLResponse).statusCode == 404)
         #endif
     }
+
+    #if !canImport(FoundationNetworking)
+    private static func slowPingRequest(url: URL, sessionID: String) throws -> URLRequest {
+        try HTTPTransportTestHelpers.streamablePOSTRequest(
+            url: url,
+            message: .request(
+                id: 9,
+                method: "tools/call",
+                params: [
+                    "name": .string("slowPing"),
+                    "arguments": .object([:]),
+                    "_meta": .object([
+                        "progressToken": .string("expiring-request")
+                    ])
+                ]
+            ),
+            sessionID: sessionID
+        )
+    }
+    #endif
 
     @Test("OPTIONS returns CORS headers")
     func corsHeaders() async throws {
