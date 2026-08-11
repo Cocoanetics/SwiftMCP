@@ -119,9 +119,11 @@ enum HTTPTransportTestHelpers {
         return request
     }
 
-    static func readFiniteSSEResponse(_ request: URLRequest) async throws -> (HTTPURLResponse, [SSEClientMessage]) {
-        let session = URLSession(configuration: .ephemeral)
-        let (bytes, response) = try await session.bytes(for: request)
+    static func readFiniteSSEResponse(
+        _ request: URLRequest,
+        urlSession: URLSession = URLSession(configuration: .ephemeral)
+    ) async throws -> (HTTPURLResponse, [SSEClientMessage]) {
+        let (bytes, response) = try await urlSession.bytes(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw TestError("Expected HTTPURLResponse")
         }
@@ -134,13 +136,15 @@ enum HTTPTransportTestHelpers {
         return (httpResponse, events)
     }
 
-    static func openStreamingRequest(_ request: URLRequest) -> HTTPTransportStreamCapture {
+    static func openStreamingRequest(
+        _ request: URLRequest,
+        urlSession: URLSession = URLSession(configuration: .ephemeral)
+    ) -> HTTPTransportStreamCapture {
         let responseBox = HTTPTransportBox<HTTPURLResponse?>(nil)
         let eventsBox = HTTPTransportBox<[SSEClientMessage]>([])
 
         let task = Task {
-            let session = URLSession(configuration: .ephemeral)
-            let (bytes, response) = try await session.bytes(for: request)
+            let (bytes, response) = try await urlSession.bytes(for: request)
             responseBox.value = response as? HTTPURLResponse
             for try await message in bytes.lines.sseMessages() {
                 eventsBox.modify { $0.append(message) }
@@ -177,9 +181,12 @@ enum HTTPTransportTestHelpers {
         return condition()
     }
 
-    static func initializeSession(url: URL) async throws -> (String, [SSEClientMessage]) {
+    static func initializeSession(
+        url: URL,
+        urlSession: URLSession = URLSession(configuration: .ephemeral)
+    ) async throws -> (String, [SSEClientMessage]) {
         let request = try streamablePOSTRequest(url: url, message: initializeRequest())
-        let (response, events) = try await readFiniteSSEResponse(request)
+        let (response, events) = try await readFiniteSSEResponse(request, urlSession: urlSession)
         guard let sessionID = response.value(forHTTPHeaderField: "Mcp-Session-Id") else {
             throw TestError("Expected Mcp-Session-Id header")
         }

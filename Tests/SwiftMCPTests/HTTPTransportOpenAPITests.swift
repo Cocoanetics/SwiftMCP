@@ -48,12 +48,21 @@ struct HTTPTransportOpenAPITests {
         #else
         let (transport, baseURL) = try await HTTPTransportTestHelpers.startTransport(
             server: ResumableServer(),
-            retentionInterval: 0.2
+            retentionInterval: 1.0
         )
         defer { Task { try? await transport.stop() } }
 
         let url = baseURL.appendingPathComponent("mcp")
-        let (sessionID, _) = try await HTTPTransportTestHelpers.initializeSession(url: url)
+        // One warm URLSession for the whole test: the retention interval doubles
+        // as the idle-session TTL, so the gap between `initialize` completing and
+        // the tool POST arriving must stay well under it. A cold ephemeral
+        // URLSession can burn more than that just spinning up on a loaded CI
+        // runner; reusing the keep-alive connection keeps the gap at
+        // request-turnaround scale.
+        let sharedSession = URLSession(configuration: .ephemeral)
+        let (sessionID, _) = try await HTTPTransportTestHelpers.initializeSession(
+            url: url, urlSession: sharedSession
+        )
 
         let capture = HTTPTransportTestHelpers.openStreamingRequest(
             try HTTPTransportTestHelpers.streamablePOSTRequest(
@@ -70,7 +79,8 @@ struct HTTPTransportOpenAPITests {
                     ]
                 ),
                 sessionID: sessionID
-            )
+            ),
+            urlSession: sharedSession
         )
 
         // Wait for the response head separately from the first event so each
@@ -79,6 +89,11 @@ struct HTTPTransportOpenAPITests {
             capture.response.value != nil
         }
         try #require(connected, "SSE response head never arrived — the POST never reached dispatch")
+        let status = try #require(capture.response.value?.statusCode)
+        try #require(
+            status == 200,
+            "tool POST rejected with \(status) — the session expired before the request arrived"
+        )
 
         let sawProgress = await HTTPTransportTestHelpers.waitForCondition {
             HTTPTransportTestHelpers.notificationEvent(capture.events.value, method: "notifications/progress") != nil
@@ -87,13 +102,14 @@ struct HTTPTransportOpenAPITests {
         let lastEventID = try #require(capture.events.value.last?.id)
         capture.task.cancel()
 
-        try? await Task.sleep(nanoseconds: 700_000_000)
+        // Sleep comfortably past the retention interval. Oversleeping is safe:
+        // extra delay only makes the expiry below more certain.
+        try? await Task.sleep(nanoseconds: 3_000_000_000)
 
-        let session = URLSession(configuration: .ephemeral)
         let resumeRequest = HTTPTransportTestHelpers.generalSSERequest(
             url: url, sessionID: sessionID, lastEventID: lastEventID
         )
-        let (_, response) = try await session.data(for: resumeRequest)
+        let (_, response) = try await sharedSession.data(for: resumeRequest)
         #expect((response as! HTTPURLResponse).statusCode == 404)
         #endif
     }
