@@ -73,6 +73,13 @@ struct HTTPTransportOpenAPITests {
             )
         )
 
+        // Wait for the response head separately from the first event so each
+        // phase gets its own budget and a failure names the phase that stalled.
+        let connected = await HTTPTransportTestHelpers.waitForCondition {
+            capture.response.value != nil
+        }
+        try #require(connected, "SSE response head never arrived — the POST never reached dispatch")
+
         let sawProgress = await HTTPTransportTestHelpers.waitForCondition {
             HTTPTransportTestHelpers.notificationEvent(capture.events.value, method: "notifications/progress") != nil
         }
