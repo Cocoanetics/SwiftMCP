@@ -282,3 +282,24 @@ func testExtractAddressArray() throws {
     #expect(extractedAddresses[1].city == "San Francisco")
     #expect(extractedAddresses[1].zip == "94102")
 }
+
+@Test("Scalar MCP content return types omit output schemas")
+func testScalarContentReturnSchemasAreOmitted() {
+    let contentReturnTypes: [Sendable.Type] = [
+        MCPText.self,
+        MCPImage.self,
+        MCPAudio.self,
+        MCPResourceLink.self,
+        MCPEmbeddedResource.self
+    ]
+
+    for returnType in contentReturnTypes {
+        let metadata = MCPToolMetadata(
+            name: "content",
+            parameters: [],
+            returnType: returnType
+        )
+
+        #expect(metadata.outputSchema == nil)
+    }
+}
