@@ -23,8 +23,17 @@ import Network
 /// Network.framework: the tests need deterministic close semantics (FIN on
 /// `close`, half-close via `shutdown`) and their own descriptors excluded
 /// from what the transport is being measured on.
-private struct TestTCPClient {
+///
+/// A reference type so the descriptor has exactly one owner: tests close the
+/// socket explicitly — the FIN is what the transport under test reacts to —
+/// and keep a `defer` as the cleanup net, so `closeSocket()` is reached twice
+/// on some paths. See `closeSocket()` for why only the first may act.
+private final class TestTCPClient {
     let sock: Int32
+    private var isClosed = false
+    /// How many `close(2)` calls this client has issued. Exactly one, for the
+    /// lifetime of the client, is the invariant `closeSocket()` exists to keep.
+    private(set) var issuedCloseCount = 0
 
     init(port: UInt16) throws {
         sock = socket(AF_INET, SOCK_STREAM, 0)
@@ -82,7 +91,18 @@ private struct TestTCPClient {
         return received.isEmpty ? nil : String(data: received, encoding: .utf8)
     }
 
+    /// Closes the socket, at most once for the lifetime of this client.
+    ///
+    /// The second `close(2)` must never reach the kernel. By then the number
+    /// is free, and the kernel hands freed numbers straight back out: a
+    /// redundant close here landed on the kqueue that a freshly booted NIO
+    /// event-loop group had just been given, and that loop died with `EBADF`
+    /// inside `kevent` — a `precondition` failure that takes the whole test
+    /// process down, in a thread that has nothing to do with this file.
     func closeSocket() {
+        guard !isClosed else { return }
+        isClosed = true
+        issuedCloseCount += 1
         close(sock)
     }
 }
@@ -176,6 +196,32 @@ struct TCPTransportTeardownTests {
                 settled <= baseline + tolerance,
                 "descriptors did not return to baseline: \(baseline) before, \(settled) after"
             )
+        }
+    }
+
+    // MARK: - A redundant close must stay out of the kernel
+
+    /// Several tests close the client explicitly *and* keep a `defer` as the
+    /// cleanup net. The second call must not issue a second `close(2)`: the
+    /// number is free by then, and the kernel immediately hands freed numbers
+    /// back out — so the close would land on whatever has since been given
+    /// that number. It did: a NIO event-loop group booted by another suite got
+    /// the number for a kqueue, and the loop died with `EBADF` inside `kevent`,
+    /// killing the test process from a thread unrelated to this file.
+    ///
+    /// Asserting on the count rather than on the recycled descriptor itself is
+    /// deliberate: reclaiming the released number to watch it survive means
+    /// racing every other thread in the process for it, and losing that race
+    /// is exactly what makes the original defect intermittent.
+    @Test("Closing a client twice issues one close(2)")
+    func redundantCloseNeverReachesTheKernel() async throws {
+        try await withStartedTransport(server: StructCalculator()) { _, port in
+            let client = try TestTCPClient(port: port)
+
+            client.closeSocket()
+            client.closeSocket()
+
+            #expect(client.issuedCloseCount == 1)
         }
     }
 

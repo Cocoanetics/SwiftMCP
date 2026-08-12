@@ -130,10 +130,16 @@ struct TCPTransportFailureTests {
         for _ in 0..<3 where !sawIncrease {
             let before = try #require(TCPBonjourTransport.descriptorUsage())
 
+            // Seeded with -1, never 0: a failed `pipe` must not leave the pair
+            // aliasing stdin, or the cleanup below would close descriptor 0
+            // twice and hand a live descriptor number to the second close.
             var pipes: [[Int32]] = []
             for _ in 0..<50 {
-                var fds: [Int32] = [0, 0]
-                #expect(pipe(&fds) == 0)
+                var fds: [Int32] = [-1, -1]
+                guard pipe(&fds) == 0 else {
+                    Issue.record("pipe() failed with errno \(errno)")
+                    break
+                }
                 pipes.append(fds)
             }
             defer {
