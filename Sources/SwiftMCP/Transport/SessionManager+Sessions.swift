@@ -109,6 +109,7 @@ extension SessionManager {
 
         primaryGeneralStreamIDs.removeValue(forKey: sessionID)
         sessionStreams.removeValue(forKey: sessionID)
+        sessionsWithUndeliverableBroadcast.remove(sessionID)
     }
 
     internal func updateSessionExpiry(for sessionID: UUID) async {
@@ -142,6 +143,21 @@ extension SessionManager {
             await removeStream(id: streamID)
         }
 
+        // Reclaim streams that were opened (or resumed) but whose connection
+        // never bound: the hub starts its retention clock only on disconnect or
+        // finish, so these have no expiry at all and would otherwise survive
+        // forever — and a general one keeps holding the session's primary slot,
+        // silently black-holing every routed send for that session (the
+        // zombie-session incident). One retention interval is ample time for an
+        // adapter to bind the connection it was handed.
+        let abandonedStreamIDs = streamMeta.compactMap { streamID, _ in
+            isAbandoned(streamID: streamID, now: now) ? streamID : nil
+        }
+        for streamID in abandonedStreamIDs where isAbandoned(streamID: streamID, now: now) {
+            logger.warning("Reclaiming SSE stream \(streamID) whose connection never bound")
+            await removeStream(id: streamID)
+        }
+
         let expiredSessionIDs = sessions.compactMap { sessionID, _ in
             sessionID
         }
@@ -151,6 +167,20 @@ extension SessionManager {
                 await destroySession(id: sessionID)
             }
         }
+    }
+
+    /// Whether a stream has been waiting for a connection for longer than one
+    /// retention interval: not attached, no retention deadline running, and its
+    /// attach grace window has passed. Re-evaluated right before removal, since
+    /// a bind can interleave with the cleanup loop's suspension points.
+    private func isAbandoned(streamID: UUID, now: Date) -> Bool {
+        guard let meta = streamMeta[streamID],
+              let info = hub.info(streamID: streamID),
+              info.expiresAt == nil,
+              !hub.attachedStreamIDs().contains(streamID) else {
+            return false
+        }
+        return now.timeIntervalSince(meta.attachGraceStart) > retentionInterval
     }
 }
 #endif

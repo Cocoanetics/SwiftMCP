@@ -53,16 +53,64 @@ extension SessionManager {
     }
 
     /// Send a resource-updated notification to all sessions subscribed to the given URI.
+    ///
+    /// Delivery failures are counted and logged (once per session per outage): a
+    /// subscribed session the notification cannot reach used to drop it without
+    /// a trace, leaving a healthy-looking session that never receives another
+    /// push (the zombie-session incident).
     func broadcastResourceUpdated(uri: URL) async {
         await cleanupExpiredState()
         let uriString = uri.absoluteString
         for session in sessions.values {
-            let subscribed = await session.isSubscribedToResource(uri: uriString)
-            if subscribed {
-                await session.work { session in
-                    try? await session.sendResourceUpdated(uri: uri)
-                }
+            guard await session.isSubscribedToResource(uri: uriString) else { continue }
+            let delivered = await deliverResourceUpdated(uri: uri, to: session)
+            recordResourceUpdatedOutcome(delivered: delivered, sessionID: session.id, uri: uriString)
+        }
+    }
+
+    /// Deliver through the session's own transport, reporting whether it went
+    /// out. Every transport keeps its own delivery mechanism — SSE routing for
+    /// ``HTTPSSETransport``, the connection write for ``TCPBonjourTransport``
+    /// (which shares this manager and has no SSE streams at all) — and each
+    /// throws when the client is unreachable. That throw is the delivery
+    /// signal; it was previously swallowed by `try?`.
+    private func deliverResourceUpdated(uri: URL, to session: Session) async -> Bool {
+        // A `nil` weak transport makes `transport?.send` a silent no-op rather
+        // than a throw, so it has to be checked separately.
+        guard await session.transport != nil else {
+            return false
+        }
+
+        do {
+            try await session.work { try await $0.sendResourceUpdated(uri: uri) }
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    /// Track per-session delivery of resource-updated broadcasts, logging the
+    /// transitions (first drop, later recovery) rather than every occurrence.
+    private func recordResourceUpdatedOutcome(delivered: Bool, sessionID: UUID, uri: String) {
+        // The session can be destroyed while the delivery above is suspended.
+        // `destroySession` already dropped its marker, so recording here would
+        // both re-add a stale id and count a session that no longer exists.
+        guard sessions[sessionID] != nil else {
+            return
+        }
+
+        if delivered {
+            if sessionsWithUndeliverableBroadcast.remove(sessionID) != nil {
+                logger.info("resource-updated delivery recovered for session \(sessionID)")
             }
+            return
+        }
+
+        undeliverableBroadcastCount += 1
+        if sessionsWithUndeliverableBroadcast.insert(sessionID).inserted {
+            let details = "resource-updated for \(uri) dropped: session \(sessionID) is subscribed"
+                + " but is unreachable; dropping until its transport can deliver again"
+            logger.warning("\(details)")
         }
     }
 
@@ -85,6 +133,7 @@ extension SessionManager {
         }
 
         guard let primaryStreamID = primaryGeneralStreamIDs[sessionID] else {
+            logger.debug("No primary general stream for session \(sessionID); SSE message not routed")
             return false
         }
 
