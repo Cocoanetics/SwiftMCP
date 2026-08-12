@@ -74,6 +74,11 @@ extension SessionManager {
             await session.touchActivity()
         }
 
+        // The resume cleared the hub's retention deadline while the new
+        // connection has not bound yet — restart the attach grace window so the
+        // abandoned-stream reclaim doesn't misfire on (or miss) this stream.
+        streamMeta[eventID.streamID] = StreamMeta(sessionID: meta.sessionID, kind: meta.kind)
+
         // The hub finishes + retains a stream that was already completed; mirror
         // the session-side reconciliation the original did via markStreamDisconnected.
         if let info = hub.info(streamID: eventID.streamID), info.isCompleted {
@@ -95,6 +100,22 @@ extension SessionManager {
 
         let sink = SSEConnectionSink(connection: connection)
         guard let connectionToken = hub.attach(sink: sink, streamID: streamID) else {
+            return nil
+        }
+
+        // A connection that is already dead (or a stream whose outbound
+        // continuation is gone) can never drain this stream. Keeping the sink
+        // bound would park the stream in a live-looking state that no cleanup
+        // reclaims and that keeps winning the primary-general slot. Detach it
+        // and start the retention clock instead, so the stream stays resumable
+        // and expires normally.
+        guard hub.isActive(streamID: streamID) else {
+            logger.warning("Rejecting SSE registration for stream \(streamID): connection not live")
+            hub.markDisconnected(streamID: streamID, connectionToken: connectionToken)
+            if meta.kind.isGeneral {
+                selectPrimaryGeneralStream(for: meta.sessionID, keepRetainedCurrent: true)
+            }
+            await updateSessionExpiry(for: meta.sessionID)
             return nil
         }
 

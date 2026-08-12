@@ -257,7 +257,15 @@ final class NIOHTTPChannelHandler: ChannelInboundHandler, @unchecked Sendable {
             // connection: it already answered (413 oversize) or the peer is
             // gone. Writing a second response for the same request trips
             // NIO's pipeline handler `fatalError` and kills the process.
-            guard !body.wasAborted else { return }
+            guard !body.wasAborted else {
+                // The discarded response may carry an SSE stream the engine
+                // already opened (and, for a general stream, promoted to the
+                // session's primary). Nothing will ever drain or bind it, so
+                // hand it back for reconciliation instead of leaking a
+                // routable-looking stream that black-holes routed sends.
+                await Self.reconcileDiscardedResponse(response, engine: engine)
+                return
+            }
             await self.writeEngineResponse(response, to: channel, engine: engine)
             // A handler that responded without consuming its body to the end
             // leaves the connection unresynchronizable (and, with reads
@@ -270,6 +278,21 @@ final class NIOHTTPChannelHandler: ChannelInboundHandler, @unchecked Sendable {
                     channel.close(promise: nil)
                 }
             }
+        }
+    }
+
+    /// Reconcile the engine's SSE state for a response that is being discarded
+    /// unwritten. Registering the (already dead) connection makes the engine's
+    /// liveness guard reject it and start the stream's retention clock, so the
+    /// stream — and any primary-general claim it holds — expires normally
+    /// instead of surviving as an undrained, never-expiring black hole.
+    private static func reconcileDiscardedResponse(
+        _ response: EngineResponse,
+        engine: any MCPHTTPEngine
+    ) async {
+        guard case .sse(_, let registration) = response.body, let registration else { return }
+        if let token = await engine.registerConnection(DeadSSEConnection(), for: registration) {
+            await engine.connectionDisconnected(token)
         }
     }
 
@@ -316,6 +339,19 @@ final class NIOHTTPChannelHandler: ChannelInboundHandler, @unchecked Sendable {
                 do {
                     try await channel.writeAndFlush(HTTPResponsePart.body(buffer)).get()
                 } catch {
+                    // A failed write means this response can no longer reach
+                    // the client — but not necessarily that the socket died
+                    // (a pipeline or encoder state error fails the write and
+                    // leaves the connection open). Close it so the client
+                    // reconnects and `closeFuture` reconciles the engine's
+                    // stream state; returning without closing leaves an
+                    // ESTABLISHED connection whose stream nobody drains, and
+                    // every later send "succeeds" into that void. Gated on
+                    // liveness: a write that failed because the channel (or
+                    // its event loop) is already going down needs no close.
+                    if channel.isActive {
+                        channel.close(promise: nil)
+                    }
                     return
                 }
             }
@@ -343,5 +379,13 @@ final class NIOSSEConnection: SSEConnection {
     init(channel: Channel) { self.channel = channel }
     var isConnected: Bool { channel.isActive }
     func terminate() { channel.close(promise: nil) }
+}
+
+/// A never-connected ``SSEConnection``, used to reconcile SSE streams whose
+/// response was discarded before any connection could bind.
+final class DeadSSEConnection: SSEConnection {
+    init() {}
+    var isConnected: Bool { false }
+    func terminate() {}
 }
 #endif

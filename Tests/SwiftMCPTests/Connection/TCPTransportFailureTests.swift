@@ -119,16 +119,19 @@ struct TCPTransportFailureTests {
         #expect(sanity.limit > 0)
         #expect(sanity.used <= sanity.limit)
 
-        // Ten pipes: twenty descriptors that F_GETFD must see. Suites in other
-        // files run concurrently and churn this process's descriptor table, so
-        // a single before/after pair can race a burst of closes; the pipes
-        // persist across attempts, while churn beating +20 every time doesn't.
+        // Fifty pipes: a hundred descriptors that F_GETFD must see. Suites in
+        // other files run concurrently and churn this process's descriptor
+        // table, so a single before/after pair can race a burst of closes — a
+        // single HTTP transport teardown releases dozens of descriptors (its
+        // event-loop kqueues, channels, sockets) at once. The signal must
+        // outweigh any such burst; the pipes persist across attempts, while
+        // churn beating +100 every time doesn't.
         var sawIncrease = false
         for _ in 0..<3 where !sawIncrease {
             let before = try #require(TCPBonjourTransport.descriptorUsage())
 
             var pipes: [[Int32]] = []
-            for _ in 0..<10 {
+            for _ in 0..<50 {
                 var fds: [Int32] = [0, 0]
                 #expect(pipe(&fds) == 0)
                 pipes.append(fds)
@@ -141,9 +144,9 @@ struct TCPTransportFailureTests {
             }
 
             let after = try #require(TCPBonjourTransport.descriptorUsage())
-            sawIncrease = after.used >= before.used + 10
+            sawIncrease = after.used >= before.used + 50
         }
-        #expect(sawIncrease, "twenty live pipe descriptors never showed up in the count")
+        #expect(sawIncrease, "a hundred live pipe descriptors never showed up in the count")
     }
 }
 

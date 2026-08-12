@@ -53,16 +53,52 @@ extension SessionManager {
     }
 
     /// Send a resource-updated notification to all sessions subscribed to the given URI.
+    ///
+    /// Routing failures are counted and logged (once per session per outage): a
+    /// subscribed session with no routable general stream used to drop the
+    /// notification without a trace, leaving a healthy-looking session that
+    /// never receives another push (the zombie-session incident).
     func broadcastResourceUpdated(uri: URL) async {
         await cleanupExpiredState()
         let uriString = uri.absoluteString
         for session in sessions.values {
-            let subscribed = await session.isSubscribedToResource(uri: uriString)
-            if subscribed {
-                await session.work { session in
-                    try? await session.sendResourceUpdated(uri: uri)
-                }
+            guard await session.isSubscribedToResource(uri: uriString) else { continue }
+
+            let notification = JSONRPCMessage.notification(
+                method: "notifications/resources/updated",
+                params: ["uri": .string(uriString)]
+            )
+            let routed = await routeJSONRPC(notification, sessionID: session.id)
+            recordResourceUpdatedOutcome(routed: routed, sessionID: session.id, uri: uriString)
+        }
+    }
+
+    /// Encode and route a JSON-RPC message to the session's primary general
+    /// stream, reporting whether any stream accepted it.
+    @discardableResult
+    internal func routeJSONRPC(_ message: JSONRPCMessage, sessionID: UUID) async -> Bool {
+        guard let data = try? JSONRPCMessage.makeEncoder().encode(message),
+              let text = String(data: data, encoding: .utf8) else {
+            return false
+        }
+        return await routeSSEMessage(SSEMessage(data: text), sessionID: sessionID, preferredStreamID: nil)
+    }
+
+    /// Track per-session delivery of resource-updated broadcasts, logging the
+    /// transitions (first drop, later recovery) rather than every occurrence.
+    private func recordResourceUpdatedOutcome(routed: Bool, sessionID: UUID, uri: String) {
+        if routed {
+            if sessionsWithUndeliverableBroadcast.remove(sessionID) != nil {
+                logger.info("resource-updated delivery recovered for session \(sessionID)")
             }
+            return
+        }
+
+        undeliverableBroadcastCount += 1
+        if sessionsWithUndeliverableBroadcast.insert(sessionID).inserted {
+            let details = "resource-updated for \(uri) dropped: session \(sessionID) is subscribed"
+                + " but has no routable general SSE stream; dropping until one (re)connects"
+            logger.warning("\(details)")
         }
     }
 
@@ -85,6 +121,7 @@ extension SessionManager {
         }
 
         guard let primaryStreamID = primaryGeneralStreamIDs[sessionID] else {
+            logger.debug("No primary general stream for session \(sessionID); SSE message not routed")
             return false
         }
 
