@@ -97,7 +97,7 @@ extension MCPServerProxy {
         value?.stringValue
     }
 
-    internal func requestResult(
+    @discardableResult internal func requestResult(
         method: String,
         params: JSONDictionary? = nil
     ) async throws -> JSONDictionary {
