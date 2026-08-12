@@ -9,10 +9,6 @@
 // instead of dropped silently, (2) registration rejects dead connections and
 // starts the retention clock, and (3) the janitor reclaims never-bound streams
 // after one retention interval so routing heals onto the live stream.
-//
-// One shared transport on purpose: each start/stop spins up (and tears down) a
-// full event-loop group, and phases that need to outwait the retention
-// interval would otherwise multiply that churn.
 
 import Foundation
 import Logging
@@ -78,26 +74,21 @@ struct BroadcastZombieRegressionTests {
         #expect(await manager.undeliverableBroadcastCount == 1)
     }
 
-    @Test(.timeLimit(.minutes(3)))
-    func zombieStreamStatesAreReclaimedCountedAndRejected() async throws {
-        let (transport, baseURL) = try await HTTPTransportTestHelpers.startTransport(
-            server: PushFixtureServer(), retentionInterval: 1.0
-        )
-        let mcpURL = baseURL.appendingPathComponent("mcp")
-        let urlSession = URLSession(configuration: .ephemeral)
+    // MARK: - The zombie stream states
 
-        try await assertUndeliverableBroadcastIsCounted(
-            transport: transport, mcpURL: mcpURL, urlSession: urlSession
-        )
-        try await assertDeadConnectionRegistrationIsRejected(
-            transport: transport, mcpURL: mcpURL, urlSession: urlSession
-        )
-        try await assertNeverBoundStreamIsReclaimedAndRoutingHeals(
-            transport: transport, mcpURL: mcpURL, urlSession: urlSession
-        )
+    @Test("Undeliverable broadcasts are counted, and delivery recovers", .timeLimit(.minutes(3)))
+    func undeliverableBroadcastIsCounted() async throws {
+        try await withPushTransport(assertUndeliverableBroadcastIsCounted)
+    }
 
-        urlSession.invalidateAndCancel()
-        try await transport.stop()
+    @Test("A dead connection is refused and its stream reclaimed", .timeLimit(.minutes(3)))
+    func deadConnectionRegistrationIsRejected() async throws {
+        try await withPushTransport(assertDeadConnectionRegistrationIsRejected)
+    }
+
+    @Test("A never-bound stream is reclaimed and routing heals", .timeLimit(.minutes(3)))
+    func neverBoundStreamIsReclaimedAndRoutingHeals() async throws {
+        try await withPushTransport(assertNeverBoundStreamIsReclaimedAndRoutingHeals)
     }
 
     // MARK: - Phases
@@ -217,6 +208,29 @@ struct BroadcastZombieRegressionTests {
     }
 
     // MARK: - Helpers
+
+    /// Starts a push-fixture transport with a one-second retention interval,
+    /// runs `body` against it, and always tears down both the transport and the
+    /// client session — a failing phase must strand neither.
+    private func withPushTransport(
+        _ body: (HTTPSSETransport, URL, URLSession) async throws -> Void
+    ) async throws {
+        let (transport, baseURL) = try await HTTPTransportTestHelpers.startTransport(
+            server: PushFixtureServer(), retentionInterval: 1.0
+        )
+        let urlSession = URLSession(configuration: .ephemeral)
+
+        do {
+            try await body(transport, baseURL.appendingPathComponent("mcp"), urlSession)
+        } catch {
+            urlSession.invalidateAndCancel()
+            try? await transport.stop()
+            throw error
+        }
+
+        urlSession.invalidateAndCancel()
+        try await transport.stop()
+    }
 
     private func initializeAndSubscribe(
         uri: String,
