@@ -15,12 +15,68 @@
 // interval would otherwise multiply that churn.
 
 import Foundation
+import Logging
 import Testing
 import SwiftCross
 @testable import SwiftMCP
 
+/// A non-SSE ``Transport``, standing in for ``TCPBonjourTransport`` (which
+/// shares ``SessionManager`` but has no SSE streams): it records what the
+/// session sends, and can be made unreachable to exercise the failure path.
+final class NonSSERecordingTransport: Transport, @unchecked Sendable {
+    let logger = Logger(label: "com.cocoanetics.SwiftMCP.RecordingTransport")
+    private let sent = HTTPTransportBox<[String]>([])
+    private let reachable = HTTPTransportBox<Bool>(true)
+
+    var sentMessages: [String] { sent.value }
+    func setReachable(_ value: Bool) { reachable.value = value }
+
+    func start() async throws {}
+    func run() async throws {}
+    func stop() async throws {}
+
+    func send(_ data: Data) async throws {
+        guard reachable.value else {
+            throw TransportError.bindingFailed("Client unreachable")
+        }
+        sent.modify { $0.append(String(data: data, encoding: .utf8) ?? "") }
+    }
+}
+
 @Suite("Zombie-session regression", .serialized)
 struct BroadcastZombieRegressionTests {
+
+    /// `SessionManager` is shared with the TCP transport, whose sessions never
+    /// create SSE streams. Broadcasts must therefore go out through each
+    /// session's own transport, not through SSE stream routing — routing
+    /// directly would silently drop every TCP client's notifications.
+    @Test func nonSSETransportsStillReceiveResourceUpdated() async throws {
+        // Both references must be held: `Session.transport` and
+        // `SessionManager.transport` are weak.
+        let transport = NonSSERecordingTransport()
+        let manager = SessionManager(transport: transport)
+
+        let session = await manager.session(id: UUID())
+        await session.subscribeResource(uri: "push://tcp")
+
+        await manager.broadcastResourceUpdated(uri: URL(string: "push://tcp")!)
+        #expect(transport.sentMessages.count == 1)
+        #expect(transport.sentMessages.first?.contains("notifications/resources/updated") == true)
+        #expect(transport.sentMessages.first?.contains("push://tcp") == true)
+        #expect(await manager.undeliverableBroadcastCount == 0)
+
+        // An unreachable client is a counted drop, not a silent one.
+        transport.setReachable(false)
+        await manager.broadcastResourceUpdated(uri: URL(string: "push://tcp")!)
+        #expect(transport.sentMessages.count == 1)
+        #expect(await manager.undeliverableBroadcastCount == 1)
+
+        // …and delivery recovers once the client is reachable again.
+        transport.setReachable(true)
+        await manager.broadcastResourceUpdated(uri: URL(string: "push://tcp")!)
+        #expect(transport.sentMessages.count == 2)
+        #expect(await manager.undeliverableBroadcastCount == 1)
+    }
 
     @Test(.timeLimit(.minutes(3)))
     func zombieStreamStatesAreReclaimedCountedAndRejected() async throws {

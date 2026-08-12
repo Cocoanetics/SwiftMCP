@@ -54,40 +54,52 @@ extension SessionManager {
 
     /// Send a resource-updated notification to all sessions subscribed to the given URI.
     ///
-    /// Routing failures are counted and logged (once per session per outage): a
-    /// subscribed session with no routable general stream used to drop the
-    /// notification without a trace, leaving a healthy-looking session that
-    /// never receives another push (the zombie-session incident).
+    /// Delivery failures are counted and logged (once per session per outage): a
+    /// subscribed session the notification cannot reach used to drop it without
+    /// a trace, leaving a healthy-looking session that never receives another
+    /// push (the zombie-session incident).
     func broadcastResourceUpdated(uri: URL) async {
         await cleanupExpiredState()
         let uriString = uri.absoluteString
         for session in sessions.values {
             guard await session.isSubscribedToResource(uri: uriString) else { continue }
-
-            let notification = JSONRPCMessage.notification(
-                method: "notifications/resources/updated",
-                params: ["uri": .string(uriString)]
-            )
-            let routed = await routeJSONRPC(notification, sessionID: session.id)
-            recordResourceUpdatedOutcome(routed: routed, sessionID: session.id, uri: uriString)
+            let delivered = await deliverResourceUpdated(uri: uri, to: session)
+            recordResourceUpdatedOutcome(delivered: delivered, sessionID: session.id, uri: uriString)
         }
     }
 
-    /// Encode and route a JSON-RPC message to the session's primary general
-    /// stream, reporting whether any stream accepted it.
-    @discardableResult
-    internal func routeJSONRPC(_ message: JSONRPCMessage, sessionID: UUID) async -> Bool {
-        guard let data = try? JSONRPCMessage.makeEncoder().encode(message),
-              let text = String(data: data, encoding: .utf8) else {
+    /// Deliver through the session's own transport, reporting whether it went
+    /// out. Every transport keeps its own delivery mechanism — SSE routing for
+    /// ``HTTPSSETransport``, the connection write for ``TCPBonjourTransport``
+    /// (which shares this manager and has no SSE streams at all) — and each
+    /// throws when the client is unreachable. That throw is the delivery
+    /// signal; it was previously swallowed by `try?`.
+    private func deliverResourceUpdated(uri: URL, to session: Session) async -> Bool {
+        // A `nil` weak transport makes `transport?.send` a silent no-op rather
+        // than a throw, so it has to be checked separately.
+        guard await session.transport != nil else {
             return false
         }
-        return await routeSSEMessage(SSEMessage(data: text), sessionID: sessionID, preferredStreamID: nil)
+
+        do {
+            try await session.work { try await $0.sendResourceUpdated(uri: uri) }
+            return true
+        } catch {
+            return false
+        }
     }
 
     /// Track per-session delivery of resource-updated broadcasts, logging the
     /// transitions (first drop, later recovery) rather than every occurrence.
-    private func recordResourceUpdatedOutcome(routed: Bool, sessionID: UUID, uri: String) {
-        if routed {
+    private func recordResourceUpdatedOutcome(delivered: Bool, sessionID: UUID, uri: String) {
+        // The session can be destroyed while the delivery above is suspended.
+        // `destroySession` already dropped its marker, so recording here would
+        // both re-add a stale id and count a session that no longer exists.
+        guard sessions[sessionID] != nil else {
+            return
+        }
+
+        if delivered {
             if sessionsWithUndeliverableBroadcast.remove(sessionID) != nil {
                 logger.info("resource-updated delivery recovered for session \(sessionID)")
             }
@@ -97,7 +109,7 @@ extension SessionManager {
         undeliverableBroadcastCount += 1
         if sessionsWithUndeliverableBroadcast.insert(sessionID).inserted {
             let details = "resource-updated for \(uri) dropped: session \(sessionID) is subscribed"
-                + " but has no routable general SSE stream; dropping until one (re)connects"
+                + " but is unreachable; dropping until its transport can deliver again"
             logger.warning("\(details)")
         }
     }
