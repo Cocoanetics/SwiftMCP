@@ -319,8 +319,10 @@ extension MCPServerProxy {
         // Servers may ignore subsequent requests until this notification is received.
         try await sendNotification(JSONRPCMessage.notification(method: "notifications/initialized"))
 
-        // Re-subscribe to any URIs recorded from a previous session. Failures are
-        // logged and skipped so a server that dropped a resource never blocks init.
+        await replaySubscriptions()
+    }
+
+    private func replaySubscriptions() async {
         for uri in subscribedResourceURIs {
             do {
                 try await requestResult(
