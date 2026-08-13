@@ -190,6 +190,21 @@ extension MCPServerProxy {
         }
     }
 
+    internal func replaySubscriptions() async {
+        for uri in subscribedResourceURIs {
+            do {
+                try await requestResult(
+                    method: "resources/subscribe",
+                    params: ["uri": .string(uri.absoluteString)]
+                )
+            } catch {
+                logger.warning(
+                    "[MCP] Failed to replay subscription for \(uri.absoluteString): \(error.localizedDescription)"
+                )
+            }
+        }
+    }
+
     /// Invalidates the cached list of tools.
     public func invalidateToolsCache() {
         cachedTools = nil

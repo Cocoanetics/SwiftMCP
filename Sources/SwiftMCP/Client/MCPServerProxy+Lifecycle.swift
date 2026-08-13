@@ -322,21 +322,6 @@ extension MCPServerProxy {
         await replaySubscriptions()
     }
 
-    private func replaySubscriptions() async {
-        for uri in subscribedResourceURIs {
-            do {
-                try await requestResult(
-                    method: "resources/subscribe",
-                    params: ["uri": .string(uri.absoluteString)]
-                )
-            } catch {
-                logger.warning(
-                    "[MCP] Failed to replay subscription for \(uri.absoluteString): \(error.localizedDescription)"
-                )
-            }
-        }
-    }
-
     /// Sends a JSON-RPC notification (fire-and-forget, no response expected).
     internal func sendNotification(_ message: JSONRPCMessage) async throws {
         switch config {
