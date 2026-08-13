@@ -173,6 +173,7 @@ extension MCPServerProxy {
         }
 
         sessionID = nil
+        subscribedResourceURIs = []
     }
 
     /// Drives a line-based transport (stdio / TCP / in-process) through the shared
@@ -317,6 +318,8 @@ extension MCPServerProxy {
         // Send the required notifications/initialized to complete the MCP handshake.
         // Servers may ignore subsequent requests until this notification is received.
         try await sendNotification(JSONRPCMessage.notification(method: "notifications/initialized"))
+
+        await replaySubscriptions()
     }
 
     /// Sends a JSON-RPC notification (fire-and-forget, no response expected).

@@ -69,15 +69,21 @@ extension MCPServerProxy {
     /// Subscribes to update notifications for a resource URI.
     /// Requires a `resourceNotificationHandler` to be set and the server
     /// to advertise `resources.subscribe` capability.
+    /// The URI is recorded locally only when the server accepts the request;
+    /// after any re-initialize the proxy replays all recorded subscriptions.
     public func subscribeResource(uri: URL) async throws {
         try await requestResult(
             method: "resources/subscribe",
             params: ["uri": .string(uri.absoluteString)]
         )
+        subscribedResourceURIs.insert(uri)
     }
 
     /// Unsubscribes from update notifications for a resource URI.
+    /// The URI is removed from the locally-recorded set immediately so it will
+    /// not be replayed after a re-initialize.
     public func unsubscribeResource(uri: URL) async throws {
+        subscribedResourceURIs.remove(uri)
         try await requestResult(
             method: "resources/unsubscribe",
             params: ["uri": .string(uri.absoluteString)]
@@ -181,6 +187,21 @@ extension MCPServerProxy {
             throw MCPServerProxyError.communicationError(
                 "Invalid response type for tools/call, expected JSONRPCResponse"
             )
+        }
+    }
+
+    internal func replaySubscriptions() async {
+        for uri in subscribedResourceURIs {
+            do {
+                try await requestResult(
+                    method: "resources/subscribe",
+                    params: ["uri": .string(uri.absoluteString)]
+                )
+            } catch {
+                logger.warning(
+                    "[MCP] Failed to replay subscription for \(uri.absoluteString): \(error.localizedDescription)"
+                )
+            }
         }
     }
 
