@@ -69,7 +69,10 @@ extension MCPServerProxy {
     /// Subscribes to update notifications for a resource URI.
     /// Requires a `resourceNotificationHandler` to be set and the server
     /// to advertise `resources.subscribe` capability.
+    /// The URI is recorded locally; after any re-initialize the proxy replays
+    /// all recorded subscriptions automatically.
     public func subscribeResource(uri: URL) async throws {
+        subscribedResourceURIs.insert(uri)
         try await requestResult(
             method: "resources/subscribe",
             params: ["uri": .string(uri.absoluteString)]
@@ -77,7 +80,10 @@ extension MCPServerProxy {
     }
 
     /// Unsubscribes from update notifications for a resource URI.
+    /// The URI is removed from the locally-recorded set immediately so it will
+    /// not be replayed after a re-initialize.
     public func unsubscribeResource(uri: URL) async throws {
+        subscribedResourceURIs.remove(uri)
         try await requestResult(
             method: "resources/unsubscribe",
             params: ["uri": .string(uri.absoluteString)]

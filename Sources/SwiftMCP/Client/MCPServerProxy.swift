@@ -112,6 +112,13 @@ public final actor MCPServerProxy {
 
     internal var notificationHandlers: [String: NotificationHandlerBox] = [:]
 
+    /// The desired set of subscribed resource URIs. `subscribeResource` adds to
+    /// this set and `unsubscribeResource` removes from it. After any successful
+    /// `initialize` the proxy replays all recorded URIs so subscriptions survive
+    /// session resets without every caller having to implement its own reconnect
+    /// dance. Cleared by `disconnect()` — an intentional teardown starts fresh.
+    internal var subscribedResourceURIs: Set<URL> = []
+
     /// Optional handler for log notifications from the server.
     public var logNotificationHandler: (any MCPServerProxyLogNotificationHandling)? {
         didSet {

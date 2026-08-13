@@ -173,6 +173,7 @@ extension MCPServerProxy {
         }
 
         sessionID = nil
+        subscribedResourceURIs = []
     }
 
     /// Drives a line-based transport (stdio / TCP / in-process) through the shared
@@ -317,6 +318,21 @@ extension MCPServerProxy {
         // Send the required notifications/initialized to complete the MCP handshake.
         // Servers may ignore subsequent requests until this notification is received.
         try await sendNotification(JSONRPCMessage.notification(method: "notifications/initialized"))
+
+        // Re-subscribe to any URIs recorded from a previous session. Failures are
+        // logged and skipped so a server that dropped a resource never blocks init.
+        for uri in subscribedResourceURIs {
+            do {
+                try await requestResult(
+                    method: "resources/subscribe",
+                    params: ["uri": .string(uri.absoluteString)]
+                )
+            } catch {
+                logger.warning(
+                    "[MCP] Failed to replay subscription for \(uri.absoluteString): \(error.localizedDescription)"
+                )
+            }
+        }
     }
 
     /// Sends a JSON-RPC notification (fire-and-forget, no response expected).
