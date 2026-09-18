@@ -81,10 +81,6 @@ public struct ServerCapabilities: Codable, Sendable {
             self.enabled = enabled
         }
 
-        private enum CodingKeys: String, CodingKey {
-            case enabled
-        }
-
         /// The spec declares `logging` as an empty object — its *presence* is the
         /// capability, and `enabled` is a SwiftMCP extension. Requiring the key
         /// made `initialize` fail outright against any compliant server that
