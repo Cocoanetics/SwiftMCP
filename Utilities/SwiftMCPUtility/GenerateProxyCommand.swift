@@ -40,7 +40,7 @@ struct GenerateProxyCommand: AsyncParsableCommand {
     var functionNaming: String?
 
     // swiftlint:disable:next line_length
-    @Option(name: .long, help: "Naming style for generated Swift parameter labels: verbatim (default), lowerCamelCase, snakeCase. The wire key sent to the server is unaffected.")
+    @Option(name: .long, help: "Naming style for generated Swift parameter labels and response-struct properties: verbatim (default), lowerCamelCase, snakeCase. Wire keys are unaffected.")
     var parameterNaming: String?
 
     func run() async throws {

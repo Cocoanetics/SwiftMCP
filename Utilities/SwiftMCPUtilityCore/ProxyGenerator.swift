@@ -92,7 +92,7 @@ public enum ProxyGenerator {
         fileName: String? = nil,
         headerMetadata: HeaderMetadata? = nil
     ) -> SourceFileSyntax {
-        let registry = OpenAPITypeRegistry()
+        let registry = OpenAPITypeRegistry(propertyNaming: parameterNaming)
         let returnTypes = buildReturnTypes(
             tools: tools,
             openapiReturnSchemas: openapiReturnSchemas,
