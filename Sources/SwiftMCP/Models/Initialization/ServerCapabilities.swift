@@ -80,6 +80,19 @@ public struct ServerCapabilities: Codable, Sendable {
         public init(enabled: Bool = true) {
             self.enabled = enabled
         }
+
+        private enum CodingKeys: String, CodingKey {
+            case enabled
+        }
+
+        /// The spec declares `logging` as an empty object — its *presence* is the
+        /// capability, and `enabled` is a SwiftMCP extension. Requiring the key
+        /// made `initialize` fail outright against any compliant server that
+        /// advertises `"logging": {}`, which is the common case.
+        public init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        }
     }
 
     public init(
