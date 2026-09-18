@@ -27,7 +27,8 @@ extension ProxyGenerator {
     static func makeResourceWrapperLines(
         resources: [SimpleResource],
         resourceTemplates: [SimpleResourceTemplate],
-        usedMethodNames: inout Set<String>
+        usedMethodNames: inout Set<String>,
+        parameterNaming: ParameterNaming = .verbatim
     ) -> [String] {
         var lines: [String] = []
 
@@ -46,7 +47,8 @@ extension ProxyGenerator {
             appendTemplateResourceMethod(
                 template: template,
                 lines: &lines,
-                usedMethodNames: &usedMethodNames
+                usedMethodNames: &usedMethodNames,
+                parameterNaming: parameterNaming
             )
         }
 
@@ -91,9 +93,13 @@ extension ProxyGenerator {
     private static func appendTemplateResourceMethod(
         template: SimpleResourceTemplate,
         lines: inout [String],
-        usedMethodNames: inout Set<String>
+        usedMethodNames: inout Set<String>,
+        parameterNaming: ParameterNaming
     ) {
-        guard let parameters = resourceTemplateParameters(for: template.uriTemplate) else {
+        guard let parameters = resourceTemplateParameters(
+            for: template.uriTemplate,
+            parameterNaming: parameterNaming
+        ) else {
             return
         }
 
@@ -159,7 +165,10 @@ extension ProxyGenerator {
         }
     }
 
-    static func resourceTemplateParameters(for template: String) -> [MethodParameter]? {
+    static func resourceTemplateParameters(
+        for template: String,
+        parameterNaming: ParameterNaming = .verbatim
+    ) -> [MethodParameter]? {
         guard let regex = try? NSRegularExpression(pattern: #"\{[^}]+\}"#) else {
             return nil
         }
@@ -195,7 +204,8 @@ extension ProxyGenerator {
 
                 guard let parameter = makeTemplateParameter(
                     variable: variable,
-                    seenSwiftNames: &seenSwiftNames
+                    seenSwiftNames: &seenSwiftNames,
+                    parameterNaming: parameterNaming
                 ) else {
                     return nil
                 }
@@ -208,9 +218,10 @@ extension ProxyGenerator {
 
     private static func makeTemplateParameter(
         variable: TemplateVariable,
-        seenSwiftNames: inout Set<String>
+        seenSwiftNames: inout Set<String>,
+        parameterNaming: ParameterNaming
     ) -> MethodParameter? {
-        let swiftName = swiftIdentifier(from: variable.name, lowerCamel: true)
+        let swiftName = parameterIdentifier(from: variable.name, naming: parameterNaming)
         guard seenSwiftNames.insert(swiftName).inserted else {
             return nil
         }

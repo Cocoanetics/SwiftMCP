@@ -39,6 +39,10 @@ struct GenerateProxyCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Naming style for generated Swift functions: verbatim, lowerCamelCase (default), snakeCase")
     var functionNaming: String?
 
+    // swiftlint:disable:next line_length
+    @Option(name: .long, help: "Naming style for generated Swift parameter labels: verbatim (default), lowerCamelCase, snakeCase. The wire key sent to the server is unaffected.")
+    var parameterNaming: String?
+
     func run() async throws {
         let config = try UtilitySupport.makeConfig(from: connection)
         let proxy = MCPServerProxy(config: config)
@@ -59,6 +63,7 @@ struct GenerateProxyCommand: AsyncParsableCommand {
         let openAPIReturnInfo = try await OpenAPIProxyLoader.loadReturnSchemas(from: openapi)
         let headerMetadata = makeHeaderMetadata(fileName: fileName, surfaces: surfaces)
         let naming = resolveFunctionNaming()
+        let parameterNamingStyle = try resolveParameterNaming()
 
         let source = ProxyGenerator.generate(
             typeName: typeName,
@@ -70,6 +75,7 @@ struct GenerateProxyCommand: AsyncParsableCommand {
             supportsPrompts: surfaces.supportsPrompts,
             openapiReturnSchemas: openAPIReturnInfo,
             functionNaming: naming,
+            parameterNaming: parameterNamingStyle,
             fileName: fileName,
             headerMetadata: headerMetadata
         )
@@ -161,6 +167,19 @@ struct GenerateProxyCommand: AsyncParsableCommand {
         case "verbatim": return .verbatim
         case "snakecase", "snake_case": return .snakeCase
         default: return .lowerCamelCase
+        }
+    }
+
+    private func resolveParameterNaming() throws -> ProxyGenerator.ParameterNaming {
+        guard let parameterNaming else { return .verbatim }
+        switch parameterNaming.lowercased() {
+        case "verbatim": return .verbatim
+        case "lowercamelcase", "lowercamel": return .lowerCamelCase
+        case "snakecase", "snake_case": return .snakeCase
+        default:
+            throw ValidationError(
+                "Unknown --parameter-naming '\(parameterNaming)'. Expected verbatim, lowerCamelCase or snakeCase."
+            )
         }
     }
 

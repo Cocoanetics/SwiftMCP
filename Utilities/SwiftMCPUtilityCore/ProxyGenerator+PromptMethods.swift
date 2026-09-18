@@ -21,13 +21,19 @@ extension ProxyGenerator {
 
     static func makePromptWrapperLines(
         prompts: [Prompt],
-        usedMethodNames: inout Set<String>
+        usedMethodNames: inout Set<String>,
+        parameterNaming: ParameterNaming = .verbatim
     ) -> [String] {
         var lines: [String] = []
         let sortedPrompts = prompts.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
 
         for prompt in sortedPrompts {
-            appendPromptWrapper(prompt: prompt, lines: &lines, usedMethodNames: &usedMethodNames)
+            appendPromptWrapper(
+                prompt: prompt,
+                lines: &lines,
+                usedMethodNames: &usedMethodNames,
+                parameterNaming: parameterNaming
+            )
         }
 
         return lines
@@ -36,9 +42,10 @@ extension ProxyGenerator {
     private static func appendPromptWrapper(
         prompt: Prompt,
         lines: inout [String],
-        usedMethodNames: inout Set<String>
+        usedMethodNames: inout Set<String>,
+        parameterNaming: ParameterNaming
     ) {
-        guard let parameters = promptParameters(for: prompt) else {
+        guard let parameters = promptParameters(for: prompt, parameterNaming: parameterNaming) else {
             return
         }
 
@@ -77,14 +84,18 @@ extension ProxyGenerator {
         lines.append("    }")
     }
 
-    static func promptParameters(for prompt: Prompt) -> [MethodParameter]? {
+    static func promptParameters(
+        for prompt: Prompt,
+        parameterNaming: ParameterNaming = .verbatim
+    ) -> [MethodParameter]? {
         var parameters: [MethodParameter] = []
         var seenSwiftNames: Set<String> = []
 
         for argument in prompt.arguments {
             guard let parameter = makePromptParameter(
                 argument: argument,
-                seenSwiftNames: &seenSwiftNames
+                seenSwiftNames: &seenSwiftNames,
+                parameterNaming: parameterNaming
             ) else {
                 return nil
             }
@@ -96,13 +107,14 @@ extension ProxyGenerator {
 
     private static func makePromptParameter(
         argument: MCPParameterInfo,
-        seenSwiftNames: inout Set<String>
+        seenSwiftNames: inout Set<String>,
+        parameterNaming: ParameterNaming
     ) -> MethodParameter? {
         guard let typeInfo = swiftTypeInfo(for: argument.type) else {
             return nil
         }
 
-        let swiftName = swiftIdentifier(from: argument.name, lowerCamel: true)
+        let swiftName = parameterIdentifier(from: argument.name, naming: parameterNaming)
         guard seenSwiftNames.insert(swiftName).inserted else {
             return nil
         }
