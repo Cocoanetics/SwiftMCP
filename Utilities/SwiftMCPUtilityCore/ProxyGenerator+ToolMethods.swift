@@ -5,11 +5,12 @@ extension ProxyGenerator {
     static func makeMethodLines(
         tool: MCPTool,
         returnInfo: OpenAPIReturnInfo?,
-        functionNaming: FunctionNaming = .lowerCamelCase
+        functionNaming: FunctionNaming = .lowerCamelCase,
+        parameterNaming: ParameterNaming = .verbatim
     ) -> [String] {
         var lines: [String] = []
         let methodName = toolMethodName(for: tool, functionNaming: functionNaming)
-        let parameters = methodParameters(for: tool)
+        let parameters = methodParameters(for: tool, parameterNaming: parameterNaming)
         lines.append(contentsOf: docCommentLines(tool: tool, parameters: parameters, returnInfo: returnInfo))
 
         let signature = parameters.map { $0.signature }.joined(separator: ", ")
@@ -54,27 +55,46 @@ extension ProxyGenerator {
         return reservedKeywords.contains(converted) ? "`\(converted)`" : converted
     }
 
-    static func methodParameters(for tool: MCPTool) -> [MethodParameter] {
+    static func methodParameters(
+        for tool: MCPTool,
+        parameterNaming: ParameterNaming = .verbatim
+    ) -> [MethodParameter] {
         guard case .object(let object, _) = tool.inputSchema else {
             return []
         }
 
         let required = Set(object.required)
         let sortedKeys = object.properties.keys.sorted()
+        // Renaming can collide (a server declaring both `ride_id` and `rideId`
+        // converts them to the same label), so keep the server's spelling for
+        // whichever parameter would have been the duplicate.
+        var seenSwiftNames: Set<String> = []
         return sortedKeys.compactMap { key in
             guard let schema = object.properties[key] else {
                 return nil
             }
-            return makeMethodParameter(key: key, schema: schema, required: required)
+            var swiftName = parameterIdentifier(from: key, naming: parameterNaming)
+            if !seenSwiftNames.insert(swiftName).inserted {
+                swiftName = parameterIdentifier(from: key, naming: .verbatim)
+                guard seenSwiftNames.insert(swiftName).inserted else {
+                    return nil
+                }
+            }
+            return makeMethodParameter(
+                key: key,
+                schema: schema,
+                required: required,
+                swiftName: swiftName
+            )
         }
     }
 
     private static func makeMethodParameter(
         key: String,
         schema: JSONSchema,
-        required: Set<String>
+        required: Set<String>,
+        swiftName: String
     ) -> MethodParameter {
-        let swiftName = swiftIdentifier(from: key, lowerCamel: true)
         let typeInfo = swiftTypeInfo(for: schema)
         let defaultLiteral = defaultValueLiteral(for: schema, typeInfo: typeInfo)
         let isDefaultNil = defaultLiteral == "nil"

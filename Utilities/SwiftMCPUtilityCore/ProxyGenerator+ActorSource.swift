@@ -15,7 +15,8 @@ extension ProxyGenerator {
         typeDefinitions: [String],
         typeDocComment: [String],
         metadata: HeaderMetadata,
-        functionNaming: FunctionNaming = .lowerCamelCase
+        functionNaming: FunctionNaming = .lowerCamelCase,
+        parameterNaming: ParameterNaming = .verbatim
     ) -> String {
         var lines: [String] = []
         if !typeDocComment.isEmpty {
@@ -34,7 +35,8 @@ extension ProxyGenerator {
             supportsResources: supportsResources,
             supportsPrompts: supportsPrompts,
             returnTypes: returnTypes,
-            functionNaming: functionNaming
+            functionNaming: functionNaming,
+            parameterNaming: parameterNaming
         )
 
         // Indent client body one extra level into the enum namespace
@@ -107,7 +109,8 @@ extension ProxyGenerator {
         supportsResources: Bool,
         supportsPrompts: Bool,
         returnTypes: [String: OpenAPIReturnInfo],
-        functionNaming: FunctionNaming
+        functionNaming: FunctionNaming,
+        parameterNaming: ParameterNaming
     ) -> [String] {
         var clientBody: [String] = []
 
@@ -127,6 +130,7 @@ extension ProxyGenerator {
             sortedTools: sortedTools,
             returnTypes: returnTypes,
             functionNaming: functionNaming,
+            parameterNaming: parameterNaming,
             into: &clientBody
         )
 
@@ -158,6 +162,7 @@ extension ProxyGenerator {
         sortedTools: [MCPTool],
         returnTypes: [String: OpenAPIReturnInfo],
         functionNaming: FunctionNaming,
+        parameterNaming: ParameterNaming,
         into clientBody: inout [String]
     ) {
         if !sortedTools.isEmpty {
@@ -170,7 +175,8 @@ extension ProxyGenerator {
             clientBody.append(contentsOf: makeMethodLines(
                 tool: tool,
                 returnInfo: returnInfo,
-                functionNaming: functionNaming
+                functionNaming: functionNaming,
+                parameterNaming: parameterNaming
             ))
         }
     }

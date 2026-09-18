@@ -51,6 +51,19 @@ public enum ProxyGenerator {
         case snakeCase
     }
 
+    /// Naming convention for generated Swift parameter labels.
+    ///
+    /// Only the Swift-side label is affected. The wire key sent to the server is
+    /// always the parameter name the server declared.
+    public enum ParameterNaming {
+        /// Use the parameter name as-is (default — preserves the server's spelling).
+        case verbatim
+        /// Convert to lowerCamelCase.
+        case lowerCamelCase
+        /// Convert to snake_case.
+        case snakeCase
+    }
+
     struct MethodParameter {
         let originalName: String
         let swiftName: String
@@ -75,6 +88,7 @@ public enum ProxyGenerator {
         supportsPrompts: Bool = false,
         openapiReturnSchemas: [String: OpenAPIReturnInfo] = [:],
         functionNaming: FunctionNaming = .lowerCamelCase,
+        parameterNaming: ParameterNaming = .verbatim,
         fileName: String? = nil,
         headerMetadata: HeaderMetadata? = nil
     ) -> SourceFileSyntax {
@@ -108,7 +122,8 @@ public enum ProxyGenerator {
             typeDefinitions: typeDefinitions,
             typeDocComment: typeDocComment,
             metadata: metadata,
-            functionNaming: functionNaming
+            functionNaming: functionNaming,
+            parameterNaming: parameterNaming
         )
 
         let headerAndImports = "\(headerComment)\n\nimport Foundation\nimport SwiftMCP\n"

@@ -1,4 +1,5 @@
 import Foundation
+import SwiftMCP
 
 extension ProxyGenerator {
     static func pascalCase(_ string: String) -> String {
@@ -42,6 +43,22 @@ extension ProxyGenerator {
         }
 
         return combined
+    }
+
+    /// Builds the Swift label for a parameter the server declared as `raw`.
+    ///
+    /// The wire key is unaffected; this only changes how the label reads in Swift.
+    static func parameterIdentifier(from raw: String, naming: ParameterNaming) -> String {
+        let converted: String
+        switch naming {
+        case .verbatim:
+            converted = raw
+        case .lowerCamelCase:
+            converted = NamingConverter.toLowerCamelCase(raw)
+        case .snakeCase:
+            converted = NamingConverter.toSnakeCase(raw)
+        }
+        return swiftIdentifier(from: converted, lowerCamel: true)
     }
 
     static func isValidIdentifier(_ value: String) -> Bool {
