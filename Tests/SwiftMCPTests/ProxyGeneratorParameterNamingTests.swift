@@ -5,7 +5,7 @@ import SwiftMCPUtilityCore
 @Suite("Proxy Generator Parameter Naming Tests", .tags(.proxyGenerator))
 struct ProxyGeneratorParameterNamingTests {
 
-    private func makeTool(properties: [String: JSONSchema], required: [String]) -> MCPTool {
+    private func makeTool(properties: [String: JSONSchema], required: Set<String>) -> MCPTool {
         MCPTool(
             name: "accept_ride",
             description: nil,
