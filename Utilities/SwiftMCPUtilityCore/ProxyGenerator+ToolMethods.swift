@@ -91,7 +91,7 @@ extension ProxyGenerator {
             return []
         }
 
-        let required = Set(object.required)
+        let required = object.required
         let sortedKeys = object.properties.keys.sorted()
         // Renaming can collide (a server declaring both `ride_id` and `rideId`
         // converts them to the same label), so keep the server's spelling for
