@@ -163,6 +163,26 @@ public enum MCPClientResultDecoder {
         throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "Expected MCPEmbeddedResource array"))
     }
 
+    /// Decodes a tool's `structuredContent` without going through text.
+    ///
+    /// The same single-key unwrap as the text path applies, because the same
+    /// two conventions produce it: the server wraps a non-object return as
+    /// `{"items": [...]}`, and the proxy generator flattens `{"rides": [...]}`
+    /// to `[Ride]`.
+    public static func decode<T: Decodable>(_ type: T.Type, from value: JSONValue) throws -> T {
+        let decoder = configuredDecoder()
+        do {
+            return try value.decoded(T.self, using: decoder)
+        } catch let firstError {
+            if case .object(let object) = value, object.count == 1,
+               let single = object.values.first,
+               let result = try? single.decoded(T.self, using: decoder) {
+                return result
+            }
+            throw firstError
+        }
+    }
+
     public static func decode<T: Decodable>(_ type: T.Type, from text: String) throws -> T {
         let decoder = configuredDecoder()
 
