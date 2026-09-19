@@ -38,7 +38,7 @@ struct ProxyGeneratorOpenAPITests {
         #expect(source.contains("public let temperature: Double"))
         #expect(source.contains("public let condition: String?"))
         #expect(source.contains("public func currentWeather() async throws -> CurrentWeatherResponse"))
-        #expect(source.contains("MCPClientResultDecoder.decode(CurrentWeatherResponse.self"))
+        #expect(source.contains("as: CurrentWeatherResponse.self)"))
     }
 
     @Test("Tool output schemas generate Codable structs")
@@ -124,7 +124,7 @@ struct ProxyGeneratorOpenAPITests {
         ).description
 
         #expect(source.contains("public func getUserContext() async throws -> Date"))
-        #expect(source.contains("MCPClientResultDecoder.decode(Date.self"))
+        #expect(source.contains("as: Date.self)"))
     }
 
     @Test("Object with single array key returns array type directly")
@@ -153,7 +153,7 @@ struct ProxyGeneratorOpenAPITests {
 
         // Should return array type directly, not a wrapper struct
         #expect(source.contains("public func getItems() async throws -> [String]"))
-        #expect(source.contains("MCPClientResultDecoder.decode([String].self"))
+        #expect(source.contains("as: [String].self)"))
         // Should NOT create a wrapper struct
         #expect(!source.contains("public struct GetItemsResponse"))
     }

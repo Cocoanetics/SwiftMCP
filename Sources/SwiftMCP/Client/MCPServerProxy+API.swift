@@ -114,12 +114,14 @@ extension MCPServerProxy {
         )
     }
 
-    /// Calls a tool by name on the connected MCP server with the provided arguments.
-    public func callTool(
+    /// Calls a tool and returns everything it answered with — the structured
+    /// value, every content block, and `_meta`. A tool that ran and said no
+    /// surfaces as ``MCPServerProxyError/toolError(_:)`` with its message.
+    public func callToolResult(
         _ name: String,
         arguments: JSONDictionary = [:],
         progressToken: JSONValue? = .string(UUID().uuidString)
-    ) async throws -> String {
+    ) async throws -> MCPToolCallResult {
         let requestId = nextRequestID()
         var params: JSONDictionary = [
             "name": .string(name),
@@ -157,14 +159,64 @@ extension MCPServerProxy {
             )
         }
 
-        if let text = extractTextPayload(from: contentArray) {
+        // An explicit null is the same as absent: there is nothing structured to decode.
+        let structured = result["structuredContent"].flatMap { $0 == .null ? nil : $0 }
+        return MCPToolCallResult(
+            content: contentArray,
+            structuredContent: structured,
+            meta: result["_meta"]?.dictionaryValue
+        )
+    }
+
+    /// Calls a tool by name on the connected MCP server with the provided arguments.
+    ///
+    /// Returns the text block, or the content blocks encoded as JSON when there
+    /// is no single text block. Use ``callTool(_:arguments:as:progressToken:)``
+    /// to decode a typed answer, or ``callToolResult(_:arguments:progressToken:)``
+    /// for the whole result.
+    public func callTool(
+        _ name: String,
+        arguments: JSONDictionary = [:],
+        progressToken: JSONValue? = .string(UUID().uuidString)
+    ) async throws -> String {
+        let result = try await callToolResult(name, arguments: arguments, progressToken: progressToken)
+        return try textPayload(from: result)
+    }
+
+    /// Calls a tool and decodes its answer as `type`.
+    ///
+    /// The value comes from `structuredContent` when the server sent one — that
+    /// is the value the tool's `outputSchema` describes, with no round trip
+    /// through text — and from the text block otherwise, so a server without
+    /// an `outputSchema` decodes exactly as before.
+    public func callTool<T: Decodable>(
+        _ name: String,
+        arguments: JSONDictionary = [:],
+        as type: T.Type,
+        progressToken: JSONValue? = .string(UUID().uuidString)
+    ) async throws -> T {
+        let result = try await callToolResult(name, arguments: arguments, progressToken: progressToken)
+        return try decode(type, from: result)
+    }
+
+    /// Where a typed call picks its source. Structured wins: it is the value
+    /// the schema describes, and the text block is its rendering for clients
+    /// that cannot read it. The two are not compared — that would make the
+    /// slower path mandatory.
+    internal func decode<T: Decodable>(_ type: T.Type, from result: MCPToolCallResult) throws -> T {
+        if let structured = result.structuredContent {
+            return try MCPClientResultDecoder.decode(type, from: structured)
+        }
+        return try MCPClientResultDecoder.decode(type, from: try textPayload(from: result))
+    }
+
+    internal func textPayload(from result: MCPToolCallResult) throws -> String {
+        if let text = extractTextPayload(from: result.content) {
             return text
         }
-
-        if let contentPayload = encodeContentPayload(from: contentArray) {
+        if let contentPayload = encodeContentPayload(from: result.content) {
             return contentPayload
         }
-
         throw MCPServerProxyError.communicationError(
             "Failed to extract string content from tools/call response"
         )

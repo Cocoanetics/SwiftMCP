@@ -18,8 +18,12 @@ extension ProxyGenerator {
         lines.append("    public func \(methodName)(\(signature)) async throws -> \(returnType) {")
 
         if parameters.isEmpty {
-            lines.append("        let text = try await proxy.callTool(\"\(tool.name)\")")
-            lines.append(contentsOf: returnLines(returnType: returnType))
+            if decodesStructured(returnType) {
+                lines.append("        return try await proxy.callTool(\"\(tool.name)\", as: \(returnType).self)")
+            } else {
+                lines.append("        let text = try await proxy.callTool(\"\(tool.name)\")")
+                lines.append(contentsOf: returnLines(returnType: returnType))
+            }
             lines.append("    }")
             return lines
         }
@@ -34,10 +38,34 @@ extension ProxyGenerator {
                 lines.append("        arguments[\"\(key)\"] = \(encode)")
             }
         }
-        lines.append("        let text = try await proxy.callTool(\"\(tool.name)\", arguments: arguments)")
-        lines.append(contentsOf: returnLines(returnType: returnType))
+        if decodesStructured(returnType) {
+            let call = "proxy.callTool(\"\(tool.name)\", arguments: arguments, as: \(returnType).self)"
+            lines.append("        return try await \(call)")
+        } else {
+            lines.append("        let text = try await proxy.callTool(\"\(tool.name)\", arguments: arguments)")
+            lines.append(contentsOf: returnLines(returnType: returnType))
+        }
         lines.append("    }")
         return lines
+    }
+
+    /// Schema-derived types decode through the typed `callTool(_:as:)`, which
+    /// reads `structuredContent` directly. Text and the content types stay on
+    /// the text path: they live in `content`, not in a structured value, and
+    /// `MCPClientResultDecoder` has purpose-built overloads for them.
+    private static let textReturns: Set<String> = ["String", "Void", "Data"]
+    private static let contentTypes: Set<String> = [
+        "MCPText", "MCPImage", "MCPAudio", "MCPResourceLink",
+        "MCPEmbeddedResource", "GenericResourceContent", "SimpleResource", "SimpleResourceTemplate"
+    ]
+
+    static func decodesStructured(_ returnType: String) -> Bool {
+        var base = returnType
+        while base.hasSuffix("?") { base.removeLast() }
+        // A bare String IS the text block; an array of strings is a schema-typed value.
+        if textReturns.contains(base) { return false }
+        while base.hasPrefix("["), base.hasSuffix("]") { base = String(base.dropFirst().dropLast()) }
+        return !contentTypes.contains(base)
     }
 
     private static func toolMethodName(for tool: MCPTool, functionNaming: FunctionNaming) -> String {
