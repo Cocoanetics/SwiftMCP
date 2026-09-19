@@ -21,7 +21,7 @@ extension Array where Element == MCPToolMetadata {
             })
 
             // Determine which parameters are required using the isRequired property
-            let required = meta.parameters.filter { $0.isRequired }.map { $0.name }
+            let required = Set(meta.parameters.filter { $0.isRequired }.map { $0.name })
 
             // Create the input schema
             let hasParameters = !properties.isEmpty

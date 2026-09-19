@@ -3,7 +3,27 @@ import SwiftMCP
 
 final class OpenAPITypeRegistry {
     private var definitions: [String: String] = [:]
-    private var usedNames: Set<String> = []
+    var usedNames: Set<String> = []
+    /// How generated struct properties are spelled. The wire key is kept in
+    /// `CodingKeys`, so this only changes how the Swift side reads.
+    private let propertyNaming: ProxyGenerator.ParameterNaming
+
+    init(propertyNaming: ProxyGenerator.ParameterNaming = .verbatim) {
+        self.propertyNaming = propertyNaming
+    }
+    /// The shape behind each titled type — descriptions stripped — so the same
+    /// title over the same shape is one type wherever it appears.
+    var shapes: [String: JSONSchema] = [:]
+    /// Whether each generated type can be `Hashable`. A struct is, when every
+    /// property is — which is every schema-derived type, and none of SwiftMCP's
+    /// own content types (`MCPText`, `MCPImage`, …), which are not `Hashable`.
+    /// SwiftUI wants value equality on a model, so it is worth emitting
+    /// wherever it can be.
+    var hashable: [String: Bool] = [:]
+    static let hashablePrimitives: Set<String> = [
+        "String", "Double", "Bool", "Int", "Date", "URL", "Data", "UUID",
+        "JSONValue", "JSONDictionary", "JSONArray"
+    ]
 
     func swiftType(for schema: JSONSchema, suggestedName: String) -> String {
         switch schema {
@@ -21,9 +41,11 @@ final class OpenAPITypeRegistry {
                 return knownType
             }
             return "String"
-        case .enum(let values, _, let description, _, _):
-            let enumName = uniqueName(suggestedName)
-            ensureEnum(name: enumName, values: values, description: description)
+        case .enum(let values, let title, let description, _, _):
+            let (enumName, exists) = typeName(for: schema, title: title, suggestedName: suggestedName)
+            if !exists {
+                ensureEnum(name: enumName, values: values, description: description)
+            }
             return enumName
         case .object(let object, _):
             return swiftTypeForObject(object, suggestedName: suggestedName)
@@ -31,8 +53,10 @@ final class OpenAPITypeRegistry {
     }
 
     private func swiftTypeForObject(_ object: JSONSchema.Object, suggestedName: String) -> String {
-        // If the object has only one key and it's an array, return the array type directly
-        if object.properties.count == 1,
+        // If the object has only one key and it's an array, return the array type
+        // directly — unless the server titled it, in which case it meant a type.
+        if object.title == nil,
+           object.properties.count == 1,
            let (_, arraySchema) = object.properties.first,
            case .array(let items, _, _, _) = arraySchema {
             let itemType = swiftType(for: items, suggestedName: "\(suggestedName)Item")
@@ -41,8 +65,10 @@ final class OpenAPITypeRegistry {
         if let knownType = knownSwiftMCPType(for: object) {
             return knownType
         }
-        let structName = uniqueName(suggestedName)
-        ensureStruct(name: structName, object: object)
+        let (structName, exists) = typeName(for: .object(object), title: object.title, suggestedName: suggestedName)
+        if !exists {
+            ensureStruct(name: structName, object: object)
+        }
         return structName
     }
 
@@ -161,17 +187,24 @@ final class OpenAPITypeRegistry {
     private func ensureStruct(name: String, object: JSONSchema.Object) {
         guard definitions[name] == nil else { return }
 
+        // Properties first: resolving them defines any nested types, and says
+        // whether this one can be Hashable.
+        var propertyLines: [String] = []
+        let (codingKeys, allHashable) = appendStructProperties(name: name, object: object, lines: &propertyLines)
+        hashable[name] = allHashable
+
         var lines: [String] = []
         lines.append(contentsOf: docCommentLines(from: object.description, indent: ""))
-        lines.append("public struct \(name): Codable, Sendable {")
-
-        let codingKeys = appendStructProperties(name: name, object: object, lines: &lines)
+        lines.append("public struct \(name): Codable, Sendable\(allHashable ? ", Hashable" : "") {")
+        lines.append(contentsOf: propertyLines)
 
         if !codingKeys.isEmpty {
             lines.append("")
             lines.append("    private enum CodingKeys: String, CodingKey {")
             for key in codingKeys {
-                lines.append("        case \(key.swift) = \"\(key.original)\"")
+                lines.append(key.swift == key.original
+                    ? "        case \(key.swift)"
+                    : "        case \(key.swift) = \"\(key.original)\"")
             }
             lines.append("    }")
         }
@@ -184,28 +217,32 @@ final class OpenAPITypeRegistry {
         name: String,
         object: JSONSchema.Object,
         lines: inout [String]
-    ) -> [(swift: String, original: String)] {
+    ) -> (codingKeys: [(swift: String, original: String)], allHashable: Bool) {
         let sortedProperties = object.properties.keys.sorted()
         var codingKeys: [(swift: String, original: String)] = []
+        var allHashable = true
 
         for key in sortedProperties {
             guard let schema = object.properties[key] else { continue }
-            let swiftName = ProxyGenerator.swiftIdentifier(from: key, lowerCamel: true)
+            let swiftName = ProxyGenerator.parameterIdentifier(from: key, naming: propertyNaming)
             let typeName = swiftType(for: schema, suggestedName: "\(name)\(ProxyGenerator.pascalCase(key))")
             let isRequired = object.required.contains(key)
             let propertyType = isRequired ? typeName : "\(typeName)?"
+            allHashable = allHashable && isHashable(typeName)
             lines.append(contentsOf: docCommentLines(from: schemaDescription(schema), indent: "    "))
             lines.append("    public let \(swiftName): \(propertyType)")
-            if swiftName != key {
-                codingKeys.append((swift: swiftName, original: key))
-            }
+            codingKeys.append((swift: swiftName, original: key))
         }
 
-        return codingKeys
+        // A CodingKeys enum is only needed when a key was respelled — but once
+        // it exists, synthesised Codable requires every property in it.
+        let anyRenamed = codingKeys.contains { $0.swift != $0.original }
+        return (anyRenamed ? codingKeys : [], allHashable)
     }
 
     private func ensureEnum(name: String, values: [String], description: String?) {
         guard definitions[name] == nil else { return }
+        hashable[name] = true
         var lines: [String] = []
         lines.append(contentsOf: docCommentLines(from: description, indent: ""))
         lines.append("public enum \(name): String, Codable, Sendable, CaseIterable {")
@@ -221,20 +258,6 @@ final class OpenAPITypeRegistry {
         }
         lines.append("}")
         definitions[name] = lines.joined(separator: "\n")
-    }
-
-    private func uniqueName(_ name: String) -> String {
-        if !usedNames.contains(name) {
-            usedNames.insert(name)
-            return name
-        }
-        var index = 2
-        while usedNames.contains("\(name)\(index)") {
-            index += 1
-        }
-        let result = "\(name)\(index)"
-        usedNames.insert(result)
-        return result
     }
 
     private func docCommentLines(from text: String?, indent: String) -> [String] {
