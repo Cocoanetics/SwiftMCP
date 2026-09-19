@@ -11,8 +11,9 @@ extension OpenAPITypeRegistry {
     /// what makes the sharing safe — the same title over a *different* shape
     /// means the server said two things were the same when they were not, and
     /// that gets a numbered name rather than a silently merged type. Shape is
-    /// compared with descriptions stripped: the same fields documented two ways
-    /// are still one type.
+    /// compared with descriptions stripped and `required` sorted: the same
+    /// fields documented two ways, or listed in a different order, are still
+    /// one type.
     ///
     /// Untitled schemas keep their positional names, so existing output is
     /// unchanged for servers that never set a title.
@@ -25,7 +26,7 @@ extension OpenAPITypeRegistry {
             return (uniqueName(suggestedName), false)
         }
         let preferred = ProxyGenerator.pascalCase(title)
-        let shape = schema.withoutDescriptions
+        let shape = schema.withoutDescriptions.withSortedRequired
 
         if shapes[preferred] == shape {
             return (preferred, true)
