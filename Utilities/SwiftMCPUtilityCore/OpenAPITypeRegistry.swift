@@ -11,9 +11,9 @@ final class OpenAPITypeRegistry {
     init(propertyNaming: ProxyGenerator.ParameterNaming = .verbatim) {
         self.propertyNaming = propertyNaming
     }
-    /// Canonical form of the schema behind each titled type, so the same title
-    /// with the same shape is one type wherever it appears.
-    var fingerprints: [String: String] = [:]
+    /// The shape behind each titled type — descriptions stripped — so the same
+    /// title over the same shape is one type wherever it appears.
+    var shapes: [String: JSONSchema] = [:]
     /// Whether each generated type can be `Hashable`. A struct is, when every
     /// property is — which is every schema-derived type, and none of SwiftMCP's
     /// own content types (`MCPText`, `MCPImage`, …), which are not `Hashable`.

@@ -136,7 +136,7 @@ let package = Package(
 		// transport delegates to) and `RequestCorrelator` (JSONRPCPeer).
 		.package(
 			url: "https://github.com/Cocoanetics/JSONFoundation.git",
-			from: "2.4.0",
+			from: "2.6.0",
 			traits: ["Subprocess"]
 		)
     ],

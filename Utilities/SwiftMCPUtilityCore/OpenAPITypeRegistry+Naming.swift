@@ -10,7 +10,9 @@ extension OpenAPITypeRegistry {
     /// `GetRideResponseRide` and `AcceptRideResponseRide`. Structural identity is
     /// what makes the sharing safe — the same title over a *different* shape
     /// means the server said two things were the same when they were not, and
-    /// that gets a numbered name rather than a silently merged type.
+    /// that gets a numbered name rather than a silently merged type. Shape is
+    /// compared with descriptions stripped: the same fields documented two ways
+    /// are still one type.
     ///
     /// Untitled schemas keep their positional names, so existing output is
     /// unchanged for servers that never set a title.
@@ -23,40 +25,28 @@ extension OpenAPITypeRegistry {
             return (uniqueName(suggestedName), false)
         }
         let preferred = ProxyGenerator.pascalCase(title)
-        let print = fingerprint(schema)
+        let shape = schema.withoutDescriptions
 
-        if fingerprints[preferred] == print {
+        if shapes[preferred] == shape {
             return (preferred, true)
         }
         if !usedNames.contains(preferred) {
             usedNames.insert(preferred)
-            fingerprints[preferred] = print
+            shapes[preferred] = shape
             return (preferred, false)
         }
         // Taken, by a positional name or by a different shape under this title.
         var index = 2
         while usedNames.contains("\(preferred)\(index)") {
-            if fingerprints["\(preferred)\(index)"] == print {
+            if shapes["\(preferred)\(index)"] == shape {
                 return ("\(preferred)\(index)", true)
             }
             index += 1
         }
         let name = "\(preferred)\(index)"
         usedNames.insert(name)
-        fingerprints[name] = print
+        shapes[name] = shape
         return (name, false)
-    }
-
-    /// A canonical rendering of a schema. `JSONSchema` is not `Equatable`, and
-    /// its properties live in a dictionary, so equality has to go through a
-    /// key-sorted encoding.
-    func fingerprint(_ schema: JSONSchema) -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        guard let data = try? encoder.encode(schema) else {
-            return UUID().uuidString  // never equal to anything: fall back to a fresh name
-        }
-        return String(data: data, encoding: .utf8) ?? UUID().uuidString
     }
 
     func isHashable(_ typeName: String) -> Bool {

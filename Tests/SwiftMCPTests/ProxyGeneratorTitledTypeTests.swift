@@ -71,6 +71,34 @@ struct ProxyGeneratorTitledTypeTests {
         #expect(source.contains("public let state: String?"))
     }
 
+    @Test("The same shape documented two ways is still one type")
+    func descriptionsDoNotSplitAType() throws {
+        let documented: JSONSchema = .object(.init(
+            properties: [
+                "id": .string(title: nil, description: "the ride's id"),
+                "rider_id": .string(title: nil, description: nil)
+            ],
+            required: ["id", "rider_id"], title: "Ride", description: "a ride"
+        ))
+        let rephrased: JSONSchema = .object(.init(
+            properties: [
+                "id": .string(title: nil, description: "an identifier"),
+                "rider_id": .string(title: nil, description: nil)
+            ],
+            required: ["id", "rider_id"], title: "Ride"
+        ))
+        let source = ProxyGenerator.generate(
+            typeName: "P",
+            tools: [
+                tool("get_ride", output: .object(.init(properties: ["ride": documented], required: ["ride"]))),
+                tool("save_ride", output: rephrased)
+            ]
+        ).description
+
+        #expect(source.components(separatedBy: "public struct Ride:").count == 2, "exactly one Ride")
+        #expect(!source.contains("Ride2"))
+    }
+
     @Test("A titled single-key object stays a struct")
     func titledSingleKeyObjectIsNotFlattened() throws {
         let upcoming: JSONSchema = .object(.init(
