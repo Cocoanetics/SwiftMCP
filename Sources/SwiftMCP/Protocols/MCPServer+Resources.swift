@@ -18,8 +18,8 @@ public extension MCPServer {
             ])
         }
 
-        /// get resources from templates that have no parameters plus developer provided array
-        let resources = resourceProvider.mcpStaticResources + (await resourceProvider.mcpResources)
+        // The resources without parameters, then the ones the server adds itself.
+        let resources = (await resourceProvider.mcpStaticResources) + (await resourceProvider.mcpResources)
 
         if let resourcesValue = try? JSONValue(encoding: resources.map { resource in
             [
