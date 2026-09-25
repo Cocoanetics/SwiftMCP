@@ -167,8 +167,8 @@ public func callTool(_ name: String, arguments: JSONDictionary) async throws -> 
 """
         output.append(resourceMetadataProperty)
 
-        // Note: mcpResources should be implemented by the developer to combine
-        // mcpStaticResources with any dynamic resources they want to provide
+        // Note: mcpResources is left to the developer for dynamic resources;
+        // resources/list adds the parameterless ones from mcpResourceMetadata.
 
         // Add mcpResourceTemplates property (only for resources with parameters)
         let mcpResourceTemplatesProperty = """

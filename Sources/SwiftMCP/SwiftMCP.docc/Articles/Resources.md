@@ -34,6 +34,10 @@ extension DemoServer: MCPResourceProviding {
 }
 ```
 
+`resources/list` returns those together with every resource that takes no parameters,
+taken from ``MCPResourceProviding/mcpResourceMetadata``. A server that wraps another one
+and forwards that metadata lists the same resources, minus any it filters out.
+
 Clients can list available resources from ``MCPServer.mcpResourceTemplates``.
 
 ### Completions

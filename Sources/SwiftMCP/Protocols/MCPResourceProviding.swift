@@ -79,40 +79,24 @@ extension MCPResourceProviding {
     }
     }
 
-    /// Resource templates with zero parameters are listed together with mcpResources
+    /// The resources without parameters, one per URI, listed together with
+    /// `mcpResources`. They come from `mcpResourceMetadata`, as the templates do,
+    /// so a server that wraps or filters a generated one lists what it serves.
     var mcpStaticResources: [MCPResource] {
-        // Find the resources without parameters
-        let mirror = Mirror(reflecting: self)
-
-        let array: [MCPResourceMetadata] = mirror.children.compactMap { child in
-
-            guard let label = child.label,
-					label.hasPrefix("__mcpResourceMetadata_") else {
-                return nil
-            }
-
-            guard let metadata = child.value as? MCPResourceMetadata else {
-                return nil
-            }
-
-            guard metadata.parameters.isEmpty else {
-                return nil
-            }
-
-            return metadata
-        }
-
-        // Create individual resources for each URI template
-        return array.flatMap { metadata in
-            metadata.uriTemplates.compactMap { template in
-                guard let url = URL(string: template) else { return nil }
-                return SimpleResource(
-                    uri: url,
-                    name: metadata.name,
-                    description: metadata.description,
-                    mimeType: metadata.mimeType
-                )
-            }
+        get async {
+            await mcpResourceMetadata
+                .filter { $0.parameters.isEmpty }
+                .flatMap { metadata in
+                    metadata.uriTemplates.sorted().compactMap { template -> MCPResource? in
+                        guard let url = URL(string: template) else { return nil }
+                        return SimpleResource(
+                            uri: url,
+                            name: metadata.name,
+                            description: metadata.description,
+                            mimeType: metadata.mimeType
+                        )
+                    }
+                }
         }
     }
 
