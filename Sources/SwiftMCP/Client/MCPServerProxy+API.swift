@@ -116,7 +116,8 @@ extension MCPServerProxy {
 
     /// Calls a tool and returns everything it answered with — the structured
     /// value, every content block, and `_meta`. A tool that ran and said no
-    /// surfaces as ``MCPServerProxyError/toolError(_:)`` with its message.
+    /// surfaces as ``MCPServerProxyError/toolError(_:)`` with its message, or as
+    /// ``MCPServerProxyError/toolErrorWithMeta(_:meta:)`` when its result carries `_meta`.
     public func callToolResult(
         _ name: String,
         arguments: JSONDictionary = [:],
@@ -148,9 +149,11 @@ extension MCPServerProxy {
         let result = try extractToolCallResult(from: responseMessage)
 
         if result["isError"]?.boolValue == true {
-            throw MCPServerProxyError.toolError(
-                errorMessage(from: result) ?? "Tool call failed with an unspecified error."
-            )
+            let message = errorMessage(from: result) ?? "Tool call failed with an unspecified error."
+            if let meta = result["_meta"]?.dictionaryValue, !meta.isEmpty {
+                throw MCPServerProxyError.toolErrorWithMeta(message, meta: meta)
+            }
+            throw MCPServerProxyError.toolError(message)
         }
 
         guard let contentArray = result["content"]?.arrayValue else {

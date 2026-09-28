@@ -134,16 +134,18 @@ public extension MCPServer {
         } catch let invalid as MRTRInvalidInputResponse {
             return mrtrInvalidInputResponse(for: invalid, request: request)
         } catch {
-            return JSONRPCMessage.response(
-                id: request.id,
-                result: [
-                    "content": .array([.object([
-                        "type": .string("text"),
-                        "text": .string(error.localizedDescription)
-                    ])]),
-                    "isError": true
-                ]
-            )
+            var result: JSONDictionary = [
+                "content": .array([.object([
+                    "type": .string("text"),
+                    "text": .string(error.localizedDescription)
+                ])]),
+                "isError": true
+            ]
+            // The error's details for the client, beside the text every client reads.
+            if let meta = (error as? MCPToolErrorMetaProviding)?.toolErrorMeta, !meta.isEmpty {
+                result["_meta"] = .object(meta)
+            }
+            return JSONRPCMessage.response(id: request.id, result: .object(result))
         }
     }
 
