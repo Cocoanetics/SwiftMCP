@@ -5,6 +5,11 @@ public enum MCPServerProxyError: Error, LocalizedError {
     case notImplemented(String)
     case communicationError(String)
     case toolError(String)
+    /// A tool call the server answered with `isError: true` and `_meta`: the message, as
+    /// ``toolError(_:)`` carries it, with the result's `_meta`, the details a server attached
+    /// to its error (``MCPToolErrorMetaProviding``). A failed call without `_meta` is
+    /// ``toolError(_:)``.
+    case toolErrorWithMeta(String, meta: JSONDictionary)
     case unsupportedPlatform(String)
     /// The server no longer recognizes this session (it returned HTTP 404 to a
     /// request that carried an `Mcp-Session-Id`), typically because the server
@@ -29,7 +34,7 @@ public enum MCPServerProxyError: Error, LocalizedError {
             return "Functionality not implemented: \(message)"
         case .communicationError(let message):
             return "Communication error with MCP server: \(message)"
-        case .toolError(let message):
+        case .toolError(let message), .toolErrorWithMeta(let message, _):
             return "Tool call failed: \(message)"
         case .unsupportedPlatform(let message):
             return "Unsupported platform: \(message)"
