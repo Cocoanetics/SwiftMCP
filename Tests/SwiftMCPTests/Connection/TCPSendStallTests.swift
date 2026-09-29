@@ -53,7 +53,9 @@ struct TCPSendStallTests {
         try await transport.stop()
     }
 
-    /// A log notification of `megabytes` MiB to `session`'s client, sent in a task.
+    /// A log notification of `megabytes` MiB to `session`'s client, sent in a task. Four
+    /// are far more than loopback's socket buffers take (some 600 KB), and little enough not to
+    /// hold up the suites that run beside this one.
     private static func flood(_ session: Session, megabytes: Int) -> Task<Void, Never> {
         Task {
             await session.work { session in
@@ -66,7 +68,7 @@ struct TCPSendStallTests {
     @Test("A client that stops reading is closed once the output has not moved for the timeout")
     func stoppedReaderIsClosed() async throws {
         try await withClient(stallTimeout: 0.5) { transport, client, session in
-            let flood = Self.flood(session, megabytes: 32)
+            let flood = Self.flood(session, megabytes: 4)
             // The send has begun: its first bytes are here. The client reads no more.
             #expect(client.readBytes(1024) == 1024)
 
@@ -79,17 +81,17 @@ struct TCPSendStallTests {
     @Test("A client that reads slowly is kept, however long the whole message takes")
     func slowReaderIsKept() async throws {
         try await withClient(stallTimeout: 1) { _, client, session in
-            // 32 MiB at about 10 MB/s: some three seconds for the one message, and no
-            // pause of a second in reading it.
-            let flood = Self.flood(session, megabytes: 32)
+            // 4 MiB at about 1.3 MB/s: some three seconds for the one message, however much
+            // the socket buffers take, and no pause of a second in reading it.
+            let flood = Self.flood(session, megabytes: 4)
             var received = 0
-            while received < 32 << 20 {
-                let got = client.readBytes(256 << 10)
+            while received < 4 << 20 {
+                let got = client.readBytes(32 << 10)
                 guard got > 0 else { break }
                 received += got
                 usleep(25_000)
             }
-            #expect(received >= 32 << 20, "the connection closed after \(received) bytes")
+            #expect(received >= 4 << 20, "the connection closed after \(received) bytes")
             #expect(await FloodOutcome.finishes(flood, within: 10))
             _ = client.readLine()  // the rest of the notification's line
             client.send(#"{"jsonrpc":"2.0","id":7,"method":"ping"}"# + "\n")
@@ -110,7 +112,7 @@ struct TCPSendStallTests {
     @Test("What the client sends counts as progress, as Node counts a socket's reads")
     func sendingClientIsKept() async throws {
         try await withClient(stallTimeout: 1) { transport, client, session in
-            let flood = Self.flood(session, megabytes: 32)
+            let flood = Self.flood(session, megabytes: 4)
             #expect(client.readBytes(1024) == 1024)
             // Reading nothing, but sending every 100 ms for 2.5 s: past the timeout twice over.
             for index in 0..<25 {

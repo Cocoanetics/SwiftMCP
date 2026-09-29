@@ -99,12 +99,12 @@ struct SessionDisconnectTests {
         try await withStartedTransport(server: server) { port in
             let (client, session) = try await rememberedClient(server, port: port)
             defer { client.closeSocket() }
-            // Far more than the socket buffers hold: once the client stops reading, the
-            // send waits for it.
+            // Far more than the socket buffers hold (some 600 KB on loopback): once the client
+            // stops reading, the send waits for it.
             let flood = Task {
                 await session.work { session in
                     await session.sendLogNotification(
-                        LogMessage(level: .info, data: .string(String(repeating: "x", count: 32 << 20))))
+                        LogMessage(level: .info, data: .string(String(repeating: "x", count: 4 << 20))))
                 }
             }
             // The send has begun: its first bytes are here. The client reads no more.
