@@ -200,6 +200,10 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
     internal var httpEndpointProvider: (@Sendable () -> String?)?
     public var httpEndpoint: String? { httpEndpointProvider?() }
 
+    /// As on Apple platforms, so that code that sets it builds everywhere; the transport
+    /// cannot run here.
+    public var sendStallTimeout: TimeInterval?
+
     internal var declaredServerName: String?
     internal var declaredServerVersion: String?
 
