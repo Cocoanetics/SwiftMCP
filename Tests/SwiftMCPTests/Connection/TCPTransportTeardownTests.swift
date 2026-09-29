@@ -28,7 +28,7 @@ import Network
 /// socket explicitly — the FIN is what the transport under test reacts to —
 /// and keep a `defer` as the cleanup net, so `closeSocket()` is reached twice
 /// on some paths. See `closeSocket()` for why only the first may act.
-private final class TestTCPClient {
+final class TestTCPClient {
     let sock: Int32
     private var isClosed = false
     /// How many `close(2)` calls this client has issued. Exactly one, for the
@@ -89,6 +89,29 @@ private final class TestTCPClient {
             received.append(byte)
         }
         return received.isEmpty ? nil : String(data: received, encoding: .utf8)
+    }
+
+    /// Reads `count` bytes, or fewer if the connection ends or the receive times out first.
+    func readBytes(_ count: Int) -> Int {
+        var buffer = [UInt8](repeating: 0, count: count)
+        var received = 0
+        while received < count {
+            let got = buffer[received...].withUnsafeMutableBufferPointer { read(sock, $0.baseAddress, $0.count) }
+            guard got > 0 else { break }
+            received += got
+        }
+        return received
+    }
+
+    /// Whether the peer closed the connection: reading, whatever is still in flight, ends in
+    /// end-of-file or a reset — not in the receive timeout.
+    func readsToEndOfFile() -> Bool {
+        var byte: UInt8 = 0
+        while true {
+            let got = read(sock, &byte, 1)
+            if got > 0 { continue }
+            return got == 0 || errno == ECONNRESET
+        }
     }
 
     /// Closes the socket, at most once for the lifetime of this client.

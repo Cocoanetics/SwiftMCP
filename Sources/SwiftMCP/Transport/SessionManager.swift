@@ -27,6 +27,8 @@ actor SessionManager {
         case unknownStream
         case sessionMismatch
         case resumePointUnavailable
+        /// The session is no longer the one kept under its id: its client disconnected.
+        case sessionGone
     }
 
     internal let logger = Logger(label: "com.cocoanetics.SwiftMCP.SessionManager")

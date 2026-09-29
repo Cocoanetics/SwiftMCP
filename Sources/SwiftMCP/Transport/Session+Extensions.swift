@@ -1,6 +1,12 @@
 import Foundation
 
 extension Session {
+    /// Close this client's connection, leaving the server's other clients connected: see
+    /// ``Transport/disconnect(_:)``.
+    public func disconnect() async {
+        await transport?.disconnect(self)
+    }
+
     /// Send a progress notification to the client associated with this session.
     /// - Parameters:
     ///   - progressToken: The token identifying the operation progress belongs to.

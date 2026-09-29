@@ -25,6 +25,9 @@ extension HTTPSSETransport {
 	private struct StreamableHTTPContext {
 		let sessionID: UUID
 		let authSessionID: UUID?
+		/// The session the request was admitted against; `nil` for an initialize or a modern
+		/// request, whose session is made at dispatch.
+		let session: Session?
 		let acceptHeader: String
 		/// A modern (stateless) request: no `Mcp-Session-Id` is required inbound or
 		/// echoed outbound; `sessionID` is an ephemeral id used only to route this
@@ -146,7 +149,7 @@ extension HTTPSSETransport {
 		// gate does not apply (modern has no `initialize`).
 		if isModern {
 			return StreamableHTTPContext(
-				sessionID: UUID(), authSessionID: nil, acceptHeader: acceptHeader, isModern: true
+				sessionID: UUID(), authSessionID: nil, session: nil, acceptHeader: acceptHeader, isModern: true
 			)
 		}
 
@@ -157,39 +160,22 @@ extension HTTPSSETransport {
 				throw StreamableHTTPError.missingSessionForNonInitialize
 			}
 			return StreamableHTTPContext(
-				sessionID: UUID(), authSessionID: nil, acceptHeader: acceptHeader, isModern: false
+				sessionID: UUID(), authSessionID: nil, session: nil, acceptHeader: acceptHeader, isModern: false
 			)
-		case .existing(let existingSessionID):
-			if await sessionNeedsInitialize(existingSessionID),
+		case .existing(let session):
+			if await sessionNeedsInitialize(session),
 			   !SessionInitializationGate.batchStartsWithPreInitMethod(messages) {
-				logger.warning("Rejected request for uninitialized session \(existingSessionID)")
-				throw StreamableHTTPError.uninitializedSession(existingSessionID)
+				logger.warning("Rejected request for uninitialized session \(session.id)")
+				throw StreamableHTTPError.uninitializedSession(session.id)
 			}
 			return StreamableHTTPContext(
-				sessionID: existingSessionID,
-				authSessionID: existingSessionID,
+				sessionID: session.id,
+				authSessionID: session.id,
+				session: session,
 				acceptHeader: acceptHeader,
 				isModern: false
 			)
 		case .malformed, .unknown:
-			return nil
-		}
-	}
-
-	/// Run authorization for an inbound request and return an error response (if any).
-	private func authorizeRequest(token: String?, authSessionID: UUID?) async -> RouteResponse? {
-		let authResult = await authorize(token, sessionID: authSessionID)
-		switch authResult {
-		case .unauthorized(let message):
-			let errorMessage = JSONRPCMessage.errorResponse(
-				id: nil,
-				error: .init(code: -32000, message: "Unauthorized: \(message)")
-			)
-			return .json(errorMessage, status: .unauthorized, sessionId: authSessionID?.uuidString)
-		case .jweNotSupported(let message):
-			let errorMessage = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32000, message: message))
-			return .json(errorMessage, status: .forbidden, sessionId: authSessionID?.uuidString)
-		case .authorized:
 			return nil
 		}
 	}
@@ -234,69 +220,83 @@ extension HTTPSSETransport {
 		token: String?,
 		context: StreamableHTTPContext
 	) async -> RouteResponse {
-		let sid = context.sessionID.uuidString
-
-		if batchContainsRequests(messages) {
-			// Validate Accept BEFORE materializing a session, so a rejection mints
-			// nothing (and, for modern, exposes no Mcp-Session-Id).
-			guard "text/event-stream".matchesAcceptHeader(context.acceptHeader)
-				|| "*/*".matchesAcceptHeader(context.acceptHeader) else {
-				return textResponse(
-					status: .badRequest,
-					body: "Client must accept text/event-stream.",
-					sessionID: context.isModern ? nil : context.sessionID
-				)
-			}
-
-			let session = await sessionManager.session(id: context.sessionID)
-			await bindBearerTokenIfNeeded(token, to: context.sessionID)
-			// Modern per-request streams are non-resumable: no replay buffer, no
-			// `id:` resume anchors on the wire (resume itself is GET-only, which
-			// modern already answers with 405).
-			let (stream, streamInfo) = await createSSEStream(
-				sessionID: context.sessionID, kind: .request, resumable: !context.isModern
-			)
-			let streamContext = OutboundStreamContext(streamID: streamInfo.streamID, kind: .request)
-
-			Task {
-				let responses = await session.work(onStream: streamContext) { _ in
-					await self.processInbound(messages)
-				}
-
-				for response in responses {
-					_ = try? await self.sendJSONRPC(response, to: streamInfo.streamID)
-				}
-
-				await self.finishSSEStream(streamInfo.streamID)
-
-				// Modern is sessionless: once this request's stream is done, drop the
-				// ephemeral session so modern traffic doesn't accumulate `Session`
-				// objects (there is no client `DELETE` to reclaim them).
-				if context.isModern {
-					await self.sessionManager.removeSession(id: context.sessionID)
-				}
-			}
-
-			var headerFields: HTTPFields = [
-				.contentType: "text/event-stream",
-				.cacheControl: "no-cache",
-				.connection: "keep-alive"
-			]
-			// Modern is sessionless (no Mcp-Session-Id echoed) and tells buffering
-			// reverse proxies to pass per-request events through immediately; legacy
-			// keeps echoing the session id.
-			if context.isModern {
-				headerFields[.xAccelBuffering] = "no"
-			} else {
-				headerFields[.mcpSessionID] = sid
-			}
-
-			return RouteResponse(status: .ok, headerFields: headerFields, bodyStream: stream, streamInfo: streamInfo)
+		guard batchContainsRequests(messages) else {
+			return await dispatchNotifications(messages, token: token, context: context)
 		}
 
-		let session = await sessionManager.session(id: context.sessionID)
+		// Validate Accept BEFORE materializing a session, so a rejection mints
+		// nothing (and, for modern, exposes no Mcp-Session-Id).
+		guard "text/event-stream".matchesAcceptHeader(context.acceptHeader)
+			|| "*/*".matchesAcceptHeader(context.acceptHeader) else {
+			return textResponse(
+				status: .badRequest,
+				body: "Client must accept text/event-stream.",
+				sessionID: context.isModern ? nil : context.sessionID
+			)
+		}
+
+		let session = await admittedSession(for: context)
 		await bindBearerTokenIfNeeded(token, to: context.sessionID)
-		_ = await session.work { _ in await self.processInbound(messages) }
+		// Modern per-request streams are non-resumable: no replay buffer, no
+		// `id:` resume anchors on the wire (resume itself is GET-only, which
+		// modern already answers with 405).
+		guard let opened = await createSSEStream(
+			for: session, kind: .request, resumable: !context.isModern
+		) else {
+			return unknownSessionResponse()
+		}
+		let (stream, streamInfo) = opened
+		let streamContext = OutboundStreamContext(streamID: streamInfo.streamID, kind: .request)
+
+		Task {
+			// A client disconnected since has none of the batch run: its stream just ends.
+			let responses = await session.workUnlessDisconnected(onStream: streamContext) { _ in
+				await self.processInbound(messages)
+			} ?? []
+
+			for response in responses {
+				_ = try? await self.sendJSONRPC(response, to: streamInfo.streamID)
+			}
+
+			await self.finishSSEStream(streamInfo.streamID)
+
+			// Modern is sessionless: once this request's stream is done, drop the
+			// ephemeral session so modern traffic doesn't accumulate `Session`
+			// objects (there is no client `DELETE` to reclaim them).
+			if context.isModern {
+				await self.sessionManager.removeSession(id: context.sessionID)
+			}
+		}
+
+		var headerFields: HTTPFields = [
+			.contentType: "text/event-stream",
+			.cacheControl: "no-cache",
+			.connection: "keep-alive"
+		]
+		// Modern is sessionless (no Mcp-Session-Id echoed) and tells buffering
+		// reverse proxies to pass per-request events through immediately; legacy
+		// keeps echoing the session id.
+		if context.isModern {
+			headerFields[.xAccelBuffering] = "no"
+		} else {
+			headerFields[.mcpSessionID] = context.sessionID.uuidString
+		}
+
+		return RouteResponse(status: .ok, headerFields: headerFields, bodyStream: stream, streamInfo: streamInfo)
+	}
+
+	/// Dispatch a notification-only POST without a stream, acknowledged with `202`.
+	private func dispatchNotifications(
+		_ messages: [JSONRPCMessage],
+		token: String?,
+		context: StreamableHTTPContext
+	) async -> RouteResponse {
+		let session = await admittedSession(for: context)
+		await bindBearerTokenIfNeeded(token, to: context.sessionID)
+		// Admitted as they begin, so none runs for a client disconnected meanwhile.
+		guard await session.workUnlessDisconnected({ _ in await self.processInbound(messages) }) != nil else {
+			return unknownSessionResponse()
+		}
 
 		// Modern is sessionless: reclaim the ephemeral session immediately (a
 		// notification-only request opens no stream, so nothing else would).
@@ -304,8 +304,19 @@ extension HTTPSSETransport {
 			await sessionManager.removeSession(id: context.sessionID)
 		}
 
-		let ackHeaders: HTTPFields = context.isModern ? [:] : [.mcpSessionID: sid]
+		let ackHeaders: HTTPFields = context.isModern ? [:] : [.mcpSessionID: context.sessionID.uuidString]
 		return RouteResponse(status: .accepted, headerFields: ackHeaders)
+	}
+
+	/// The session a request runs on: the one it was admitted against — though its client be
+	/// disconnected since, so that the request does not run on a new session under that id — or,
+	/// for an initialize or a modern request, a new one.
+	private func admittedSession(for context: StreamableHTTPContext) async -> Session {
+		guard let session = context.session else {
+			return await sessionManager.session(id: context.sessionID)
+		}
+		await session.touchActivity()
+		return session
 	}
 
 	/// Process an inbound HTTP payload: through the connected ``MCPDispatcher``
@@ -352,8 +363,8 @@ extension HTTPSSETransport {
 			error: .init(code: -32700, message: error.localizedDescription)
 		)
 		let sessionID: String? = {
-			if case .existing(let existingSessionID) = sessionHeader {
-				return existingSessionID.uuidString
+			if case .existing(let session) = sessionHeader {
+				return session.id.uuidString
 			}
 			return nil
 		}()
@@ -373,8 +384,8 @@ extension HTTPSSETransport {
 			return textResponse(status: .badRequest, body: "Valid Mcp-Session-Id header required.")
 		case .unknown:
 			return textResponse(status: .notFound, body: "Unknown session. Send initialize first.")
-		case .existing(let sessionID):
-			await sessionManager.removeSession(id: sessionID)
+		case .existing(let session):
+			await sessionManager.removeSession(id: session.id)
 			return RouteResponse(status: .noContent)
 		}
 	}

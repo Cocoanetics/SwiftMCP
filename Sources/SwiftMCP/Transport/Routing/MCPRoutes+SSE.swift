@@ -7,6 +7,8 @@ extension HTTPSSETransport {
 	fileprivate struct SSEContext {
 		let sessionID: UUID
 		let authSessionID: UUID?
+		/// The session the request was admitted against; `nil` for a new legacy session.
+		let session: Session?
 		let isLegacy: Bool
 	}
 
@@ -48,6 +50,8 @@ extension HTTPSSETransport {
 			return textResponse(status: .badRequest, body: "Malformed Last-Event-ID header.", sessionID: sessionID)
 		case .unknownStream:
 			return textResponse(status: .notFound, body: "Unknown or expired resumable stream.", sessionID: sessionID)
+		case .unknownSession:
+			return unknownSessionResponse()
 		case .internalError:
 			return textResponse(status: .internalServerError, body: "Failed to resume stream.", sessionID: sessionID)
 		}
@@ -68,13 +72,14 @@ extension HTTPSSETransport {
 		switch sessionHeader {
 		case .missing:
 			if isLegacy {
-				return .context(SSEContext(sessionID: UUID(), authSessionID: nil, isLegacy: true))
+				return .context(SSEContext(sessionID: UUID(), authSessionID: nil, session: nil, isLegacy: true))
 			}
 			return .response(textResponse(status: .badRequest, body: "Missing Mcp-Session-Id. Send initialize first."))
-		case .existing(let existingSessionID):
+		case .existing(let session):
 			return .context(SSEContext(
-				sessionID: existingSessionID,
-				authSessionID: existingSessionID,
+				sessionID: session.id,
+				authSessionID: session.id,
+				session: session,
 				isLegacy: isLegacy
 			))
 		case .malformed:
@@ -149,15 +154,22 @@ extension HTTPSSETransport {
 		request: HTTPRouteRequest<Data?>,
 		context: SSEContext
 	) async throws -> (AsyncStream<Data>, StreamRouteResponseInfo) {
-		if context.isLegacy {
-			return await createSSEStream(sessionID: context.sessionID, kind: .legacyGeneral)
+		// The session admitted, though its client be disconnected since — it then gets no
+		// stream — or a new legacy one.
+		let session: Session
+		if let admitted = context.session {
+			session = admitted
+		} else {
+			session = await sessionManager.session(id: context.sessionID)
 		}
 
-		if let lastEventID = request.header("Last-Event-ID") ?? request.header("last-event-id") {
+		if !context.isLegacy, let lastEventID = request.header("Last-Event-ID") ?? request.header("last-event-id") {
 			do {
-				return try await resumeSSEStream(sessionID: context.sessionID, lastEventID: lastEventID)
+				return try await resumeSSEStream(for: session, lastEventID: lastEventID)
 			} catch SessionManager.StreamResumeError.malformedEventID {
 				throw SSEStreamCreationError.malformedLastEventID
+			} catch SessionManager.StreamResumeError.sessionGone {
+				throw SSEStreamCreationError.unknownSession
 			} catch SessionManager.StreamResumeError.sessionMismatch,
 					SessionManager.StreamResumeError.unknownStream,
 					SessionManager.StreamResumeError.resumePointUnavailable {
@@ -167,7 +179,10 @@ extension HTTPSSETransport {
 			}
 		}
 
-		return await createSSEStream(sessionID: context.sessionID, kind: .general)
+		guard let opened = await createSSEStream(for: session, kind: context.isLegacy ? .legacyGeneral : .general) else {
+			throw SSEStreamCreationError.unknownSession
+		}
+		return opened
 	}
 
 	/// Send the endpoint event for legacy SSE protocol; returns an early response on failure.
@@ -206,6 +221,8 @@ extension HTTPSSETransport {
 	fileprivate enum SSEStreamCreationError: Error {
 		case malformedLastEventID
 		case unknownStream
+		/// The session admitted is gone: its client disconnected meanwhile.
+		case unknownSession
 		case internalError
 	}
 }

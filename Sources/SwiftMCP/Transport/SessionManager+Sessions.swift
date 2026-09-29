@@ -60,6 +60,22 @@ extension SessionManager {
         }
     }
 
+    /// Disconnect `session`'s client: its requests cancelled — those in flight and
+    /// any that register later — and the session removed, so its client has to
+    /// initialize again. A request admitted before holds the session itself (the
+    /// route's `SessionHeaderResolution.existing`): it gets no stream for it
+    /// (``createStream(for:kind:resumable:)``) and is cancelled as it registers.
+    func disconnectSession(_ session: Session) async {
+        // Marked before the first suspension: from here on nothing of the session's
+        // begins, and no stream opens for it, though it is still kept a moment.
+        session.disconnection.mark()
+        await session.disconnectRequests()
+        guard sessions[session.id] === session else {
+            return
+        }
+        await removeSession(id: session.id)
+    }
+
     /// Remove a session entirely, including all retained streams and pending state.
     func removeSession(id: UUID) async {
         await cleanupExpiredState()
@@ -98,14 +114,16 @@ extension SessionManager {
     // MARK: - Internal helpers
 
     internal func destroySession(id sessionID: UUID) async {
+        // Dropped before the first suspension: a stream asked for meanwhile is refused
+        // (``createStream(for:kind:resumable:)``), not opened after the streams below are
+        // removed and left open.
+        let session = sessions.removeValue(forKey: sessionID)
         let streamIDs = Array(sessionStreams[sessionID] ?? [])
         for streamID in streamIDs {
             await removeStream(id: streamID)
         }
 
-        if let session = sessions.removeValue(forKey: sessionID) {
-            await session.cancelAllWaitingTasks()
-        }
+        await session?.cancelAllWaitingTasks()
 
         primaryGeneralStreamIDs.removeValue(forKey: sessionID)
         sessionStreams.removeValue(forKey: sessionID)

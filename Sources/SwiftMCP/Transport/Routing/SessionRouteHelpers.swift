@@ -7,7 +7,10 @@ extension HTTPSSETransport {
         case missing
         case malformed(String)
         case unknown(UUID)
-        case existing(UUID)
+        /// The session the header names, as the request found it: the request runs on this
+        /// session, not on whatever is kept under its id later — nothing, once its client is
+        /// disconnected (``SessionManager/disconnectSession(_:)``).
+        case existing(Session)
     }
 
     func resolveSessionHeader<Body: Sendable>(for request: HTTPRouteRequest<Body>) async -> SessionHeaderResolution {
@@ -19,8 +22,8 @@ extension HTTPSSETransport {
             return .malformed(rawSessionID)
         }
 
-        if await sessionManager.hasSession(id: sessionID) {
-            return .existing(sessionID)
+        if let session = await sessionManager.existingSession(id: sessionID) {
+            return .existing(session)
         }
 
         return .unknown(sessionID)
@@ -37,12 +40,32 @@ extension HTTPSSETransport {
         return MCPProtocolVersion.isModern(headerVersion)
     }
 
-    func sessionNeedsInitialize(_ sessionID: UUID) async -> Bool {
-        guard let session = await sessionManager.existingSession(id: sessionID) else {
-            return false
-        }
+    func sessionNeedsInitialize(_ session: Session) async -> Bool {
+        !(await session.hasReceivedInitializeRequest)
+    }
 
-        return !(await session.hasReceivedInitializeRequest)
+    /// Run authorization for an inbound request and return an error response (if any).
+    func authorizeRequest(token: String?, authSessionID: UUID?) async -> RouteResponse? {
+        let authResult = await authorize(token, sessionID: authSessionID)
+        switch authResult {
+        case .unauthorized(let message):
+            let errorMessage = JSONRPCMessage.errorResponse(
+                id: nil,
+                error: .init(code: -32000, message: "Unauthorized: \(message)")
+            )
+            return .json(errorMessage, status: .unauthorized, sessionId: authSessionID?.uuidString)
+        case .jweNotSupported(let message):
+            let errorMessage = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32000, message: message))
+            return .json(errorMessage, status: .forbidden, sessionId: authSessionID?.uuidString)
+        case .authorized:
+            return nil
+        }
+    }
+
+    /// The answer to a request whose session is gone since it was admitted — its client
+    /// disconnected: the same as had it come after.
+    func unknownSessionResponse() -> RouteResponse {
+        textResponse(status: .notFound, body: "Unknown session. Send initialize first.")
     }
 
     func batchContainsRequests(_ messages: [JSONRPCMessage]) -> Bool {

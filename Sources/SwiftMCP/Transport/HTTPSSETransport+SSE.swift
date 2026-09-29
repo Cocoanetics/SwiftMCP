@@ -4,19 +4,21 @@ import Foundation
 extension HTTPSSETransport {
     // MARK: - Handling SSE Connections
 
+    /// A stream for `session`'s client — `nil` once the session is gone, its client
+    /// disconnected: see ``SessionManager/createStream(for:kind:resumable:)``.
     func createSSEStream(
-        sessionID: UUID,
+        for session: Session,
         kind: SSEStreamKind,
         resumable: Bool = true
-    ) async -> (AsyncStream<Data>, StreamRouteResponseInfo) {
-        await sessionManager.createStream(sessionID: sessionID, kind: kind, resumable: resumable)
+    ) async -> (AsyncStream<Data>, StreamRouteResponseInfo)? {
+        await sessionManager.createStream(for: session, kind: kind, resumable: resumable)
     }
 
     func resumeSSEStream(
-        sessionID: UUID,
+        for session: Session,
         lastEventID: String
     ) async throws -> (AsyncStream<Data>, StreamRouteResponseInfo) {
-        try await sessionManager.resumeStream(sessionID: sessionID, after: lastEventID)
+        try await sessionManager.resumeStream(for: session, after: lastEventID)
     }
 
     /// Send a message to a specific client.
