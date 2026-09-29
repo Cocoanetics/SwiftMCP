@@ -22,12 +22,16 @@ extension SessionManager {
         return existing
     }
 
-    /// Retrieve or create a session for the given identifier.
+    /// Retrieve or create a session for the given identifier — the closed one of
+    /// a client just disconnected, whose requests are cancelled as they register.
     func session(id: UUID) async -> Session {
         await cleanupExpiredState()
         if let existing = await existingSession(id: id) {
             await existing.touchActivity()
             return existing
+        }
+        if let disconnected = disconnectedSessions.last(where: { $0.id == id }) {
+            return disconnected
         }
 
         let session = Session(id: id)
@@ -58,6 +62,17 @@ extension SessionManager {
         for sessionID in sessionIDs {
             await removeSession(id: sessionID)
         }
+    }
+
+    /// Disconnect `session`'s client: its requests cancelled — those in flight and
+    /// any that register later — and the session removed, so its client has to
+    /// initialize again. A request already past the session check finds the
+    /// closed session (``session(id:)``); the last 64 are kept for that.
+    func disconnectSession(_ session: Session) async {
+        await session.disconnectRequests()
+        disconnectedSessions.append(session)
+        if disconnectedSessions.count > 64 { disconnectedSessions.removeFirst() }
+        await removeSession(id: session.id)
     }
 
     /// Remove a session entirely, including all retained streams and pending state.

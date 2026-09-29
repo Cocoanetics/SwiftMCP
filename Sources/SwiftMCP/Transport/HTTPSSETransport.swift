@@ -211,11 +211,10 @@ public final class HTTPSSETransport: Transport, MCPTransport, Service, MCPHTTPEn
 
     // MARK: - Transport
 
-    /// Cancels the session's in-flight requests and removes it, closing its SSE streams: the
-    /// client has to initialize again.
+    /// Cancels the session's requests — in flight, and any that register later — and removes
+    /// it, closing its SSE streams: the client has to initialize again.
     public func disconnect(_ session: Session) async {
-        await session.cancelAllInFlightRequests()
-        await sessionManager.removeSession(id: session.id)
+        await sessionManager.disconnectSession(session)
     }
 
     /// Send raw data to the client associated with the current `Session`.

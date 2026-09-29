@@ -94,6 +94,10 @@ public actor Session {
     /// request is cancelled the moment it registers.
     private var pendingCancellations: Set<JSONRPCID> = []
 
+    /// Set once the client was disconnected (``Transport/disconnect(_:)``): a
+    /// request that registers after is cancelled the moment it does.
+    private var requestsDisconnected = false
+
     /// Timestamp of the most recent activity associated with this session.
     public var lastActivityAt: Date = Date()
 
@@ -313,7 +317,7 @@ public actor Session {
     /// cancellation that raced ahead of this registration fires immediately.
     /// See `MCPServer.processCancellableRequest`.
     internal func registerInFlightRequest(id: JSONRPCID, cancel: @escaping @Sendable () -> Void) {
-        if pendingCancellations.remove(id) != nil {
+        if pendingCancellations.remove(id) != nil || requestsDisconnected {
             cancelledRequestIDs.insert(id)
             cancel()
             return
@@ -332,10 +336,12 @@ public actor Session {
         return cancelledRequestIDs.remove(id) != nil
     }
 
-    /// Cancels every request this session is processing, as when its client
-    /// goes: each task sees cooperative cancellation, and its response is
-    /// suppressed. See ``Transport/disconnect(_:)``.
-    internal func cancelAllInFlightRequests() {
+    /// Cancels every request this session is processing, and every one that
+    /// registers from now on, as when its client goes: each task sees
+    /// cooperative cancellation, and its response is suppressed. See
+    /// ``Transport/disconnect(_:)``.
+    internal func disconnectRequests() {
+        requestsDisconnected = true
         let hooks = inFlightRequests
         inFlightRequests = [:]
         for (id, cancel) in hooks {
