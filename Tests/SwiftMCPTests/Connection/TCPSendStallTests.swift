@@ -97,6 +97,16 @@ struct TCPSendStallTests {
         }
     }
 
+    @Test("Stopping the transport stops each connection's stall watch")
+    func stoppingTheTransportStopsTheWatch() async throws {
+        try await withClient(stallTimeout: 0.5) { transport, _, session in
+            let output = try #require(await transport.state.entry(for: session.id)?.output)
+            #expect(!output.isFinished)
+            try await transport.stop()
+            #expect(output.isFinished, "the watch outlived the transport's stop")
+        }
+    }
+
     @Test("What the client sends counts as progress, as Node counts a socket's reads")
     func sendingClientIsKept() async throws {
         try await withClient(stallTimeout: 1) { transport, client, session in

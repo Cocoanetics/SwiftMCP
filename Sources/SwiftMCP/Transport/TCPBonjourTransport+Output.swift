@@ -78,6 +78,11 @@ final class ConnectionOutput: @unchecked Sendable {
         }
     }
 
+    /// Whether the output is watched no more: stopped, or found stalled.
+    var isFinished: Bool {
+        lock.withLock { finished }
+    }
+
     /// Something came from the client: the connection moves.
     func noteProgress() {
         lock.withLock { lastProgress = .now() }

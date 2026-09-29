@@ -89,6 +89,9 @@ extension TCPBonjourTransport {
             localRegistration?.stop()
             localRegistration = nil
             for entry in connections.values {
+                // As `removeConnection` does: a stall watch due now must not take this
+                // shutdown for a client that stopped reading.
+                entry.output.stop()
                 entry.connection.cancel()
                 entry.tasks.cancelAll()
             }
