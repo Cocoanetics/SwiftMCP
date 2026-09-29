@@ -38,6 +38,14 @@ extension TCPBonjourTransport {
         await state.stop()
     }
 
+    // MARK: - Disconnect
+
+    /// Cancels the session's connection and cancels its in-flight requests, as when the
+    /// client goes: a send waiting for the client to read ends with an error.
+    public func disconnect(_ session: Session) async {
+        await cleanupConnection(id: session.id)
+    }
+
     // MARK: - Send
 
     public func send(_ data: Data) async throws {

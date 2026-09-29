@@ -211,6 +211,11 @@ public final class HTTPSSETransport: Transport, MCPTransport, Service, MCPHTTPEn
 
     // MARK: - Transport
 
+    /// Removes the session, closing its SSE streams: the client has to initialize again.
+    public func disconnect(_ session: Session) async {
+        await sessionManager.removeSession(id: session.id)
+    }
+
     /// Send raw data to the client associated with the current `Session`.
     public func send(_ data: Data) async throws {
         precondition(Session.current != nil, "Attempted to send without an active session")

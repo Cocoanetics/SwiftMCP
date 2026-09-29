@@ -114,4 +114,14 @@ public protocol Transport: AnyObject, Sendable {
     /// Transport implementations have to provide the concrete mechanism for
     /// delivering the bytes back to the connected client.
     func send(_ data: Data) async throws
+
+    /// Close the connection of the one client `session` belongs to, leaving the
+    /// transport and its other clients running: a server giving up on a client
+    /// that has stopped reading, say. It goes as if the client had disconnected
+    /// itself — its in-flight requests cancelled, its session removed — and a send
+    /// to it that waits for the client to read ends with an error.
+    ///
+    /// The default does nothing: a transport whose clients have no connection of
+    /// their own to close, such as stdio's one client, keeps it.
+    func disconnect(_ session: Session) async
 }

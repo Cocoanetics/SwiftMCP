@@ -21,4 +21,7 @@ public extension Transport {
 
         try await send(data)
     }
+
+    /// Does nothing: see ``Transport/disconnect(_:)``.
+    func disconnect(_ session: Session) async {}
 }
