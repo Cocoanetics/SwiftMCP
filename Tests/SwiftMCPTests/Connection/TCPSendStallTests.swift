@@ -82,21 +82,23 @@ struct TCPSendStallTests {
 
     @Test("A client that reads slowly is kept, however long the whole message takes")
     func slowReaderIsKept() async throws {
-        try await withClient(stallTimeout: 1) { _, client, session in
-            // 4 MiB at about 1.3 MB/s: some three seconds for the one message, however much
-            // the socket buffers take, and no pause of a second in reading it.
-            let flood = Self.flood(session, megabytes: 4)
+        try await withClient(stallTimeout: 2) { _, client, session in
+            // 8 MiB at about 1.3 MB/s: some five seconds for the one message, however much the
+            // socket buffers take. Each read takes 256 KiB, so that it opens the client's receive
+            // window at once: reads of a few TCP segments may wait for a delayed acknowledgment,
+            // or the stack's zero-window probe 5 s on, before the server can send again.
+            let flood = Self.flood(session, megabytes: 8)
             let received = await offPool {
                 var received = 0
-                while received < 4 << 20 {
-                    let got = client.readBytes(32 << 10)
+                while received < 8 << 20 {
+                    let got = client.readBytes(256 << 10)
                     guard got > 0 else { break }
                     received += got
-                    usleep(25_000)
+                    usleep(200_000)
                 }
                 return received
             }
-            #expect(received >= 4 << 20, "the connection closed after \(received) bytes")
+            #expect(received >= 8 << 20, "the connection closed after \(received) bytes")
             #expect(await FloodOutcome.finishes(flood, within: 10))
             let pong = await offPool {
                 _ = client.readLine()  // the rest of the notification's line
