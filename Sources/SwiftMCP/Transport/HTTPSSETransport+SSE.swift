@@ -15,10 +15,10 @@ extension HTTPSSETransport {
     }
 
     func resumeSSEStream(
-        sessionID: UUID,
+        for session: Session,
         lastEventID: String
     ) async throws -> (AsyncStream<Data>, StreamRouteResponseInfo) {
-        try await sessionManager.resumeStream(sessionID: sessionID, after: lastEventID)
+        try await sessionManager.resumeStream(for: session, after: lastEventID)
     }
 
     /// Send a message to a specific client.

@@ -154,11 +154,22 @@ extension HTTPSSETransport {
 		request: HTTPRouteRequest<Data?>,
 		context: SSEContext
 	) async throws -> (AsyncStream<Data>, StreamRouteResponseInfo) {
+		// The session admitted, though its client be disconnected since — it then gets no
+		// stream — or a new legacy one.
+		let session: Session
+		if let admitted = context.session {
+			session = admitted
+		} else {
+			session = await sessionManager.session(id: context.sessionID)
+		}
+
 		if !context.isLegacy, let lastEventID = request.header("Last-Event-ID") ?? request.header("last-event-id") {
 			do {
-				return try await resumeSSEStream(sessionID: context.sessionID, lastEventID: lastEventID)
+				return try await resumeSSEStream(for: session, lastEventID: lastEventID)
 			} catch SessionManager.StreamResumeError.malformedEventID {
 				throw SSEStreamCreationError.malformedLastEventID
+			} catch SessionManager.StreamResumeError.sessionGone {
+				throw SSEStreamCreationError.unknownSession
 			} catch SessionManager.StreamResumeError.sessionMismatch,
 					SessionManager.StreamResumeError.unknownStream,
 					SessionManager.StreamResumeError.resumePointUnavailable {
@@ -168,14 +179,6 @@ extension HTTPSSETransport {
 			}
 		}
 
-		// The session admitted, though its client be disconnected since — it then gets no
-		// stream — or a new legacy one.
-		let session: Session
-		if let admitted = context.session {
-			session = admitted
-		} else {
-			session = await sessionManager.session(id: context.sessionID)
-		}
 		guard let opened = await createSSEStream(for: session, kind: context.isLegacy ? .legacyGeneral : .general) else {
 			throw SSEStreamCreationError.unknownSession
 		}

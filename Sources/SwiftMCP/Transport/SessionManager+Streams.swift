@@ -52,14 +52,23 @@ extension SessionManager {
     }
 
     /// Resume an existing retained stream from the specified Last-Event-ID.
+    ///
+    /// Refused (`sessionGone`) once `session` is no longer the one kept under its
+    /// id, its client disconnected, as ``createStream(for:kind:resumable:)`` refuses
+    /// a new stream: checked before the stream is taken up again, and again after
+    /// the last suspension.
     func resumeStream(
-        sessionID: UUID,
+        for session: Session,
         after lastEventID: String
     ) async throws -> (AsyncStream<Data>, StreamRouteResponseInfo) {
         await cleanupExpiredState()
+        let sessionID = session.id
 
         guard let eventID = SSEEventID(lastEventID) else {
             throw StreamResumeError.malformedEventID
+        }
+        guard sessions[sessionID] === session else {
+            throw StreamResumeError.sessionGone
         }
         guard let meta = streamMeta[eventID.streamID] else {
             throw StreamResumeError.unknownStream
@@ -77,22 +86,26 @@ extension SessionManager {
             throw StreamResumeError.resumePointUnavailable
         }
 
-        if let session = sessions[sessionID] {
-            await session.touchActivity()
-        }
-
         // The resume cleared the hub's retention deadline while the new
         // connection has not bound yet — restart the attach grace window so the
         // abandoned-stream reclaim doesn't misfire on (or miss) this stream.
+        // Taken up before the first suspension below, so that a disconnect meanwhile
+        // removes it with the session's other streams, not restores it afterwards.
         streamMeta[eventID.streamID] = StreamMeta(sessionID: meta.sessionID, kind: meta.kind)
 
         // The hub finishes + retains a stream that was already completed; mirror
         // the session-side reconciliation the original did via markStreamDisconnected.
-        if let info = hub.info(streamID: eventID.streamID), info.isCompleted {
-            if meta.kind.isGeneral {
-                selectPrimaryGeneralStream(for: sessionID, keepRetainedCurrent: true)
-            }
+        let completed = hub.info(streamID: eventID.streamID)?.isCompleted == true
+        if completed, meta.kind.isGeneral {
+            selectPrimaryGeneralStream(for: sessionID, keepRetainedCurrent: true)
+        }
+        await session.touchActivity()
+        if completed {
             await updateSessionExpiry(for: sessionID)
+        }
+        // A disconnect during those suspensions removed the stream again.
+        guard sessions[sessionID] === session else {
+            throw StreamResumeError.sessionGone
         }
 
         return (stream, StreamRouteResponseInfo(sessionID: sessionID, streamID: eventID.streamID))

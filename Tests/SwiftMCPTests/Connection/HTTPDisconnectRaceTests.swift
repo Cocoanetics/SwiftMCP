@@ -99,6 +99,25 @@ struct HTTPDisconnectRaceTests {
         #expect(await transport.sessionManager.existingSession(id: session.id) == nil, "its id has a session again")
     }
 
+    @Test("A resuming GET admitted before the disconnect is answered as for an unknown session")
+    func streamableResume() async throws {
+        let (counter, gate) = (CallCounter(), ValidationGate())
+        let (transport, session) = await Self.transport(counting: counter, gate: gate)
+        let (_, info) = try #require(await transport.sessionManager.createStream(for: session, kind: .general))
+
+        let response = try await Self.racingTheDisconnect(of: session, on: transport, gate: gate) {
+            try await transport.handleSSE(request: Self.request(
+                .get, "/mcp", body: nil, session: session.id, accept: "text/event-stream",
+                lastEventID: "\(info.streamID.uuidString):1"))
+        }
+
+        #expect(response.status == .notFound)
+        let body = response.body.flatMap { String(bytes: $0, encoding: .utf8) }
+        #expect(body == "Unknown session. Send initialize first.")
+        #expect(await transport.sessionManager.streamMeta[info.streamID] == nil, "the stream was taken up again")
+        #expect(await transport.sessionManager.existingSession(id: session.id) == nil, "its id has a session again")
+    }
+
     @Test("A legacy POST admitted before the disconnect is answered 404 and runs nothing")
     func legacyPost() async throws {
         let (counter, gate) = (CallCounter(), ValidationGate())
@@ -116,13 +135,15 @@ struct HTTPDisconnectRaceTests {
     }
 
     private static func request(
-        _ method: HTTPRequest.Method, _ path: String, body: String?, session: UUID?, accept: String
+        _ method: HTTPRequest.Method, _ path: String, body: String?, session: UUID?, accept: String,
+        lastEventID: String? = nil
     ) -> HTTPRouteRequest<Data?> {
         var fields = HTTPFields()
         fields[.accept] = accept
         fields[.contentType] = "application/json"
         fields[.authorization] = "Bearer token"
         if let session { fields[.mcpSessionID] = session.uuidString }
+        if let lastEventID, let name = HTTPField.Name("Last-Event-ID") { fields[name] = lastEventID }
         return HTTPRouteRequest(
             method: method, uri: path, path: path, headerFields: fields, body: body.map { Data($0.utf8) },
             pathParams: [:], queryParams: [])
