@@ -87,6 +87,17 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
     /// Internal so tests can shorten the wait.
     internal var eofDrainTimeout: TimeInterval = 30
 
+    /// How long a client may leave what the server sends it unread before the
+    /// transport closes its connection, as ``disconnect(_:)`` does.
+    ///
+    /// With a timeout, a message goes to the network stack in 64 KiB pieces. Each piece
+    /// the stack takes counts as progress, as does anything the client sends. So a
+    /// client that reads slowly is kept; only one that has stopped reading is closed,
+    /// and the sends waiting for it end with an error. `nil`, the default, waits for a
+    /// client however long it takes. Set it before ``start()``: a connection keeps the
+    /// value it was accepted with.
+    public var sendStallTimeout: TimeInterval?
+
     // MARK: - Init
 
     /// Creates a server-coupled transport.

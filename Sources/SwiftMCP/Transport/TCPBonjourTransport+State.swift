@@ -22,6 +22,9 @@ import Network
 internal struct TCPConnectionEntry {
     let connection: NWConnection
     let tasks: ConnectionTaskTracker
+    /// What the server sends the client, watched for a stall under
+    /// ``TCPBonjourTransport/sendStallTimeout``.
+    let output: ConnectionOutput
 }
 
 extension TCPBonjourTransport {
@@ -187,9 +190,11 @@ extension TCPBonjourTransport {
         /// already stopped — `handleNewConnection` suspends before registering,
         /// so a connection accepted around `stop()` would otherwise be added
         /// after `stop()`'s sweep and live on a shut-down transport.
-        func addConnection(id: UUID, connection: NWConnection, tasks: ConnectionTaskTracker) -> Bool {
+        func addConnection(
+            id: UUID, connection: NWConnection, tasks: ConnectionTaskTracker, output: ConnectionOutput
+        ) -> Bool {
             guard isRunning else { return false }
-            connections[id] = TCPConnectionEntry(connection: connection, tasks: tasks)
+            connections[id] = TCPConnectionEntry(connection: connection, tasks: tasks, output: output)
             return true
         }
 
@@ -202,12 +207,17 @@ extension TCPBonjourTransport {
         /// the second entry removes nothing and is a no-op.
         func removeConnection(id: UUID) {
             guard let entry = connections.removeValue(forKey: id) else { return }
+            entry.output.stop()
             entry.connection.cancel()
             entry.tasks.cancelAll()
         }
 
         func connection(for id: UUID) -> NWConnection? {
             connections[id]?.connection
+        }
+
+        func entry(for id: UUID) -> TCPConnectionEntry? {
+            connections[id]
         }
     }
 }

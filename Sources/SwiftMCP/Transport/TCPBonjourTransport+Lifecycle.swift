@@ -53,7 +53,7 @@ extension TCPBonjourTransport {
             throw TransportError.bindingFailed("No active session for send")
         }
 
-        guard let connection = await state.connection(for: currentSession.id) else {
+        guard let entry = await state.entry(for: currentSession.id) else {
             throw TransportError.bindingFailed("TCP connection unavailable for session \(currentSession.id)")
         }
 
@@ -63,15 +63,7 @@ extension TCPBonjourTransport {
         var out = data
         out.append(Data("\n".utf8))
 
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            connection.send(content: out, completion: .contentProcessed { error in
-                if let error {
-                    continuation.resume(throwing: error)
-                } else {
-                    continuation.resume()
-                }
-            })
-        }
+        try await entry.output.send(out, on: entry.connection)
     }
 }
 #endif
