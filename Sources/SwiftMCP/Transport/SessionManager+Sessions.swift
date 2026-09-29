@@ -73,13 +73,6 @@ extension SessionManager {
         await removeSession(id: session.id)
     }
 
-    /// Whether `session` is still the one kept under its id: not removed, its
-    /// client not disconnected.
-    func isLive(_ session: Session) async -> Bool {
-        await cleanupExpiredState()
-        return sessions[session.id] === session
-    }
-
     /// Remove a session entirely, including all retained streams and pending state.
     func removeSession(id: UUID) async {
         await cleanupExpiredState()

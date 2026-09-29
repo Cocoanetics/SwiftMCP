@@ -158,6 +158,18 @@ public actor Session {
         }
     }
 
+    /// Runs `operation` as ``work(onStream:_:)`` does — unless the client was disconnected
+    /// (``disconnectRequests()``), then `nil`. Checked on the session as the work begins, so a
+    /// disconnect comes either before, and nothing runs, or after, and the work was admitted
+    /// as a request in flight is.
+    internal func workUnlessDisconnected<T: Sendable>(
+        onStream streamContext: OutboundStreamContext? = nil,
+        _ operation: @Sendable (Session) async throws -> T
+    ) async rethrows -> T? {
+        guard !requestsDisconnected else { return nil }
+        return try await work(onStream: streamContext, operation)
+    }
+
     /// Indicates whether this session currently has an active SSE connection.
     public var hasActiveConnection: Bool {
         sseContinuation != nil && (connection?.isConnected ?? false)

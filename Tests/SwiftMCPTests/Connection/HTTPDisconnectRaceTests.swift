@@ -18,13 +18,19 @@ import Testing
 final class CallCounter: @unchecked Sendable {
     private let lock = NSLock()
     private var calls = 0
+    private var rootsChanges = 0
 
     var count: Int { lock.withLock { calls } }
+    var rootsChangesSeen: Int { lock.withLock { rootsChanges } }
 
     @MCPTool(description: "Counts the call")
     func tally() -> String {
         lock.withLock { calls += 1 }
         return "counted"
+    }
+
+    func handleRootsListChanged() async {
+        lock.withLock { rootsChanges += 1 }
     }
 }
 
@@ -82,6 +88,21 @@ struct HTTPDisconnectRaceTests {
         #expect(counter.count == 0, "the request ran")
         #expect(await transport.sessionManager.existingSession(id: session.id) == nil, "its id has a session again")
         #expect(await transport.sessionManager.sessionStreams[session.id] == nil, "a stream was opened for it")
+    }
+
+    @Test("A notification POST admitted before the disconnect is answered 404 and runs nothing")
+    func streamableNotification() async throws {
+        let (counter, gate) = (CallCounter(), ValidationGate())
+        let (transport, session) = await Self.transport(counting: counter, gate: gate)
+
+        let response = try await Self.racingTheDisconnect(of: session, on: transport, gate: gate) {
+            try await transport.handleStreamableHTTP(request: Self.request(
+                .post, "/mcp", body: #"{"jsonrpc":"2.0","method":"notifications/roots/list_changed"}"#,
+                session: session.id, accept: "application/json, text/event-stream"))
+        }
+
+        #expect(response.status == .notFound)
+        #expect(counter.rootsChangesSeen == 0, "the notification ran")
     }
 
     @Test("A GET admitted before the disconnect is answered 404 and opens no stream")

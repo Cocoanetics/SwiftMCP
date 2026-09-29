@@ -134,7 +134,7 @@ struct SessionDisconnectTests {
         // and it is cancelled as it registers. New requests find no session.
         #expect(await transport.sessionManager.existingSession(id: session.id) == nil)
         #expect(await transport.sessionManager.createStream(for: session, kind: .request) == nil)
-        #expect(await !transport.sessionManager.isLive(session))
+        #expect(await session.workUnlessDisconnected({ _ in true }) == nil, "work was admitted after the disconnect")
         let late = CancelCount()
         await session.registerInFlightRequest(id: .integer(10)) { late.count += 1 }
         #expect(late.count == 1, "a request registering after the disconnect was not cancelled")

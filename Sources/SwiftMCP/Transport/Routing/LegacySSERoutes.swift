@@ -76,10 +76,9 @@ extension HTTPSSETransport {
 			}
 
 			// Its client disconnected since the request was admitted: as had it come after.
-			guard await sessionManager.isLive(session) else {
+			guard await dispatchLegacyMessages(messages, session: session) else {
 				return textResponse(status: .notFound, body: "Unknown session. Connect to /sse first.")
 			}
-			await dispatchLegacyMessages(messages, session: session)
 		} catch {
 			logger.error("Failed to decode JSON-RPC message in SSE context: \(error)")
 		}
@@ -94,18 +93,18 @@ extension HTTPSSETransport {
 	/// dispatch, so a tool's mid-call notifications land there too. Dispatch goes
 	/// through the connected ``MCPDispatcher`` (decoupled mode) or the transport's
 	/// own server (server-coupled mode) via ``processInbound(_:)``.
-	private func dispatchLegacyMessages(_ messages: [JSONRPCMessage], session: Session) async {
+	///
+	/// Returns whether they ran: none does for a client disconnected since the request was
+	/// admitted, checked as the work begins.
+	private func dispatchLegacyMessages(_ messages: [JSONRPCMessage], session: Session) async -> Bool {
 		await session.touchActivity()
 		let generalStreamContext = await sessionManager.primaryGeneralStreamID(for: session.id)
 			.map { OutboundStreamContext(streamID: $0, kind: .general) }
 
-		let responses: [JSONRPCMessage]
-		if let generalStreamContext {
-			responses = await session.work(onStream: generalStreamContext) { _ in
-				await self.processInbound(messages)
-			}
-		} else {
-			responses = await session.work { _ in await self.processInbound(messages) }
+		guard let responses = await session.workUnlessDisconnected(onStream: generalStreamContext, { _ in
+			await self.processInbound(messages)
+		}) else {
+			return false
 		}
 
 		if let generalStreamID = generalStreamContext?.streamID {
@@ -113,6 +112,7 @@ extension HTTPSSETransport {
 				_ = try? await self.sendJSONRPC(response, to: generalStreamID)
 			}
 		}
+		return true
 	}
 
 	// MARK: - Helpers

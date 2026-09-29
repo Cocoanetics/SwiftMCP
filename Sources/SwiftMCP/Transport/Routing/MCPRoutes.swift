@@ -249,9 +249,10 @@ extension HTTPSSETransport {
 		let streamContext = OutboundStreamContext(streamID: streamInfo.streamID, kind: .request)
 
 		Task {
-			let responses = await session.work(onStream: streamContext) { _ in
+			// A client disconnected since has none of the batch run: its stream just ends.
+			let responses = await session.workUnlessDisconnected(onStream: streamContext) { _ in
 				await self.processInbound(messages)
-			}
+			} ?? []
 
 			for response in responses {
 				_ = try? await self.sendJSONRPC(response, to: streamInfo.streamID)
@@ -291,11 +292,11 @@ extension HTTPSSETransport {
 		context: StreamableHTTPContext
 	) async -> RouteResponse {
 		let session = await admittedSession(for: context)
-		guard await sessionManager.isLive(session) else {
+		await bindBearerTokenIfNeeded(token, to: context.sessionID)
+		// Admitted as they begin, so none runs for a client disconnected meanwhile.
+		guard await session.workUnlessDisconnected({ _ in await self.processInbound(messages) }) != nil else {
 			return unknownSessionResponse()
 		}
-		await bindBearerTokenIfNeeded(token, to: context.sessionID)
-		_ = await session.work { _ in await self.processInbound(messages) }
 
 		// Modern is sessionless: reclaim the ephemeral session immediately (a
 		// notification-only request opens no stream, so nothing else would).
