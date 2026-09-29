@@ -27,7 +27,7 @@ extension SessionManager {
         await session.touchActivity()
         // Checked after the last suspension, so that no removal slips in before the stream is
         // registered: `destroySession` drops the session before it suspends.
-        guard sessions[session.id] === session else {
+        guard sessions[session.id] === session, !session.disconnection.isMarked else {
             return nil
         }
         let sessionID = session.id
@@ -67,7 +67,7 @@ extension SessionManager {
         guard let eventID = SSEEventID(lastEventID) else {
             throw StreamResumeError.malformedEventID
         }
-        guard sessions[sessionID] === session else {
+        guard sessions[sessionID] === session, !session.disconnection.isMarked else {
             throw StreamResumeError.sessionGone
         }
         guard let meta = streamMeta[eventID.streamID] else {
@@ -104,7 +104,7 @@ extension SessionManager {
             await updateSessionExpiry(for: sessionID)
         }
         // A disconnect during those suspensions removed the stream again.
-        guard sessions[sessionID] === session else {
+        guard sessions[sessionID] === session, !session.disconnection.isMarked else {
             throw StreamResumeError.sessionGone
         }
 

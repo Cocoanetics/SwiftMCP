@@ -139,6 +139,24 @@ struct HTTPDisconnectRaceTests {
         #expect(await transport.sessionManager.existingSession(id: session.id) == nil, "its id has a session again")
     }
 
+    @Test("A session marked disconnected, though kept a moment longer, gets no stream and runs nothing")
+    func markedSessionIsRefused() async throws {
+        let transport = HTTPSSETransport(server: CallCounter(), port: 0)
+        let manager = transport.sessionManager
+        let session = await manager.session(id: UUID())
+        let (_, info) = try #require(await manager.createStream(for: session, kind: .general))
+
+        // What `disconnectSession` does first, before it suspends and removes the session.
+        session.disconnection.mark()
+
+        #expect(await manager.existingSession(id: session.id) === session)
+        #expect(await manager.createStream(for: session, kind: .request) == nil, "a stream opened")
+        await #expect(throws: SessionManager.StreamResumeError.sessionGone) {
+            try await manager.resumeStream(for: session, after: "\(info.streamID.uuidString):1")
+        }
+        #expect(await session.workUnlessDisconnected({ _ in true }) == nil, "work began")
+    }
+
     @Test("A legacy POST admitted before the disconnect is answered 404 and runs nothing")
     func legacyPost() async throws {
         let (counter, gate) = (CallCounter(), ValidationGate())

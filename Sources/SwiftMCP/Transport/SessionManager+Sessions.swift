@@ -66,6 +66,9 @@ extension SessionManager {
     /// route's `SessionHeaderResolution.existing`): it gets no stream for it
     /// (``createStream(for:kind:resumable:)``) and is cancelled as it registers.
     func disconnectSession(_ session: Session) async {
+        // Marked before the first suspension: from here on nothing of the session's
+        // begins, and no stream opens for it, though it is still kept a moment.
+        session.disconnection.mark()
         await session.disconnectRequests()
         guard sessions[session.id] === session else {
             return

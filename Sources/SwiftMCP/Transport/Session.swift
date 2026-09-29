@@ -94,9 +94,12 @@ public actor Session {
     /// request is cancelled the moment it registers.
     private var pendingCancellations: Set<JSONRPCID> = []
 
-    /// Set once the client was disconnected (``Transport/disconnect(_:)``): a
-    /// request that registers after is cancelled the moment it does.
-    private var requestsDisconnected = false
+    /// Marked once the client is disconnected (``Transport/disconnect(_:)``) —
+    /// from any isolation, so that the session manager marks it before anything
+    /// else of the disconnect, and every check sees it at once: a request that
+    /// registers after is cancelled the moment it does, work does not begin
+    /// (``workUnlessDisconnected(onStream:_:)``), and no stream opens.
+    internal nonisolated let disconnection = DisconnectMark()
 
     /// Timestamp of the most recent activity associated with this session.
     public var lastActivityAt: Date = Date()
@@ -166,7 +169,7 @@ public actor Session {
         onStream streamContext: OutboundStreamContext? = nil,
         _ operation: @Sendable (Session) async throws -> T
     ) async rethrows -> T? {
-        guard !requestsDisconnected else { return nil }
+        guard !disconnection.isMarked else { return nil }
         return try await work(onStream: streamContext, operation)
     }
 
@@ -329,7 +332,7 @@ public actor Session {
     /// cancellation that raced ahead of this registration fires immediately.
     /// See `MCPServer.processCancellableRequest`.
     internal func registerInFlightRequest(id: JSONRPCID, cancel: @escaping @Sendable () -> Void) {
-        if pendingCancellations.remove(id) != nil || requestsDisconnected {
+        if pendingCancellations.remove(id) != nil || disconnection.isMarked {
             cancelledRequestIDs.insert(id)
             cancel()
             return
@@ -353,7 +356,7 @@ public actor Session {
     /// cooperative cancellation, and its response is suppressed. See
     /// ``Transport/disconnect(_:)``.
     internal func disconnectRequests() {
-        requestsDisconnected = true
+        disconnection.mark()
         let hooks = inFlightRequests
         inFlightRequests = [:]
         for (id, cancel) in hooks {
@@ -379,5 +382,19 @@ public actor Session {
         // guarantees anyway.
         guard pendingCancellations.count < 128 else { return }
         pendingCancellations.insert(id)
+    }
+}
+
+/// Whether a session's client was disconnected: set once, read from anywhere.
+final class DisconnectMark: @unchecked Sendable {
+    private let lock = NSLock()
+    private var marked = false
+
+    var isMarked: Bool {
+        lock.withLock { marked }
+    }
+
+    func mark() {
+        lock.withLock { marked = true }
     }
 }
