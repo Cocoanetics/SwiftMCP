@@ -21,6 +21,11 @@ import Network
 /// When pieces are pending and nothing has moved for the timeout, the client has
 /// stopped reading, and `onStall` is called once to close its connection. The
 /// pending sends then end with the connection's error.
+///
+/// A piece is the finest progress `NWConnection` reports: it tells of a send only once
+/// the stack has taken all of it. Pieces let a fast reader of a large message count as
+/// moving; smaller ones would not help a slow reader, whose data the stack takes in
+/// bursts seconds apart over TCP (see ``TCPBonjourTransport/sendStallTimeout``).
 final class ConnectionOutput: @unchecked Sendable {
     /// How much of a message goes to the network stack at once under a stall timeout.
     static let pieceBytes = 64 * 1024

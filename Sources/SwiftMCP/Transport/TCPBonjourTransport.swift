@@ -91,11 +91,16 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
     /// transport closes its connection, as ``disconnect(_:)`` does.
     ///
     /// With a timeout, a message goes to the network stack in 64 KiB pieces. Each piece
-    /// the stack takes counts as progress, as does anything the client sends. So a
-    /// client that reads slowly is kept; only one that has stopped reading is closed,
-    /// and the sends waiting for it end with an error. `nil`, the default, waits for a
-    /// client however long it takes. Set it before ``start()``: a connection keeps the
-    /// value it was accepted with.
+    /// the stack takes counts as progress, as does anything the client sends; a client
+    /// whose output has not moved for the timeout is closed, and the sends waiting for it
+    /// end with an error. `nil`, the default, waits for a client however long it takes.
+    /// Set it before ``start()``: a connection keeps the value it was accepted with.
+    ///
+    /// Over TCP, the stack takes a slow reader's data in bursts, as the reader's receive
+    /// window reopens. On macOS loopback those bursts come up to about 5 s apart for a
+    /// reader taking anything from 30 to 130 KB a second (the stack's zero-window probes).
+    /// A timeout below that closes slow readers along with stopped ones, so choose one
+    /// well above it for the slowest reader to keep.
     public var sendStallTimeout: TimeInterval?
 
     // MARK: - Init
