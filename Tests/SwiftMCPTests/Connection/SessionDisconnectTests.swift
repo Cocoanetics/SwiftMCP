@@ -130,10 +130,11 @@ struct SessionDisconnectTests {
         #expect(cancelled.count == 1, "the request in flight was not cancelled")
         #expect(await session.unregisterInFlightRequest(id: .integer(9)), "its response is not suppressed")
 
-        // A request past the session check before the disconnect: its lookup finds the closed
-        // session, not a new one, and it is cancelled as it registers. New requests find none.
-        #expect(await transport.sessionManager.session(id: session.id) === session)
+        // A request admitted before the disconnect holds the session: it gets no stream for it,
+        // and it is cancelled as it registers. New requests find no session.
         #expect(await transport.sessionManager.existingSession(id: session.id) == nil)
+        #expect(await transport.sessionManager.createStream(for: session, kind: .request) == nil)
+        #expect(await !transport.sessionManager.isLive(session))
         let late = CancelCount()
         await session.registerInFlightRequest(id: .integer(10)) { late.count += 1 }
         #expect(late.count == 1, "a request registering after the disconnect was not cancelled")

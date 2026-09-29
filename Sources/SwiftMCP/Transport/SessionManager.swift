@@ -32,11 +32,6 @@ actor SessionManager {
     internal let logger = Logger(label: "com.cocoanetics.SwiftMCP.SessionManager")
 
     internal var sessions: [UUID: Session] = [:]
-
-    /// The sessions of the clients disconnected last (``disconnectSession(_:)``),
-    /// oldest first: a request that got past the session check before the
-    /// disconnect finds its closed session here, not a new one under its id.
-    internal var disconnectedSessions: [Session] = []
     internal weak var transport: (any Transport)?
     internal let retentionInterval: TimeInterval
 

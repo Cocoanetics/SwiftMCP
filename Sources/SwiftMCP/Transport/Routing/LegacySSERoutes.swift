@@ -38,24 +38,14 @@ extension HTTPSSETransport {
 			return RouteResponse(status: .badRequest)
 		}
 
-		guard await sessionManager.hasSession(id: sessionID) else {
+		guard let session = await sessionManager.existingSession(id: sessionID) else {
 			logger.warning("Rejected message for unknown legacy SSE session \(sessionID)")
 			return textResponse(status: .notFound, body: "Unknown session. Connect to /sse first.")
 		}
 
 		// Check authorization
-		let token = request.bearerToken
-
-		let authResult = await authorize(token, sessionID: sessionID)
-		switch authResult {
-		case .unauthorized(let message):
-			let err = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32000, message: "Unauthorized: \(message)"))
-			return RouteResponse.json(err, status: .unauthorized, sessionId: sessionID.uuidString)
-		case .jweNotSupported(let message):
-			let err = JSONRPCMessage.errorResponse(id: nil, error: .init(code: -32000, message: message))
-			return RouteResponse.json(err, status: .forbidden, sessionId: sessionID.uuidString)
-		case .authorized:
-			break
+		if let authError = await authorizeRequest(token: request.bearerToken, authSessionID: sessionID) {
+			return authError
 		}
 
 		guard let body = request.body else {
@@ -64,7 +54,7 @@ extension HTTPSSETransport {
 
 		do {
 			let messages = try JSONRPCMessage.decodeMessages(from: body)
-			if await sessionNeedsInitialize(sessionID), !SessionInitializationGate.batchStartsWithPreInitMethod(messages) {
+			if await sessionNeedsInitialize(session), !SessionInitializationGate.batchStartsWithPreInitMethod(messages) {
 				logger.warning("Rejected legacy SSE request for uninitialized session \(sessionID)")
 				return textResponse(
 					status: .badRequest,
@@ -85,7 +75,11 @@ extension HTTPSSETransport {
 				return batchError
 			}
 
-			await dispatchLegacyMessages(messages, sessionID: sessionID)
+			// Its client disconnected since the request was admitted: as had it come after.
+			guard await sessionManager.isLive(session) else {
+				return textResponse(status: .notFound, body: "Unknown session. Connect to /sse first.")
+			}
+			await dispatchLegacyMessages(messages, session: session)
 		} catch {
 			logger.error("Failed to decode JSON-RPC message in SSE context: \(error)")
 		}
@@ -100,9 +94,9 @@ extension HTTPSSETransport {
 	/// dispatch, so a tool's mid-call notifications land there too. Dispatch goes
 	/// through the connected ``MCPDispatcher`` (decoupled mode) or the transport's
 	/// own server (server-coupled mode) via ``processInbound(_:)``.
-	private func dispatchLegacyMessages(_ messages: [JSONRPCMessage], sessionID: UUID) async {
-		let session = await sessionManager.session(id: sessionID)
-		let generalStreamContext = await sessionManager.primaryGeneralStreamID(for: sessionID)
+	private func dispatchLegacyMessages(_ messages: [JSONRPCMessage], session: Session) async {
+		await session.touchActivity()
+		let generalStreamContext = await sessionManager.primaryGeneralStreamID(for: session.id)
 			.map { OutboundStreamContext(streamID: $0, kind: .general) }
 
 		let responses: [JSONRPCMessage]

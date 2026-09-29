@@ -143,7 +143,8 @@ struct BroadcastZombieRegressionTests {
         let sessionUUID = try #require(UUID(uuidString: sessionID))
         let manager = transport.sessionManager
 
-        let (_, info) = await manager.createStream(sessionID: sessionUUID, kind: .general)
+        let session = try #require(await manager.existingSession(id: sessionUUID))
+        let (_, info) = try #require(await manager.createStream(for: session, kind: .general))
         let token = await manager.register(
             connection: DeadSSEConnection(),
             sessionID: sessionUUID,
@@ -183,7 +184,8 @@ struct BroadcastZombieRegressionTests {
         // the primary slot) whose response never gets drained or bound —
         // exactly what handleSSE produces when the adapter discards the
         // response or the drain dies before binding.
-        let (_, abandonedInfo) = await manager.createStream(sessionID: sessionUUID, kind: .general)
+        let session = try #require(await manager.existingSession(id: sessionUUID))
+        let (_, abandonedInfo) = try #require(await manager.createStream(for: session, kind: .general))
         #expect(await manager.primaryGeneralStreamID(for: sessionUUID) == abandonedInfo.streamID)
 
         // While the abandoned stream holds the slot, broadcasts vanish into its

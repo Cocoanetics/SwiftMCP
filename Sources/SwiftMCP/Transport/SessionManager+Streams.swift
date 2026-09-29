@@ -10,20 +10,27 @@ extension SessionManager {
         }
     }
 
-    /// Create a new SSE stream for the given session and return the AsyncStream to write to the response.
+    /// Create a new SSE stream for the given session and return the AsyncStream to write to the response
+    /// — `nil` once the session is no longer the one kept under its id: removed, its client disconnected.
+    /// A stream opened for it then would stay open, with nothing to close it.
     ///
     /// `resumable: false` (the modern era's per-request streams) opens the hub
     /// stream without a replay buffer or priming anchor: no `id:` fields reach the
     /// wire and nothing is retained for a `Last-Event-ID` resume — modern streams
     /// must not advertise or support resumability.
     func createStream(
-        sessionID: UUID,
+        for session: Session,
         kind: SSEStreamKind,
         resumable: Bool = true
-    ) async -> (AsyncStream<Data>, StreamRouteResponseInfo) {
+    ) async -> (AsyncStream<Data>, StreamRouteResponseInfo)? {
         await cleanupExpiredState()
-        let session = await session(id: sessionID)
         await session.touchActivity()
+        // Checked after the last suspension, so that no removal slips in before the stream is
+        // registered: `destroySession` drops the session before it suspends.
+        guard sessions[session.id] === session else {
+            return nil
+        }
+        let sessionID = session.id
 
         // The hub assigns the stream id, buffers replayable data events, and emits
         // the priming event for replayable streams. MCP kind maps to its flags:
