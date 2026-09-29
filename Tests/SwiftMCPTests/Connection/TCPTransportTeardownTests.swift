@@ -28,7 +28,7 @@ import Network
 /// socket explicitly — the FIN is what the transport under test reacts to —
 /// and keep a `defer` as the cleanup net, so `closeSocket()` is reached twice
 /// on some paths. See `closeSocket()` for why only the first may act.
-final class TestTCPClient {
+final class TestTCPClient: @unchecked Sendable {
     let sock: Int32
     private var isClosed = false
     /// How many `close(2)` calls this client has issued. Exactly one, for the
@@ -127,6 +127,16 @@ final class TestTCPClient {
         isClosed = true
         issuedCloseCount += 1
         close(sock)
+    }
+}
+
+/// `body` on a thread of its own, off the cooperative pool. A test client's socket calls
+/// block: made on the pool, they hold a thread the server under test needs to answer them,
+/// and with the pool's few threads all held so (a CI runner has three), the server never
+/// answers and each read runs to its timeout.
+func offPool<T: Sendable>(_ body: @escaping @Sendable () -> T) async -> T {
+    await withCheckedContinuation { continuation in
+        Thread { continuation.resume(returning: body()) }.start()
     }
 }
 

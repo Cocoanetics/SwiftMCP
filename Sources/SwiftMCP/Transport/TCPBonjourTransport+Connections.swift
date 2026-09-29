@@ -11,6 +11,11 @@ extension TCPBonjourTransport {
     internal func handleNewConnection(_ connection: NWConnection) {
         let connectionID = UUID()
         let tracker = ConnectionTaskTracker()
+        let output = ConnectionOutput(stallTimeout: sendStallTimeout, queue: queue) { [weak self] in
+            guard let self else { return }
+            self.logger.warning("TCP client stopped reading (\(connectionID)); closing its connection")
+            Task { await self.cleanupConnection(id: connectionID) }
+        }
 
         // Installed before the first suspension: a connection that fails while
         // its session is still being created must already have a cleanup path.
@@ -39,7 +44,9 @@ extension TCPBonjourTransport {
             // transport so outbound bytes route back over the same socket.
             let session = await sessionManager.session(id: connectionID)
 
-            guard await state.addConnection(id: connectionID, connection: connection, tasks: tracker) else {
+            guard await state.addConnection(
+                id: connectionID, connection: connection, tasks: tracker, output: output
+            ) else {
                 // The transport stopped while this connection was being set up.
                 // Every early return on this path must cancel: the kernel already
                 // allocated the descriptor at accept, and only `cancel()` frees it.
@@ -49,8 +56,8 @@ extension TCPBonjourTransport {
             }
             connection.start(queue: queue)
             startReceiveLoop(
-                connection: connection, session: session,
-                connectionID: connectionID, tracker: tracker
+                TCPConnectionEntry(connection: connection, tasks: tracker, output: output),
+                session: session, connectionID: connectionID
             )
         }
     }
@@ -62,26 +69,17 @@ extension TCPBonjourTransport {
         await sessionManager.removeSession(id: id)
     }
 
-    internal func startReceiveLoop(
-        connection: NWConnection,
-        session: Session,
-        connectionID: UUID,
-        tracker: ConnectionTaskTracker
-    ) {
-        let framer = LineFramer()
-        receiveNext(
-            connection: connection, session: session,
-            connectionID: connectionID, framer: framer, tracker: tracker
-        )
+    internal func startReceiveLoop(_ entry: TCPConnectionEntry, session: Session, connectionID: UUID) {
+        receiveNext(entry, session: session, connectionID: connectionID, framer: LineFramer())
     }
 
     internal func receiveNext(
-        connection: NWConnection,
+        _ entry: TCPConnectionEntry,
         session: Session,
         connectionID: UUID,
-        framer: LineFramer,
-        tracker: ConnectionTaskTracker
+        framer: LineFramer
     ) {
+        let (connection, tracker, output) = (entry.connection, entry.tasks, entry.output)
         connection.receive(
             minimumIncompleteLength: 1,
             maximumLength: 64 * 1024
@@ -94,6 +92,7 @@ extension TCPBonjourTransport {
             // Only the dispatch of complete lines leaves the queue.
             var lines: [String] = []
             if let data, !data.isEmpty {
+                output.noteProgress()
                 framer.append(data)
                 lines = framer.extractLines()
             }
@@ -135,13 +134,7 @@ extension TCPBonjourTransport {
             }
 
             self.dispatchLines(lines, session: session, tracker: tracker)
-            self.receiveNext(
-                connection: connection,
-                session: session,
-                connectionID: connectionID,
-                framer: framer,
-                tracker: tracker
-            )
+            self.receiveNext(entry, session: session, connectionID: connectionID, framer: framer)
         }
     }
 

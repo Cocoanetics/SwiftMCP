@@ -87,6 +87,22 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
     /// Internal so tests can shorten the wait.
     internal var eofDrainTimeout: TimeInterval = 30
 
+    /// How long a client may leave what the server sends it unread before the
+    /// transport closes its connection, as ``disconnect(_:)`` does.
+    ///
+    /// With a timeout, a message goes to the network stack in 64 KiB pieces. Each piece
+    /// the stack takes counts as progress, as does anything the client sends; a client
+    /// whose output has not moved for the timeout is closed, and the sends waiting for it
+    /// end with an error. `nil`, the default, waits for a client however long it takes.
+    /// Set it before ``start()``: a connection keeps the value it was accepted with.
+    ///
+    /// Over TCP, the stack takes a slow reader's data in bursts, as the reader's receive
+    /// window reopens. On macOS loopback those bursts come up to about 5 s apart for a
+    /// reader taking anything from 30 to 130 KB a second (the stack's zero-window probes).
+    /// A timeout below that closes slow readers along with stopped ones, so choose one
+    /// well above it for the slowest reader to keep.
+    public var sendStallTimeout: TimeInterval?
+
     // MARK: - Init
 
     /// Creates a server-coupled transport.
@@ -188,6 +204,10 @@ public final class TCPBonjourTransport: Transport, MCPTransport, Service, @unche
     public private(set) var resolvedInstanceName: String?
     internal var httpEndpointProvider: (@Sendable () -> String?)?
     public var httpEndpoint: String? { httpEndpointProvider?() }
+
+    /// As on Apple platforms, so that code that sets it builds everywhere; the transport
+    /// cannot run here.
+    public var sendStallTimeout: TimeInterval?
 
     internal var declaredServerName: String?
     internal var declaredServerVersion: String?

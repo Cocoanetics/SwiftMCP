@@ -90,14 +90,16 @@ struct TCPTransportFailureTests {
 
         // Never started: not running, so registration must be refused.
         let refusedBeforeStart = await transport.state.addConnection(
-            id: UUID(), connection: connection, tasks: ConnectionTaskTracker()
+            id: UUID(), connection: connection, tasks: ConnectionTaskTracker(),
+            output: ConnectionOutput(stallTimeout: nil, queue: .global()) {}
         )
         #expect(refusedBeforeStart == false)
 
         try await transport.start()
         let id = UUID()
         let acceptedWhileRunning = await transport.state.addConnection(
-            id: id, connection: connection, tasks: ConnectionTaskTracker()
+            id: id, connection: connection, tasks: ConnectionTaskTracker(),
+            output: ConnectionOutput(stallTimeout: nil, queue: .global()) {}
         )
         #expect(acceptedWhileRunning == true)
 
@@ -105,7 +107,8 @@ struct TCPTransportFailureTests {
         #expect(await transport.state.connection(for: id) == nil)
 
         let refusedAfterStop = await transport.state.addConnection(
-            id: UUID(), connection: connection, tasks: ConnectionTaskTracker()
+            id: UUID(), connection: connection, tasks: ConnectionTaskTracker(),
+            output: ConnectionOutput(stallTimeout: nil, queue: .global()) {}
         )
         #expect(refusedAfterStop == false)
     }

@@ -68,10 +68,12 @@ struct SessionDisconnectTests {
         _ server: SessionRecorder, port: UInt16
     ) async throws -> (TestTCPClient, Session) {
         let client = try TestTCPClient(port: port)
-        client.send(Self.initializeLine + "\n")
-        _ = client.readLine()
-        client.send(Self.rememberLine + "\n")
-        _ = client.readLine()
+        await offPool {
+            client.send(Self.initializeLine + "\n")
+            _ = client.readLine()
+            client.send(Self.rememberLine + "\n")
+            _ = client.readLine()
+        }
         let session = try #require(await server.sessions.all.last)
         return (client, session)
     }
@@ -87,9 +89,12 @@ struct SessionDisconnectTests {
 
             await session.disconnect()
 
-            #expect(first.readsToEndOfFile(), "the disconnected client's connection is still open")
-            second.send(#"{"jsonrpc":"2.0","id":7,"method":"ping"}"# + "\n")
-            #expect(second.readLine()?.contains(#""id":7"#) == true)
+            #expect(await offPool { first.readsToEndOfFile() }, "the disconnected client's connection is still open")
+            let pong = await offPool {
+                second.send(#"{"jsonrpc":"2.0","id":7,"method":"ping"}"# + "\n")
+                return second.readLine()
+            }
+            #expect(pong?.contains(#""id":7"#) == true)
         }
     }
 
@@ -99,16 +104,16 @@ struct SessionDisconnectTests {
         try await withStartedTransport(server: server) { port in
             let (client, session) = try await rememberedClient(server, port: port)
             defer { client.closeSocket() }
-            // Far more than the socket buffers hold: once the client stops reading, the
-            // send waits for it.
+            // Far more than the socket buffers hold (some 600 KB on loopback): once the client
+            // stops reading, the send waits for it.
             let flood = Task {
                 await session.work { session in
                     await session.sendLogNotification(
-                        LogMessage(level: .info, data: .string(String(repeating: "x", count: 32 << 20))))
+                        LogMessage(level: .info, data: .string(String(repeating: "x", count: 4 << 20))))
                 }
             }
             // The send has begun: its first bytes are here. The client reads no more.
-            #expect(client.readBytes(1024) == 1024)
+            #expect(await offPool { client.readBytes(1024) } == 1024)
 
             await session.disconnect()
 
