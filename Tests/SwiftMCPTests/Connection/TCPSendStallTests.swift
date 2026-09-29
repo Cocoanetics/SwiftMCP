@@ -40,10 +40,12 @@ struct TCPSendStallTests {
             }
             let client = try TestTCPClient(port: try #require(transport.port))
             defer { client.closeSocket() }
-            client.send(Self.initializeLine + "\n")
-            _ = client.readLine()
-            client.send(Self.rememberLine + "\n")
-            _ = client.readLine()
+            await offPool {
+                client.send(Self.initializeLine + "\n")
+                _ = client.readLine()
+                client.send(Self.rememberLine + "\n")
+                _ = client.readLine()
+            }
             let session = try #require(await server.sessions.all.last)
             try await body(transport, client, session)
         } catch {
@@ -70,10 +72,10 @@ struct TCPSendStallTests {
         try await withClient(stallTimeout: 0.5) { transport, client, session in
             let flood = Self.flood(session, megabytes: 4)
             // The send has begun: its first bytes are here. The client reads no more.
-            #expect(client.readBytes(1024) == 1024)
+            #expect(await offPool { client.readBytes(1024) } == 1024)
 
             #expect(await FloodOutcome.finishes(flood, within: 10), "the send still waits for a client that stopped")
-            #expect(client.readsToEndOfFile(), "the client's connection is still open")
+            #expect(await offPool { client.readsToEndOfFile() }, "the client's connection is still open")
             #expect(await !transport.sessionManager.sessionIDs.contains(session.id))
         }
     }
@@ -84,18 +86,24 @@ struct TCPSendStallTests {
             // 4 MiB at about 1.3 MB/s: some three seconds for the one message, however much
             // the socket buffers take, and no pause of a second in reading it.
             let flood = Self.flood(session, megabytes: 4)
-            var received = 0
-            while received < 4 << 20 {
-                let got = client.readBytes(32 << 10)
-                guard got > 0 else { break }
-                received += got
-                usleep(25_000)
+            let received = await offPool {
+                var received = 0
+                while received < 4 << 20 {
+                    let got = client.readBytes(32 << 10)
+                    guard got > 0 else { break }
+                    received += got
+                    usleep(25_000)
+                }
+                return received
             }
             #expect(received >= 4 << 20, "the connection closed after \(received) bytes")
             #expect(await FloodOutcome.finishes(flood, within: 10))
-            _ = client.readLine()  // the rest of the notification's line
-            client.send(#"{"jsonrpc":"2.0","id":7,"method":"ping"}"# + "\n")
-            #expect(client.readLine()?.contains(#""id":7"#) == true, "the client was closed")
+            let pong = await offPool {
+                _ = client.readLine()  // the rest of the notification's line
+                client.send(#"{"jsonrpc":"2.0","id":7,"method":"ping"}"# + "\n")
+                return client.readLine()
+            }
+            #expect(pong?.contains(#""id":7"#) == true, "the client was closed")
         }
     }
 
@@ -113,12 +121,14 @@ struct TCPSendStallTests {
     func sendingClientIsKept() async throws {
         try await withClient(stallTimeout: 1) { transport, client, session in
             let flood = Self.flood(session, megabytes: 4)
-            #expect(client.readBytes(1024) == 1024)
+            #expect(await offPool { client.readBytes(1024) } == 1024)
             // Reading nothing, but sending every 100 ms for 2.5 s: past the timeout twice over.
-            for index in 0..<25 {
-                client.send(#"{"jsonrpc":"2.0","method":"notifications/progress","params":"# +
-                    #"{"progressToken":\#(index),"progress":1}}"# + "\n")
-                usleep(100_000)
+            await offPool {
+                for index in 0..<25 {
+                    client.send(#"{"jsonrpc":"2.0","method":"notifications/progress","params":"# +
+                        #"{"progressToken":\#(index),"progress":1}}"# + "\n")
+                    usleep(100_000)
+                }
             }
             #expect(await transport.sessionManager.sessionIDs.contains(session.id), "closed while the client sent")
             // Silent now: closed once the timeout passes.
