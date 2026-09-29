@@ -332,6 +332,18 @@ public actor Session {
         return cancelledRequestIDs.remove(id) != nil
     }
 
+    /// Cancels every request this session is processing, as when its client
+    /// goes: each task sees cooperative cancellation, and its response is
+    /// suppressed. See ``Transport/disconnect(_:)``.
+    internal func cancelAllInFlightRequests() {
+        let hooks = inFlightRequests
+        inFlightRequests = [:]
+        for (id, cancel) in hooks {
+            cancelledRequestIDs.insert(id)
+            cancel()
+        }
+    }
+
     /// Cancels the in-flight request with the given id. The request's task
     /// sees ordinary Swift cooperative cancellation. An id that has not
     /// registered yet is retained briefly (dispatch tasks are unordered, so

@@ -116,15 +116,19 @@ struct SessionDisconnectTests {
         }
     }
 
-    @Test("Disconnecting an HTTP client's session removes it")
+    @Test("Disconnecting an HTTP client's session cancels what it runs and removes it")
     func httpDisconnectRemovesTheSession() async throws {
         let transport = HTTPSSETransport(server: SessionRecorder(), port: 0)
         let session = await transport.sessionManager.session(id: UUID())
         #expect(await transport.sessionManager.sessionIDs.contains(session.id))
+        let cancelled = CancelCount()
+        await session.registerInFlightRequest(id: .integer(9)) { cancelled.count += 1 }
 
         await session.disconnect()
 
         #expect(await !transport.sessionManager.sessionIDs.contains(session.id))
+        #expect(cancelled.count == 1, "the request in flight was not cancelled")
+        #expect(await session.unregisterInFlightRequest(id: .integer(9)), "its response is not suppressed")
     }
 
     /// Whether `task` finishes within `seconds`.
@@ -138,6 +142,17 @@ struct SessionDisconnectTests {
             }
             DispatchQueue.global().asyncAfter(deadline: .now() + seconds) { outcome.resume(false) }
         }
+    }
+}
+
+/// How often a request's cancellation ran.
+private final class CancelCount: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+
+    var count: Int {
+        get { lock.withLock { value } }
+        set { lock.withLock { value = newValue } }
     }
 }
 
