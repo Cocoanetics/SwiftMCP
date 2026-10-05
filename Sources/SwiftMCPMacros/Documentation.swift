@@ -149,36 +149,7 @@ struct Documentation {
         state: ParsingState,
         result: inout ParsedDocumentation
     ) {
-        let lowered = line.lowercased()
-
-        if lowered.hasPrefix("- parameters:") {
-            flushCurrentParameter(state: state, result: &result)
-            state.inReturnsSection = false
-            state.inInstructionsSection = false
-            state.inParametersSection = true
-            state.inOtherSection = false
-            return
-        }
-
-        if lowered.hasPrefix("- returns:") {
-            flushCurrentParameter(state: state, result: &result)
-            state.inParametersSection = false
-            state.inInstructionsSection = false
-            state.inOtherSection = false
-            let returnsDescription = line.dropFirst("- Returns:".count).trimmingCharacters(in: .whitespaces)
-            result.returnsLines = [returnsDescription]
-            state.inReturnsSection = true
-            return
-        }
-
-        if lowered.hasPrefix("- instructions:") {
-            flushCurrentParameter(state: state, result: &result)
-            state.inParametersSection = false
-            state.inReturnsSection = false
-            state.inOtherSection = false
-            let instructionsDescription = line.dropFirst("- Instructions:".count).trimmingCharacters(in: .whitespaces)
-            result.instructionsLines = [instructionsDescription]
-            state.inInstructionsSection = true
+        if handleSectionHeaderLine(line, state: state, result: &result) {
             return
         }
 
@@ -200,12 +171,67 @@ struct Documentation {
             return
         }
 
+        // An unrecognized dash-prefixed line while Instructions is active is a
+        // nested step (e.g. "- Instructions:" followed by "  - Ask before
+        // deleting") rather than the start of a new section — cleaning strips
+        // its indentation, so by this point it looks like any other dash
+        // line. Keep collecting it as instructions content instead of
+        // truncating the section.
+        if state.inInstructionsSection {
+            result.instructionsLines.append(line)
+            return
+        }
+
         // Any other dash-prefixed line is a section we don't handle.
         flushCurrentParameter(state: state, result: &result)
         state.inReturnsSection = false
         state.inInstructionsSection = false
         state.inParametersSection = false
         state.inOtherSection = true
+    }
+
+    /// Recognizes the "- Parameters:", "- Returns:", and "- Instructions:"
+    /// section headers, updating `state` and seeding the section's first
+    /// line. Returns `true` when `line` was one of these headers.
+    private static func handleSectionHeaderLine(
+        _ line: String,
+        state: ParsingState,
+        result: inout ParsedDocumentation
+    ) -> Bool {
+        let lowered = line.lowercased()
+
+        if lowered.hasPrefix("- parameters:") {
+            flushCurrentParameter(state: state, result: &result)
+            state.inReturnsSection = false
+            state.inInstructionsSection = false
+            state.inParametersSection = true
+            state.inOtherSection = false
+            return true
+        }
+
+        if lowered.hasPrefix("- returns:") {
+            flushCurrentParameter(state: state, result: &result)
+            state.inParametersSection = false
+            state.inInstructionsSection = false
+            state.inOtherSection = false
+            let returnsDescription = line.dropFirst("- Returns:".count).trimmingCharacters(in: .whitespaces)
+            result.returnsLines = [returnsDescription]
+            state.inReturnsSection = true
+            return true
+        }
+
+        if lowered.hasPrefix("- instructions:") {
+            flushCurrentParameter(state: state, result: &result)
+            state.inParametersSection = false
+            state.inReturnsSection = false
+            state.inOtherSection = false
+            let instructionsDescription = line.dropFirst("- Instructions:".count).trimmingCharacters(in: .whitespaces)
+            result.instructionsLines = [instructionsDescription]
+            state.inInstructionsSection = true
+            return true
+        }
+
+        return false
     }
 
     private static func handleIndentedParameterLine(
