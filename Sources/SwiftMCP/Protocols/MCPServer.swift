@@ -46,6 +46,16 @@ public protocol MCPServer {
     var serverWebsiteUrl: URL? { get }
 
     /**
+     Instructions describing how to use the server and its tools.
+
+     An optional string that a host hands to the model describing the server's
+     workflow and safety boundary — the place to brief a client that loads no
+     skill file. Emitted as `instructions` in the `initialize` and
+     `server/discover` results when set.
+     */
+    var serverInstructions: String? { get }
+
+    /**
      Handles a JSON-RPC message and generates an appropriate response.
 
      - Parameter message: The JSON-RPC message to handle
@@ -118,6 +128,15 @@ public extension MCPServer {
         (Mirror(reflecting: self).children
             .first(where: { $0.label == "__mcpServerWebsiteUrl" })?.value as? String)
             .flatMap(URL.init(string:))
+    }
+
+    /**
+     The server's usage instructions, derived from the `@MCPServer(instructions:)`
+     macro argument or a `- Instructions:` DocC bullet.
+     */
+    var serverInstructions: String? {
+        Mirror(reflecting: self).children
+            .first(where: { $0.label == "__mcpServerInstructions" })?.value as? String
     }
 
     /// Handles the roots list changed notification by retrieving the updated roots list.

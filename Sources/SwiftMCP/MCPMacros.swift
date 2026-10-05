@@ -148,6 +148,7 @@ public macro MCPAppIntentTool(
         named(__mcpServerDescription),
         named(__mcpServerTitle),
         named(__mcpServerWebsiteUrl),
+        named(__mcpServerInstructions),
         named(mcpResourceMetadata),
         named(mcpResources),
         named(mcpStaticResources),
@@ -172,6 +173,7 @@ public macro MCPServer(
     description: String? = nil,
     title: String? = nil,
     websiteUrl: String? = nil,
+    instructions: String? = nil,
     toolNaming: MCPToolNaming = .functionName,
     generateClient: Bool = true
 ) = #externalMacro(module: "SwiftMCPMacros", type: "MCPServerMacro")
