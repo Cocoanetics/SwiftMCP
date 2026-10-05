@@ -44,6 +44,21 @@ struct DiscoverModelTests {
         #expect(decoded.serverInfo.name == "X")
     }
 
+    @Test("DiscoverResult round-trips instructions when set")
+    func discoverResultInstructionsCodable() throws {
+        let result = DiscoverResult(
+            supportedVersions: ["2025-11-25"],
+            capabilities: ServerCapabilities(),
+            serverInfo: Implementation(name: "X", version: "1.0"),
+            instructions: "Always confirm with the user before deleting a widget."
+        )
+        let json = String(data: try JSONEncoder().encode(result), encoding: .utf8) ?? ""
+        #expect(json.contains("instructions"))
+
+        let decoded = try JSONDecoder().decode(DiscoverResult.self, from: try JSONEncoder().encode(result))
+        #expect(decoded.instructions == "Always confirm with the user before deleting a widget.")
+    }
+
     @Test("supportedDescending orders the negotiable revisions newest-first")
     func supportedDescendingOrder() {
         #expect(MCPProtocolVersion.supportedDescending == ["2025-11-25", "2025-06-18", "2025-03-26"])

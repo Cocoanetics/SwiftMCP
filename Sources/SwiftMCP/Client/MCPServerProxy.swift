@@ -95,6 +95,8 @@ public final actor MCPServerProxy {
     public internal(set) var serverWebsiteUrl: URL?
     /// The server's display icons (2025-06-18+); empty when none were advertised.
     public internal(set) var serverIcons: [Icon] = []
+    /// Instructions describing how to use the server and its tools, if it advertised any.
+    public internal(set) var serverInstructions: String?
     public internal(set) var serverCapabilities: ServerCapabilities?
 
     /// The most recent `server/discover` result, cached by ``discover()`` for

@@ -48,7 +48,8 @@ public extension MCPServer {
         let result = DiscoverResult(
             supportedVersions: MCPProtocolVersion.supportedDescending,
             capabilities: capabilities,
-            serverInfo: serverInfo
+            serverInfo: serverInfo,
+            instructions: serverInstructions
         )
 
         do {
