@@ -277,12 +277,12 @@ let package = Package(
 			name: "SwiftMCPTests",
 			dependencies: [
 				"SwiftMCP",
-				// MacroDocumentationTests imports the macro module directly. The
-				// native build finds it through SwiftMCP; Swift Build (the default
-				// since Swift 6.4) needs the dependency declared. Not on Android,
-				// whose cross-build cannot take a macro target as a library
-				// dependency and finds the module the old way.
-				.target(name: "SwiftMCPMacros", condition: .when(platforms: [.macOS, .linux, .windows])),
+				// MacroDocumentationTests imports the macro module directly. Only
+				// macOS's Swift Build (the default since Swift 6.4) needs the
+				// dependency declared; Linux, Windows and the Android cross-build
+				// find the module through SwiftMCP, and the Android one cannot take
+				// a macro target as a library dependency at all.
+				.target(name: "SwiftMCPMacros", condition: .when(platforms: [.macOS])),
 				"SwiftMCPUtilityCore",
 				.product(name: "SwiftCross", package: "SwiftCross"),
 				.product(name: "Crypto", package: "swift-crypto", condition: .when(traits: ["Server"])),
