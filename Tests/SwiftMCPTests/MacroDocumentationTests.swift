@@ -289,6 +289,69 @@ func testMarkAndDocumentationBlocks() {
     // swiftlint:enable line_length
 }
 
+@Test("Properly handles Instructions section in documentation")
+func testInstructionsSection() {
+    let docText = """
+    /// Manages the widget inventory.
+    /// - Instructions: Always confirm with the user before deleting a widget.
+    """
+    let doc = Documentation(from: docText)
+    #expect(doc.description == "Manages the widget inventory.")
+    #expect(doc.instructions == "Always confirm with the user before deleting a widget.")
+
+    // Test with multi-line instructions section, combined with Parameter / Returns.
+    let multiLine = """
+    /**
+     * A server description.
+     * - Parameter x: X parameter
+     * - Returns: A result
+     * - Instructions: Follow the safety
+     *   boundary carefully.
+     */
+    """
+    let docWithMultiLine = Documentation(from: multiLine)
+    #expect(docWithMultiLine.description == "A server description.")
+    #expect(docWithMultiLine.parameters["x"] == "X parameter")
+    #expect(docWithMultiLine.returns == "A result")
+    #expect(docWithMultiLine.instructions == "Follow the safety boundary carefully.")
+}
+
+@Test("Preserves a nested bullet list of steps under Instructions")
+func testInstructionsNestedBulletList() {
+    // A bullet-only Instructions section: cleaning strips the nested bullets'
+    // indentation, so they must not be mistaken for a new, unhandled section.
+    let bulletsOnly = """
+    /// Manages the widget inventory.
+    /// - Instructions:
+    ///   - Ask before deleting a widget.
+    ///   - Confirm the widget id twice.
+    """
+    let doc = Documentation(from: bulletsOnly)
+    #expect(doc.description == "Manages the widget inventory.")
+    #expect(doc.instructions == "- Ask before deleting a widget. - Confirm the widget id twice.")
+
+    // Bullets following introductory prose on the same "- Instructions:" line.
+    let proseThenBullets = """
+    /// Desc.
+    /// - Instructions: Follow these steps carefully.
+    ///   - Step one.
+    ///   - Step two.
+    """
+    let docWithProse = Documentation(from: proseThenBullets)
+    #expect(docWithProse.instructions == "Follow these steps carefully. - Step one. - Step two.")
+
+    // A subsequent recognized section still terminates Instructions.
+    let followedByReturns = """
+    /// Desc.
+    /// - Instructions:
+    ///   - Step one.
+    /// - Returns: A value
+    """
+    let docWithReturns = Documentation(from: followedByReturns)
+    #expect(docWithReturns.instructions == "- Step one.")
+    #expect(docWithReturns.returns == "A value")
+}
+
 @Test("Handles single-line documentation blocks")
 func testSingleLineDocumentationBlocks() {
     let docText = """

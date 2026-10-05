@@ -18,6 +18,7 @@ extension MCPServerMacro {
         let serverDescriptionText: String?
         let titleLiteral: String
         let websiteUrlLiteral: String
+        let instructionsLiteral: String
         let generateClient: Bool
         let toolNaming: String?
     }
@@ -57,6 +58,11 @@ extension MCPServerMacro {
             documentation: documentation
         )
 
+        let instructionsLiteral = resolveInstructionsLiteral(
+            instructionsArg: parsed.instructionsArg,
+            documentation: documentation
+        )
+
         return ServerArguments(
             name: serverName,
             version: serverVersion,
@@ -64,6 +70,7 @@ extension MCPServerMacro {
             serverDescriptionText: serverDescriptionText,
             titleLiteral: parsed.titleArg ?? "nil",
             websiteUrlLiteral: parsed.websiteUrlArg ?? "nil",
+            instructionsLiteral: instructionsLiteral,
             generateClient: parsed.generateClient,
             toolNaming: parsed.toolNaming
         )
@@ -74,6 +81,7 @@ extension MCPServerMacro {
         var serverDescriptionText: String?
         var titleArg: String?
         var websiteUrlArg: String?
+        var instructionsArg: String?
         var generateClient = false
         var toolNaming: String?
     }
@@ -93,6 +101,9 @@ extension MCPServerMacro {
             } else if argument.label?.text == "websiteUrl",
                       let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
                 parsed.websiteUrlArg = "\"\(stringLiteral.segments.description.escapedForSwiftString)\""
+            } else if argument.label?.text == "instructions",
+                      let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
+                parsed.instructionsArg = "\"\(stringLiteral.segments.description.escapedForSwiftString)\""
             } else if argument.label?.text == "generateClient",
                       let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
                 parsed.generateClient = boolLiteral.literal.text == "true"
@@ -118,6 +129,19 @@ extension MCPServerMacro {
             return "nil"
         }
         return "\"\(documentation.description.escapedForSwiftString)\""
+    }
+
+    private static func resolveInstructionsLiteral(
+        instructionsArg: String?,
+        documentation: Documentation
+    ) -> String {
+        if let instructionsArg {
+            return instructionsArg
+        }
+        guard let instructions = documentation.instructions, !instructions.isEmpty else {
+            return "nil"
+        }
+        return "\"\(instructions.escapedForSwiftString)\""
     }
 
     static func hasAppShortcutsProvider(declaration: some DeclGroupSyntax) -> Bool {

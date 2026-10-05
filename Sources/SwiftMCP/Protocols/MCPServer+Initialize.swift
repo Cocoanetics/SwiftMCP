@@ -84,7 +84,8 @@ public extension MCPServer {
         let result = InitializeResult(
             protocolVersion: protocolVersion,
             capabilities: capabilities,
-            serverInfo: serverInfo
+            serverInfo: serverInfo,
+            instructions: serverInstructions
         )
 
         do {

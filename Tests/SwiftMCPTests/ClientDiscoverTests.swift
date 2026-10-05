@@ -12,6 +12,17 @@ actor ClientDiscoverTestServer {
     func echo(text: String) -> String { text }
 }
 
+/// A tiny in-process server advertising `serverInstructions`, for the client
+/// `initialize()` handshake round-trip.
+@MCPServer(name: "ClientInstructionsServer", version: "1.0", instructions: "Always echo politely.")
+actor ClientInstructionsTestServer {
+    /// Echoes its input.
+    /// - Parameter text: The text to echo.
+    /// - Returns: The same text.
+    @MCPTool(description: "Echoes its input")
+    func echo(text: String) -> String { text }
+}
+
 @Suite("Client discover()")
 struct ClientDiscoverTests {
 
@@ -31,5 +42,17 @@ struct ClientDiscoverTests {
 
         let cached = await proxy.lastDiscover
         #expect(cached?.serverInfo.name == "ClientDiscoverServer")
+    }
+
+    @Test("Client initialize() populates serverInstructions from the server's instructions",
+          .enabled(if: isStdioProcessSupported))
+    func clientServerInstructions() async throws {
+        let server = ClientInstructionsTestServer()
+        let proxy = MCPServerProxy(config: .stdioHandles(server: server))
+        try await proxy.connect()
+        defer { Task { await proxy.disconnect() } }
+
+        let instructions = await proxy.serverInstructions
+        #expect(instructions == "Always echo politely.")
     }
 }
