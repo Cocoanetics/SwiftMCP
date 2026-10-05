@@ -18,15 +18,25 @@ public struct InitializeResult: Codable, Sendable {
     /// Information about the server
     public let serverInfo: Implementation
 
+    /// Optional instructions describing how to use the server and its tools,
+    /// for a client that loads no skill file of its own.
+    public let instructions: String?
+
     /// Server identity. The spec models both client and server info as
     /// `Implementation`; this alias preserves the `InitializeResult.ServerInfo`
     /// spelling while unifying onto the full type (name, title, version,
     /// description, icons, websiteUrl).
     public typealias ServerInfo = Implementation
 
-    public init(protocolVersion: String, capabilities: ServerCapabilities, serverInfo: Implementation) {
+    public init(
+        protocolVersion: String,
+        capabilities: ServerCapabilities,
+        serverInfo: Implementation,
+        instructions: String? = nil
+    ) {
         self.protocolVersion = protocolVersion
         self.capabilities = capabilities
         self.serverInfo = serverInfo
+        self.instructions = instructions
     }
 }
