@@ -2,7 +2,12 @@ import Foundation
 import Testing
 @testable import SwiftMCP
 
-@MCPServer(name: "weather", title: "Weather Tools", websiteUrl: "https://example.com/weather")
+@MCPServer(
+    name: "weather",
+    title: "Weather Tools",
+    websiteUrl: "https://example.com/weather",
+    instructions: "Always confirm the location with the user before calling a tool."
+)
 final class RichIdentityServer: HasIcons {
     var icons: [Icon] { [Icon("https://example.com/icon.png", mimeType: "image/png")] }
 
@@ -16,26 +21,43 @@ final class PlainIdentityServer {
     func ping() -> String { "pong" }
 }
 
+/// Manages the widget inventory.
+/// - Instructions: Always ask before deleting a widget.
+@MCPServer(name: "widgets")
+final class DocCInstructionsServer {
+    @MCPTool(description: "Ping")
+    func ping() -> String { "pong" }
+}
+
 @Suite("serverInfo identity")
 struct ServerInfoIdentityTests {
 
     // MARK: - Authoring (macro args / HasIcons -> protocol surface)
 
-    @Test("@MCPServer(title:websiteUrl:) populates the protocol properties")
+    @Test("@MCPServer(title:websiteUrl:instructions:) populates the protocol properties")
     func macroArgsPopulateProperties() {
         let server = RichIdentityServer()
         #expect(server.serverName == "weather")
         #expect(server.serverTitle == "Weather Tools")
         #expect(server.serverWebsiteUrl == URL(string: "https://example.com/weather"))
+        #expect(server.serverInstructions == "Always confirm the location with the user before calling a tool.")
         #expect(server.icons.count == 1)
     }
 
-    @Test("A plain server has no title / websiteUrl / icons")
+    @Test("A plain server has no title / websiteUrl / icons / instructions")
     func plainServerDefaults() {
         let server = PlainIdentityServer()
         #expect(server.serverTitle == nil)
         #expect(server.serverWebsiteUrl == nil)
+        #expect(server.serverInstructions == nil)
         #expect((server as? HasIcons) == nil)
+    }
+
+    @Test("A `- Instructions:` DocC bullet populates serverInstructions when no explicit argument is given")
+    func docCInstructionsFallback() {
+        let server = DocCInstructionsServer()
+        #expect(server.serverDescription == "Manages the widget inventory.")
+        #expect(server.serverInstructions == "Always ask before deleting a widget.")
     }
 
     // MARK: - Emission (version-gated)
@@ -88,6 +110,37 @@ struct ServerInfoIdentityTests {
         #expect(info["title"] == nil)
     }
 
+    private func initializeResult<S: MCPServer>(
+        make: @Sendable @escaping () -> S
+    ) async -> JSONValue? {
+        let request = JSONRPCMessage.request(
+            id: 1,
+            method: "initialize",
+            params: [
+                "protocolVersion": .string("2025-06-18"),
+                "capabilities": .object([:]),
+                "clientInfo": .object(["name": .string("C"), "version": .string("1.0")])
+            ]
+        )
+        let session = Session(id: UUID())
+        let response = await session.work { _ in await make().handleMessage(request) }
+        guard case .response(let data)? = response else { return nil }
+        return data.result
+    }
+
+    @Test("initialize result carries instructions as a top-level field, not under serverInfo")
+    func emitsInstructionsAtTopLevel() async throws {
+        let result = try #require(await initializeResult { RichIdentityServer() })
+        #expect(result["instructions"]?.stringValue == "Always confirm the location with the user before calling a tool.")
+        #expect(result["serverInfo"]?.dictionaryValue?["instructions"] == nil)
+    }
+
+    @Test("initialize result omits instructions when unset")
+    func omitsInstructionsWhenUnset() async throws {
+        let result = try #require(await initializeResult { PlainIdentityServer() })
+        #expect(result["instructions"] == nil)
+    }
+
     // MARK: - Read path (decode -> Implementation, as MCPServerProxy does)
 
     @Test("Emitted serverInfo decodes back into InitializeResult (proxy read path)")
@@ -114,5 +167,6 @@ struct ServerInfoIdentityTests {
         #expect(initResult.serverInfo.websiteUrl == URL(string: "https://example.com/weather"))
         #expect(initResult.serverInfo.icons?.count == 1)
         #expect(initResult.serverInfo.icons?.first?.src == URL(string: "https://example.com/icon.png"))
+        #expect(initResult.instructions == "Always confirm the location with the user before calling a tool.")
     }
 }

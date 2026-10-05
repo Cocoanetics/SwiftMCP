@@ -6,7 +6,7 @@ import Logging
 
 /// A minimal server for exercising `server/discover` and the `-32004`
 /// negotiation guard over the in-memory transport.
-@MCPServer(name: "DiscoverTest", version: "2.0")
+@MCPServer(name: "DiscoverTest", version: "2.0", instructions: "Always echo politely.")
 actor DiscoverTestServer {
     /// Echoes its input (gives the server a non-empty tools capability).
     /// - Parameter text: The text to echo.
@@ -63,6 +63,7 @@ struct ServerDiscoverTests {
         #expect(discover.supportedVersions.first == "2025-11-25")   // newest first
         #expect(discover.serverInfo.name == "DiscoverTest")
         #expect(discover.capabilities.tools != nil)                 // the echo tool
+        #expect(discover.instructions == "Always echo politely.")
 
         transport.stop()
         try await serveTask.value
