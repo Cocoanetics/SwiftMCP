@@ -175,6 +175,12 @@ struct ModernResponseShapeTests {
         for method in ModernRequestMethods.known {
             let response = await server.handleMessage(.request(id: 1, method: method, params: nil))
             if case .errorResponse(let err) = response {
+                if method == "server/discover", !MCPProtocolVersion.supportsModernEra {
+                    // Declined on purpose while no modern era can be served (#197):
+                    // the method is routed, it just answers -32601 until #137.
+                    #expect(err.error.code == -32601)
+                    continue
+                }
                 #expect(err.error.code != -32601, "\(method) fell through to -32601 — set is stale")
             }
         }

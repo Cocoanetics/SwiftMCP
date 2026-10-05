@@ -26,7 +26,7 @@ actor ClientInstructionsTestServer {
 @Suite("Client discover()")
 struct ClientDiscoverTests {
 
-    @Test("Client discover() returns the server's supported versions and caches the result",
+    @Test("Client discover() throws on the server's -32601 while no modern era is supported",
           .enabled(if: isStdioProcessSupported))
     func clientDiscover() async throws {
         let server = ClientDiscoverTestServer()
@@ -34,14 +34,15 @@ struct ClientDiscoverTests {
         try await proxy.connect()
         defer { Task { await proxy.disconnect() } }
 
-        let discover = try await proxy.discover()
-        #expect(discover.resultType == "complete")
-        #expect(discover.supportedVersions == MCPProtocolVersion.supportedDescending)
-        #expect(discover.serverInfo.name == "ClientDiscoverServer")
-        #expect(discover.capabilities.tools != nil)
+        // Until dual-era support (#137) adds a modern revision to
+        // `MCPProtocolVersion.supported`, the server can't truthfully answer
+        // `server/discover` and reports -32601 per its documented contract.
+        await #expect(throws: (any Error).self) {
+            try await proxy.discover()
+        }
 
         let cached = await proxy.lastDiscover
-        #expect(cached?.serverInfo.name == "ClientDiscoverServer")
+        #expect(cached == nil)
     }
 
     @Test("Client initialize() populates serverInstructions from the server's instructions",
