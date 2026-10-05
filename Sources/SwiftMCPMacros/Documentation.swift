@@ -80,12 +80,6 @@ struct Documentation {
         return cleanedLines
     }
 
-    private struct CleanLineResult {
-        var line: String
-        var shouldProcess: Bool
-        var isDocumentationLine: Bool
-    }
-
     /// Strips comment markers (`///`, `/**`, `*/`) from a single line, updating
     /// the multi-line block flag as appropriate.
     private static func cleanLine(_ raw: String, inDocumentationBlock: inout Bool) -> CleanLineResult {
@@ -129,22 +123,6 @@ struct Documentation {
     }
 
     // MARK: - Section parsing
-
-    private struct ParsedDocumentation {
-        var descriptionLines: [String] = []
-        var parameters: [String: String] = [:]
-        var returnsLines: [String] = []
-        var instructionsLines: [String] = []
-    }
-
-    private final class ParsingState {
-        var currentParameterName: String?
-        var currentParameterLines: [String] = []
-        var inReturnsSection = false
-        var inInstructionsSection = false
-        var inParametersSection = false
-        var inOtherSection = false
-    }
 
     /// Walks the cleaned lines and populates the description, parameters, and
     /// returns sections.
@@ -314,6 +292,28 @@ struct Documentation {
         }
         return combined.trimmingCharacters(in: .whitespacesAndNewlines)
     }
+}
+
+private struct CleanLineResult {
+    var line: String
+    var shouldProcess: Bool
+    var isDocumentationLine: Bool
+}
+
+private struct ParsedDocumentation {
+    var descriptionLines: [String] = []
+    var parameters: [String: String] = [:]
+    var returnsLines: [String] = []
+    var instructionsLines: [String] = []
+}
+
+private final class ParsingState {
+    var currentParameterName: String?
+    var currentParameterLines: [String] = []
+    var inReturnsSection = false
+    var inInstructionsSection = false
+    var inParametersSection = false
+    var inOtherSection = false
 }
 
 /// Helper that checks if a line defines a parameter and, if so, extracts its name and description.

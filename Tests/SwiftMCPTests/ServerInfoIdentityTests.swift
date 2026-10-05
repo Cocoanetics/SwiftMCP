@@ -131,7 +131,8 @@ struct ServerInfoIdentityTests {
     @Test("initialize result carries instructions as a top-level field, not under serverInfo")
     func emitsInstructionsAtTopLevel() async throws {
         let result = try #require(await initializeResult { RichIdentityServer() })
-        #expect(result["instructions"]?.stringValue == "Always confirm the location with the user before calling a tool.")
+        let expectedInstructions = "Always confirm the location with the user before calling a tool."
+        #expect(result["instructions"]?.stringValue == expectedInstructions)
         #expect(result["serverInfo"]?.dictionaryValue?["instructions"] == nil)
     }
 
