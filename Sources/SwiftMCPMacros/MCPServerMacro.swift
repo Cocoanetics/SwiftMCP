@@ -185,12 +185,14 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro, MemberAttributeMacro 
         let descriptionProperty = "private let __mcpServerDescription: String? = \(serverArgs.descriptionLiteral)"
         let titleProperty = "private let __mcpServerTitle: String? = \(serverArgs.titleLiteral)"
         let websiteUrlProperty = "private let __mcpServerWebsiteUrl: String? = \(serverArgs.websiteUrlLiteral)"
+        let instructionsProperty = "private let __mcpServerInstructions: String? = \(serverArgs.instructionsLiteral)"
         return [
             DeclSyntax(stringLiteral: nameProperty),
             DeclSyntax(stringLiteral: versionProperty),
             DeclSyntax(stringLiteral: descriptionProperty),
             DeclSyntax(stringLiteral: titleProperty),
-            DeclSyntax(stringLiteral: websiteUrlProperty)
+            DeclSyntax(stringLiteral: websiteUrlProperty),
+            DeclSyntax(stringLiteral: instructionsProperty)
         ]
     }
 }
