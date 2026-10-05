@@ -73,6 +73,7 @@ struct DiscoverModelTests {
     func includesModernEraDetection() {
         #expect(MCPProtocolVersion.includesModernEra(["2026-07-28"]))
         #expect(!MCPProtocolVersion.includesModernEra(MCPProtocolVersion.supported))
-        #expect(!MCPProtocolVersion.supportsModernEra)   // true today; flips once #137 adds a modern version to `supported`
+        // Flips once #137 adds a modern version to `supported`.
+        #expect(!MCPProtocolVersion.supportsModernEra)
     }
 }
