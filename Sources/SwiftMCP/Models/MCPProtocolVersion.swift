@@ -34,4 +34,14 @@ public enum MCPProtocolVersion {
     public static var supportedDescending: [String] {
         supported.sorted(by: >)
     }
+
+    /// Whether `versions` includes at least one modern (`2026-07-28`-era) revision.
+    public static func includesModernEra(_ versions: Set<String>) -> Bool {
+        versions.contains(where: isModern)
+    }
+
+    /// Whether this server's negotiable revisions (``supported``) include a modern
+    /// era — i.e. whether `server/discover` can truthfully describe one. `false`
+    /// until the dual-era rollout (#137) adds a modern revision to ``supported``.
+    public static var supportsModernEra: Bool { includesModernEra(supported) }
 }

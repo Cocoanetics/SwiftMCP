@@ -36,7 +36,7 @@ struct ServerDiscoverTests {
         .object(["_meta": .object(["io.modelcontextprotocol/protocolVersion": .string(version)])])
     }
 
-    @Test("server/discover is answered before initialize and lists supported versions")
+    @Test("server/discover answers -32601 before initialize while no modern era is supported")
     func discoverBeforeInitialize() async throws {
         let server = DiscoverTestServer()
         let transport = InMemoryTransport()
@@ -46,23 +46,18 @@ struct ServerDiscoverTests {
 
         let connection = transport.accept()
         var outbound = connection.outbound.makeAsyncIterator()
-        // No prior `initialize`: discover must still answer (pre-init exemption).
+        // No prior `initialize`: discover must still be reachable (pre-init
+        // exemption) — it just has nothing modern to report yet.
         connection.clientSends([request(id: 1, method: "server/discover")])
 
         let frame = try #require(await outbound.next())
-        guard case .response(let response) = frame.first else {
-            Issue.record("Expected a discover response, got \(String(describing: frame.first))")
+        guard case .errorResponse(let err) = frame.first else {
+            Issue.record("Expected a -32601 discover response, got \(String(describing: frame.first))")
             transport.stop()
             return
         }
-        #expect(response.id == .integer(1))
-        let result = try #require(response.result)
-        let discover = try result.decoded(DiscoverResult.self)
-        #expect(discover.resultType == "complete")
-        #expect(discover.supportedVersions == MCPProtocolVersion.supportedDescending)
-        #expect(discover.supportedVersions.first == "2025-11-25")   // newest first
-        #expect(discover.serverInfo.name == "DiscoverTest")
-        #expect(discover.capabilities.tools != nil)                 // the echo tool
+        #expect(err.id == .integer(1))
+        #expect(err.error.code == -32601)   // not gated with -32000: it's reachable, just unimplemented for now
 
         transport.stop()
         try await serveTask.value
@@ -127,11 +122,14 @@ struct ServerDiscoverTests {
         connection.clientSends([request(id: 1, method: "server/discover", params: metaVersion("2099-01-01"))])
 
         let frame = try #require(await outbound.next())
-        guard case .response = frame.first else {
+        guard case .errorResponse(let err) = frame.first else {
             Issue.record("discover must answer despite an unsupported _meta version")
             transport.stop()
             return
         }
+        // -32601 (no modern era to report), not -32004: the unsupported _meta
+        // version never trips the negotiation guard — discover is exempt from it.
+        #expect(err.error.code == -32601)
         transport.stop()
         try await serveTask.value
     }

@@ -44,7 +44,8 @@ struct InMemoryHTTPAdapterTests {
         let adapter = InMemoryHTTPServerAdapter(engine: transport)
 
         // No prior initialize and no Mcp-Session-Id: the modern negotiation entry
-        // point must still be answered (the init gate exempts server/discover).
+        // point must still be reachable (the init gate exempts server/discover) —
+        // it just has no modern era to report yet, hence the in-band -32601.
         let body = try HTTPTransportTestHelpers.encode(
             JSONRPCMessage.request(id: 1, method: "server/discover", params: nil)
         )
@@ -52,8 +53,7 @@ struct InMemoryHTTPAdapterTests {
 
         #expect(exchange.status == .ok)
         let text = await drain(exchange.body)
-        #expect(text.contains("supportedVersions"))   // the discover result
-        #expect(text.contains("serverInfo"))
+        #expect(text.contains("\"code\":-32601"))
     }
 
     @Test("POST /mcp: a batch hiding work behind server/discover is rejected pre-init")

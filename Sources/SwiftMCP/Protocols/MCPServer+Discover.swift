@@ -28,6 +28,20 @@ public extension MCPServer {
     internal func handleServerDiscoverRequest(
         _ request: JSONRPCMessage.JSONRPCRequestData
     ) async -> JSONRPCMessage? {
+        // Don't advertise an era this server can't serve: until dual-era support
+        // (#137) adds a modern revision to `supported`, a discover-first client
+        // (e.g. ChatGPT's Secure MCP Tunnel) that reads a legacy-only
+        // `supportedVersions` may give up instead of falling back to `initialize`.
+        // Answering `-32601` here instead matches the documented client contract
+        // (`MCPServerProxy+API.swift`'s `discover()`) and self-resolves once a
+        // modern revision is advertised.
+        guard MCPProtocolVersion.supportsModernEra else {
+            return JSONRPCMessage.errorResponse(
+                id: request.id,
+                error: .init(code: -32601, message: "Method not found")
+            )
+        }
+
         let capabilities = await buildServerCapabilities()
         let serverInfo = buildServerInfo(includeRichIdentity: true)
 
