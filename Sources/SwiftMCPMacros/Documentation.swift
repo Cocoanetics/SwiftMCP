@@ -14,6 +14,8 @@ struct Documentation {
     let parameters: [String: String]
     /// The returns section of the documentation, if present.
     let returns: String?
+    /// The instructions section of the documentation (`- Instructions:`), if present.
+    let instructions: String?
 
     init(from text: String) {
         let cleanedLines = Self.cleanDocumentationLines(from: text)
@@ -23,6 +25,8 @@ struct Documentation {
         self.parameters = parsed.parameters
         let returnsDescription = Self.combineLines(parsed.returnsLines)
         self.returns = returnsDescription.isEmpty ? nil : returnsDescription
+        let instructionsDescription = Self.combineLines(parsed.instructionsLines)
+        self.instructions = instructionsDescription.isEmpty ? nil : instructionsDescription
     }
 
     // MARK: - Line cleaning
@@ -130,12 +134,14 @@ struct Documentation {
         var descriptionLines: [String] = []
         var parameters: [String: String] = [:]
         var returnsLines: [String] = []
+        var instructionsLines: [String] = []
     }
 
     private final class ParsingState {
         var currentParameterName: String?
         var currentParameterLines: [String] = []
         var inReturnsSection = false
+        var inInstructionsSection = false
         var inParametersSection = false
         var inOtherSection = false
     }
@@ -170,6 +176,7 @@ struct Documentation {
         if lowered.hasPrefix("- parameters:") {
             flushCurrentParameter(state: state, result: &result)
             state.inReturnsSection = false
+            state.inInstructionsSection = false
             state.inParametersSection = true
             state.inOtherSection = false
             return
@@ -178,6 +185,7 @@ struct Documentation {
         if lowered.hasPrefix("- returns:") {
             flushCurrentParameter(state: state, result: &result)
             state.inParametersSection = false
+            state.inInstructionsSection = false
             state.inOtherSection = false
             let returnsDescription = line.dropFirst("- Returns:".count).trimmingCharacters(in: .whitespaces)
             result.returnsLines = [returnsDescription]
@@ -185,9 +193,21 @@ struct Documentation {
             return
         }
 
+        if lowered.hasPrefix("- instructions:") {
+            flushCurrentParameter(state: state, result: &result)
+            state.inParametersSection = false
+            state.inReturnsSection = false
+            state.inOtherSection = false
+            let instructionsDescription = line.dropFirst("- Instructions:".count).trimmingCharacters(in: .whitespaces)
+            result.instructionsLines = [instructionsDescription]
+            state.inInstructionsSection = true
+            return
+        }
+
         if let param = parseParameterLine(from: line) {
             flushCurrentParameter(state: state, result: &result)
             state.inReturnsSection = false
+            state.inInstructionsSection = false
             state.inParametersSection = false
             state.inOtherSection = false
             state.currentParameterName = param.name
@@ -205,6 +225,7 @@ struct Documentation {
         // Any other dash-prefixed line is a section we don't handle.
         flushCurrentParameter(state: state, result: &result)
         state.inReturnsSection = false
+        state.inInstructionsSection = false
         state.inParametersSection = false
         state.inOtherSection = true
     }
@@ -238,6 +259,8 @@ struct Documentation {
             }
         } else if state.inReturnsSection && !state.inOtherSection {
             result.returnsLines.append(line)
+        } else if state.inInstructionsSection && !state.inOtherSection {
+            result.instructionsLines.append(line)
         } else if !state.inParametersSection && !state.inOtherSection {
             result.descriptionLines.append(line)
         }
