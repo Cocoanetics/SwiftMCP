@@ -172,3 +172,8 @@ jobs:
         with:
           swift-version: "6.3.2"
           free-disk-space: true
+          # The cross-compile of SwiftMCPTests fails writing its index store
+          # ("Failed opening …/index/store/v5/units/…: No such file or
+          # directory") once the test target depends on the macro target; CI
+          # has no use for the index anyway.
+          swift-build-flags: "--disable-index-store"
