@@ -97,7 +97,8 @@ internal final class LocalOnlyRegistration: @unchecked Sendable {
         guard let reference else { return }
         self.reference = nil
         // Deallocation must happen on the queue the service was bound to.
-        queue.async { DNSServiceRefDeallocate(reference) }
+        nonisolated(unsafe) let boundReference = reference
+        queue.async { DNSServiceRefDeallocate(boundReference) }
     }
 
     deinit {

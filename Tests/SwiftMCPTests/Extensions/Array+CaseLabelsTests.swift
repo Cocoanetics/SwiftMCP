@@ -11,15 +11,16 @@ enum Options: CaseIterable {
 struct ArrayCaseLabelsTests {
     @Test("Case labels from enum")
     func testCaseLabelsFromEnum() throws {
-        // Test that we get the correct labels for a CaseIterable enum
-        let labels = [String](caseLabelsFrom: Options.self)
-        #expect(labels != nil)
-        #expect(labels == ["all", "unread", "starred"])
+        // The labels of a CaseIterable enum, through the API that replaced
+        // the deprecated initializer.
+        #expect(Options.caseLabels == ["all", "unread", "starred"])
     }
 
+    // The deprecated initializer still has to answer nil for a type that is
+    // not CaseIterable; a deprecated test may call it without a warning.
+    @available(*, deprecated, message: "Tests the deprecated initializer")
     @Test("Case labels from non-enum")
     func testCaseLabelsFromNonEnum() throws {
-        // Test that we get nil for a non-CaseIterable type
         let labels = [String](caseLabelsFrom: Int.self)
         #expect(labels == nil)
     }

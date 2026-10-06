@@ -26,10 +26,10 @@ private func createContact(client: MockClient) async throws -> (text: String, st
     }
     #expect(createResponse.id == .integer(1))
     let createResult = try #require(createResponse.result)
-    let createIsError = try #require(createResult["isError"]?.value as? Bool)
+    let createIsError = try #require(createResult["isError"]?.jsonObject as? Bool)
     #expect(createIsError == false)
-    let structured = try #require(createResult["structuredContent"]?.value as? [String: Any])
-    let createContent = try #require(createResult["content"]?.value as? [[String: String]])
+    let structured = try #require(createResult["structuredContent"]?.jsonObject as? [String: Any])
+    let createContent = try #require(createResult["content"]?.jsonObject as? [[String: String]])
     let createFirstContent = try #require(createContent.first)
     let createText = try #require(createFirstContent["text"])
     return (createText, structured)
@@ -64,9 +64,9 @@ private func processContacts(client: MockClient, contactText: String) async thro
     }
     #expect(processResponse.id == .integer(1))
     let processResult = try #require(processResponse.result)
-    let processIsError = try #require(processResult["isError"]?.value as? Bool)
+    let processIsError = try #require(processResult["isError"]?.jsonObject as? Bool)
     #expect(processIsError == false)
-    let processContent = try #require(processResult["content"]?.value as? [[String: String]])
+    let processContent = try #require(processResult["content"]?.jsonObject as? [[String: String]])
     let processFirstContent = try #require(processContent.first)
     return try #require(processFirstContent["text"])
 }
@@ -112,7 +112,7 @@ private func createJaneContact(client: MockClient) async throws -> String {
         throw TestError("Expected response case")
     }
     let contactResult = try #require(contactResponse.result)
-    let contactContent = try #require(contactResult["content"]?.value as? [[String: String]])
+    let contactContent = try #require(contactResult["content"]?.jsonObject as? [[String: String]])
     return try #require(contactContent.first?["text"])
 }
 
@@ -136,7 +136,7 @@ private func createAddressFor(client: MockClient) async throws -> String {
         throw TestError("Expected response case")
     }
     let addressResult = try #require(addressResponse.result)
-    let addressContent = try #require(addressResult["content"]?.value as? [[String: String]])
+    let addressContent = try #require(addressResult["content"]?.jsonObject as? [[String: String]])
     return try #require(addressContent.first?["text"])
 }
 
@@ -163,9 +163,9 @@ private func createProfileFor(client: MockClient, contactText: String, addressTe
     }
     #expect(profileResponse.id == .integer(1))
     let profileResult = try #require(profileResponse.result)
-    let profileIsError = try #require(profileResult["isError"]?.value as? Bool)
+    let profileIsError = try #require(profileResult["isError"]?.jsonObject as? Bool)
     #expect(profileIsError == false)
-    let profileContent = try #require(profileResult["content"]?.value as? [[String: String]])
+    let profileContent = try #require(profileResult["content"]?.jsonObject as? [[String: String]])
     let profileFirstContent = try #require(profileContent.first)
     let profileText: String = try #require(profileFirstContent["text"])
     return try JSONDecoder().decode(Profile.self, from: profileText.data(using: String.Encoding.utf8)!)
@@ -212,7 +212,7 @@ private func callOptionalArrayTool(client: MockClient, name: String) async throw
         throw TestError("Expected response case")
     }
     let result = try #require(response.result)
-    let content = try #require(result["content"]?.value as? [[String: String]])
+    let content = try #require(result["content"]?.jsonObject as? [[String: String]])
     return try #require(content.first?["text"])
 }
 

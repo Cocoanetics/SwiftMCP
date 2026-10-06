@@ -204,7 +204,8 @@ public final actor TCPConnection: StdioConnection {
             if config.timeout > 0 {
                 Task {
                     let delay = UInt64(config.timeout * 1_000_000_000)
-                    try await Task.sleep(nanoseconds: delay)
+                    // A cancelled sleep means the browse ended; nothing to time out.
+                    do { try await Task.sleep(nanoseconds: delay) } catch { return }
                     finish(.failure(MCPServerProxyError.serviceNotFound(instanceName: baseName)))
                 }
             }

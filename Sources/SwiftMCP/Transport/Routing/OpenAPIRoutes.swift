@@ -126,12 +126,12 @@ extension HTTPSSETransport {
 		}
 
 		do {
-			let arguments = try MCPJSONCoding.makeDecoder().decode(JSONDictionary.self, from: body)
+			let arguments = try JSONCoding.makeDecoder().decode(JSONDictionary.self, from: body)
 			let (result, metadata) = try await dispatchTool(toolName: toolName, arguments: arguments)
 			let wrappedResult = try metadata?.wrapOutputIfNeeded(result) ?? result
 			let responseToEncode = openAPIEncodable(for: wrappedResult)
 
-			let encoder = MCPJSONCoding.makeValueEncoder()
+			let encoder = JSONCoding.makeValueEncoder()
 			encoder.outputFormatting = [.prettyPrinted]
 			let jsonData = try encoder.encode(responseToEncode)
 			return RouteResponse(status: .ok, headerFields: [.contentType: "application/json"], body: jsonData)

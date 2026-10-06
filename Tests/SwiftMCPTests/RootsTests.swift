@@ -104,7 +104,7 @@ struct RootsTests {
             let capabilities = try decoder.decode(ClientCapabilities.self, from: data)
 
             #expect(capabilities.roots?.listChanged == true)
-            #expect(capabilities.experimental?["customFeature"]?.value as? String == "enabled")
+            #expect(capabilities.experimental?["customFeature"]?.jsonObject as? String == "enabled")
         }
     }
 

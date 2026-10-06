@@ -29,9 +29,9 @@ struct CalculatorMockErrorTests {
 
             #expect(response.id == .integer(1))
             let result = try #require(response.result)
-            let isError = try #require(result["isError"]?.value as? Bool)
+            let isError = try #require(result["isError"]?.jsonObject as? Bool)
             #expect(isError == false)
-            let content = try #require(result["content"]?.value as? [[String: String]])
+            let content = try #require(result["content"]?.jsonObject as? [[String: String]])
             let firstContent = try #require(content.first)
             let type = try #require(firstContent["type"])
             let text = try #require(firstContent["text"])
@@ -59,9 +59,9 @@ struct CalculatorMockErrorTests {
             }
 
             let result = try #require(response.result)
-            let isError = try #require(result["isError"]?.value as? Bool)
+            let isError = try #require(result["isError"]?.jsonObject as? Bool)
             #expect(isError == false)
-            let content = try #require(result["content"]?.value as? [[String: String]])
+            let content = try #require(result["content"]?.jsonObject as? [[String: String]])
             let firstContent = try #require(content.first)
             let text = try #require(firstContent["text"])
             #expect(text == "-Infinity")
@@ -87,9 +87,9 @@ struct CalculatorMockErrorTests {
             }
 
             let result = try #require(response.result)
-            let isError = try #require(result["isError"]?.value as? Bool)
+            let isError = try #require(result["isError"]?.jsonObject as? Bool)
             #expect(isError == false)
-            let content = try #require(result["content"]?.value as? [[String: String]])
+            let content = try #require(result["content"]?.jsonObject as? [[String: String]])
             let firstContent = try #require(content.first)
             let text = try #require(firstContent["text"])
             #expect(text == "NaN")
@@ -116,9 +116,9 @@ struct CalculatorMockErrorTests {
 
             #expect(response.id == .integer(1))
             let result = try #require(response.result)
-            let isError = try #require(result["isError"]?.value as? Bool)
+            let isError = try #require(result["isError"]?.jsonObject as? Bool)
             #expect(isError == true)
-            let content = try #require(result["content"]?.value as? [[String: String]])
+            let content = try #require(result["content"]?.jsonObject as? [[String: String]])
             let firstContent = try #require(content.first)
             let type = try #require(firstContent["type"])
             let text = try #require(firstContent["text"])
@@ -151,7 +151,7 @@ struct CalculatorMockErrorTests {
             }
 
             let addResult = try #require(addResponse.result)
-            let addContent = try #require(addResult["content"]?.value as? [[String: String]])
+            let addContent = try #require(addResult["content"]?.jsonObject as? [[String: String]])
             let addText = try #require(addContent.first?["text"])
             #expect(addText == "8")
 
@@ -171,7 +171,7 @@ struct CalculatorMockErrorTests {
             }
 
             let multiplyResult = try #require(multiplyResponse.result)
-            let multiplyContent = try #require(multiplyResult["content"]?.value as? [[String: String]])
+            let multiplyContent = try #require(multiplyResult["content"]?.jsonObject as? [[String: String]])
             let multiplyText = try #require(multiplyContent.first?["text"])
             #expect(multiplyText == "16")
         }

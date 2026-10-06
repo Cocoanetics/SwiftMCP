@@ -23,8 +23,8 @@ func testEnrichArguments() throws {
 
     // Check that the arguments were not changed
     #expect(enrichedArguments.count == 2)
-    #expect(enrichedArguments["a"]?.value as? Int == 2)
-    #expect(enrichedArguments["b"]?.value as? Int == 3)
+    #expect(enrichedArguments["a"]?.jsonObject as? Int == 2)
+    #expect(enrichedArguments["b"]?.jsonObject as? Int == 3)
 }
 
 @Test
@@ -40,8 +40,8 @@ func testEnrichArgumentsWithExplicitFunctionName() throws {
 
     // Check that the arguments were not changed
     #expect(enrichedArguments.count == 2)
-    #expect(enrichedArguments["a"]?.value as? Int == 2)
-    #expect(enrichedArguments["b"]?.value as? Int == 3)
+    #expect(enrichedArguments["a"]?.jsonObject as? Int == 2)
+    #expect(enrichedArguments["b"]?.jsonObject as? Int == 3)
 }
 
 @Test
@@ -57,8 +57,8 @@ func testEnrichArgumentsWithNoDefaults() throws {
 
     // Check that the arguments were not changed
     #expect(enrichedArguments.count == 2)
-    #expect(enrichedArguments["a"]?.value as? Int == 2)
-    #expect(enrichedArguments["b"]?.value as? Int == 3)
+    #expect(enrichedArguments["a"]?.jsonObject as? Int == 2)
+    #expect(enrichedArguments["b"]?.jsonObject as? Int == 3)
 }
 
 @Test
@@ -87,8 +87,8 @@ func testEnrichArgumentsWithTypeConversion() throws {
 
     // Check that the arguments were not changed (enrichArguments doesn't do type conversion)
     #expect(enrichedArguments.count == 2)
-    #expect(enrichedArguments["a"]?.value as? String == "2") // String is not converted by enrichArguments
-    #expect(enrichedArguments["b"]?.value as? String == "3") // String is not converted by enrichArguments
+    #expect(enrichedArguments["a"]?.jsonObject as? String == "2") // String is not converted by enrichArguments
+    #expect(enrichedArguments["b"]?.jsonObject as? String == "3") // String is not converted by enrichArguments
 }
 
 @Test
@@ -111,8 +111,8 @@ func testSubtractArguments() throws {
     // Test with all arguments - no defaults should be added
     let allArgs = try metadata.enrichArguments(["a": 20, "b": 5])
     #expect(allArgs.count == 2)
-    #expect(allArgs["a"]?.value as? Int == 20)
-    #expect(allArgs["b"]?.value as? Int == 5)
+    #expect(allArgs["a"]?.jsonObject as? Int == 20)
+    #expect(allArgs["b"]?.jsonObject as? Int == 5)
 }
 
 @Test
@@ -135,8 +135,8 @@ func testMultiplyArguments() throws {
     // Test with all arguments - no defaults should be added
     let allArgs = try metadata.enrichArguments(["a": 20, "b": 5])
     #expect(allArgs.count == 2)
-    #expect(allArgs["a"]?.value as? Int == 20)
-    #expect(allArgs["b"]?.value as? Int == 5)
+    #expect(allArgs["a"]?.jsonObject as? Int == 20)
+    #expect(allArgs["b"]?.jsonObject as? Int == 5)
 }
 
 @Test

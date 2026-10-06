@@ -81,7 +81,7 @@ struct CompletionTests {
         }
 
         let result = try #require(response.result)
-        let comp = try #require(result["completion"]?.value as? [String: Any])
+        let comp = try #require(result["completion"]?.jsonObject as? [String: Any])
         let values = try #require(comp["values"] as? [String])
 
         #expect(values == ["red", "green", "blue"])
@@ -107,7 +107,7 @@ struct CompletionTests {
         }
 
         let result = try #require(response.result)
-        let comp = try #require(result["completion"]?.value as? [String: Any])
+        let comp = try #require(result["completion"]?.jsonObject as? [String: Any])
         let values = try #require(comp["values"] as? [String])
 
         #expect(values.first == "ruby")

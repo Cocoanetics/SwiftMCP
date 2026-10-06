@@ -18,10 +18,10 @@ struct NestedStruct: Codable, Equatable {
 func testFlatStruct() throws {
     let value = TestStruct(intValue: 42, stringValue: "hello", boolValue: true, doubleValue: 3.14)
     let dict = try JSONDictionary(encoding: value)
-    #expect(dict["intValue"]?.value as? Int == 42)
-    #expect(dict["stringValue"]?.value as? String == "hello")
-    #expect(dict["boolValue"]?.value as? Bool == true)
-    #expect(dict["doubleValue"]?.value as? Double == 3.14)
+    #expect(dict["intValue"]?.jsonObject as? Int == 42)
+    #expect(dict["stringValue"]?.jsonObject as? String == "hello")
+    #expect(dict["boolValue"]?.jsonObject as? Bool == true)
+    #expect(dict["doubleValue"]?.jsonObject as? Double == 3.14)
 }
 
 @Test("JSONDictionary encodes nested struct")
@@ -29,8 +29,8 @@ func testNestedStruct() throws {
     let innerStruct = TestStruct(intValue: 1, stringValue: "inner", boolValue: false, doubleValue: 2.71)
     let value = NestedStruct(name: "outer", inner: innerStruct)
     let dict = try JSONDictionary(encoding: value)
-    #expect(dict["name"]?.value as? String == "outer")
-    let inner = dict["inner"]?.value as? [String: Any]
+    #expect(dict["name"]?.jsonObject as? String == "outer")
+    let inner = dict["inner"]?.jsonObject as? [String: Any]
     #expect(inner?["intValue"] as? Int == 1)
     #expect(inner?["stringValue"] as? String == "inner")
     #expect(inner?["boolValue"] as? Bool == false)
@@ -45,7 +45,7 @@ func testArraysAndOptionals() throws {
     }
     let value = ArrayStruct(items: [1, 2, 3], optional: nil)
     let dict = try JSONDictionary(encoding: value)
-    #expect(dict["items"]?.value as? [Int] == [1, 2, 3])
+    #expect(dict["items"]?.jsonObject as? [Int] == [1, 2, 3])
     #expect(dict["optional"] == nil)
 }
 
@@ -57,7 +57,7 @@ func testNonNilOptionals() throws {
     }
     let value = OptionalStruct(value: "present", number: nil)
     let dict = try JSONDictionary(encoding: value)
-    #expect(dict["value"]?.value as? String == "present")
+    #expect(dict["value"]?.jsonObject as? String == "present")
     #expect(dict["number"] == nil)
 }
 
