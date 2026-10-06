@@ -75,7 +75,9 @@ internal enum BonjourTXTResolver {
         )
         guard status == kDNSServiceErr_NoError, let reference else { return nil }
         DNSServiceSetDispatchQueue(reference, queue)
-        defer { queue.async { DNSServiceRefDeallocate(reference) } }
+        // The service is bound to `queue`, which is where it is deallocated.
+        nonisolated(unsafe) let boundReference = reference
+        defer { queue.async { DNSServiceRefDeallocate(boundReference) } }
 
         // Yields instead of blocking: the callback lands on `queue`.
         let deadline = Date().addingTimeInterval(timeout)

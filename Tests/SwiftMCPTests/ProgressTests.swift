@@ -39,7 +39,7 @@ func testContextProgressToken() throws {
     let context = RequestContext(message: message)
     #expect(context.id == .integer(1))
     #expect(context.method == "tools/call")
-    #expect(context.meta?.progressToken?.value as? Int == 5)
+    #expect(context.meta?.progressToken?.jsonObject as? Int == 5)
 }
 
 @Test("Progress notification is sent via session")
@@ -72,8 +72,8 @@ func testProgressNotification() async throws {
     }
     #expect(data.method == "notifications/progress")
     let params = try #require(data.params)
-    #expect(params["progressToken"]?.value as? String == "abc")
-    #expect(params["progress"]?.value as? Double == 0.5)
-    #expect(params["total"]?.value as? Int == 1)
-    #expect(params["message"]?.value as? String == "Halfway")
+    #expect(params["progressToken"]?.jsonObject as? String == "abc")
+    #expect(params["progress"]?.jsonObject as? Double == 0.5)
+    #expect(params["total"]?.jsonObject as? Int == 1)
+    #expect(params["message"]?.jsonObject as? String == "Halfway")
 }

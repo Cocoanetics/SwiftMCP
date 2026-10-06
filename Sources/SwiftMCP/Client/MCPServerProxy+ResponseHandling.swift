@@ -81,7 +81,7 @@ extension MCPServerProxy {
             return "[]"
         }
         let payload: JSONValue = normalized.count == 1 ? normalized[0] : .array(normalized)
-        let encoder = MCPJSONCoding.makeWireEncoder()
+        let encoder = JSONCoding.makeWireEncoder()
         guard let data = try? encoder.encode(payload),
               let string = String(data: data, encoding: .utf8) else {
             return nil
@@ -150,10 +150,10 @@ extension MCPServerProxy {
         _ payload: Payload,
         as type: T.Type = T.self
     ) throws -> T {
-        let encoder = MCPJSONCoding.makeWireEncoder()
+        let encoder = JSONCoding.makeWireEncoder()
         let data = try encoder.encode(payload)
 
-        let decoder = MCPJSONCoding.makeDecoder()
+        let decoder = JSONCoding.makeDecoder()
         return try decoder.decode(type, from: data)
     }
 

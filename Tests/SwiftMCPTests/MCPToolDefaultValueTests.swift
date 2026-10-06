@@ -95,7 +95,7 @@ func testIntDefaultValue() throws {
 
 		if case .number(title: _, description: _, minimum: _, maximum: _, defaultValue: let defaultValue) =
             object.properties["b"] {
-            #expect(defaultValue?.value as? Int == 42)
+            #expect(defaultValue?.jsonObject as? Int == 42)
         } else {
             #expect(Bool(false), "Expected number schema for parameter 'b'")
         }
@@ -120,7 +120,7 @@ func testStringDefaultValue() throws {
     if case .object(let object, _) = stringDefaultTool.inputSchema {
 		if case .string(title: _, description: _, format: _, minLength: _, maxLength: _, defaultValue: let defaultValue) =
             object.properties["name"] {
-            #expect(defaultValue?.value as? String == "John Doe")
+            #expect(defaultValue?.jsonObject as? String == "John Doe")
         } else {
             #expect(Bool(false), "Expected string schema for parameter 'name'")
         }
@@ -143,7 +143,7 @@ func testBoolDefaultValue() throws {
 
     if case .object(let object, _) = boolDefaultTool.inputSchema {
 		if case .boolean(title: _, description: _, defaultValue: let defaultValue) = object.properties["flag"] {
-            #expect(defaultValue?.value as? Bool == true)
+            #expect(defaultValue?.jsonObject as? Bool == true)
         } else {
             #expect(Bool(false), "Expected boolean schema for parameter 'flag'")
         }
@@ -167,7 +167,7 @@ func testDoubleDefaultValue() throws {
     if case .object(let object, _) = doubleDefaultTool.inputSchema {
 		if case .number(title: _, description: _, minimum: _, maximum: _, defaultValue: let defaultValue) =
             object.properties["value"] {
-            #expect(defaultValue?.value as? Double == 3.14)
+            #expect(defaultValue?.jsonObject as? Double == 3.14)
         } else {
             #expect(Bool(false), "Expected number schema for parameter 'value'")
         }
@@ -221,13 +221,13 @@ func testMultipleDefaultValues() throws {
 
 		if case .number(title: _, description: _, minimum: _, maximum: _, defaultValue: let defaultValue) =
             object.properties["b"] {
-            #expect(defaultValue?.value as? Int == 10)
+            #expect(defaultValue?.jsonObject as? Int == 10)
         } else {
             #expect(Bool(false), "Expected number schema for parameter 'b'")
         }
 
 		if case .boolean(title: _, description: _, defaultValue: let defaultValue) = object.properties["c"] {
-            #expect(defaultValue?.value as? Bool == false)
+            #expect(defaultValue?.jsonObject as? Bool == false)
         } else {
             #expect(Bool(false), "Expected boolean schema for parameter 'c'")
         }
@@ -265,10 +265,10 @@ func testStructuredDefaultValue() throws {
 }
 
 private func intArray(from value: JSONValue?) -> [Int]? {
-    if let ints = value?.value as? [Int] {
+    if let ints = value?.jsonObject as? [Int] {
         return ints
     }
-    if let values = value?.value as? [Any] {
+    if let values = value?.jsonObject as? [Any] {
         let ints = values.compactMap { $0 as? Int }
         return ints.count == values.count ? ints : nil
     }

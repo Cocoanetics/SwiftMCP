@@ -32,11 +32,11 @@ struct StructuredToolOutputGatingTests {
         let request = JSONRPCMessage.request(id: 1, method: "tools/list")
 
         let modern = try #require(await result(for: request, negotiating: "2025-06-18"))
-        let modernTools = try #require(modern["tools"]?.value as? [[String: Any]])
+        let modernTools = try #require(modern["tools"]?.jsonObject as? [[String: Any]])
         #expect(try createContactTool(in: modernTools)["outputSchema"] != nil)
 
         let legacy = try #require(await result(for: request, negotiating: "2025-03-26"))
-        let legacyTools = try #require(legacy["tools"]?.value as? [[String: Any]])
+        let legacyTools = try #require(legacy["tools"]?.jsonObject as? [[String: Any]])
         #expect(try createContactTool(in: legacyTools)["outputSchema"] == nil)
     }
 

@@ -278,7 +278,7 @@ public extension MCPServer {
         } else if case .double(let value) = jsonValue, value.isNaN {
             responseText = "NaN"
         } else {
-            let encoder = MCPJSONCoding.makeWireEncoder()
+            let encoder = JSONCoding.makeWireEncoder()
             let jsonData = try encoder.encode(jsonValue)
             responseText = String(data: jsonData, encoding: .utf8) ?? ""
         }

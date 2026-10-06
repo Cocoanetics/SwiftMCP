@@ -61,7 +61,7 @@ public struct PromptMessage: Codable, Sendable {
         } else if let str = result as? String {
             return [PromptMessage(role: .user, content: .init(text: str))]
         } else if let encodable = result as? Encodable {
-            let encoder = MCPJSONCoding.makeWireEncoder()
+            let encoder = JSONCoding.makeWireEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             if let jsonValue = try? JSONValue(encoding: encodable),
                let data = try? encoder.encode(jsonValue),

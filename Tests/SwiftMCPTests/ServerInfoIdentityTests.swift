@@ -62,7 +62,7 @@ struct ServerInfoIdentityTests {
 
     // MARK: - Emission (version-gated)
 
-    private func serverInfo<S: MCPServer>(
+    private func serverInfo<S: MCPServer & SendableMetatype>(
         version: String,
         make: @Sendable @escaping () -> S
     ) async -> JSONDictionary? {
@@ -91,7 +91,7 @@ struct ServerInfoIdentityTests {
         #expect(info["name"]?.stringValue == "weather")
         #expect(info["title"]?.stringValue == "Weather Tools")
         #expect(info["websiteUrl"]?.stringValue == "https://example.com/weather")
-        #expect((info["icons"]?.value as? [[String: Any]])?.count == 1)
+        #expect((info["icons"]?.jsonObject as? [[String: Any]])?.count == 1)
     }
 
     @Test("serverInfo omits title / icons / websiteUrl for 2025-03-26")
@@ -110,7 +110,7 @@ struct ServerInfoIdentityTests {
         #expect(info["title"] == nil)
     }
 
-    private func initializeResult<S: MCPServer>(
+    private func initializeResult<S: MCPServer & SendableMetatype>(
         make: @Sendable @escaping () -> S
     ) async -> JSONValue? {
         let request = JSONRPCMessage.request(

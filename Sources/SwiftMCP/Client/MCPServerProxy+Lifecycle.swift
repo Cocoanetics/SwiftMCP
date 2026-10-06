@@ -48,7 +48,8 @@ extension MCPServerProxy {
                     environment: stdioConfig.environment,
                     workingDirectory: stdioConfig.workingDirectory
                 )
-                let transport = StdioMessageTransport(
+                // JSONRPCSubprocess's, not SwiftMCP's server-side StdioTransport.
+                let transport = JSONRPCSubprocess.StdioTransport(
                     endpoint: .childProcess(launch),
                     framing: LineFraming()
                 )

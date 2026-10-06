@@ -184,7 +184,7 @@ func testToolsListReturnsTransformedNames() async throws {
         return
     }
 
-    guard let toolsArray = result["tools"]?.value as? [[String: Any]] else {
+    guard let toolsArray = result["tools"]?.jsonObject as? [[String: Any]] else {
         #expect(Bool(false), "Expected tools array")
         return
     }

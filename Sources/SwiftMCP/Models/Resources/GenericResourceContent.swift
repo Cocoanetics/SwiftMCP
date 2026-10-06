@@ -97,7 +97,7 @@ public struct GenericResourceContent: MCPResourceContent {
         guard let encodable = result as? Encodable else {
             return nil
         }
-        let encoder = MCPJSONCoding.makeWireEncoder()
+        let encoder = JSONCoding.makeWireEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         guard let jsonValue = try? JSONValue(encoding: encodable),
               let data = try? encoder.encode(jsonValue),

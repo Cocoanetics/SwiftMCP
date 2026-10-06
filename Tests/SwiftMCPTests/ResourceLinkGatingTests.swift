@@ -41,7 +41,7 @@ struct ResourceLinkGatingTests {
         }
         guard case .response(let data)? = response,
               let result = data.result,
-              let content = result["content"]?.value as? [[String: Any]] else {
+              let content = result["content"]?.jsonObject as? [[String: Any]] else {
             return nil
         }
         return content

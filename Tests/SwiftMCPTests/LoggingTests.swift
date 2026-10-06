@@ -75,18 +75,18 @@ func testLogMessageCreation() throws {
     let message1 = LogMessage(level: .info, message: "Test message")
     #expect(message1.level == .info)
     #expect(message1.logger == nil)
-    #expect(message1.data.value as? String == "Test message")
+    #expect(message1.data.jsonObject as? String == "Test message")
 
     let message2 = LogMessage(level: .error, message: "Error message", logger: "test")
     #expect(message2.level == .error)
     #expect(message2.logger == "test")
-    #expect(message2.data.value as? String == "Error message")
+    #expect(message2.data.jsonObject as? String == "Error message")
 
     let data: [String: Any] = ["key": "value", "number": 42]
     let message3 = LogMessage(level: .debug, data: data, logger: "debug")
     #expect(message3.level == .debug)
     #expect(message3.logger == "debug")
-    let messageData = message3.data.value as? [String: Any]
+    let messageData = message3.data.jsonObject as? [String: Any]
     #expect(messageData != nil)
     #expect(messageData?["key"] as? String == "value")
     #expect(messageData?["number"] as? Int == 42)

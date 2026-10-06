@@ -61,7 +61,7 @@ struct PromptTests {
             }
 
             let result = try #require(response.result)
-            let comp = try #require(result["completion"]?.value as? [String: Any])
+            let comp = try #require(result["completion"]?.jsonObject as? [String: Any])
             let values = try #require(comp["values"] as? [String])
             #expect(values == ["happy", "sad", "excited"])
         }
@@ -85,7 +85,7 @@ struct PromptTests {
             }
 
             let result = try #require(response.result)
-            let caps = try #require(result["capabilities"]?.value as? [String: Any])
+            let caps = try #require(result["capabilities"]?.jsonObject as? [String: Any])
             #expect(caps["prompts"] != nil)
         }
     }
@@ -112,7 +112,7 @@ struct PromptTests {
             }
 
             let result = try #require(resp.result)
-            let messages = try #require(result["messages"]?.value as? [[String: Any]])
+            let messages = try #require(result["messages"]?.jsonObject as? [[String: Any]])
             #expect(messages.count == 1)
             let content = try #require(messages.first?["content"] as? [String: Any])
             let text = try #require(content["text"] as? String)
@@ -138,7 +138,7 @@ struct PromptTests {
             }
 
             let result = try #require(resp.result)
-            let messages = try #require(result["messages"]?.value as? [[String: Any]])
+            let messages = try #require(result["messages"]?.jsonObject as? [[String: Any]])
             let content = try #require(messages.first?["content"] as? [String: Any])
             let text = try #require(content["text"] as? String)
             #expect(text.contains("happy"))
@@ -160,7 +160,7 @@ struct PromptTests {
             }
 
             let result = try #require(resp.result)
-            let messages = try #require(result["messages"]?.value as? [[String: Any]])
+            let messages = try #require(result["messages"]?.jsonObject as? [[String: Any]])
             let content = try #require(messages.first?["content"] as? [String: Any])
             let text = try #require(content["text"] as? String)
             #expect(text == "pong")
@@ -188,7 +188,7 @@ struct PromptTests {
             }
 
             let result = try #require(response.result)
-            let comp = try #require(result["completion"]?.value as? [String: Any])
+            let comp = try #require(result["completion"]?.jsonObject as? [String: Any])
             let values = try #require(comp["values"] as? [String])
 
             // With prefix "s", "sad" should come first (matches prefix), then others
@@ -216,7 +216,7 @@ struct PromptTests {
             }
 
             let result = try #require(response.result)
-            let comp = try #require(result["completion"]?.value as? [String: Any])
+            let comp = try #require(result["completion"]?.jsonObject as? [String: Any])
             let values = try #require(comp["values"] as? [String])
 
             // With empty prefix, should return all values in original order
@@ -242,7 +242,7 @@ struct PromptTests {
             }
 
             let result = try #require(response.result)
-            let comp = try #require(result["completion"]?.value as? [String: Any])
+            let comp = try #require(result["completion"]?.jsonObject as? [String: Any])
             let values = try #require(comp["values"] as? [String])
 
             // With prefix "h", "high" should come first (matches prefix), then others
@@ -270,7 +270,7 @@ struct PromptTests {
             }
 
             let result = try #require(response.result)
-            let comp = try #require(result["completion"]?.value as? [String: Any])
+            let comp = try #require(result["completion"]?.jsonObject as? [String: Any])
             let values = try #require(comp["values"] as? [String])
 
             // Should return empty array for non-existent prompt
@@ -305,7 +305,7 @@ struct AdditionalPromptTests {
         }
 
         let result = try #require(response.result)
-        let comp = try #require(result["completion"]?.value as? [String: Any])
+        let comp = try #require(result["completion"]?.jsonObject as? [String: Any])
         let values = try #require(comp["values"] as? [String])
 
         // Should return empty array for non-enum parameter
@@ -327,7 +327,7 @@ struct AdditionalPromptTests {
         let decoded = try decoder.decode(JSONDictionary.self, from: jsonData)
 
         // Now test if we can access it like the test expects
-        let messagesValue = try #require(decoded["messages"]?.value as? [[String: Any]])
+        let messagesValue = try #require(decoded["messages"]?.jsonObject as? [[String: Any]])
         let firstMessage = try #require(messagesValue.first)
         let content = try #require(firstMessage["content"] as? [String: Any])
         let text = try #require(content["text"] as? String)

@@ -53,7 +53,7 @@ struct ProxyNotificationHandlerTests {
         let message = messages[0]
         #expect(message.level == .warning)
         #expect(message.logger == "demo")
-        #expect(message.data.value as? String == "hello")
+        #expect(message.data.jsonObject as? String == "hello")
     }
 
     @Test("Proxy tolerates malformed optional log fields and still forwards handler callbacks")
@@ -78,7 +78,7 @@ struct ProxyNotificationHandlerTests {
         let message = messages[0]
         #expect(message.level == .info)
         #expect(message.logger == nil)
-        #expect(message.data.value as? String == "hello")
+        #expect(message.data.jsonObject as? String == "hello")
     }
 
     @Test("Proxy forwards progress notifications to handler")
@@ -102,7 +102,7 @@ struct ProxyNotificationHandlerTests {
         let notifications = await capture.notifications
         #expect(notifications.count == 1)
         let progress = notifications[0]
-        #expect(progress.progressToken.value as? String == "job-42")
+        #expect(progress.progressToken.jsonObject as? String == "job-42")
         #expect(progress.progress == 0.5)
         #expect(progress.total == 1.0)
         #expect(progress.message == "Halfway there")

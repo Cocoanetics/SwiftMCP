@@ -322,7 +322,8 @@ extension MCPServerProxy {
                 self.endpointContinuation = continuation
 
                 Task {
-                    try await Task.sleep(nanoseconds: 10_000_000_000)
+                    // A cancelled sleep means the wait is over; nothing to time out.
+                    do { try await Task.sleep(nanoseconds: 10_000_000_000) } catch { return }
                     if let cont = self.endpointContinuation {
                         self.endpointContinuation = nil
                         cont.resume(throwing: MCPServerProxyError.communicationError(

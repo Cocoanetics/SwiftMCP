@@ -6,7 +6,7 @@ import Foundation
 
 // MARK: - String to Decodable Conversion
 extension String {
-    func decode<T: Decodable>(_ type: T.Type, using decoder: JSONDecoder = MCPJSONCoding.makeDecoder()) throws -> T {
+    func decode<T: Decodable>(_ type: T.Type, using decoder: JSONDecoder = JSONCoding.makeDecoder()) throws -> T {
         guard let data = self.data(using: .utf8) else {
             throw MCPToolError.invalidArgumentType(
                 parameterName: "jsonString",
@@ -19,7 +19,7 @@ extension String {
 
     func decode(
         _ type: any Decodable.Type,
-        using decoder: JSONDecoder = MCPJSONCoding.makeDecoder()
+        using decoder: JSONDecoder = JSONCoding.makeDecoder()
     ) throws -> any Decodable {
         guard let data = self.data(using: .utf8) else {
             throw MCPToolError.invalidArgumentType(
@@ -132,7 +132,7 @@ public extension Dictionary where Key == String, Value == JSONValue {
         guard let decodableType = T.self as? any Decodable.Type else {
             return nil
         }
-        let decoder = MCPJSONCoding.makeDecoder()
+        let decoder = JSONCoding.makeDecoder()
 
         if let decoded = try? jsonValue.decodeDynamically(decodableType, using: decoder) as? T {
             return decoded
@@ -227,7 +227,7 @@ public extension Dictionary where Key == String, Value == JSONValue {
         guard let decodableType = elementType as? any Decodable.Type else {
             return nil
         }
-        let decoder = MCPJSONCoding.makeDecoder()
+        let decoder = JSONCoding.makeDecoder()
         return try values.map { element in
             if let decoded = try? element.decodeDynamically(decodableType, using: decoder) as? T {
                 return decoded

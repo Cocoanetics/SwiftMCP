@@ -34,7 +34,7 @@ private func extractInitializeResponseResult(_ message: JSONRPCMessage) throws -
 }
 
 private func assertInitializeCapabilities(_ result: [String: JSONValue]) throws {
-    guard let capabilitiesDict = result["capabilities"]?.value as? [String: Any] else {
+    guard let capabilitiesDict = result["capabilities"]?.jsonObject as? [String: Any] else {
         throw TestError("capabilities not found")
     }
     let experimental = capabilitiesDict["experimental"] as? [String: Any] ?? [:]
@@ -50,7 +50,7 @@ private func assertInitializeCapabilities(_ result: [String: JSONValue]) throws 
 }
 
 private func assertServerInfo(_ result: [String: JSONValue]) throws {
-    guard let serverInfoDict = result["serverInfo"]?.value as? [String: Any] else {
+    guard let serverInfoDict = result["serverInfo"]?.jsonObject as? [String: Any] else {
         throw TestError("serverInfo not found")
     }
     guard let name = serverInfoDict["name"] as? String else {
@@ -74,7 +74,7 @@ func testInitializeRequest() async throws {
     }
 
     let result = try extractInitializeResponseResult(message)
-    guard let protocolVersion = result["protocolVersion"]?.value as? String else {
+    guard let protocolVersion = result["protocolVersion"]?.jsonObject as? String else {
         throw TestError("protocolVersion not found")
     }
     #expect(protocolVersion == "2025-11-25")
@@ -160,7 +160,7 @@ func testToolCallRequest() async throws {
     }
     #expect(result["structuredContent"] == nil)
 
-    guard let content = result["content"]?.value as? [[String: String]] else {
+    guard let content = result["content"]?.jsonObject as? [[String: String]] else {
         throw TestError("Content not found or not an array")
     }
 
@@ -200,7 +200,7 @@ func testToolCallRequestWithError() async throws {
         throw TestError("Result is missing")
     }
 
-    guard let content = result["content"]?.value as? [[String: String]] else {
+    guard let content = result["content"]?.jsonObject as? [[String: String]] else {
         throw TestError("Content not found or not an array")
     }
 
@@ -211,7 +211,7 @@ func testToolCallRequestWithError() async throws {
     }
     #expect(text.contains("not found on the server"))
 
-    guard let isError = result["isError"]?.value as? Bool else {
+    guard let isError = result["isError"]?.jsonObject as? Bool else {
         throw TestError("isError flag not found")
     }
     #expect(isError)
@@ -251,7 +251,7 @@ func testToolCallRequestWithInvalidArgument() async throws {
         throw TestError("Result is missing")
     }
 
-    guard let content = result["content"]?.value as? [[String: String]] else {
+    guard let content = result["content"]?.jsonObject as? [[String: String]] else {
         throw TestError("Content not found or not an array")
     }
 
@@ -262,7 +262,7 @@ func testToolCallRequestWithInvalidArgument() async throws {
     }
     #expect(text.contains("expected type Int"))
 
-    guard let isError = result["isError"]?.value as? Bool else {
+    guard let isError = result["isError"]?.jsonObject as? Bool else {
         throw TestError("isError flag not found")
     }
     #expect(isError)
@@ -285,7 +285,7 @@ func testCustomNameAndVersion() async throws {
         throw TestError("Failed to extract result from response")
     }
 
-    guard let serverInfoDict = result["serverInfo"]?.value as? [String: Any] else {
+    guard let serverInfoDict = result["serverInfo"]?.jsonObject as? [String: Any] else {
         throw TestError("serverInfo not found")
     }
     guard let name = serverInfoDict["name"] as? String else {
@@ -316,7 +316,7 @@ func testDefaultNameAndVersion() async throws {
         throw TestError("Failed to extract result from response")
     }
 
-    guard let serverInfoDict = result["serverInfo"]?.value as? [String: Any] else {
+    guard let serverInfoDict = result["serverInfo"]?.jsonObject as? [String: Any] else {
         throw TestError("serverInfo not found")
     }
     guard let name = serverInfoDict["name"] as? String else {

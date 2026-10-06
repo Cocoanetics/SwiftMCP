@@ -51,8 +51,8 @@ struct ElicitationTests {
             let response = ElicitationCreateResponse(action: .accept, content: content)
 
             #expect(response.action == .accept)
-            #expect(response.content?["name"]?.value as? String == "John Doe")
-            #expect(response.content?["age"]?.value as? Int == 30)
+            #expect(response.content?["name"]?.jsonObject as? String == "John Doe")
+            #expect(response.content?["age"]?.jsonObject as? Int == 30)
 
             // Test encoding/decoding
             let encoder = JSONEncoder()
@@ -62,7 +62,7 @@ struct ElicitationTests {
             let decodedResponse = try decoder.decode(ElicitationCreateResponse.self, from: data)
 
             #expect(decodedResponse.action == .accept)
-            #expect(decodedResponse.content?["name"]?.value as? String == "John Doe")
+            #expect(decodedResponse.content?["name"]?.jsonObject as? String == "John Doe")
         }
 
         @Test("ElicitationCreateResponse with decline action")
@@ -143,7 +143,7 @@ struct ElicitationTests {
             let capabilities = try decoder.decode(ClientCapabilities.self, from: data)
 
             #expect(capabilities.elicitation != nil)
-            #expect(capabilities.experimental?["customFeature"]?.value as? String == "enabled")
+            #expect(capabilities.experimental?["customFeature"]?.jsonObject as? String == "enabled")
         }
 
         @Test("ClientCapabilities with all capabilities")

@@ -14,7 +14,7 @@ func testDecodeJSONRPCRequest() throws {
 	#expect(request.jsonrpc == "2.0")
 	#expect(request.id == .integer(1))
 	#expect(request.method == "testMethod")
-	#expect(request.params?["foo"]?.value as? Int == 42)
+	#expect(request.params?["foo"]?.jsonObject as? Int == 42)
 }
 
 @Test
@@ -28,7 +28,7 @@ func testDecodeJSONRPCResponse() throws {
 	}
 	#expect(response.jsonrpc == "2.0")
 	#expect(response.id == .integer(1))
-	#expect(response.result?["bar"]?.value as? String == "baz")
+	#expect(response.result?["bar"]?.jsonObject as? String == "baz")
 }
 
 @Test

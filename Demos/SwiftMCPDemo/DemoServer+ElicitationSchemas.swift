@@ -66,9 +66,9 @@ extension DemoServer {
             guard let content = response.content else {
                 return "User accepted but no content was provided"
             }
-            let name = content["name"]?.value as? String ?? "Unknown"
-            let email = content["email"]?.value as? String ?? "Unknown"
-            let age = content["age"]?.value as? Double ?? 0
+            let name = content["name"]?.jsonObject as? String ?? "Unknown"
+            let email = content["email"]?.jsonObject as? String ?? "Unknown"
+            let age = content["age"]?.jsonObject as? Double ?? 0
             return "Thank you! Contact info received: \(name) (\(email)), age: \(Int(age))"
         case .decline:
             return "User declined to provide contact information"
@@ -98,10 +98,10 @@ extension DemoServer {
             guard let content = response.content else {
                 return "User accepted but no content was provided"
             }
-            let projectType = content["projectType"]?.value as? String ?? "unspecified"
-            let framework = content["framework"]?.value as? String ?? "not specified"
-            let priority = content["priority"]?.value as? String ?? "unspecified"
-            let hasDeadline = content["hasDeadline"]?.value as? Bool ?? false
+            let projectType = content["projectType"]?.jsonObject as? String ?? "unspecified"
+            let framework = content["framework"]?.jsonObject as? String ?? "not specified"
+            let priority = content["priority"]?.jsonObject as? String ?? "unspecified"
+            let hasDeadline = content["hasDeadline"]?.jsonObject as? Bool ?? false
             let base = "Project preferences received: \(projectType) project using "
                 + "\(framework), prioritizing \(priority)"
             return base + (hasDeadline ? " with a deadline" : " without a specific deadline")
@@ -168,10 +168,10 @@ extension DemoServer {
             guard let content = response.content else {
                 return "User accepted but no content was provided"
             }
-            let username = content["username"]?.value as? String ?? "Unknown"
-            let email = content["email"]?.value as? String ?? "Unknown"
-            let password = content["password"]?.value as? String ?? ""
-            let confirmPassword = content["confirmPassword"]?.value as? String ?? ""
+            let username = content["username"]?.jsonObject as? String ?? "Unknown"
+            let email = content["email"]?.jsonObject as? String ?? "Unknown"
+            let password = content["password"]?.jsonObject as? String ?? ""
+            let confirmPassword = content["confirmPassword"]?.jsonObject as? String ?? ""
             if password == confirmPassword {
                 return "Account creation successful! Username: \(username), Email: \(email)"
             } else {
@@ -225,10 +225,10 @@ extension DemoServer {
             guard let content = response.content else {
                 return "User accepted but no content was provided"
             }
-            let theme = content["theme"]?.value as? String ?? "unknown"
-            let language = content["language"]?.value as? String ?? "unknown"
-            let notifications = content["notifications"]?.value as? Bool ?? false
-            let maxItems = content["maxItems"]?.value as? Double ?? 25.0
+            let theme = content["theme"]?.jsonObject as? String ?? "unknown"
+            let language = content["language"]?.jsonObject as? String ?? "unknown"
+            let notifications = content["notifications"]?.jsonObject as? Bool ?? false
+            let maxItems = content["maxItems"]?.jsonObject as? Double ?? 25.0
             return "Preferences saved! Theme: \(theme), Language: \(language), "
                 + "Notifications: \(notifications), Max items: \(Int(maxItems))"
         case .decline:

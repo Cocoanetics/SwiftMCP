@@ -51,7 +51,7 @@ struct MCPServerParametersTests {
         }
 
         let result = try #require(response.result)
-        let serverInfoDict = try #require(result["serverInfo"]?.value as? [String: Any])
+        let serverInfoDict = try #require(result["serverInfo"]?.jsonObject as? [String: Any])
         let name = try #require(serverInfoDict["name"] as? String)
         let version = try #require(serverInfoDict["version"] as? String)
 
@@ -87,7 +87,7 @@ struct MCPServerParametersTests {
         }
 
         let result = try #require(response.result)
-        let serverInfoDict = try #require(result["serverInfo"]?.value as? [String: Any])
+        let serverInfoDict = try #require(result["serverInfo"]?.jsonObject as? [String: Any])
         let name = try #require(serverInfoDict["name"] as? String)
         let version = try #require(serverInfoDict["version"] as? String)
 

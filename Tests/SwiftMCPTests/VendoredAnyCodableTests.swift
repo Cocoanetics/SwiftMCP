@@ -24,11 +24,11 @@ struct JSONValueTests {
         let data = try JSONEncoder().encode(payload)
         let decoded = try JSONDecoder().decode(JSONDictionary.self, from: data)
 
-        #expect(decoded["string"]?.value as? String == "value")
-        #expect(decoded["number"]?.value as? Int == 42)
-        #expect(decoded["array"]?.value as? [String] == ["one", "two"])
+        #expect(decoded["string"]?.jsonObject as? String == "value")
+        #expect(decoded["number"]?.jsonObject as? Int == 42)
+        #expect(decoded["array"]?.jsonObject as? [String] == ["one", "two"])
 
-        let object = try #require(decoded["object"]?.value as? [String: Any])
+        let object = try #require(decoded["object"]?.jsonObject as? [String: Any])
         #expect(object["nested"] as? Bool == true)
         #expect(object["count"] as? Int == 3)
     }

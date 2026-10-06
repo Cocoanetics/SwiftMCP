@@ -99,9 +99,9 @@ struct EnumTests {
 
             #expect(responseData.id == .integer(1))
             let result = try #require(responseData.result)
-            let isError = try #require(result["isError"]?.value as? Bool)
+            let isError = try #require(result["isError"]?.jsonObject as? Bool)
             #expect(isError == false)
-            let content = try #require(result["content"]?.value as? [[String: String]])
+            let content = try #require(result["content"]?.jsonObject as? [[String: String]])
             let firstContent = try #require(content.first)
             let type = try #require(firstContent["type"])
             let text = try #require(firstContent["text"])
@@ -130,9 +130,9 @@ struct EnumTests {
 
             #expect(responseData.id == .integer(2))
             let result = try #require(responseData.result)
-            let isError = try #require(result["isError"]?.value as? Bool)
+            let isError = try #require(result["isError"]?.jsonObject as? Bool)
             #expect(isError == false)
-            let content = try #require(result["content"]?.value as? [[String: String]])
+            let content = try #require(result["content"]?.jsonObject as? [[String: String]])
             let firstContent = try #require(content.first)
             let type = try #require(firstContent["type"])
             let text = try #require(firstContent["text"])
@@ -165,7 +165,7 @@ struct EnumTests {
 
             #expect(responseData.id == .integer(3))
             let result = try #require(responseData.result)
-            let content = try #require(result["content"]?.value as? [[String: String]])
+            let content = try #require(result["content"]?.jsonObject as? [[String: String]])
             let firstContent = try #require(content.first)
             let type = try #require(firstContent["type"])
             let text = try #require(firstContent["text"])
@@ -198,9 +198,9 @@ struct EnumTests {
 
             #expect(responseData.id == .integer(4))
             let result = try #require(responseData.result)
-            let isError = try #require(result["isError"]?.value as? Bool)
+            let isError = try #require(result["isError"]?.jsonObject as? Bool)
             #expect(isError == false)
-            let content = try #require(result["content"]?.value as? [[String: String]])
+            let content = try #require(result["content"]?.jsonObject as? [[String: String]])
             let firstContent = try #require(content.first)
             let type = try #require(firstContent["type"])
             let text = try #require(firstContent["text"])
@@ -229,9 +229,9 @@ struct EnumTests {
 
             #expect(responseData.id == .integer(5))
             let result = try #require(responseData.result)
-            let isError = try #require(result["isError"]?.value as? Bool)
+            let isError = try #require(result["isError"]?.jsonObject as? Bool)
             #expect(isError == false)
-            let content = try #require(result["content"]?.value as? [[String: String]])
+            let content = try #require(result["content"]?.jsonObject as? [[String: String]])
             let firstContent = try #require(content.first)
             let text = try #require(firstContent["text"])
             #expect(text == "Status: ACTIVE")
@@ -258,9 +258,9 @@ struct EnumTests {
 
             #expect(responseData.id == .integer(6))
             let result = try #require(responseData.result)
-            let isError = try #require(result["isError"]?.value as? Bool)
+            let isError = try #require(result["isError"]?.jsonObject as? Bool)
             #expect(isError == false)
-            let content = try #require(result["content"]?.value as? [[String: String]])
+            let content = try #require(result["content"]?.jsonObject as? [[String: String]])
             let firstContent = try #require(content.first)
             let text = try #require(firstContent["text"])
             #expect(text == "empty")
@@ -272,23 +272,17 @@ struct EnumTests {
 
         @Test("Case labels match raw values for Priority enum")
         func priorityCaseLabelsMatchRawValues() throws {
-            let labels = [String](caseLabelsFrom: Priority.self)
-            let actualLabels = try #require(labels)
-            #expect(actualLabels == ["low", "medium", "high"])
+            #expect(Priority.caseLabels == ["low", "medium", "high"])
         }
 
         @Test("Case labels match raw values for Status enum")
         func statusCaseLabelsMatchRawValues() throws {
-            let labels = [String](caseLabelsFrom: Status.self)
-            let actualLabels = try #require(labels)
-            #expect(actualLabels == ["pending", "active", "completed"])
+            #expect(Status.caseLabels == ["pending", "active", "completed"])
         }
 
         @Test("Case labels match raw values for SortOrder enum")
         func sortOrderCaseLabelsMatchRawValues() throws {
-            let labels = [String](caseLabelsFrom: SortOrder.self)
-            let actualLabels = try #require(labels)
-            #expect(actualLabels == ["SORT_ASC", "SORT_DESC"])
+            #expect(SortOrder.caseLabels == ["SORT_ASC", "SORT_DESC"])
         }
 
         @Test("Enum schema generation includes proper constraints")
