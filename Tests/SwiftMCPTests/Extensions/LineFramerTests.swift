@@ -72,4 +72,54 @@ struct LineFramerTests {
         #expect(framedLines == bufferedLines)
         #expect(framedRemainder == bufferedRemainder)
     }
+
+    @Test("A newline right after an already searched prefix ends the line")
+    func newlineAfterSearchedPrefix() {
+        let framer = LineFramer()
+        framer.append(Data("abc".utf8))
+        #expect(framer.extractLines().isEmpty)
+        framer.append(Data("\nxyz".utf8))
+        #expect(framer.extractLines() == ["abc"])
+        #expect(framer.remainder() == "xyz")
+    }
+
+    @Test("Consecutive newlines produce empty lines")
+    func emptyLines() {
+        let framer = LineFramer()
+        framer.append(Data("a\n\nb\n".utf8))
+        #expect(framer.extractLines() == ["a", "", "b"])
+    }
+
+    @Test("A line that is not valid UTF-8 is dropped")
+    func invalidUTF8() {
+        let framer = LineFramer()
+        framer.append(Data([0xFF, 0xFE, 0x0A]) + Data("ok\n".utf8))
+        #expect(framer.extractLines() == ["ok"])
+    }
+
+    /// A raw email returned as base64 is one line of tens of megabytes. Searching the whole
+    /// buffer again for each chunk made this quadratic: 32 MB in 64 KB chunks meant scanning
+    /// about 8 GB, minutes instead of milliseconds.
+    @Test("A 32 MB line arriving in 64 KB chunks is assembled in linear time")
+    func largeLine() {
+        let framer = LineFramer()
+        let chunk = Data(repeating: UInt8(ascii: "a"), count: 64 * 1024)
+        let chunkCount = 512
+        var linesBeforeNewline = 0
+        var lines: [String] = []
+
+        let elapsed = ContinuousClock().measure {
+            for _ in 0..<chunkCount {
+                framer.append(chunk)
+                linesBeforeNewline += framer.extractLines().count
+            }
+            framer.append(Data("\n".utf8))
+            lines = framer.extractLines()
+        }
+
+        #expect(linesBeforeNewline == 0)
+        #expect(lines.count == 1)
+        #expect(lines.first?.utf8.count == chunkCount * chunk.count)
+        #expect(elapsed < .seconds(10))
+    }
 }
