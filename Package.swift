@@ -88,7 +88,7 @@ let package = Package(
 		// trait alongside the rest of the NIO stack.
 		.package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.25.0"),
 		.package(url: "https://github.com/swiftlang/swift-docc-plugin.git", from: "1.0.0"),
-		.package(url: "https://github.com/swiftlang/swift-syntax.git", "602.0.0-latest"..<"604.0.0"),
+		.package(url: "https://github.com/swiftlang/swift-syntax.git", "602.0.0-latest"..<"605.0.0"),
 		// Allow both the crypto 3.x and 4.x major series. swift-certificates
 		// >= 1.19 moves to crypto 4.x, so capping at < 4.0 here would make a
 		// blanket `swift package update` unresolvable. crypto 4.0's only
