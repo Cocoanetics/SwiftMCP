@@ -118,7 +118,7 @@ extension SessionManager {
     @discardableResult
     func sendJSONRPC(_ message: JSONRPCMessage, to streamID: UUID) async throws -> Bool {
         let data = try JSONRPCMessage.makeEncoder().encode(message)
-        let text = String(data: data, encoding: .utf8) ?? ""
+        let text = (String(data: data, encoding: .utf8) ?? "").escapingUnicodeLineBreaksForSSE
         return await sendSSE(SSEMessage(data: text), to: streamID)
     }
 
