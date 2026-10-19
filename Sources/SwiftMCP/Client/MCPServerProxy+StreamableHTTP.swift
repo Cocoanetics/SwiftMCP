@@ -145,7 +145,7 @@ extension MCPServerProxy {
         var retryMilliseconds = retryMilliseconds
 
         do {
-            for try await message in asyncBytes.lines.sseMessages() {
+            for try await message in asyncBytes.sseLines().sseMessages() {
                 if let id = message.id {
                     latestEventID = id
                 }
