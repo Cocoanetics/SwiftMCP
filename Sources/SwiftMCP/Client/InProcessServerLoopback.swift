@@ -1,5 +1,6 @@
 #if Client
 import Foundation
+import Logging
 
 /// Runs an in-process ``MCPServer`` over JSONFoundation's ``LoopbackTransport``, so
 /// the client's `.stdioHandles` path can talk to an embedded server with **no OS
@@ -17,6 +18,9 @@ final class InProcessServerLoopback: @unchecked Sendable {
     private let serverTransport: LoopbackTransport
     private let server: any MCPServer & Sendable
     private let session = Session(id: UUID())
+    /// The session's outbound transport. ``Session`` holds it weakly, so the
+    /// loopback keeps it alive for as long as the pair runs.
+    private let outbound: LoopbackSessionTransport
     private var task: Task<Void, Never>?
 
     init(server: any MCPServer & Sendable) {
@@ -24,6 +28,7 @@ final class InProcessServerLoopback: @unchecked Sendable {
         self.clientTransport = pair.client
         self.serverTransport = pair.server
         self.server = server
+        self.outbound = LoopbackSessionTransport(serverTransport: pair.server)
     }
 
     /// Begins reading the server end and dispatching messages. Call once, before
@@ -32,7 +37,13 @@ final class InProcessServerLoopback: @unchecked Sendable {
         let serverTransport = self.serverTransport
         let server = self.server
         let session = self.session
+        let outbound = self.outbound
         task = Task {
+            // Attach the outbound transport first, so notifications and
+            // server→client requests a captured `Session` sends outside a request
+            // (`sendResourceUpdated`, list-changed, log, elicitation…) reach the
+            // client instead of going to a nil transport.
+            await session.setTransport(outbound)
             do {
                 for try await message in serverTransport.makeInboundStream() {
                     // Each message gets its own task, like the pipe-based bridge's
@@ -67,6 +78,31 @@ final class InProcessServerLoopback: @unchecked Sendable {
         task?.cancel()
         serverTransport.close()
         clientTransport.close()
+    }
+}
+
+/// The ``Transport`` a loopback ``Session`` writes outbound messages through:
+/// it decodes the bytes ``Session`` hands it back into ``JSONRPCMessage``s and
+/// sends them on the server end of the pair. There is nothing to start or stop —
+/// the pair's lifetime belongs to ``InProcessServerLoopback``.
+private final class LoopbackSessionTransport: Transport, @unchecked Sendable {
+    let logger = Logger(label: "com.cocoanetics.SwiftMCP.InProcessServerLoopback")
+    private let serverTransport: LoopbackTransport
+
+    init(serverTransport: LoopbackTransport) {
+        self.serverTransport = serverTransport
+    }
+
+    func start() async throws {}
+
+    func run() async throws {}
+
+    func stop() async throws {}
+
+    func send(_ data: Data) async throws {
+        for message in try JSONRPCMessage.decodeMessages(from: data) {
+            try serverTransport.send(message)
+        }
     }
 }
 #endif
