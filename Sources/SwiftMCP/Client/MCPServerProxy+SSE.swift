@@ -143,7 +143,7 @@ extension MCPServerProxy {
                     isStreamableMCP: isStreamableMCP
                 )
 
-                for try await message in asyncBytes.lines.sseMessages() {
+                for try await message in asyncBytes.sseLines().sseMessages() {
                     await self.processIncomingMessage(event: message.event, data: message.data)
                 }
                 self.handleStreamTermination(
@@ -256,7 +256,7 @@ extension MCPServerProxy {
         var lastEventID = lastEventID
         var retryMilliseconds = retryMilliseconds
 
-        for try await message in asyncBytes.lines.sseMessages() {
+        for try await message in asyncBytes.sseLines().sseMessages() {
             if let id = message.id {
                 lastEventID = id
             }

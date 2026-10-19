@@ -129,7 +129,7 @@ enum HTTPTransportTestHelpers {
         }
 
         var events: [SSEClientMessage] = []
-        for try await message in bytes.lines.sseMessages() {
+        for try await message in bytes.sseLines().sseMessages() {
             events.append(message)
         }
 
@@ -146,7 +146,7 @@ enum HTTPTransportTestHelpers {
         let task = Task {
             let (bytes, response) = try await urlSession.bytes(for: request)
             responseBox.value = response as? HTTPURLResponse
-            for try await message in bytes.lines.sseMessages() {
+            for try await message in bytes.sseLines().sseMessages() {
                 eventsBox.modify { $0.append(message) }
             }
         }

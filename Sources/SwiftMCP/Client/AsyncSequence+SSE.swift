@@ -99,4 +99,68 @@ extension AsyncSequence where Element: StringProtocol {
         SSEMessageSequence(base: self)
     }
 }
+
+/// Splits a byte stream into SSE lines.
+///
+/// The SSE spec ends a line only at CRLF, LF or CR. `AsyncBytes.lines` also splits on
+/// NEL (U+0085), U+2028 and U+2029, which can occur unescaped inside a JSON string and
+/// would cut a `data:` line in two. Empty lines are yielded since they dispatch an event.
+@available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, macCatalyst 15.0, *)
+struct SSELineSequence<Base: AsyncSequence>: AsyncSequence where Base.Element == UInt8 {
+    typealias Element = String
+    let base: Base
+
+    struct AsyncIterator: AsyncIteratorProtocol {
+        var iterator: Base.AsyncIterator
+        var buffer: [UInt8] = []
+        var skipLineFeed = false
+        var finished = false
+
+        mutating func next() async throws -> String? {
+            guard !finished else { return nil }
+
+            while let byte = try await iterator.next() {
+                if skipLineFeed {
+                    skipLineFeed = false
+                    if byte == 0x0A {
+                        continue
+                    }
+                }
+
+                switch byte {
+                case 0x0A:
+                    return takeLine()
+                case 0x0D:
+                    skipLineFeed = true
+                    return takeLine()
+                default:
+                    buffer.append(byte)
+                }
+            }
+
+            finished = true
+            return buffer.isEmpty ? nil : takeLine()
+        }
+
+        private mutating func takeLine() -> String {
+            // SSE decodes UTF-8 lossily; a failable conversion would drop the whole line.
+            // swiftlint:disable:next optional_data_string_conversion
+            let line = String(decoding: buffer, as: UTF8.self)
+            buffer.removeAll(keepingCapacity: true)
+            return line
+        }
+    }
+
+    func makeAsyncIterator() -> AsyncIterator {
+        AsyncIterator(iterator: base.makeAsyncIterator())
+    }
+}
+
+@available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, macCatalyst 15.0, *)
+extension AsyncSequence where Element == UInt8 {
+    /// Split a byte stream into lines at CRLF, LF or CR only, as the SSE spec requires.
+    func sseLines() -> SSELineSequence<Self> {
+        SSELineSequence(base: self)
+    }
+}
 #endif
