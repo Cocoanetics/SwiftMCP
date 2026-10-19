@@ -222,7 +222,7 @@ public final class HTTPSSETransport: Transport, MCPTransport, Service, MCPHTTPEn
         precondition(Session.current != nil, "Attempted to send without an active session")
         let session = Session.current!
 
-        let string = String(data: data, encoding: .utf8) ?? ""
+        let string = (String(data: data, encoding: .utf8) ?? "").escapingUnicodeLineBreaksForSSE
         let message = SSEMessage(data: string)
         let routed = await sessionManager.routeSSEMessage(
             message,
