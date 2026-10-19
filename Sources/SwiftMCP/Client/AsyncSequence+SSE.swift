@@ -143,6 +143,8 @@ struct SSELineSequence<Base: AsyncSequence>: AsyncSequence where Base.Element ==
         }
 
         private mutating func takeLine() -> String {
+            // SSE decodes UTF-8 lossily; a failable conversion would drop the whole line.
+            // swiftlint:disable:next optional_data_string_conversion
             let line = String(decoding: buffer, as: UTF8.self)
             buffer.removeAll(keepingCapacity: true)
             return line
