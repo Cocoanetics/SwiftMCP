@@ -171,4 +171,6 @@ jobs:
         uses: skiptools/swift-android-action@v2
         with:
           swift-version: "6.3.2"
+          # Avoid missing index units during macro-dependent test cross-compilation.
+          swift-build-flags: --disable-index-store
           free-disk-space: true
