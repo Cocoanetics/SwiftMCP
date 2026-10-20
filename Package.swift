@@ -277,6 +277,7 @@ let package = Package(
 			name: "SwiftMCPTests",
 			dependencies: [
 				"SwiftMCP",
+				"SwiftMCPMacros",
 				"SwiftMCPUtilityCore",
 				.product(name: "SwiftCross", package: "SwiftCross"),
 				.product(name: "Crypto", package: "swift-crypto", condition: .when(traits: ["Server"])),
