@@ -170,7 +170,10 @@ jobs:
         timeout-minutes: 25
         uses: skiptools/swift-android-action@v2
         with:
-          swift-version: "6.3.2"
+          # Swift 6.3's SwiftBuild backend emits an incompatible Android target
+          # triple. Use the matching 6.4 host toolchain and Android SDK.
+          # https://github.com/swiftlang/swift-build/issues/1167
+          swift-version: "6.4.1"
           # Use the backend that fixes macro-dependent Android test discovery (SwiftPM #8094).
           swift-build-flags: --build-system swiftbuild
           free-disk-space: true
