@@ -63,6 +63,15 @@ jobs:
       # this has run (or was already there).
       - name: Ensure the iOS platform is installed (best-effort)
         run: xcodebuild -downloadPlatform iOS || true
+      # Standalone Swift toolchains can omit ld, which Xcode's package-manifest
+      # compilation expects beside swiftc (swiftlang/swift#89035).
+      - name: Supply Xcode linker to the Swift toolchain
+        run: |
+          swift_bin="$(dirname "$(xcrun --find swiftc)")"
+          xcode_ld="$(TOOLCHAINS=com.apple.dt.toolchain.XcodeDefault xcrun --find ld)"
+          if [ ! -e "$swift_bin/ld" ]; then
+            sudo ln -s "$xcode_ld" "$swift_bin/ld"
+          fi
       - name: Verify Swift version
         run: |
           swift --version
