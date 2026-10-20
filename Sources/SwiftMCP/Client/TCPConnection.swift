@@ -111,13 +111,25 @@ public final actor TCPConnection: StdioConnection {
         }
     }
 
-    public func write(_ data: Data) async {
-        guard let connection else { return }
-        connection.send(content: data, completion: .contentProcessed { [logger] error in
-            if let error {
-                logger.error("TCP send failed: \(error)")
-            }
-        })
+    /// Sends `data`, suspending until the network stack has processed it.
+    ///
+    /// - Throws: ``MCPServerProxyError/communicationError(_:)`` when the connection is
+    ///   not started, or the underlying error when the send completes with a failure,
+    ///   so callers awaiting a reply can fail instead of hanging.
+    public func write(_ data: Data) async throws {
+        guard let connection else {
+            throw MCPServerProxyError.communicationError("TCP connection not started")
+        }
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            connection.send(content: data, completion: .contentProcessed { [logger] error in
+                if let error {
+                    logger.error("TCP send failed: \(error)")
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume()
+                }
+            })
+        }
     }
 
     public func stop() async {
@@ -130,6 +142,14 @@ public final actor TCPConnection: StdioConnection {
     private func makeParameters() -> NWParameters {
         let parameters = NWParameters.tcp
         parameters.includePeerToPeer = false
+        // Detect half-dead links (peer gone without FIN, sleeping Mac, NAT timeout)
+        // proactively instead of only when a later write fails.
+        if let tcpOptions = parameters.defaultProtocolStack.transportProtocol as? NWProtocolTCP.Options {
+            tcpOptions.enableKeepalive = true
+            tcpOptions.keepaliveIdle = 30
+            tcpOptions.keepaliveInterval = 10
+            tcpOptions.keepaliveCount = 3
+        }
         if config.preferIPv4,
            let ipOptions = parameters.defaultProtocolStack.internetProtocol as? NWProtocolIP.Options {
             ipOptions.version = .v4
@@ -315,7 +335,8 @@ public final actor TCPConnection: StdioConnection {
         }
     }
 
-    public func write(_ data: Data) async {
+    public func write(_ data: Data) async throws {
+        throw MCPServerProxyError.unsupportedPlatform("TCP connections require the Network framework.")
     }
 
     public func stop() async {
