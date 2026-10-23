@@ -4,15 +4,16 @@
 //
 //  The swift-nio adapter behind the ``MCPHTTPEngine`` seam: the listening socket,
 //  the HTTP/1 pipeline, the per-connection read/write loops, and the `Channel`
-//  liveness/close wiring. This is the *only* file in the HTTP/SSE server that
-//  links the swift-nio server stack — the engine (`HTTPSSETransport`, routing,
-//  sessions, SSE) is NIO-free. Swapping in Network.framework means writing a
-//  sibling of this file, not touching the engine.
+//  liveness/close wiring. This file and `NIOSSEConnection.swift` are the *only*
+//  ones in the HTTP/SSE server linking the swift-nio server stack — the engine
+//  (`HTTPSSETransport`, routing, sessions, SSE) is NIO-free. Swapping in
+//  Network.framework means siblings of these files, not changes to the engine.
 //
 
 #if Server
 import Foundation
 import Logging
+@preconcurrency import NIOConcurrencyHelpers
 @preconcurrency import NIOCore
 import NIOFoundationCompat
 import NIOHTTP1
@@ -28,6 +29,9 @@ final class NIOHTTPServerAdapter: @unchecked Sendable {
     private let logger: Logger
     private let group: EventLoopGroup
     private var channel: Channel?
+    /// The shutdown in progress once `shutdown()` ran; `waitUntilClosed()` joins it.
+    private var shutdownTask: Task<Void, Error>?
+    private let lock = NIOLock()
 
     init(engine: any MCPHTTPEngine, logger: Logger) {
         self.engine = engine
@@ -89,14 +93,34 @@ final class NIOHTTPServerAdapter: @unchecked Sendable {
         }
     }
 
-    /// Suspends until the listening channel closes.
+    /// Suspends until the listener has closed and, when `shutdown()` closed it,
+    /// until the event-loop group is down too, so `run()` outlives the loops.
     func waitUntilClosed() async throws {
         try await channel?.closeFuture.get()
+        if let shutdown = lock.withLock({ shutdownTask }) {
+            try await shutdown.value
+        }
     }
 
-    /// Shut the listener down. Closing the group closes the listening channel,
-    /// which completes `waitUntilClosed()`.
+    /// Close the listener first, then shut the event-loop group down: the group
+    /// closes its loops concurrently, and a connection the still-open listener
+    /// accepted onto an already-closed loop was registered via `flatSubmit`, whose
+    /// promise then leaked — fatal in debug builds. Repeated calls join the first.
     func shutdown() async throws {
+        let shutdown = lock.withLock { () -> Task<Void, Error> in
+            if let shutdownTask { return shutdownTask }
+            let task = Task { [self] in
+                channel?.close(promise: nil)
+                try? await channel?.closeFuture.get()
+                try await shutDownGroup()
+            }
+            shutdownTask = task
+            return task
+        }
+        try await shutdown.value
+    }
+
+    private func shutDownGroup() async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             group.shutdownGracefully { error in
                 if let error {
@@ -256,8 +280,9 @@ final class NIOHTTPChannelHandler: ChannelInboundHandler, @unchecked Sendable {
             // An aborted body means the channel-read layer owns the
             // connection: it already answered (413 oversize) or the peer is
             // gone. Writing a second response for the same request trips
-            // NIO's pipeline handler `fatalError` and kills the process.
-            guard !body.wasAborted else {
+            // NIO's pipeline handler `fatalError` and kills the process. A closed
+            // channel (peer gone, adapter shutting down) has nobody to write to.
+            guard !body.wasAborted, channel.isActive else {
                 // The discarded response may carry an SSE stream the engine
                 // already opened (and, for a general stream, promoted to the
                 // session's primary). Nothing will ever drain or bind it, so
@@ -371,21 +396,5 @@ final class NIOHTTPChannelHandler: ChannelInboundHandler, @unchecked Sendable {
         context.channel.writeAndFlush(HTTPResponsePart.end(nil), promise: nil)
         context.close(promise: nil)
     }
-}
-
-/// An ``SSEConnection`` backed by a live NIO `Channel`.
-final class NIOSSEConnection: SSEConnection {
-    private let channel: Channel
-    init(channel: Channel) { self.channel = channel }
-    var isConnected: Bool { channel.isActive }
-    func terminate() { channel.close(promise: nil) }
-}
-
-/// A never-connected ``SSEConnection``, used to reconcile SSE streams whose
-/// response was discarded before any connection could bind.
-final class DeadSSEConnection: SSEConnection {
-    init() {}
-    var isConnected: Bool { false }
-    func terminate() {}
 }
 #endif
