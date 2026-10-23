@@ -94,9 +94,14 @@ final class NIOHTTPServerAdapter: @unchecked Sendable {
         try await channel?.closeFuture.get()
     }
 
-    /// Shut the listener down. Closing the group closes the listening channel,
-    /// which completes `waitUntilClosed()`.
+    /// Close the listener first, then shut the event-loop group down: the group
+    /// closes its loops concurrently, and a connection the still-open listener
+    /// accepted onto an already-closed loop was registered via `flatSubmit`,
+    /// whose promise then leaked — fatal in debug builds ("leaking promise
+    /// created at NIOCore/EventLoop.swift"). This also completes `waitUntilClosed()`.
     func shutdown() async throws {
+        channel?.close(promise: nil)
+        try? await channel?.closeFuture.get()
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             group.shutdownGracefully { error in
                 if let error {
@@ -256,8 +261,10 @@ final class NIOHTTPChannelHandler: ChannelInboundHandler, @unchecked Sendable {
             // An aborted body means the channel-read layer owns the
             // connection: it already answered (413 oversize) or the peer is
             // gone. Writing a second response for the same request trips
-            // NIO's pipeline handler `fatalError` and kills the process.
-            guard !body.wasAborted else {
+            // NIO's pipeline handler `fatalError` and kills the process. A
+            // channel already closed (peer gone, adapter shutting down) has
+            // nobody to write to either, and its event loop may be gone too.
+            guard !body.wasAborted, channel.isActive else {
                 // The discarded response may carry an SSE stream the engine
                 // already opened (and, for a general stream, promoted to the
                 // session's primary). Nothing will ever drain or bind it, so
