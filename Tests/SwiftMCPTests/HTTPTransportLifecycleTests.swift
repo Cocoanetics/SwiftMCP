@@ -87,6 +87,13 @@ struct HTTPTransportLifecycleTests {
     }
 }
 
+/// `SOCK_STREAM` is an enum case on glibc and a plain `Int32` elsewhere.
+#if os(Linux) && !canImport(Musl)
+private let streamSocketType = Int32(SOCK_STREAM.rawValue)
+#else
+private let streamSocketType = SOCK_STREAM
+#endif
+
 /// Opens and closes TCP connections to a loopback port from plain threads
 /// (blocking socket calls stay off the cooperative pool) until stopped.
 ///
@@ -130,7 +137,7 @@ private final class ConnectionChurn: @unchecked Sendable {
     /// One blocking connect to 127.0.0.1:`port`; `true` when the handshake
     /// completed, i.e. a listener accepted it.
     static func connectOnce(port: Int) -> Bool {
-        let descriptor = socket(AF_INET, Int32(SOCK_STREAM), 0)
+        let descriptor = socket(AF_INET, streamSocketType, 0)
         guard descriptor >= 0 else { return false }
         defer { close(descriptor) }
         var address = sockaddr_in()
