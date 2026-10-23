@@ -186,7 +186,8 @@ public final class HTTPSSETransport: Transport, MCPTransport, Service, MCPHTTPEn
     /// When executed inside a `ServiceGroup`, a graceful shutdown signal (e.g.
     /// `SIGINT`/`SIGTERM`) stops the adapter via ``stop()`` so this method returns
     /// and the group can drain. When called standalone, it returns once the
-    /// listener closes.
+    /// listener closes — and, when `stop()` closed it, once the event loops are
+    /// down too.
     public func run() async throws {
         try await start()
         try await withGracefulShutdownHandler {
