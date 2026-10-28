@@ -122,8 +122,8 @@ struct HTTPTransportLifecycleTests {
             try await transport.stop()
             let elapsed = TimeInterval(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000_000
             #expect(
-                elapsed < NIOHTTPServerAdapter.quiesceTimeout,
-                "stop() ended the drain loop by cancellation, not by timeout"
+                elapsed < NIOHTTPServerAdapter.slowHandlerWarningDelay,
+                "stop() ended the drain loop by cancellation instead of waiting on it"
             )
 
             // The connection was closed server-side: the client's stream ends

@@ -10,6 +10,7 @@
 
 #if Server
 import Foundation
+import Logging
 @preconcurrency import NIOConcurrencyHelpers
 @preconcurrency import NIOCore
 
@@ -21,17 +22,22 @@ import Foundation
 /// live — an SSE write awaited from a handler task, the post-response check,
 /// an engine-side `terminate()` — and each such touch after
 /// `shutdownGracefully` closed the loop is NIO's "Cannot schedule tasks on an
-/// EventLoop that has already shut down". `quiesce(timeout:)` closes every
-/// channel and awaits its handler tasks while the loops are still up, so no
-/// touch is left to land on a closed one.
+/// EventLoop that has already shut down". `quiesce(slowHandlerWarningAfter:)`
+/// closes every channel and awaits its handler tasks while the loops are still
+/// up, so no touch is left to land on a closed one.
 ///
 /// Lock-protected rather than an actor: registration runs on an event loop,
 /// inside the synchronous child-channel initializer.
 final class NIOConnectionRegistry: @unchecked Sendable {
+    private let logger: Logger
     private let lock = NIOLock()
     private var channels: [ObjectIdentifier: Channel] = [:]
     private var tasks: [UUID: Task<Void, Never>] = [:]
     private var isQuiescing = false
+
+    init(logger: Logger) {
+        self.logger = logger
+    }
 
     /// Track `channel` until it closes. `false` once the quiesce has begun:
     /// the caller closes the channel instead of serving it.
@@ -67,14 +73,21 @@ final class NIOConnectionRegistry: @unchecked Sendable {
     }
 
     /// Close every tracked connection, then cancel its handler tasks and wait
-    /// for them — until `timeout` passes, so a handler that ignores
-    /// cancellation cannot hold the shutdown forever.
+    /// for every one of them to finish.
     ///
     /// Cancellation is what ends an SSE handler: its drain loop is parked on
     /// the stream's next event, and the engine does not finish a stream whose
     /// connection dropped — it retains it for a resume. Whatever a cancelled
     /// task still writes fails on the closed channel, whose loop is still up.
-    func quiesce(timeout: TimeInterval) async {
+    ///
+    /// The wait has no deadline. A task released early would still be able to
+    /// touch its channel once it resumes — attach to its close future, write
+    /// its stream's end — and that is exactly the scheduling onto a shut-down
+    /// loop this registry exists to prevent; the loops stay up until the last
+    /// task is done. A handler that ignores cancellation therefore holds the
+    /// shutdown for as long as it runs, which is logged after
+    /// `slowHandlerWarningAfter` so a hung stop can be traced to it.
+    func quiesce(slowHandlerWarningAfter warningDelay: TimeInterval) async {
         let (channels, tasks) = lock.withLock { () -> ([Channel], [Task<Void, Never>]) in
             isQuiescing = true
             return (Array(self.channels.values), Array(self.tasks.values))
@@ -88,14 +101,20 @@ final class NIOConnectionRegistry: @unchecked Sendable {
         for task in tasks {
             task.cancel()
         }
-        let deadline = Date().addingTimeInterval(timeout)
-        while !isDrained, Date() < deadline {
-            try? await Task.sleep(nanoseconds: 10_000_000)
+        let watchdog = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(warningDelay * 1_000_000_000))
+            guard !Task.isCancelled, let self else { return }
+            let remaining = lock.withLock { self.tasks.count }
+            if remaining > 0 {
+                let message = "Shutdown is waiting for \(remaining) request handler(s) still running "
+                    + "\(warningDelay)s after cancellation; the event loops stay up until they finish"
+                logger.warning("\(message)")
+            }
         }
-    }
-
-    private var isDrained: Bool {
-        lock.withLock { tasks.isEmpty }
+        for task in tasks {
+            await task.value
+        }
+        watchdog.cancel()
     }
 }
 #endif

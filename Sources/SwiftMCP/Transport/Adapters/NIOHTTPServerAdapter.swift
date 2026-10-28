@@ -31,19 +31,23 @@ final class NIOHTTPServerAdapter: @unchecked Sendable {
     private let logger: Logger
     private let group: EventLoopGroup
     private var channel: Channel?
+    /// Finishes once the listener has closed; see `start()` for why it is not
+    /// the listener's `closeFuture` itself.
+    private var listenerClosed: AsyncStream<Void>?
     /// The accepted connections and their handler tasks, quiesced by `shutdown()`.
-    private let connections = NIOConnectionRegistry()
+    private let connections: NIOConnectionRegistry
     /// The shutdown in progress once `shutdown()` ran; `waitUntilClosed()` joins it.
     private var shutdownTask: Task<Void, Error>?
     private let lock = NIOLock()
 
-    /// How long `shutdown()` waits for handler tasks after cancelling them. A
-    /// handler that ignores cancellation this long goes on without its loops.
-    static let quiesceTimeout: TimeInterval = 5
+    /// How long `shutdown()` waits for cancelled handler tasks before it logs
+    /// that they are holding it. It keeps waiting: the loops outlive every task.
+    static let slowHandlerWarningDelay: TimeInterval = 5
 
     init(engine: any MCPHTTPEngine, logger: Logger) {
         self.engine = engine
         self.logger = logger
+        self.connections = NIOConnectionRegistry(logger: logger)
         self.group = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
     }
 
@@ -87,6 +91,12 @@ final class NIOHTTPServerAdapter: @unchecked Sendable {
             let boundPort = channel.localAddress?.port ?? engine.configuredPort
             logger.info("Server started and listening on \(engine.configuredHost):\(boundPort)")
 
+            // Attached now, while the listener's loop is up: attaching to a
+            // future from off its loop schedules onto that loop, which
+            // `waitUntilClosed()` must not do — `shutdown()` may have taken
+            // the loop down by the time `run()` gets there.
+            let (listenerClosed, closedContinuation) = AsyncStream<Void>.makeStream()
+            self.listenerClosed = listenerClosed
             channel.closeFuture.whenComplete { [logger] result in
                 switch result {
                 case .success:
@@ -94,6 +104,7 @@ final class NIOHTTPServerAdapter: @unchecked Sendable {
                 case .failure(let error):
                     logger.error("Server channel closed with error: \(error)")
                 }
+                closedContinuation.finish()
             }
             return boundPort
         } catch {
@@ -114,7 +125,9 @@ final class NIOHTTPServerAdapter: @unchecked Sendable {
     /// Suspends until the listener has closed and, when `shutdown()` closed it,
     /// until the event-loop group is down too, so `run()` outlives the loops.
     func waitUntilClosed() async throws {
-        try await channel?.closeFuture.get()
+        if let listenerClosed {
+            for await _ in listenerClosed {}
+        }
         if let shutdown = lock.withLock({ shutdownTask }) {
             try await shutdown.value
         }
@@ -128,7 +141,8 @@ final class NIOHTTPServerAdapter: @unchecked Sendable {
     /// that outlived it (an SSE write, its post-response check, an engine-side
     /// `terminate()`) is NIO's "Cannot schedule tasks on an EventLoop that has
     /// already shut down", announced to become a forced crash. So every accepted
-    /// channel is closed and its handler tasks are done before a loop goes down.
+    /// channel is closed and its handler tasks are done before a loop goes down —
+    /// all of them, however long a handler takes to honor its cancellation.
     /// Repeated calls join the first.
     func shutdown() async throws {
         let shutdown = lock.withLock { () -> Task<Void, Error> in
@@ -136,13 +150,34 @@ final class NIOHTTPServerAdapter: @unchecked Sendable {
             let task = Task { [self] in
                 channel?.close(promise: nil)
                 try? await channel?.closeFuture.get()
-                await connections.quiesce(timeout: Self.quiesceTimeout)
+                await settleInFlightAccepts()
+                await connections.quiesce(slowHandlerWarningAfter: Self.slowHandlerWarningDelay)
                 try await shutDownGroup()
             }
             shutdownTask = task
             return task
         }
         try await shutdown.value
+    }
+
+    /// Lets the connections accepted just before the listener closed finish
+    /// NIO's own accept sequence while every loop is still up.
+    ///
+    /// For each accepted connection NIO submits the pipeline setup to the
+    /// child's loop and hops back to the listener's loop; finding the listener
+    /// closed, it closes the child from there — a hop onto the child's loop
+    /// again. Each hop schedules onto the other loop, and the group shutdown
+    /// closes its loops concurrently, so a hop that runs late lands on a loop
+    /// already gone (seen as four warnings at once: one per churning client).
+    /// Two passes of an empty task over every loop let both hops land first:
+    /// the first pass runs every pending setup, the second every hop-back, and
+    /// the close the hop-back schedules goes onto a loop that is still up.
+    private func settleInFlightAccepts() async {
+        for _ in 0..<2 {
+            for loop in group.makeIterator() {
+                try? await loop.submit {}.get()
+            }
+        }
     }
 
     private func shutDownGroup() async throws {
