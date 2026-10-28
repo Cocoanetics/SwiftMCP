@@ -85,6 +85,125 @@ struct HTTPTransportLifecycleTests {
             #expect(!ConnectionChurn.connectOnce(port: port))
         }
     }
+
+    /// Regression for a connection that outlives the listener (#218).
+    ///
+    /// Closing the listener first keeps new connections off a dying loop, but a
+    /// client holding an SSE stream open across `stop()` kept touching its
+    /// channel's loop from the handler task draining the stream — a write, the
+    /// post-response check, the engine's `terminate()` — and a touch after
+    /// `shutdownGracefully` had closed that loop was NIO's "Cannot schedule
+    /// tasks on an EventLoop that has already shut down", announced to become a
+    /// forced crash. The adapter now closes every accepted connection and waits
+    /// for its handler task before the loops go down; this holds a stream open
+    /// across `stop()` and checks the stream ends and the stop stays prompt (the
+    /// cancelled drain loop ends the task, not the quiesce timeout).
+    @Test("stop() with a live SSE stream closes it before the event loops go down")
+    func stopWithLiveSSEStream() async throws {
+        #if canImport(FoundationNetworking)
+        return
+        #else
+        for _ in 0..<5 {
+            let (transport, baseURL) = try await HTTPTransportTestHelpers.startTransport()
+            let urlSession = URLSession(configuration: .ephemeral)
+            let (sessionID, _) = try await HTTPTransportTestHelpers.initializeSession(
+                url: baseURL.appendingPathComponent("mcp"), urlSession: urlSession
+            )
+            let request = HTTPTransportTestHelpers.generalSSERequest(
+                url: baseURL.appendingPathComponent("mcp"), sessionID: sessionID
+            )
+            let capture = HTTPTransportTestHelpers.openStreamingRequest(request, urlSession: urlSession)
+            let opened = await HTTPTransportTestHelpers.waitForCondition {
+                capture.response.value?.statusCode == 200
+            }
+            #expect(opened, "The SSE stream opened before stop()")
+
+            let started = DispatchTime.now().uptimeNanoseconds
+            try await transport.stop()
+            let elapsed = TimeInterval(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000_000
+            #expect(
+                elapsed < NIOHTTPServerAdapter.quiesceTimeout,
+                "stop() ended the drain loop by cancellation, not by timeout"
+            )
+
+            // The connection was closed server-side: the client's stream ends
+            // on its own, without the watchdog having to cancel the read.
+            let timedOut = HTTPTransportBox(false)
+            let watchdog = Task {
+                try await Task.sleep(nanoseconds: 10_000_000_000)
+                timedOut.value = true
+                capture.task.cancel()
+            }
+            _ = await capture.task.result
+            watchdog.cancel()
+            #expect(!timedOut.value, "stop() closed the SSE connection")
+        }
+        #endif
+    }
+
+    /// The issue's own shape (#218): a client that re-initializes the moment its
+    /// connection drops, so an `initialize` — answered on an SSE-framed response
+    /// stream — is in flight on an accepted connection while `stop()` runs. Its
+    /// drain loop writes the stream's end, and its post-response check executes
+    /// on the loop, after the response completes; before the quiesce, either
+    /// could land on a loop `shutdownGracefully` had already closed.
+    @Test("stop() under request churn neither crashes nor leaves a late response to a closed loop")
+    func stopUnderRequestChurn() async throws {
+        #if canImport(FoundationNetworking)
+        return
+        #else
+        for _ in 0..<10 {
+            let (transport, baseURL) = try await HTTPTransportTestHelpers.startTransport()
+            let churn = RequestChurn(url: baseURL.appendingPathComponent("mcp"), workers: 4)
+            churn.start()
+            try await Task.sleep(nanoseconds: 20_000_000)
+            try await transport.stop()
+            await churn.stop()
+        }
+        #endif
+    }
+}
+
+/// Issues `initialize` requests back to back from several tasks until stopped,
+/// so responses are completing on accepted connections throughout `stop()`.
+private final class RequestChurn: @unchecked Sendable {
+    private let url: URL
+    private let workerCount: Int
+    private let lock = NSLock()
+    private var stopped = false
+    private var workers: [Task<Void, Never>] = []
+
+    init(url: URL, workers: Int) {
+        self.url = url
+        self.workerCount = workers
+    }
+
+    func start() {
+        workers = (0..<workerCount).map { _ in
+            Task { [self] in
+                let urlSession = URLSession(configuration: .ephemeral)
+                while !isStopped {
+                    guard let request = try? HTTPTransportTestHelpers.streamablePOSTRequest(
+                        url: url, message: HTTPTransportTestHelpers.initializeRequest()
+                    ) else { return }
+                    _ = try? await HTTPTransportTestHelpers.readFiniteSSEResponse(request, urlSession: urlSession)
+                }
+            }
+        }
+    }
+
+    func stop() async {
+        lock.withLock { stopped = true }
+        for worker in workers {
+            await worker.value
+        }
+    }
+
+    private var isStopped: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return stopped
+    }
 }
 
 /// `SOCK_STREAM` is an enum case on glibc and a plain `Int32` elsewhere.

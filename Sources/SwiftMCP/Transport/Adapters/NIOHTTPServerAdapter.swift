@@ -3,10 +3,12 @@
 //  SwiftMCP
 //
 //  The swift-nio adapter behind the ``MCPHTTPEngine`` seam: the listening socket,
-//  the HTTP/1 pipeline, the per-connection read/write loops, and the `Channel`
-//  liveness/close wiring. This file and `NIOSSEConnection.swift` are the *only*
-//  ones in the HTTP/SSE server linking the swift-nio server stack — the engine
-//  (`HTTPSSETransport`, routing, sessions, SSE) is NIO-free. Swapping in
+//  the HTTP/1 pipeline, and the shutdown that quiesces accepted connections
+//  before the event loops go down. With `NIOHTTPChannelHandler.swift` (the
+//  per-connection read/write loops), `NIOConnectionRegistry.swift` and
+//  `NIOSSEConnection.swift` (the `Channel` liveness/close wiring) these are the
+//  *only* files in the HTTP/SSE server linking the swift-nio server stack — the
+//  engine (`HTTPSSETransport`, routing, sessions, SSE) is NIO-free. Swapping in
 //  Network.framework means siblings of these files, not changes to the engine.
 //
 
@@ -29,9 +31,15 @@ final class NIOHTTPServerAdapter: @unchecked Sendable {
     private let logger: Logger
     private let group: EventLoopGroup
     private var channel: Channel?
+    /// The accepted connections and their handler tasks, quiesced by `shutdown()`.
+    private let connections = NIOConnectionRegistry()
     /// The shutdown in progress once `shutdown()` ran; `waitUntilClosed()` joins it.
     private var shutdownTask: Task<Void, Error>?
     private let lock = NIOLock()
+
+    /// How long `shutdown()` waits for handler tasks after cancelling them. A
+    /// handler that ignores cancellation this long goes on without its loops.
+    static let quiesceTimeout: TimeInterval = 5
 
     init(engine: any MCPHTTPEngine, logger: Logger) {
         self.engine = engine
@@ -44,11 +52,19 @@ final class NIOHTTPServerAdapter: @unchecked Sendable {
     func start() async throws -> Int {
         let engine = self.engine
         let logger = self.logger
+        let connections = self.connections
         let bootstrap = ServerBootstrap(group: group)
             .serverChannelOption(ChannelOptions.backlog, value: 256)
             .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
             .childChannelInitializer { channel in
-                channel.pipeline.configureHTTPServerPipeline().flatMap {
+                // The listener's close completes on its own loop while a
+                // connection it accepted just before may still be queued for
+                // setup on another; the registry refuses it once the shutdown
+                // has begun, so nothing serves a connection the quiesce missed.
+                guard connections.register(channel) else {
+                    return channel.close()
+                }
+                return channel.pipeline.configureHTTPServerPipeline().flatMap {
                     channel.pipeline.addHandler(HTTPLogger())
                 }.flatMap {
                     // Translate NIO's HTTP/1 request/response parts to and from
@@ -56,7 +72,9 @@ final class NIOHTTPServerAdapter: @unchecked Sendable {
                     // HTTPRequest / HTTPResponse / HTTPFields directly.
                     channel.pipeline.addHandler(HTTP1ToHTTPServerCodec(secure: false))
                 }.flatMap {
-                    channel.pipeline.addHandler(NIOHTTPChannelHandler(engine: engine, logger: logger))
+                    channel.pipeline.addHandler(
+                        NIOHTTPChannelHandler(engine: engine, logger: logger, connections: connections)
+                    )
                 }
             }
             .childChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
@@ -102,16 +120,23 @@ final class NIOHTTPServerAdapter: @unchecked Sendable {
         }
     }
 
-    /// Close the listener first, then shut the event-loop group down: the group
-    /// closes its loops concurrently, and a connection the still-open listener
-    /// accepted onto an already-closed loop was registered via `flatSubmit`, whose
-    /// promise then leaked — fatal in debug builds. Repeated calls join the first.
+    /// Close the listener first, then the connections it accepted, and only then
+    /// shut the event-loop group down. The group closes its loops concurrently:
+    /// a connection the still-open listener accepted onto an already-closed loop
+    /// was registered via `flatSubmit`, whose promise then leaked — fatal in
+    /// debug builds — and a task scheduled onto a closed loop from a connection
+    /// that outlived it (an SSE write, its post-response check, an engine-side
+    /// `terminate()`) is NIO's "Cannot schedule tasks on an EventLoop that has
+    /// already shut down", announced to become a forced crash. So every accepted
+    /// channel is closed and its handler tasks are done before a loop goes down.
+    /// Repeated calls join the first.
     func shutdown() async throws {
         let shutdown = lock.withLock { () -> Task<Void, Error> in
             if let shutdownTask { return shutdownTask }
             let task = Task { [self] in
                 channel?.close(promise: nil)
                 try? await channel?.closeFuture.get()
+                await connections.quiesce(timeout: Self.quiesceTimeout)
                 try await shutDownGroup()
             }
             shutdownTask = task
@@ -147,254 +172,6 @@ final class NIOHTTPServerAdapter: @unchecked Sendable {
         }
         logger.error("\(errorMessage)")
         return TransportError.bindingFailed(errorMessage)
-    }
-}
-
-/// The per-connection NIO channel handler: parses HTTP/1 request parts into an
-/// `HTTPRequest` + an `AsyncStream<Data>` body, hands them to ``MCPHTTPEngine``,
-/// and writes the ``EngineResponse`` back — buffered, or drained chunk-by-chunk
-/// for SSE (one flush per event).
-final class NIOHTTPChannelHandler: ChannelInboundHandler, @unchecked Sendable {
-    typealias InboundIn = HTTPRequestPart
-    typealias OutboundOut = HTTPResponsePart
-
-    private var requestState: RequestState = .idle
-    /// Increments per request head; lets the post-response check recognize
-    /// whether a `.streaming` state still belongs to *its* request or to a
-    /// pipelined successor.
-    private var requestGeneration = 0
-    private let engine: any MCPHTTPEngine
-    private let logger: Logger
-
-    init(engine: any MCPHTTPEngine, logger: Logger) {
-        self.engine = engine
-        self.logger = logger
-    }
-
-    func channelInactive(context: ChannelHandlerContext) {
-        abortInFlightRequestBody()
-        context.fireChannelInactive()
-    }
-
-    func errorCaught(context: ChannelHandlerContext, error: Error) {
-        abortInFlightRequestBody()
-        context.close(promise: nil)
-    }
-
-    /// Ends a mid-request body stream when the connection dies. Without this,
-    /// a handler consuming an upload would wait for the next chunk forever —
-    /// leaking the handler task and everything it holds open.
-    private func abortInFlightRequestBody() {
-        if case .streaming(_, let body, _) = requestState {
-            body.abort()
-        }
-        requestState = .idle
-    }
-
-    func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
-        if let channelEvent = event as? ChannelEvent, channelEvent == .inputClosed {
-            context.close(promise: nil)
-            return
-        }
-        context.fireUserInboundEventTriggered(event)
-    }
-
-    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
-        let requestPart = unwrapInboundIn(data)
-
-        switch (requestPart, requestState) {
-
-        // HEAD — create stream and dispatch handler immediately
-        case (.head(let head), _):
-            let sizeLimit = engine.maxBodySize(for: head)
-            if let contentLength = head.headerFields[.contentLength],
-               let length = Int(contentLength), length > sizeLimit {
-                logger.warning("Rejecting request with Content-Length \(length) > max \(sizeLimit)")
-                rejectOversizedRequest(context: context, limit: sizeLimit)
-                requestState = .rejected
-                return
-            }
-
-            // Watermarked handoff: pausing reads when the consumer lags lets
-            // TCP flow control push back on the sender, instead of a fast
-            // upload with a slow downstream (e.g. Drive) queueing the entire
-            // body in memory.
-            let channel = context.channel
-            let body = InboundBodyBuffer(
-                pauseReads: {
-                    channel.setOption(ChannelOptions.autoRead, value: false).whenComplete { _ in }
-                },
-                resumeReads: {
-                    channel.setOption(ChannelOptions.autoRead, value: true).whenComplete { _ in
-                        channel.read()
-                    }
-                }
-            )
-            requestState = .streaming(head: head, body: body, bytesWritten: 0)
-            requestGeneration &+= 1
-            dispatchRoute(context: context, head: head, body: body)
-
-        // BODY — append chunk to the buffer
-        case (.body(let buffer), .streaming(let head, let body, let bytesWritten)):
-            let sizeLimit = engine.maxBodySize(for: head)
-            let newTotal = bytesWritten + buffer.readableBytes
-            guard newTotal <= sizeLimit else {
-                logger.warning("Rejecting request: body size \(newTotal) > max \(sizeLimit)")
-                body.abort()
-                rejectOversizedRequest(context: context, limit: sizeLimit)
-                requestState = .rejected
-                return
-            }
-            if let bytes = buffer.getBytes(at: buffer.readerIndex, length: buffer.readableBytes) {
-                body.append(Data(bytes))
-            }
-            requestState = .streaming(head: head, body: body, bytesWritten: newTotal)
-
-        // END — finish the stream
-        case (.end, .streaming(_, let body, _)):
-            defer { requestState = .idle }
-            body.finish()
-
-        // Rejection / unexpected states
-        case (.body, .rejected), (.end, .rejected):
-            if case .end = requestPart { requestState = .idle }
-        case (.body, _):
-            logger.warning("Received unexpected body without a valid head")
-        case (.end, .idle):
-            logger.warning("Received end without prior request state")
-        }
-    }
-
-    func channelReadComplete(context: ChannelHandlerContext) {
-        context.flush()
-    }
-
-    // MARK: - Dispatch
-
-    private func dispatchRoute(context: ChannelHandlerContext, head: HTTPRequest, body: InboundBodyBuffer) {
-        let channel = context.channel
-        let engine = self.engine
-        let generation = requestGeneration
-        Task {
-            let response = await engine.handle(head: head, bodyStream: body.stream)
-            // An aborted body means the channel-read layer owns the
-            // connection: it already answered (413 oversize) or the peer is
-            // gone. Writing a second response for the same request trips
-            // NIO's pipeline handler `fatalError` and kills the process. A closed
-            // channel (peer gone, adapter shutting down) has nobody to write to.
-            guard !body.wasAborted, channel.isActive else {
-                // The discarded response may carry an SSE stream the engine
-                // already opened (and, for a general stream, promoted to the
-                // session's primary). Nothing will ever drain or bind it, so
-                // hand it back for reconciliation instead of leaking a
-                // routable-looking stream that black-holes routed sends.
-                await Self.reconcileDiscardedResponse(response, engine: engine)
-                return
-            }
-            await self.writeEngineResponse(response, to: channel, engine: engine)
-            // A handler that responded without consuming its body to the end
-            // leaves the connection unresynchronizable (and, with reads
-            // paused at the watermark, wedged). Close it — but only when the
-            // streaming state still belongs to this request, not a pipelined
-            // successor.
-            channel.eventLoop.execute {
-                if case .streaming = self.requestState, self.requestGeneration == generation {
-                    self.abortInFlightRequestBody()
-                    channel.close(promise: nil)
-                }
-            }
-        }
-    }
-
-    /// Reconcile the engine's SSE state for a response that is being discarded
-    /// unwritten. Registering the (already dead) connection makes the engine's
-    /// liveness guard reject it and start the stream's retention clock, so the
-    /// stream — and any primary-general claim it holds — expires normally
-    /// instead of surviving as an undrained, never-expiring black hole.
-    private static func reconcileDiscardedResponse(
-        _ response: EngineResponse,
-        engine: any MCPHTTPEngine
-    ) async {
-        guard case .sse(_, let registration) = response.body, let registration else { return }
-        if let token = await engine.registerConnection(DeadSSEConnection(), for: registration) {
-            await engine.connectionDisconnected(token)
-        }
-    }
-
-    private func writeEngineResponse(
-        _ response: EngineResponse,
-        to channel: Channel,
-        engine: any MCPHTTPEngine
-    ) async {
-        switch response.body {
-        case .buffered(let data):
-            let fields = HTTPResponseDefaults.buffered(response.headerFields, bodyLength: data?.count)
-            let head = HTTPResponse(status: response.status, headerFields: fields)
-            channel.write(HTTPResponsePart.head(head), promise: nil)
-            if let data, !data.isEmpty {
-                channel.write(HTTPResponsePart.body(channel.allocator.buffer(data: data)), promise: nil)
-            }
-            channel.writeAndFlush(HTTPResponsePart.end(nil), promise: nil)
-
-        case .sse(let stream, let registration):
-            // SSE: write the head immediately so the client can start consuming,
-            // bind the live connection, then drain — flushing per event.
-            let fields = HTTPResponseDefaults.streaming(response.headerFields)
-            let head = HTTPResponse(status: response.status, headerFields: fields)
-            channel.writeAndFlush(HTTPResponsePart.head(head), promise: nil)
-
-            if let registration {
-                let connection = NIOSSEConnection(channel: channel)
-                if let token = await engine.registerConnection(connection, for: registration) {
-                    channel.closeFuture.whenComplete { _ in
-                        Task { await engine.connectionDisconnected(token) }
-                    }
-                }
-            }
-
-            for await chunk in stream {
-                // Await each write. Fire-and-forget writes let a fast producer
-                // queue an entire large body in the channel's outbound buffer
-                // while a slow client drains it — memory grows by the full
-                // response size — and writes to a closed channel fail silently,
-                // so the loop would keep pulling the rest of the stream into a
-                // dead connection. A failed write stops the pull, which is what
-                // carries backpressure (and client aborts) to the producer.
-                let buffer = channel.allocator.buffer(data: chunk)
-                do {
-                    try await channel.writeAndFlush(HTTPResponsePart.body(buffer)).get()
-                } catch {
-                    // A failed write means this response can no longer reach
-                    // the client — but not necessarily that the socket died
-                    // (a pipeline or encoder state error fails the write and
-                    // leaves the connection open). Close it so the client
-                    // reconnects and `closeFuture` reconciles the engine's
-                    // stream state; returning without closing leaves an
-                    // ESTABLISHED connection whose stream nobody drains, and
-                    // every later send "succeeds" into that void. Gated on
-                    // liveness: a write that failed because the channel (or
-                    // its event loop) is already going down needs no close.
-                    if channel.isActive {
-                        channel.close(promise: nil)
-                    }
-                    return
-                }
-            }
-
-            channel.writeAndFlush(HTTPResponsePart.end(nil), promise: nil)
-        }
-    }
-
-    // MARK: - Oversize rejection
-
-    private func rejectOversizedRequest(context: ChannelHandlerContext, limit: Int) {
-        let reply = HTTPResponseDefaults.oversizedBody(limit: limit)
-        let head = HTTPResponse(status: reply.status, headerFields: reply.headerFields)
-        let body = context.channel.allocator.buffer(data: reply.body)
-        context.channel.write(HTTPResponsePart.head(head), promise: nil)
-        context.channel.write(HTTPResponsePart.body(body), promise: nil)
-        context.channel.writeAndFlush(HTTPResponsePart.end(nil), promise: nil)
-        context.close(promise: nil)
     }
 }
 #endif
