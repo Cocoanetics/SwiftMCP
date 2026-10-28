@@ -39,7 +39,7 @@ final class NonSSERecordingTransport: Transport, @unchecked Sendable {
     }
 }
 
-@Suite("Zombie-session regression", .serialized)
+@Suite("Zombie-session regression", .serialized, .loopbackShared)
 struct BroadcastZombieRegressionTests {
 
     /// `SessionManager` is shared with the TCP transport, whose sessions never

@@ -23,6 +23,77 @@ import Android
 #endif
 @testable import SwiftMCP
 
+/// Lets the churn tests below run alone. `.serialized` only orders tests within
+/// one suite, so on the 2-core Android emulator the churn overlapped the
+/// loopback suites that time-box a stream or a request, starving them (#220).
+/// Churn tests take the gate exclusively; suites that are sensitive to that load
+/// opt in as shared holders with `.loopbackShared`.
+actor LoopbackGate {
+    static let shared = LoopbackGate()
+
+    private var holders = 0
+    private var exclusiveHeld = false
+    private var waiters: [(exclusive: Bool, continuation: CheckedContinuation<Void, Never>)] = []
+
+    private var exclusiveWaiting: Bool { waiters.contains { $0.exclusive } }
+
+    func acquire(exclusive: Bool) async {
+        let free = exclusive ? (holders == 0 && !exclusiveHeld) : (!exclusiveHeld && !exclusiveWaiting)
+        if free && waiters.isEmpty {
+            take(exclusive: exclusive)
+            return
+        }
+        await withCheckedContinuation { waiters.append((exclusive, $0)) }
+    }
+
+    func release(exclusive: Bool) {
+        if exclusive { exclusiveHeld = false } else { holders -= 1 }
+        while let next = waiters.first {
+            if next.exclusive {
+                guard holders == 0 else { return }
+            } else if exclusiveHeld {
+                return
+            }
+            waiters.removeFirst()
+            take(exclusive: next.exclusive)
+            next.continuation.resume()
+        }
+    }
+
+    private func take(exclusive: Bool) {
+        if exclusive { exclusiveHeld = true } else { holders += 1 }
+    }
+
+    /// Number of shared holders and whether the gate is held exclusively.
+    var state: (shared: Int, exclusive: Bool) { (holders, exclusiveHeld) }
+}
+
+struct LoopbackGateTrait: TestTrait, SuiteTrait, TestScoping {
+    let exclusive: Bool
+    var isRecursive: Bool { true }
+
+    func provideScope(for test: Test, testCase: Test.Case?,
+                      performing function: @Sendable () async throws -> Void) async throws {
+        // Suites recurse into their tests; only test functions take the gate.
+        guard !test.isSuite else { return try await function() }
+        await LoopbackGate.shared.acquire(exclusive: exclusive)
+        do {
+            try await function()
+        } catch {
+            await LoopbackGate.shared.release(exclusive: exclusive)
+            throw error
+        }
+        await LoopbackGate.shared.release(exclusive: exclusive)
+    }
+}
+
+extension Trait where Self == LoopbackGateTrait {
+    /// Runs the test with no other gated test running.
+    static var loopbackExclusive: Self { Self(exclusive: true) }
+    /// Runs the test alongside other shared tests, but never during an exclusive one.
+    static var loopbackShared: Self { Self(exclusive: false) }
+}
+
 @Suite("HTTP transport lifecycle", .serialized)
 struct HTTPTransportLifecycleTests {
 
@@ -73,7 +144,7 @@ struct HTTPTransportLifecycleTests {
     /// its connection drops turns that into a plain `stop()` crash, so the
     /// adapter now closes the listener first and only then shuts the loops down.
     /// The test keeps connections arriving at the port throughout `stop()`.
-    @Test("stop() under connection churn neither crashes nor accepts late connections")
+    @Test("stop() under connection churn neither crashes nor accepts late connections", .loopbackExclusive)
     func stopUnderConnectionChurn() async throws {
         for _ in 0..<15 {
             let transport = HTTPSSETransport(server: Calculator(), host: "127.0.0.1", port: 0)
@@ -87,6 +158,28 @@ struct HTTPTransportLifecycleTests {
             // The listener is gone before stop() returns: nothing accepts anymore.
             #expect(!ConnectionChurn.connectOnce(port: port))
         }
+    }
+
+    /// Regression for #220: an exclusive (churn) test never overlaps a shared one.
+    @Test("Loopback gate keeps exclusive tests apart from shared ones", .loopbackShared)
+    func gateSeparatesExclusiveFromShared() async throws {
+        // This test is itself a shared holder, so the gate must not be exclusive.
+        #expect(await LoopbackGate.shared.state.exclusive == false)
+        #expect(await LoopbackGate.shared.state.shared >= 1)
+
+        let gate = LoopbackGate()
+        await gate.acquire(exclusive: false)
+        let entered = HTTPTransportBox(false)
+        let writer = Task {
+            await gate.acquire(exclusive: true)
+            entered.value = true
+            await gate.release(exclusive: true)
+        }
+        try await Task.sleep(nanoseconds: 50_000_000)
+        #expect(!entered.value, "exclusive acquire must wait for shared holders")
+        await gate.release(exclusive: false)
+        await writer.value
+        #expect(entered.value)
     }
 
     /// `run()` waits for the listener to close, and the caller's cancellation
@@ -178,7 +271,7 @@ struct HTTPTransportLifecycleTests {
     /// drain loop writes the stream's end, and its post-response check executes
     /// on the loop, after the response completes; before the quiesce, either
     /// could land on a loop `shutdownGracefully` had already closed.
-    @Test("stop() under request churn neither crashes nor leaves a late response to a closed loop")
+    @Test("stop() under request churn neither crashes nor leaves a late response to a closed loop", .loopbackExclusive)
     func stopUnderRequestChurn() async throws {
         #if canImport(FoundationNetworking)
         return

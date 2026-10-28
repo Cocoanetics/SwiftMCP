@@ -3,7 +3,7 @@ import Testing
 import SwiftCross
 @testable import SwiftMCP
 
-@Suite("MCPServerProxy Streamable HTTP")
+@Suite("MCPServerProxy Streamable HTTP", .loopbackShared)
 struct MCPServerProxyStreamableHTTPTests {
     private func startTransport(server: some MCPServer = Calculator()) async throws -> (HTTPSSETransport, URL) {
         let transport = HTTPSSETransport(server: server, host: "127.0.0.1", port: 0)
