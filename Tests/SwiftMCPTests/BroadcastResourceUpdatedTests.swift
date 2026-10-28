@@ -20,7 +20,7 @@ final class PushFixtureServer {
     }
 }
 
-@Suite("Broadcast resource-updated delivery", .serialized)
+@Suite("Broadcast resource-updated delivery", .serialized, .loopbackShared)
 struct BroadcastResourceUpdatedTests {
 
     static let subscribedURIs: [String] = (0..<10).map { "push://resource/\($0)" }
