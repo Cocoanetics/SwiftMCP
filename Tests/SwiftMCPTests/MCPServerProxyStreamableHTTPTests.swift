@@ -15,10 +15,10 @@ struct MCPServerProxyStreamableHTTPTests {
     @Test("Proxy connects to streamable HTTP and can ping/list tools")
     func connectAndPing() async throws {
         let (transport, url) = try await startTransport()
-        defer { Task { try? await transport.stop() } }
+        defer { LoopbackTeardown.run { try? await transport.stop() } }
 
         let proxy = MCPServerProxy(config: .sse(config: MCPServerSseConfig(url: url)))
-        defer { Task { await proxy.disconnect() } }
+        defer { LoopbackTeardown.run { await proxy.disconnect() } }
 
         try await proxy.connect()
         let serverName = await proxy.serverName
@@ -32,10 +32,10 @@ struct MCPServerProxyStreamableHTTPTests {
     @Test("Proxy reuses one URLSession until disconnect")
     func reusesURLSessionUntilDisconnect() async throws {
         let (transport, url) = try await startTransport()
-        defer { Task { try? await transport.stop() } }
+        defer { LoopbackTeardown.run { try? await transport.stop() } }
 
         let proxy = MCPServerProxy(config: .sse(config: MCPServerSseConfig(url: url)))
-        defer { Task { await proxy.disconnect() } }
+        defer { LoopbackTeardown.run { await proxy.disconnect() } }
 
         try await proxy.connect()
         let connectedSession = try #require(await proxy.urlSession)
@@ -69,10 +69,10 @@ struct MCPServerProxyStreamableHTTPTests {
     @Test("Proxy captures the negotiated protocol version and keeps sending matching headers")
     func capturesNegotiatedVersion() async throws {
         let (transport, url) = try await startTransport()
-        defer { Task { try? await transport.stop() } }
+        defer { LoopbackTeardown.run { try? await transport.stop() } }
 
         let proxy = MCPServerProxy(config: .sse(config: MCPServerSseConfig(url: url)))
-        defer { Task { await proxy.disconnect() } }
+        defer { LoopbackTeardown.run { await proxy.disconnect() } }
 
         try await proxy.connect()
 
@@ -90,12 +90,12 @@ struct MCPServerProxyStreamableHTTPTests {
     @Test("Proxy receives list-changed notifications over the general GET stream")
     func receivesToolsListChanged() async throws {
         let (transport, url) = try await startTransport()
-        defer { Task { try? await transport.stop() } }
+        defer { LoopbackTeardown.run { try? await transport.stop() } }
 
         let handler = ToolsListChangedCapture()
         let proxy = MCPServerProxy(config: .sse(config: MCPServerSseConfig(url: url)))
         await proxy.setToolsListChangedHandler(handler)
-        defer { Task { await proxy.disconnect() } }
+        defer { LoopbackTeardown.run { await proxy.disconnect() } }
 
         try await proxy.connect()
         let sessionID = try #require(await proxy.sessionID)
@@ -115,10 +115,10 @@ struct MCPServerProxyStreamableHTTPTests {
     @Test("Tool call after the server forgets the session throws sessionInvalidated and keeps the session ID")
     func sessionInvalidationSurfacesTypedError() async throws {
         let (transport, url) = try await startTransport()
-        defer { Task { try? await transport.stop() } }
+        defer { LoopbackTeardown.run { try? await transport.stop() } }
 
         let proxy = MCPServerProxy(config: .sse(config: MCPServerSseConfig(url: url)))
-        defer { Task { await proxy.disconnect() } }
+        defer { LoopbackTeardown.run { await proxy.disconnect() } }
 
         try await proxy.connect()
         let sessionID = try #require(await proxy.sessionID)
@@ -150,10 +150,10 @@ struct MCPServerProxyStreamableHTTPTests {
     @Test("Reconnecting the same proxy after invalidation establishes a fresh session")
     func reconnectAfterInvalidationEstablishesFreshSession() async throws {
         let (transport, url) = try await startTransport()
-        defer { Task { try? await transport.stop() } }
+        defer { LoopbackTeardown.run { try? await transport.stop() } }
 
         let proxy = MCPServerProxy(config: .sse(config: MCPServerSseConfig(url: url)))
-        defer { Task { await proxy.disconnect() } }
+        defer { LoopbackTeardown.run { await proxy.disconnect() } }
 
         try await proxy.connect()
         let firstSession = try #require(await proxy.sessionID)
