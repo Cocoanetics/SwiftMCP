@@ -31,9 +31,11 @@ final class NIOHTTPServerAdapter: @unchecked Sendable {
     private let logger: Logger
     private let group: EventLoopGroup
     private var channel: Channel?
-    /// Finishes once the listener has closed; see `start()` for why it is not
-    /// the listener's `closeFuture` itself.
-    private var listenerClosed: AsyncStream<Void>?
+    /// Completes once the listener has closed; see `start()` for why it is not
+    /// the listener's `closeFuture` itself. A task, not the stream it drains:
+    /// awaiting a task's value neither ends on the awaiter's cancellation nor
+    /// limits the number of awaiters, while iterating a stream does both.
+    private var listenerClosed: Task<Void, Never>?
     /// The accepted connections and their handler tasks, quiesced by `shutdown()`.
     private let connections: NIOConnectionRegistry
     /// The shutdown in progress once `shutdown()` ran; `waitUntilClosed()` joins it.
@@ -96,7 +98,7 @@ final class NIOHTTPServerAdapter: @unchecked Sendable {
             // `waitUntilClosed()` must not do — `shutdown()` may have taken
             // the loop down by the time `run()` gets there.
             let (listenerClosed, closedContinuation) = AsyncStream<Void>.makeStream()
-            self.listenerClosed = listenerClosed
+            self.listenerClosed = Task { for await _ in listenerClosed {} }
             channel.closeFuture.whenComplete { [logger] result in
                 switch result {
                 case .success:
@@ -124,9 +126,12 @@ final class NIOHTTPServerAdapter: @unchecked Sendable {
 
     /// Suspends until the listener has closed and, when `shutdown()` closed it,
     /// until the event-loop group is down too, so `run()` outlives the loops.
+    /// Cancelling the caller does not end the wait: `run()` returning early
+    /// would leave the listener bound and the loops running with nothing left
+    /// to stop them.
     func waitUntilClosed() async throws {
         if let listenerClosed {
-            for await _ in listenerClosed {}
+            await listenerClosed.value
         }
         if let shutdown = lock.withLock({ shutdownTask }) {
             try await shutdown.value

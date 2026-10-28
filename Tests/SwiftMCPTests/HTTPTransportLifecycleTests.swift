@@ -89,6 +89,34 @@ struct HTTPTransportLifecycleTests {
         }
     }
 
+    /// `run()` waits for the listener to close, and the caller's cancellation
+    /// must not cut that short: a `run()` that returned on cancellation would
+    /// leave the listener bound and the event loops running, with nothing left
+    /// to stop them. Review of #219 caught the wait briefly becoming
+    /// cancellable when it moved off the listener's close future.
+    @Test("Cancelling run() does not end it before the listener is closed")
+    func cancellingRunKeepsWaitingForTheListener() async throws {
+        let transport = HTTPSSETransport(server: Calculator(), host: "127.0.0.1", port: 0)
+        let finished = HTTPTransportBox(false)
+        let runTask = Task {
+            defer { finished.value = true }
+            try await transport.run()
+        }
+        let bound = await HTTPTransportTestHelpers.waitForCondition { transport.port != 0 }
+        #expect(bound)
+        let port = transport.port
+
+        runTask.cancel()
+        try await Task.sleep(nanoseconds: 200_000_000)
+        #expect(!finished.value, "run() keeps waiting past its cancellation while the listener is open")
+        #expect(ConnectionChurn.connectOnce(port: port), "The listener is still bound")
+
+        try await transport.stop()
+        _ = await runTask.result
+        #expect(finished.value)
+        #expect(!ConnectionChurn.connectOnce(port: port))
+    }
+
     /// Regression for a connection that outlives the listener (#218).
     ///
     /// Closing the listener first keeps new connections off a dying loop, but a
