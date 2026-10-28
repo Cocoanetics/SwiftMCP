@@ -11,6 +11,9 @@
 #if Server
 import Testing
 import Foundation
+// Re-exports FoundationNetworking where Foundation lacks URLSession (Linux,
+// Android); `RequestChurn` below is compiled on every platform.
+import SwiftCross
 #if canImport(Glibc)
 import Glibc
 #elseif canImport(Musl)
