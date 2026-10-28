@@ -73,7 +73,7 @@ struct HTTPTransportLifecycleTests {
     /// its connection drops turns that into a plain `stop()` crash, so the
     /// adapter now closes the listener first and only then shuts the loops down.
     /// The test keeps connections arriving at the port throughout `stop()`.
-    @Test("stop() under connection churn neither crashes nor accepts late connections")
+    @Test("stop() under connection churn neither crashes nor accepts late connections", .loopbackExclusive)
     func stopUnderConnectionChurn() async throws {
         for _ in 0..<15 {
             let transport = HTTPSSETransport(server: Calculator(), host: "127.0.0.1", port: 0)
@@ -87,6 +87,32 @@ struct HTTPTransportLifecycleTests {
             // The listener is gone before stop() returns: nothing accepts anymore.
             #expect(!ConnectionChurn.connectOnce(port: port))
         }
+    }
+
+    /// Regression for #220: an exclusive (churn) test never overlaps a shared one.
+    @Test("Loopback gate keeps exclusive tests apart from shared ones", .loopbackShared)
+    func gateSeparatesExclusiveFromShared() async throws {
+        // This test is itself a shared holder, so the gate must not be exclusive.
+        #expect(await LoopbackGate.shared.state.exclusive == false)
+        #expect(await LoopbackGate.shared.state.shared >= 1)
+
+        let gate = LoopbackGate()
+        await gate.acquire(exclusive: false)
+        let entered = HTTPTransportBox(false)
+        let writer = Task {
+            await gate.acquire(exclusive: true)
+            entered.value = true
+            await gate.release(exclusive: true)
+        }
+        // Wait until the writer is queued, so "not entered" shows it was blocked.
+        for _ in 0..<1000 where await gate.waiterCount == 0 {
+            try await Task.sleep(nanoseconds: 5_000_000)
+        }
+        #expect(await gate.waiterCount == 1)
+        #expect(!entered.value, "exclusive acquire must wait for shared holders")
+        await gate.release(exclusive: false)
+        await writer.value
+        #expect(entered.value)
     }
 
     /// `run()` waits for the listener to close, and the caller's cancellation
@@ -178,7 +204,7 @@ struct HTTPTransportLifecycleTests {
     /// drain loop writes the stream's end, and its post-response check executes
     /// on the loop, after the response completes; before the quiesce, either
     /// could land on a loop `shutdownGracefully` had already closed.
-    @Test("stop() under request churn neither crashes nor leaves a late response to a closed loop")
+    @Test("stop() under request churn neither crashes nor leaves a late response to a closed loop", .loopbackExclusive)
     func stopUnderRequestChurn() async throws {
         #if canImport(FoundationNetworking)
         return
