@@ -1,9 +1,9 @@
 import Foundation
 
-/// Carries the non-Sendable `MCPServer` existential into the cancellable
-/// request task. See the comment in `processCancellableRequest` for why the
-/// sharing is sound.
-private struct UncheckedServerBox: @unchecked Sendable {
+/// Carries the non-Sendable `MCPServer` existential into an unstructured
+/// task (cancellable requests, task-augmented tool work). See the comment in
+/// `processCancellableRequest` for why the sharing is sound.
+struct UncheckedServerBox: @unchecked Sendable {
     let server: any MCPServer
 }
 
@@ -125,6 +125,9 @@ public extension MCPServer {
         if let response = await dispatchToolRequest(requestData) {
             return response
         }
+        if let response = await dispatchTasksRequest(requestData) {
+            return response
+        }
         if let response = await dispatchResourceRequest(requestData) {
             return response
         }
@@ -170,6 +173,24 @@ public extension MCPServer {
             return await createToolsListResponse(id: requestData.id)
         case "tools/call":
             return await handleToolCall(requestData)
+        default:
+            return nil
+        }
+    }
+
+    /// Handles official Tasks-extension methods (`tasks/get`, `tasks/update`,
+    /// `tasks/cancel`). Deliberately omits the superseded `tasks/list` /
+    /// `tasks/result` methods from #113.
+    private func dispatchTasksRequest(
+        _ requestData: JSONRPCMessage.JSONRPCRequestData
+    ) async -> JSONRPCMessage? {
+        switch requestData.method {
+        case "tasks/get":
+            return await handleTasksGet(requestData)
+        case "tasks/update":
+            return await handleTasksUpdate(requestData)
+        case "tasks/cancel":
+            return await handleTasksCancel(requestData)
         default:
             return nil
         }
@@ -326,6 +347,7 @@ enum ModernRequestMethods {
     static let known: Set<String> = [
         "server/discover",
         "tools/list", "tools/call",
+        "tasks/get", "tasks/update", "tasks/cancel",
         "resources/list", "resources/templates/list", "resources/read",
         "prompts/list", "prompts/get",
         "completion/complete"

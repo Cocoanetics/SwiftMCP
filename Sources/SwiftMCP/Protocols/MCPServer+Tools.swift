@@ -104,32 +104,60 @@ public extension MCPServer {
             return rejection
         }
 
-        // Extract arguments from the request
         let arguments = params["arguments"]?.dictionaryValue ?? [:]
-
         let metadata = mcpToolMetadata(for: toolName)
-
-        // structuredContent and resource_link are 2025-06-18 features; degrade
-        // both for clients that negotiated an earlier revision.
         let profile = await RequestContext.current?.protocolProfile
-        let includeStructuredContent = profile?.has(.structuredToolOutput) ?? true
-        let includeResourceLinks = profile?.has(.resourceLinks) ?? true
+        let call = TaskAugmentedCall(
+            toolName: toolName,
+            arguments: arguments,
+            metadata: metadata,
+            includeStructuredContent: profile?.has(.structuredToolOutput) ?? true,
+            includeResourceLinks: profile?.has(.resourceLinks) ?? true
+        )
 
+        if let taskResponse = await maybeStartTaskAugmentedCall(request: request, call: call) {
+            return taskResponse
+        }
+
+        return await executeSynchronousToolCall(
+            toolProvider: toolProvider,
+            request: request,
+            call: call
+        )
+    }
+
+    /// Returns a task handle when the tool opts in and the client declared the
+    /// Tasks extension; otherwise `nil` so the caller runs synchronously.
+    private func maybeStartTaskAugmentedCall(
+        request: JSONRPCMessage.JSONRPCRequestData,
+        call: TaskAugmentedCall
+    ) async -> JSONRPCMessage? {
+        let taskSupport = call.metadata?.taskSupport ?? .forbidden
+        let clientHasTasks = await clientSupportsTasksExtension()
+        if taskSupport == .required && !clientHasTasks {
+            return missingTasksCapabilityError(id: request.id)
+        }
+        guard clientHasTasks, taskSupport != .forbidden else { return nil }
+        return await startTaskAugmentedToolCall(request: request, call: call)
+    }
+
+    /// Runs a non-task `tools/call` to completion (including MRTR).
+    private func executeSynchronousToolCall(
+        toolProvider: MCPToolProviding,
+        request: JSONRPCMessage.JSONRPCRequestData,
+        call: TaskAugmentedCall
+    ) async -> JSONRPCMessage {
         do {
-            let result = try await toolProvider.callTool(toolName, arguments: arguments)
-            let wrappedResult = try metadata?.wrapOutputIfNeeded(result) ?? result
-            let expectsToolResult = metadata?.returnTypeIsContent ?? false
-
+            let result = try await toolProvider.callTool(call.toolName, arguments: call.arguments)
+            let wrappedResult = try call.metadata?.wrapOutputIfNeeded(result) ?? result
             return try buildToolCallResponse(
                 requestID: request.id,
                 wrappedResult: wrappedResult,
-                expectsToolResult: expectsToolResult,
-                includeStructuredContent: includeStructuredContent,
-                includeResourceLinks: includeResourceLinks
+                expectsToolResult: call.expectsToolResult,
+                includeStructuredContent: call.includeStructuredContent,
+                includeResourceLinks: call.includeResourceLinks
             )
         } catch let signal as InputRequiredSignal {
-            // MRTR (modern): the tool needs client input — answer input_required
-            // instead of an error, and let the client retry with the responses.
             return await mrtrInputRequiredResponse(for: signal, request: request)
         } catch let invalid as MRTRInvalidInputResponse {
             return mrtrInvalidInputResponse(for: invalid, request: request)
@@ -141,7 +169,6 @@ public extension MCPServer {
                 ])]),
                 "isError": true
             ]
-            // The error's details for the client, beside the text every client reads.
             if let meta = (error as? MCPToolErrorMetaProviding)?.toolErrorMeta, !meta.isEmpty {
                 result["_meta"] = .object(meta)
             }
@@ -158,8 +185,26 @@ public extension MCPServer {
         includeStructuredContent: Bool,
         includeResourceLinks: Bool
     ) throws -> JSONRPCMessage {
+        let resultPayload = try encodeToolCallResultPayload(
+            wrappedResult: wrappedResult,
+            expectsToolResult: expectsToolResult,
+            includeStructuredContent: includeStructuredContent,
+            includeResourceLinks: includeResourceLinks,
+            isError: false
+        )
+        return JSONRPCMessage.response(id: requestID, result: .object(resultPayload))
+    }
+
+    /// Encodes a tool call's `CallToolResult`-shaped payload dictionary.
+    internal func encodeToolCallResultPayload(
+        wrappedResult: Encodable & Sendable,
+        expectsToolResult: Bool,
+        includeStructuredContent: Bool,
+        includeResourceLinks: Bool,
+        isError: Bool
+    ) throws -> JSONDictionary {
         var resultPayload: JSONDictionary = [
-            "isError": false
+            "isError": .bool(isError)
         ]
 
         var content: JSONValue
@@ -187,7 +232,7 @@ public extension MCPServer {
         if let structured, includeStructuredContent {
             resultPayload["structuredContent"] = structured
         }
-        return JSONRPCMessage.response(id: requestID, result: .object(resultPayload))
+        return resultPayload
     }
 
     /// Rewrites any `resource_link` content blocks (a 2025-06-18 feature) into
