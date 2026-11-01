@@ -55,6 +55,18 @@ enum SessionInitializationGate {
         return MCPProtocolVersion.isModern(version)
     }
 
+    /// The `_meta` protocol version of a lone request that this server cannot
+    /// serve (unknown to ``MCPProtocolVersion/isServable(_:)``), if any. `server/discover`
+    /// is exempt: it is the negotiation entry point and always answers.
+    static func unservableMetaVersion(_ messages: [JSONRPCMessage]) -> String? {
+        guard messages.count == 1, let only = messages.first, only.isRequest, only.method != "server/discover",
+              let version = only.params?["_meta"]?[MCPMetaKey.protocolVersion]?.stringValue,
+              !MCPProtocolVersion.isServable(version) else {
+            return nil
+        }
+        return version
+    }
+
     static func shouldReject(_ messages: [JSONRPCMessage], for session: Session) async -> Bool {
         guard !(await session.hasReceivedInitializeRequest) else {
             return false

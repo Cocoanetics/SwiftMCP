@@ -28,14 +28,15 @@ public extension MCPServer {
     internal func handleServerDiscoverRequest(
         _ request: JSONRPCMessage.JSONRPCRequestData
     ) async -> JSONRPCMessage? {
-        // Don't advertise an era this server can't serve: until dual-era support
-        // (#137) adds a modern revision to `supported`, a discover-first client
+        // Don't advertise an era this server can't serve: until the server opts in
+        // (`advertisesModernEra`) or dual-era support (#137) adds a modern revision
+        // to `supported`, a discover-first client
         // (e.g. ChatGPT's Secure MCP Tunnel) that reads a legacy-only
         // `supportedVersions` may give up instead of falling back to `initialize`.
         // Answering `-32601` here instead matches the documented client contract
         // (`MCPServerProxy+API.swift`'s `discover()`) and self-resolves once a
         // modern revision is advertised.
-        guard MCPProtocolVersion.supportsModernEra else {
+        guard advertisesModernEra || MCPProtocolVersion.supportsModernEra else {
             return JSONRPCMessage.errorResponse(
                 id: request.id,
                 error: .init(code: -32601, message: "Method not found")
@@ -48,7 +49,7 @@ public extension MCPServer {
         // Discover is modern-only, so the cache hints are always emitted.
         let hint = await (self as? MCPCacheHintProviding)?.cacheHint(for: .serverDiscover) ?? .default
         let result = DiscoverResult(
-            supportedVersions: MCPProtocolVersion.supportedDescending,
+            supportedVersions: MCPProtocolVersion.advertisedDescending(modernEra: advertisesModernEra),
             capabilities: capabilities,
             serverInfo: serverInfo,
             instructions: serverInstructions,
@@ -72,7 +73,14 @@ public extension MCPServer {
         id: JSONRPCID,
         requested: String
     ) -> JSONRPCMessage {
-        let supported = MCPProtocolVersion.supportedDescending.map { JSONValue.string($0) }
+        MCPProtocolVersion.unsupportedVersionError(id: id, requested: requested, modernEra: advertisesModernEra)
+    }
+}
+
+extension MCPProtocolVersion {
+    /// Builds the `-32004` response for `requested`, listing the advertised revisions.
+    static func unsupportedVersionError(id: JSONRPCID, requested: String, modernEra: Bool) -> JSONRPCMessage {
+        let supported = advertisedDescending(modernEra: modernEra).map { JSONValue.string($0) }
         return JSONRPCMessage.errorResponse(
             id: id,
             error: .init(

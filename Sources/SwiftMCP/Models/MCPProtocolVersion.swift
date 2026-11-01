@@ -35,6 +35,17 @@ public enum MCPProtocolVersion {
         supported.sorted(by: >)
     }
 
+    /// The revisions a server advertises: ``supported``, plus ``modern`` when the
+    /// server opts in to the modern era (`MCPServer.advertisesModernEra`).
+    public static func advertised(modernEra: Bool) -> Set<String> {
+        modernEra ? supported.union([modern]) : supported
+    }
+
+    /// ``advertised(modernEra:)``, newest first.
+    public static func advertisedDescending(modernEra: Bool) -> [String] {
+        advertised(modernEra: modernEra).sorted(by: >)
+    }
+
     /// Whether `versions` includes at least one modern (`2026-07-28`-era) revision.
     public static func includesModernEra(_ versions: Set<String>) -> Bool {
         versions.contains(where: isModern)

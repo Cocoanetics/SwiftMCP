@@ -50,6 +50,20 @@ extension HTTPSSETransport {
 		return .json(error, status: .notFound, sessionId: nil)
 	}
 
+	/// A lone request declaring a `_meta` version this server cannot serve (e.g. a
+	/// newer modern revision) gets `-32004` before the legacy session gate, which
+	/// would otherwise answer 400 "Missing Mcp-Session-Id".
+	func unservableMetaVersionResponse(messages: [JSONRPCMessage]) -> RouteResponse? {
+		guard let requested = SessionInitializationGate.unservableMetaVersion(messages),
+		      let id = messages.first?.id else {
+			return nil
+		}
+		let error = MCPProtocolVersion.unsupportedVersionError(
+			id: id, requested: requested, modernEra: server?.advertisesModernEra ?? false
+		)
+		return .json(error, status: .badRequest, sessionId: nil)
+	}
+
 	/// Validates the modern required headers against the decoded message, returning
 	/// a `-32001` response on the first missing/mismatched header, or `nil` when all
 	/// match. Modern is a single message (``SessionInitializationGate/batchIsModern``
