@@ -135,6 +135,10 @@ struct HTTPTransportOpenAPITests {
         #expect(http.value(forHTTPHeaderField: "Access-Control-Allow-Methods")?.contains("POST") == true)
         #expect(http.value(forHTTPHeaderField: "Access-Control-Allow-Headers")?.contains("Content-Type") == true)
         #expect(http.value(forHTTPHeaderField: "Access-Control-Allow-Headers")?.contains("Mcp-Session-Id") == true)
+        for header in ["Mcp-Method", "Mcp-Name", "Last-Event-ID"] {
+            #expect(http.value(forHTTPHeaderField: "Access-Control-Allow-Headers")?.contains(header) == true)
+        }
+        #expect(http.value(forHTTPHeaderField: "Access-Control-Expose-Headers")?.contains("Mcp-Session-Id") == true)
     }
 
     @Test("GET /.well-known/ai-plugin.json returns manifest when serveOpenAPI is true")

@@ -56,6 +56,7 @@ public struct MCPToolMacro: PeerMacro {
         var idempotentHintArg: String?
         var openWorldHintArg: String?
         var headerParameters: [String] = []
+        var headerParametersExpression: ExprSyntax?
         var taskSupportArg: String = ".forbidden"
     }
 
@@ -88,6 +89,7 @@ public struct MCPToolMacro: PeerMacro {
         var attrArgs = parseAttributeArguments(node: node)
         resolveDescription(&attrArgs, commonMetadata: commonMetadata, funcDecl: funcDecl, context: context)
 
+        diagnoseNonLiteralHeaderParameters(attrArgs.headerParametersExpression, context: context)
         let headerParams = validatedHeaderParameters(
             attrArgs.headerParameters, commonMetadata: commonMetadata, funcDecl: funcDecl, context: context
         )
@@ -194,6 +196,7 @@ public struct MCPToolMacro: PeerMacro {
         switch label {
         case "headerParameters":
             args.headerParameters = parseStringArray(expression)
+            args.headerParametersExpression = expression
         case "taskSupport":
             if let memberAccess = expression.as(MemberAccessExprSyntax.self) {
                 args.taskSupportArg = ".\(memberAccess.declName.baseName.text)"
@@ -368,27 +371,5 @@ private extension MCPToolMacro {
             }
             return text
         }
-    }
-
-    /// The validated `headerParameters` set: names that match no function
-    /// parameter get an error diagnostic (a typo would otherwise silently
-    /// annotate nothing).
-    static func validatedHeaderParameters(
-        _ headerParameters: [String],
-        commonMetadata: ExtractedFunctionMetadata,
-        funcDecl: FunctionDeclSyntax,
-        context: some MacroExpansionContext
-    ) -> Set<String> {
-        let parameterNames = Set(commonMetadata.parameters.map { $0.name })
-        for headerParam in headerParameters where !parameterNames.contains(headerParam) {
-            let diagnostic = Diagnostic(
-                node: Syntax(funcDecl.name),
-                message: MCPToolDiagnostic.unknownHeaderParameter(
-                    paramName: headerParam, functionName: commonMetadata.functionName
-                )
-            )
-            context.diagnose(diagnostic)
-        }
-        return Set(headerParameters)
     }
 }

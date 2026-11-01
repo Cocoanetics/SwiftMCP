@@ -208,7 +208,8 @@ extension HTTPSSETransport {
 			.cacheControl: "no-cache",
 			.connection: "keep-alive",
 			.accessControlAllowMethods: "GET",
-			.accessControlAllowHeaders: "Content-Type, Authorization, MCP-Protocol-Version"
+			.accessControlAllowHeaders: HTTPField.Name.corsAllowedRequestHeaders,
+			.accessControlExposeHeaders: HTTPField.Name.corsExposedResponseHeaders
 		]
 
 		if !context.isLegacy {
