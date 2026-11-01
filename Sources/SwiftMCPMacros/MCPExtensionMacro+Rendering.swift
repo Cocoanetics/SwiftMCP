@@ -38,7 +38,8 @@ MCPToolMetadata(
    isAsync: \(extracted.isAsync),
    isThrowing: \(extracted.isThrowing),
    isConsequential: \(toolArgs.isConsequential),
-   annotations: \(toolArgs.annotationsArg)
+   annotations: \(toolArgs.annotationsArg),
+   taskSupport: \(toolArgs.taskSupportArg)
 )
 """)
             cases.append("""

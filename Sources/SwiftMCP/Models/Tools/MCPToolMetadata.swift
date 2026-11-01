@@ -18,6 +18,11 @@ public struct MCPToolMetadata: Sendable {
     /// Optional annotations providing hints about tool behavior (per MCP spec)
     public let annotations: MCPToolAnnotations?
 
+    /// Server-side opt-in for the official Tasks extension. Defaults to
+    /// ``MCPTaskSupport/forbidden``. Not emitted on the wire — under SEP-2663
+    /// the server decides unsolicited whether to return a task handle.
+    public let taskSupport: MCPTaskSupport
+
 /**
      Creates a new MCPToolMetadata instance.
 
@@ -31,6 +36,7 @@ public struct MCPToolMetadata: Sendable {
        - isThrowing: Whether the function can throw errors
        - isConsequential: Whether the function's actions are consequential
        - annotations: Optional hints about tool behavior
+       - taskSupport: Whether this tool may/must return a task handle
      */
     public init(
         name: String,
@@ -41,7 +47,8 @@ public struct MCPToolMetadata: Sendable {
         isAsync: Bool = false,
         isThrowing: Bool = false,
         isConsequential: Bool = true,
-        annotations: MCPToolAnnotations? = nil
+        annotations: MCPToolAnnotations? = nil,
+        taskSupport: MCPTaskSupport = .forbidden
     ) {
         self.functionMetadata = MCPFunctionMetadata(
             name: name,
@@ -54,6 +61,7 @@ public struct MCPToolMetadata: Sendable {
         )
         self.isConsequential = isConsequential
         self.annotations = annotations
+        self.taskSupport = taskSupport
     }
 
     // Convenience accessors for common properties
@@ -99,7 +107,8 @@ public struct MCPToolMetadata: Sendable {
             isAsync: isAsync,
             isThrowing: isThrowing,
             isConsequential: isConsequential,
-            annotations: annotations
+            annotations: annotations,
+            taskSupport: taskSupport
         )
     }
 }
