@@ -106,6 +106,12 @@ The `--openapi` option enables OpenAPI endpoints for AI plugin integration. When
 
 ## OAuth support
 
+MCP OAuth conformance helpers (`OAuthConformanceError`, `OAuthAuthorizationResponse`, `OAuthClientRegistrationValidator`,
+`OAuthClientCredentialStore`, `ClientIDMetadataDocument`): authorization-response `iss` validation (RFC 9207 / SEP-2468),
+mandatory `application_type` on dynamic client registration (SEP-837, enforced by the proxy's `/oauth/register`),
+issuer-bound client credentials that force re-registration when the issuer changes (SEP-2352), and Client ID Metadata
+Documents. Dynamic client registration is deprecated in favor of CIMD; it remains available as a fallback.
+
 When `HTTPSSETransport` is configured with ``OAuthConfiguration``, the transport
 validates incoming bearer tokens through the configured OAuth provider.
 Validation can use an introspection endpoint or by checking JWT claims against

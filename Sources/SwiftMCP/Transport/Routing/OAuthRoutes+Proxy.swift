@@ -22,7 +22,7 @@ extension HTTPSSETransport {
 		}
 
 		// Determine the target URL based on the request path
-		let resolved = resolveProxyTarget(config: config, requestURI: request.uri)
+		let resolved = resolveProxyTarget(config: config, request: request)
 		switch resolved {
 		case .target(let targetURL):
 			return try await proxyRequestToUpstream(
@@ -73,6 +73,16 @@ extension HTTPSSETransport {
 		return RouteResponse(status: .found, headerFields: [.location: redirectURL.absoluteString])
 	}
 
+	/// RFC 7591 error response for a registration request failing SEP-837 validation.
+	private static func invalidRegistrationResponse(_ error: Error) -> RouteResponse {
+		let payload: [String: String] = [
+			"error": "invalid_client_metadata",
+			"error_description": error.localizedDescription
+		]
+		let body = (try? JSONSerialization.data(withJSONObject: payload)) ?? Data()
+		return RouteResponse(status: .badRequest, headerFields: [.contentType: "application/json"], body: body)
+	}
+
 	/// Resolution of a request URI to a proxy target or redirect.
 	private enum ProxyTargetResolution {
 		case target(URL)
@@ -81,12 +91,24 @@ extension HTTPSSETransport {
 	}
 
 	/// Map a request URI to its upstream target URL or redirect response.
-	private func resolveProxyTarget(config: OAuthConfiguration, requestURI: String) -> ProxyTargetResolution {
+	private func resolveProxyTarget(
+		config: OAuthConfiguration,
+		request: HTTPRouteRequest<Data?>
+	) -> ProxyTargetResolution {
+		let requestURI = request.uri
 		switch requestURI {
 		case let path where path.hasPrefix("/oauth/token"):
 			return .target(config.tokenEndpoint)
 		case let path where path.hasPrefix("/oauth/register"):
-			return .target(config.registrationEndpoint ?? config.issuer.appendingPathComponent("oidc/register"))
+			if request.method == .post {
+				do {
+					try OAuthClientRegistrationValidator.validate(requestBody: request.body ?? nil)
+				} catch {
+					return .redirect(Self.invalidRegistrationResponse(error))
+				}
+			}
+			let fallback = config.issuer.appendingPathComponent("oidc/register")
+			return .target(config.registrationEndpoint ?? fallback)
 		case let path where path.hasPrefix("/oauth/"):
 			let pathComponent = String(requestURI.dropFirst(1))
 			return .target(config.issuer.appendingPathComponent(pathComponent))
