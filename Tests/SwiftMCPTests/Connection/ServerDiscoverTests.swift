@@ -15,6 +15,18 @@ actor DiscoverTestServer {
     func echo(text: String) -> String { text }
 }
 
+/// Same server, opted in to advertising the modern revision.
+@MCPServer(name: "DiscoverTest", version: "2.0", instructions: "Always echo politely.")
+actor ModernDiscoverTestServer {
+    nonisolated var advertisesModernEra: Bool { true }
+
+    /// Echoes its input.
+    /// - Parameter text: The text to echo.
+    /// - Returns: The same text.
+    @MCPTool(description: "Echoes its input")
+    func echo(text: String) -> String { text }
+}
+
 @Suite("server/discover & -32004 negotiation")
 struct ServerDiscoverTests {
     private static let logger = Logger(label: "test.discover")
@@ -168,6 +180,70 @@ struct ServerDiscoverTests {
         }
         #expect(response.id == .integer(1))
         #expect(response.result?["tools"] != nil)   // the tools list, not a rejection
+
+        transport.stop()
+        try await serveTask.value
+    }
+
+    @Test("An opted-in server answers server/discover with a spec-shaped DiscoverResult")
+    func optedInDiscoverConformance() async throws {
+        let server = ModernDiscoverTestServer()
+        let transport = InMemoryTransport()
+        let serveTask = Task {
+            try await server.serve(over: [transport], gracefulShutdownSignals: [], logger: Self.logger)
+        }
+
+        let connection = transport.accept()
+        var outbound = connection.outbound.makeAsyncIterator()
+        connection.clientSends([request(id: 1, method: "server/discover")])
+
+        let frame = try #require(await outbound.next())
+        guard case .response(let response) = frame.first else {
+            Issue.record("Expected a DiscoverResult, got \(String(describing: frame.first))")
+            transport.stop()
+            return
+        }
+        let result = try #require(response.result)
+        #expect(result["resultType"]?.stringValue == "complete")
+        let versions = result["supportedVersions"]?.arrayValue?.compactMap { $0.stringValue }
+        #expect(versions == ["2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26"])
+        #expect(result["capabilities"]?["tools"] != nil)
+        #expect(result["serverInfo"]?["name"]?.stringValue == "DiscoverTest")
+        #expect(result["serverInfo"]?["version"]?.stringValue == "2.0")
+        #expect(result["instructions"]?.stringValue == "Always echo politely.")
+        #expect(result["ttlMs"] != nil)
+        #expect(result["cacheScope"] != nil)
+
+        // The default (legacy) set is untouched by the opt-in.
+        #expect(!MCPProtocolVersion.supported.contains("2026-07-28"))
+
+        transport.stop()
+        try await serveTask.value
+    }
+
+    @Test("An opted-in server's -32004 lists the modern revision")
+    func optedInUnsupportedVersionListsModern() async throws {
+        let server = ModernDiscoverTestServer()
+        let transport = InMemoryTransport()
+        let serveTask = Task {
+            try await server.serve(over: [transport], gracefulShutdownSignals: [], logger: Self.logger)
+        }
+
+        let connection = transport.accept()
+        var outbound = connection.outbound.makeAsyncIterator()
+        connection.clientSends([initializeRequest(id: 1)])
+        _ = await outbound.next()
+        connection.clientSends([request(id: 2, method: "ping", params: metaVersion("2099-01-01"))])
+        let frame = try #require(await outbound.next())
+        guard case .errorResponse(let err) = frame.first else {
+            Issue.record("Expected -32004")
+            transport.stop()
+            return
+        }
+        #expect(err.error.code == -32004)
+        let supported = err.error.data?["supported"]?.arrayValue?.compactMap { $0.stringValue }
+        #expect(supported?.first == "2026-07-28")
+        #expect(err.error.data?["requested"]?.stringValue == "2099-01-01")
 
         transport.stop()
         try await serveTask.value

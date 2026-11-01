@@ -56,6 +56,16 @@ public protocol MCPServer {
     var serverInstructions: String? { get }
 
     /**
+     Whether this server opts in to advertising the modern (`2026-07-28`) revision.
+
+     Defaults to `false`: ``MCPProtocolVersion/supported`` stays legacy-only and
+     `server/discover` answers `-32601`. Return `true` to add
+     ``MCPProtocolVersion/modern`` to the revisions `server/discover` and the
+     `-32004` error advertise. Legacy `initialize` negotiation is unaffected.
+     */
+    var advertisesModernEra: Bool { get }
+
+    /**
      Handles a JSON-RPC message and generates an appropriate response.
 
      - Parameter message: The JSON-RPC message to handle
@@ -129,6 +139,11 @@ public extension MCPServer {
             .first(where: { $0.label == "__mcpServerWebsiteUrl" })?.value as? String)
             .flatMap(URL.init(string:))
     }
+
+    /**
+     Modern era is opt-in; see the requirement's documentation.
+     */
+    var advertisesModernEra: Bool { false }
 
     /**
      The server's usage instructions, derived from the `@MCPServer(instructions:)`
