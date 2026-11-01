@@ -167,10 +167,7 @@ jobs:
   # hung teardown) surfaces as a red check in ~25 min, and keep the job timeout
   # just above it.
   build-android:
-    # Pinned: ubuntu-latest now resolves to Ubuntu 26.04, and swift-android-action
-    # then downloads an `ubuntu2604` host toolchain that swift.org doesn't
-    # publish (404). Move back to ubuntu-latest once that toolchain exists.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
@@ -181,7 +178,9 @@ jobs:
           # Swift 6.3's SwiftBuild backend emits an incompatible Android target
           # triple. Use the matching 6.4 host toolchain and Android SDK.
           # https://github.com/swiftlang/swift-build/issues/1167
-          swift-version: "6.4.1"
+          # 6.4.2, not 6.4.1: ubuntu-latest is now 26.04, and 6.4.1 has no
+          # ubuntu26.04 host toolchain (the download 404s).
+          swift-version: "6.4.2"
           # Use the backend that fixes macro-dependent Android test discovery (SwiftPM #8094).
           swift-build-flags: --build-system swiftbuild
           free-disk-space: true
