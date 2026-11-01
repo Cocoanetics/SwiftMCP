@@ -284,5 +284,6 @@ struct TasksExtensionTests {
         )
         #expect(expired["__error_code"]?.intValue == -32602)
     }
+
 }
 #endif
