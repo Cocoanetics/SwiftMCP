@@ -22,7 +22,7 @@ extension HTTPSSETransport {
 	// MARK: - Handler Implementations
 
 	/// Resolved request context used by `handleStreamableHTTP` after gate / auth checks.
-	private struct StreamableHTTPContext {
+	struct StreamableHTTPContext {
 		let sessionID: UUID
 		let authSessionID: UUID?
 		/// The session the request was admitted against; `nil` for an initialize or a modern
@@ -219,6 +219,9 @@ extension HTTPSSETransport {
 		token: String?,
 		context: StreamableHTTPContext
 	) async -> RouteResponse {
+		if context.isModern, let listen = messages.first, listen.method == ModernRequestMethods.subscriptionsListen {
+			return await handleSubscriptionsListen(listen, token: token, context: context)
+		}
 		guard batchContainsRequests(messages) else {
 			return await dispatchNotifications(messages, token: token, context: context)
 		}
@@ -314,7 +317,7 @@ extension HTTPSSETransport {
 	/// The session a request runs on: the one it was admitted against — though its client be
 	/// disconnected since, so that the request does not run on a new session under that id — or,
 	/// for an initialize or a modern request, a new one.
-	private func admittedSession(for context: StreamableHTTPContext) async -> Session {
+	func admittedSession(for context: StreamableHTTPContext) async -> Session {
 		guard let session = context.session else {
 			return await sessionManager.session(id: context.sessionID)
 		}

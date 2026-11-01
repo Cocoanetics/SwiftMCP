@@ -55,6 +55,8 @@ actor SessionManager {
     internal var streamMeta: [UUID: StreamMeta] = [:]
     internal var sessionStreams: [UUID: Set<UUID>] = [:]
     internal var primaryGeneralStreamIDs: [UUID: UUID] = [:]
+    /// Modern `subscriptions/listen` streams, by stream id.
+    internal var listenSubscriptions: [UUID: ListenSubscription] = [:]
 
     init(
         transport: (any Transport)? = nil,

@@ -40,7 +40,7 @@ extension HTTPSSETransport {
 	/// (they get a `202` as usual); legacy keeps its in-band `-32601` over `200`.
 	private func modernUnknownMethodResponse(messages: [JSONRPCMessage]) -> RouteResponse? {
 		guard let message = messages.first, message.isRequest,
-		      let method = message.method, !ModernRequestMethods.known.contains(method) else {
+		      let method = message.method, !ModernRequestMethods.isKnown(method) else {
 			return nil
 		}
 		let error = JSONRPCMessage.errorResponse(

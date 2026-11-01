@@ -28,6 +28,10 @@ public enum MCPMetaKey {
     /// The log level requested for this single request (modern per-request logging).
     public static let logLevel = "io.modelcontextprotocol/logLevel"
 
+    /// The JSON-RPC id of the `subscriptions/listen` request that opened the stream a
+    /// notification (or the closing result) was delivered on.
+    public static let subscriptionId = "io.modelcontextprotocol/subscriptionId"
+
     /// W3C Trace Context `traceparent` (SEP-414). Unprefixed, per the W3C spec.
     public static let traceparent = "traceparent"
 

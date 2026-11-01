@@ -161,6 +161,12 @@ extension SessionManager {
             return
         }
 
+        // A listen stream is not resumable: its client leaving ends the subscription.
+        if listenSubscriptions[streamID] != nil {
+            await endListenStream(streamID: streamID)
+            return
+        }
+
         if meta.kind.isGeneral {
             selectPrimaryGeneralStream(for: meta.sessionID, keepRetainedCurrent: true)
         }
@@ -219,6 +225,7 @@ extension SessionManager {
         guard let meta = streamMeta.removeValue(forKey: streamID) else {
             return
         }
+        listenSubscriptions.removeValue(forKey: streamID)
 
         // The hub finishes the continuation and force-closes a live sink.
         hub.remove(streamID: streamID)
