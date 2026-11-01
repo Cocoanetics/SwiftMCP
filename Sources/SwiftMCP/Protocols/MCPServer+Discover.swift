@@ -45,11 +45,15 @@ public extension MCPServer {
         let capabilities = await buildServerCapabilities()
         let serverInfo = buildServerInfo(includeRichIdentity: true)
 
+        // Discover is modern-only, so the cache hints are always emitted.
+        let hint = await (self as? MCPCacheHintProviding)?.cacheHint(for: .serverDiscover) ?? .default
         let result = DiscoverResult(
             supportedVersions: MCPProtocolVersion.supportedDescending,
             capabilities: capabilities,
             serverInfo: serverInfo,
-            instructions: serverInstructions
+            instructions: serverInstructions,
+            ttlMs: hint.ttlMs,
+            cacheScope: hint.cacheScope.rawValue
         )
 
         do {

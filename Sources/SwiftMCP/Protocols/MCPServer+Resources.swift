@@ -29,7 +29,10 @@ public extension MCPServer {
                 "mimeType": resource.mimeType
             ]
         }) {
-            return JSONRPCMessage.response(id: id, result: ["resources": resourcesValue])
+            return JSONRPCMessage.response(
+                id: id,
+                result: await cacheableResult(["resources": resourcesValue], for: .resourcesList)
+            )
         }
         return JSONRPCMessage.errorResponse(
             id: id,
@@ -79,7 +82,10 @@ public extension MCPServer {
 
             if !resourceContentArray.isEmpty {
                 let contents = try resourceContentArray.map { try JSONValue(encoding: $0) }
-                return JSONRPCMessage.response(id: id, result: ["contents": .array(contents)])
+                return JSONRPCMessage.response(
+                    id: id,
+                    result: await cacheableResult(["contents": .array(contents)], for: .resourcesRead)
+                )
             } else {
                 // The not-found code is version-sensitive: modern revisions align
                 // with JSON-RPC and use -32602 (Invalid Params); legacy keeps
@@ -148,7 +154,13 @@ public extension MCPServer {
                 "mimeType": template.mimeType ?? "text/plain"
             ]
         }) {
-            return JSONRPCMessage.response(id: id, result: ["resourceTemplates": templatesValue])
+            return JSONRPCMessage.response(
+                id: id,
+                result: await cacheableResult(
+                    ["resourceTemplates": templatesValue],
+                    for: .resourceTemplatesList
+                )
+            )
         }
         return JSONRPCMessage.errorResponse(
             id: id,

@@ -65,7 +65,7 @@ public struct MCPResourceMetadata: Sendable {
 
     /// Converts metadata to MCPResourceTemplate array (one for each URI template)
     public func toResourceTemplates() -> [SimpleResourceTemplate] {
-        return uriTemplates.map { template in
+        return uriTemplates.sorted().map { template in
             SimpleResourceTemplate(
                 uriTemplate: template,
                 name: name,
@@ -86,7 +86,7 @@ public struct MCPResourceMetadata: Sendable {
         var bestTemplate: String?
         var maxParameterCount = -1
 
-        for template in uriTemplates {
+        for template in uriTemplates.sorted() {
             if let variables = url.extractTemplateVariables(from: template) {
                 let parameterCount = variables.count
                 if parameterCount > maxParameterCount {
