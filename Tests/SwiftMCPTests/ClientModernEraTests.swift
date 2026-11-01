@@ -180,6 +180,30 @@ struct ClientModernEraTests {
         await proxy.disconnect()
     }
 
+    @Test("A modern tools/call keeps the typed -32001 error")
+    func toolCallTypedError() async throws {
+        let fake = makeModernServer { FakeLineServer.fail($0, -32001) }
+        let proxy = await makeModernProxy(fake, preference: .modern)
+        try await proxy.establishConnection(clientName: "t", clientVersion: "1")
+        do {
+            _ = try await proxy.callTool("x")
+            Issue.record("expected headerMismatch")
+        } catch MCPServerProxyError.headerMismatch {
+            // expected
+        }
+        await proxy.disconnect()
+    }
+
+    @Test("invalidateToolsCache drops the mirrored-header metadata")
+    func invalidateClearsHeaderParameters() async throws {
+        let proxy = await makeModernProxy(makeModernServer(), preference: .modern)
+        await proxy.recordHeaderParameters(from: ["tools": .array([])])
+        #expect(await proxy.headerParameters != nil)
+        await proxy.invalidateToolsCache()
+        #expect(await proxy.headerParameters == nil)
+        await proxy.disconnect()
+    }
+
     @Test("Modern connections send the selected version header and no session id")
     func modernVersionHeader() async throws {
         let fake = makeModernServer()

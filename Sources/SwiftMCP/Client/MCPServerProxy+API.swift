@@ -237,7 +237,8 @@ extension MCPServerProxy {
             }
             return responseResult
         case .errorResponse(let errorResponse):
-            throw MCPServerProxyError.toolError(errorResponse.error.message)
+            throw typedModernError(errorResponse.error)
+                ?? MCPServerProxyError.toolError(errorResponse.error.message)
         default:
             throw MCPServerProxyError.communicationError(
                 "Invalid response type for tools/call, expected JSONRPCResponse"
@@ -263,6 +264,7 @@ extension MCPServerProxy {
     /// Invalidates the cached list of tools.
     public func invalidateToolsCache() {
         cachedTools = nil
+        headerParameters = nil
     }
 
     /// Sends a ping request to the server.
