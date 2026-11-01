@@ -248,5 +248,27 @@ struct ServerDiscoverTests {
         transport.stop()
         try await serveTask.value
     }
+
+    @Test("A draft-shaped server/discover result vector decodes into DiscoverResult")
+    func draftDiscoverResultVector() throws {
+        let json = """
+        {
+          "resultType": "complete",
+          "supportedVersions": ["2026-07-28", "2025-11-25"],
+          "capabilities": {"tools": {"listChanged": true}, "extensions": {"io.modelcontextprotocol/tasks": {}}},
+          "serverInfo": {"name": "DiscoverTest", "version": "2.0"},
+          "instructions": "Always echo politely.",
+          "ttlMs": 60000,
+          "cacheScope": "shared"
+        }
+        """
+        let result = try JSONDecoder().decode(DiscoverResult.self, from: Data(json.utf8))
+        #expect(result.resultType == "complete")
+        #expect(result.supportedVersions == ["2026-07-28", "2025-11-25"])
+        #expect(result.capabilities.extensions?["io.modelcontextprotocol/tasks"] != nil)
+        #expect(result.serverInfo.name == "DiscoverTest")
+        #expect(result.ttlMs == 60000)
+        #expect(result.cacheScope == "shared")
+    }
 }
 #endif
