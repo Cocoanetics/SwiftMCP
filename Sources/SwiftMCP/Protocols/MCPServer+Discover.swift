@@ -73,8 +73,14 @@ public extension MCPServer {
         id: JSONRPCID,
         requested: String
     ) -> JSONRPCMessage {
-        let supported = MCPProtocolVersion.advertisedDescending(modernEra: advertisesModernEra)
-            .map { JSONValue.string($0) }
+        MCPProtocolVersion.unsupportedVersionError(id: id, requested: requested, modernEra: advertisesModernEra)
+    }
+}
+
+extension MCPProtocolVersion {
+    /// Builds the `-32004` response for `requested`, listing the advertised revisions.
+    static func unsupportedVersionError(id: JSONRPCID, requested: String, modernEra: Bool) -> JSONRPCMessage {
+        let supported = advertisedDescending(modernEra: modernEra).map { JSONValue.string($0) }
         return JSONRPCMessage.errorResponse(
             id: id,
             error: .init(
