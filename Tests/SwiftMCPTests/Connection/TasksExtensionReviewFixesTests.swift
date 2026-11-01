@@ -72,5 +72,30 @@ extension TasksExtensionTests {
 
         await MCPTaskRegistry.shared.setDefaultTTLMs(MCPTasksExtension.defaultTTLMs)
     }
+
+    @Test("Expiring a task cancels work and resumes pending input waits")
+    func expiryCancelsPendingWork() async throws {
+        let owner = MCPTaskPrincipal(rawValue: "expiry-cancel-owner")
+        let record = await MCPTaskRegistry.shared.create(owner: owner, ttlMs: 1)
+        let taskId = await record.taskId
+
+        let waiter = Task {
+            try await record.awaitInput(method: "elicitation/create", params: .object([:]))
+        }
+        // Let the waiter park on the input continuation before the TTL elapses.
+        try await Task.sleep(for: .milliseconds(5))
+        try await Task.sleep(for: .milliseconds(20))
+
+        await MCPTaskRegistry.shared.purgeExpired()
+
+        await #expect(throws: CancellationError.self) {
+            _ = try await waiter.value
+        }
+        #expect(await record.wasCancellationRequested())
+        #expect(await record.snapshot().status == .cancelled)
+        #expect(await MCPTaskRegistry.shared.task(id: taskId, for: owner) == nil)
+
+        await MCPTaskRegistry.shared.setDefaultTTLMs(MCPTasksExtension.defaultTTLMs)
+    }
 }
 #endif

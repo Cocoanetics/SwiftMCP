@@ -61,7 +61,7 @@ public actor MCPTaskRegistry {
         let recordOwner = await record.owner
         guard recordOwner == owner else { return nil }
         if await record.isExpired {
-            tasks.removeValue(forKey: taskId)
+            await discardExpired(record, id: taskId)
             return nil
         }
         return record
@@ -73,11 +73,19 @@ public actor MCPTaskRegistry {
     }
 
     /// Removes every task whose TTL has elapsed, so abandoned records do not
-    /// accumulate when clients stop polling.
+    /// accumulate when clients stop polling. Cancels in-flight work and resumes
+    /// any pending input waits before dropping the record.
     func purgeExpired() async {
         for (id, record) in Array(tasks) {
             guard await record.isExpired else { continue }
-            tasks.removeValue(forKey: id)
+            await discardExpired(record, id: id)
         }
+    }
+
+    /// Tears down an expired task so its unstructured work and input
+    /// continuations cannot leak after the registry forgets it.
+    private func discardExpired(_ record: MCPTaskRecord, id: String) async {
+        await record.requestCancellation()
+        tasks.removeValue(forKey: id)
     }
 }
