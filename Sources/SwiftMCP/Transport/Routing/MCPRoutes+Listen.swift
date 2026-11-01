@@ -33,7 +33,7 @@ extension HTTPSSETransport {
 			return textResponse(status: .badRequest, body: "Client must accept text/event-stream.")
 		}
 
-		let capabilities = await server?.buildServerCapabilities()
+		let capabilities = await listenCapabilities()
 		let session = await admittedSession(for: context)
 		await bindBearerTokenIfNeeded(token, to: context.sessionID)
 		guard let (stream, streamInfo) = await sessionManager.openListenStream(
@@ -52,6 +52,26 @@ extension HTTPSSETransport {
 			.xAccelBuffering: "no"
 		]
 		return RouteResponse(status: .ok, headerFields: headerFields, bodyStream: stream, streamInfo: streamInfo)
+	}
+
+	/// The capabilities a listen stream is narrowed to: the transport's own server, or — in the
+	/// decoupled mode, where the dispatcher owns it — whatever the dispatcher reports for
+	/// `server/discover`. `nil` when neither can say.
+	private func listenCapabilities() async -> ServerCapabilities? {
+		if let server {
+			return await server.buildServerCapabilities()
+		}
+		let discover = JSONRPCMessage.request(
+			id: 0, method: "server/discover",
+			params: .object(["_meta": .object([MCPMetaKey.protocolVersion: .string(MCPProtocolVersion.modern)])])
+		)
+		guard let reply = await dispatcher?.handle(discover),
+		      case .response(let response) = reply,
+		      let capabilities = response.result?["capabilities"],
+		      let data = try? JSONEncoder().encode(capabilities) else {
+			return nil
+		}
+		return try? JSONDecoder().decode(ServerCapabilities.self, from: data)
 	}
 }
 #endif

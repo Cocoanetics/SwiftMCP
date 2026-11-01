@@ -36,6 +36,9 @@ extension HTTPSSETransport {
                     _ = await self.sessionManager.sendComment("keep-alive", to: streamID)
                 }
             case .ping:
+                // Listen streams are never a session's primary general stream, so the
+                // pings below don't reach them; comment them so idle proxies keep them open.
+                await self.sessionManager.sendListenKeepAlive()
                 await self.sessionManager.forEachSession { session in
                     guard await self.sessionManager.hasActivePrimaryGeneralConnection(for: session.id) else {
                         return

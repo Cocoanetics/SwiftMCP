@@ -150,6 +150,46 @@ struct ModernSubscriptionsListenTests {
         #expect(await transport.sessionManager.sessionIDs.isEmpty)
     }
 
+    @Test("A server-less transport narrows the acknowledgement via the dispatcher's capabilities")
+    func decoupledAcknowledgementNarrowed() async throws {
+        let server = Calculator()
+        let transport = HTTPSSETransport(host: "127.0.0.1", port: 0)
+        transport.connect(to: MCPServerDispatcher(server: server))
+        let adapter = InMemoryHTTPServerAdapter(engine: transport)
+        let exchange = await adapter.send(
+            method: .post, path: "/mcp", headerFields: headers(method: "subscriptions/listen"),
+            body: try listenBody(.object([
+                "toolsListChanged": .bool(true), "promptsListChanged": .bool(true)
+            ]))
+        )
+        guard case .sse(let stream) = exchange.body else {
+            Issue.record("expected an SSE body")
+            return
+        }
+        var iterator = stream.makeAsyncIterator()
+        let honored = await events(&iterator, count: 1).first?["params"]?["notifications"]
+        #expect(honored?["promptsListChanged"] == nil)
+    }
+
+    @Test("Keep-alive reaches idle listen streams")
+    func keepAliveReachesListenStream() async throws {
+        let transport = HTTPSSETransport(server: Calculator())
+        let adapter = InMemoryHTTPServerAdapter(engine: transport)
+        let exchange = await adapter.send(
+            method: .post, path: "/mcp", headerFields: headers(method: "subscriptions/listen"),
+            body: try listenBody(.object(["toolsListChanged": .bool(true)]))
+        )
+        guard case .sse(let stream) = exchange.body else {
+            Issue.record("expected an SSE body")
+            return
+        }
+        var iterator = stream.makeAsyncIterator()
+        _ = await events(&iterator, count: 1)
+        await transport.sessionManager.sendListenKeepAlive()
+        let chunk = await iterator.next()
+        #expect(String(bytes: chunk ?? Data(), encoding: .utf8)?.contains("keep-alive") == true)
+    }
+
     @Test("A malformed filter is rejected with -32602 before any stream opens")
     func malformedFilterRejected() async throws {
         let transport = HTTPSSETransport(server: Calculator())

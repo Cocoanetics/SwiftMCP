@@ -52,6 +52,13 @@ extension SessionManager {
         await removeSession(id: subscription.sessionID)
     }
 
+    /// Send an SSE comment on every listen stream so idle connections stay open.
+    func sendListenKeepAlive() async {
+        for streamID in Array(listenSubscriptions.keys) {
+            _ = await sendComment("keep-alive", to: streamID)
+        }
+    }
+
     /// End every listen stream gracefully with the empty `subscriptions/listen` result.
     func closeListenStreams() async {
         for (streamID, subscription) in listenSubscriptions {

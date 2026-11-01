@@ -44,10 +44,11 @@ struct SubscriptionFilter: Sendable, Equatable {
         return value.boolValue
     }
 
-    /// The filter narrowed to the notification types the server can produce.
+    /// The filter narrowed to the notification types the server can produce;
+    /// nothing is honored when the capabilities are unknown.
     func honored(by capabilities: ServerCapabilities?) -> SubscriptionFilter {
         guard let capabilities else {
-            return self
+            return SubscriptionFilter(.object([:])) ?? self
         }
         var result = self
         result.toolsListChanged = toolsListChanged && capabilities.tools != nil
