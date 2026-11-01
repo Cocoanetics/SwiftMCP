@@ -123,6 +123,24 @@ struct InMemoryHTTPAdapterTests {
         #expect(text.contains("2026-07-28"))   // opted-in server advertises modern
     }
 
+    @Test("POST /mcp: server/discover with an unservable _meta version still answers, not -32004")
+    func discoverExemptFromUnservableMetaVersionOverHTTP() async throws {
+        let transport = HTTPSSETransport(server: ModernDiscoverTestServer())
+        let adapter = InMemoryHTTPServerAdapter(engine: transport)
+
+        let discover = JSONRPCMessage.request(
+            id: 1, method: "server/discover",
+            params: .object(["_meta": .object(["io.modelcontextprotocol/protocolVersion": .string("2027-01-01")])])
+        )
+        let body = try HTTPTransportTestHelpers.encode(discover)
+        let exchange = await adapter.send(method: .post, path: "/mcp", headerFields: jsonHeaders(), body: body)
+
+        #expect(exchange.status == .ok)
+        let text = await drain(exchange.body)
+        #expect(text.contains("supportedVersions"))
+        #expect(!text.contains("-32004"))
+    }
+
     @Test("POST /mcp: a modern header without matching _meta is not served sessionless")
     func modernHeaderWithoutMetaIsNotSessionless() async throws {
         let transport = HTTPSSETransport(server: Calculator())
