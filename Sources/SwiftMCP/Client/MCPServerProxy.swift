@@ -112,6 +112,37 @@ public final actor MCPServerProxy {
     /// requests.
     public internal(set) var negotiatedProtocolVersion: String?
 
+    /// Which era `connect()` should negotiate. Defaults to ``MCPClientEraPreference/legacy``
+    /// — modern support is opt-in until the dual-era rollout (#137) completes.
+    public var eraPreference: MCPClientEraPreference = .legacy
+
+    /// The era of the current connection; `nil` before `connect()` completes.
+    public internal(set) var negotiatedEra: MCPClientEra?
+
+    /// The modern revision selected from `server/discover`, when ``negotiatedEra``
+    /// is ``MCPClientEra/modern``.
+    public internal(set) var modernProtocolVersion: String?
+
+    /// How long the era probe waits for a line-transport server to answer
+    /// `server/discover` before falling back to the legacy handshake.
+    public var eraProbeTimeout: TimeInterval = 3
+
+    /// The log level sent as `_meta` on every modern request; omitted when `nil`.
+    public var requestLogLevel: LogLevel?
+
+    /// **Experimental.** Answers MRTR `input_required` rounds from modern servers.
+    public var inputHandler: (any MCPClientInputHandler)?
+
+    /// The most `input_required` rounds a single request may take before failing.
+    public var maxInputRounds: Int = 10
+
+    /// Client identity sent as `_meta` on modern requests (set by `connect`).
+    internal var clientIdentity: (name: String, version: String) = ("swiftmcp-client", "1.0.0")
+
+    /// Mirrored-header parameters per tool, read from the raw `tools/list`
+    /// `inputSchema` (`x-mcp-header`) — the typed schema model drops vendor keys.
+    internal var headerParameters: [String: [String: String]]?
+
     internal var notificationHandlers: [String: NotificationHandlerBox] = [:]
 
     /// The desired set of subscribed resource URIs. `subscribeResource` adds to

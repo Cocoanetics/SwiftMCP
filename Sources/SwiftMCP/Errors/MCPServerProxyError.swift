@@ -27,6 +27,17 @@ public enum MCPServerProxyError: Error, LocalizedError {
     case ambiguousService(candidates: [String])
     /// The advertised publisher process is gone — a stale or wedged advertisement.
     case publisherNotRunning(processID: Int32)
+    /// Modern-era negotiation found no revision both sides support. `supported`
+    /// is the server's list (from `server/discover` or the `-32004` error data);
+    /// empty when the server does not speak the modern era at all.
+    case unsupportedProtocolVersion(supported: [String])
+    /// The server rejected a modern request's required HTTP headers (`-32001`).
+    case headerMismatch(String)
+    /// A non-2xx HTTP response without a JSON-RPC error body, on a modern-era
+    /// connection (legacy connections report these as ``communicationError(_:)``).
+    case httpStatus(Int, String)
+    /// A multi-round (`input_required`) request could not be completed.
+    case inputRequired(String)
 
     public var errorDescription: String? {
         switch self {
@@ -52,6 +63,15 @@ public enum MCPServerProxyError: Error, LocalizedError {
                 """
         case .publisherNotRunning(let processID):
             return "The advertised MCP server (pid \(processID)) is no longer running."
+        case .unsupportedProtocolVersion(let supported):
+            let list = supported.isEmpty ? "none" : supported.joined(separator: ", ")
+            return "No mutually supported modern protocol version (server supports: \(list))."
+        case .httpStatus(let status, let body):
+            return "Communication error with MCP server: HTTP error \(status)\(body.isEmpty ? "" : ": \(body)")"
+        case .headerMismatch(let message):
+            return "The server rejected the request headers: \(message)"
+        case .inputRequired(let message):
+            return "Multi-round request failed: \(message)"
         }
     }
 }

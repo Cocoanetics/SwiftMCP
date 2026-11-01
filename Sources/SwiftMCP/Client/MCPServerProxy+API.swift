@@ -25,11 +25,11 @@ extension MCPServerProxy {
             return cachedTools
         }
 
-        let result: ToolsListResult = try await requestResult(
-            method: "tools/list",
-            as: ToolsListResult.self
-        )
-        let tools = result.tools
+        let raw = try await requestResult(method: "tools/list")
+        if negotiatedEra == .modern {
+            recordHeaderParameters(from: raw)
+        }
+        let tools = try raw.decoded(ToolsListResult.self).tools
 
         if cacheToolsList {
             cachedTools = tools
@@ -144,7 +144,7 @@ extension MCPServerProxy {
             method: "tools/call",
             params: .object(params)
         )
-        let responseMessage = try await send(request)
+        let responseMessage = try await sendCompletingInputRounds(request)
 
         let result = try extractToolCallResult(from: responseMessage)
 
@@ -237,7 +237,8 @@ extension MCPServerProxy {
             }
             return responseResult
         case .errorResponse(let errorResponse):
-            throw MCPServerProxyError.toolError(errorResponse.error.message)
+            throw typedModernError(errorResponse.error)
+                ?? MCPServerProxyError.toolError(errorResponse.error.message)
         default:
             throw MCPServerProxyError.communicationError(
                 "Invalid response type for tools/call, expected JSONRPCResponse"
@@ -263,6 +264,7 @@ extension MCPServerProxy {
     /// Invalidates the cached list of tools.
     public func invalidateToolsCache() {
         cachedTools = nil
+        headerParameters = nil
     }
 
     /// Sends a ping request to the server.

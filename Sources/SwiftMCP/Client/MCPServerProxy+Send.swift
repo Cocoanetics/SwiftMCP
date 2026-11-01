@@ -5,6 +5,14 @@ import HTTPTypes
 extension MCPServerProxy {
     /// Sends a JSON-RPC message to the server and waits for the response.
     public func send(_ message: JSONRPCMessage) async throws -> JSONRPCMessage {
+        var message = message
+        var modernHeaders: [String: String] = [:]
+        if negotiatedEra == .modern {
+            message = injectingModernMeta(into: message)
+            if case .sse = config {
+                modernHeaders = try await modernRequestHeaders(for: message)
+            }
+        }
         let messageId = message.id
         switch config {
         case .stdio, .stdioHandles, .tcp:
@@ -12,7 +20,7 @@ extension MCPServerProxy {
 
         case .sse(let sseConfig):
             if isStreamableMCPURL(endpointURL ?? sseConfig.url) {
-                return try await sendStreamable(message, sseConfig: sseConfig)
+                return try await sendStreamable(message, sseConfig: sseConfig, extraHeaders: modernHeaders)
             }
 
             return try await sendSSEMessage(
@@ -25,9 +33,10 @@ extension MCPServerProxy {
 
     private func sendStreamable(
         _ message: JSONRPCMessage,
-        sseConfig: MCPServerSseConfig
+        sseConfig: MCPServerSseConfig,
+        extraHeaders: [String: String]
     ) async throws -> JSONRPCMessage {
-        try await sendStreamableRequest(message, sseConfig: sseConfig)
+        try await sendStreamableRequest(message, sseConfig: sseConfig, extraHeaders: extraHeaders)
     }
 
     private func sendLineMessage(
