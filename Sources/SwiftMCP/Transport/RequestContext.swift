@@ -170,6 +170,12 @@ public final class RequestContext: Sendable {
         params: JSONValue?,
         as type: Response.Type
     ) async throws -> Response {
+        // Task-augmented execution: mid-flight inputs are surfaced via
+        // `tasks/get` / fulfilled via `tasks/update`, not MRTR retries.
+        if let task = MCPTaskRecord.current {
+            return try await resolveTaskInput(task: task, method: method, params: params, as: type)
+        }
+
         let ordinalID = await mrtr.nextOrdinalID()
         if let answer = await mrtr.response(for: ordinalID) {
             do {
@@ -202,6 +208,10 @@ public final class RequestContext: Sendable {
     /// - Returns: The generated sampling response
     /// - Throws: An error if the sampling request fails
     public func sample(_ request: SamplingCreateMessageRequest) async throws -> SamplingCreateMessageResponse {
+        if let viaTask = try await sampleViaTaskIfPresent(request) {
+            return viaTask
+        }
+
         // Modern (2026-07-28): live server→client requests are illegal — resolve
         // from the MRTR retry's input responses, or signal `input_required`.
         // Capabilities come from the request's `_meta` (there is no session).
@@ -292,6 +302,10 @@ public final class RequestContext: Sendable {
     /// - Returns: The elicitation response with user action and optional content
     /// - Throws: An error if the elicitation request fails
     public func elicit(_ request: ElicitationCreateRequest) async throws -> ElicitationCreateResponse {
+        if let viaTask = try await elicitViaTaskIfPresent(request) {
+            return viaTask
+        }
+
         // Modern (2026-07-28): resolve from the MRTR retry's input responses, or
         // signal `input_required`. Capability comes from the request's `_meta`.
         if await protocolProfile.has(.mrtr) {

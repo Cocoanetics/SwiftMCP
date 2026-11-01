@@ -16,6 +16,7 @@ extension MCPExtensionMacro {
         var descriptionArg: String
         var isConsequential: String
         var annotationsArg: String
+        var taskSupportArg: String
     }
 
     /// Intermediate accumulator populated while iterating over labeled
@@ -29,6 +30,7 @@ extension MCPExtensionMacro {
         var destructiveHintArg: String?
         var idempotentHintArg: String?
         var openWorldHintArg: String?
+        var taskSupportArg: String = ".forbidden"
     }
 
     static func parseToolArgs(attribute: AttributeSyntax, defaults: ExtractedFunctionMetadata) -> ToolArgs {
@@ -48,7 +50,8 @@ extension MCPExtensionMacro {
             wireName: parsed.wireName,
             descriptionArg: parsed.descriptionArg,
             isConsequential: parsed.isConsequentialArg,
-            annotationsArg: makeAnnotationsArg(from: parsed)
+            annotationsArg: makeAnnotationsArg(from: parsed),
+            taskSupportArg: parsed.taskSupportArg
         )
     }
 
@@ -72,9 +75,19 @@ extension MCPExtensionMacro {
             if let lit = arg.expression.as(BooleanLiteralExprSyntax.self) {
                 parsed.isConsequentialArg = lit.literal.text
             }
+        case "taskSupport":
+            applyTaskSupport(arg.expression, to: &parsed)
         default:
             applyLegacyHint(label: label, expression: arg.expression, to: &parsed)
         }
+    }
+
+    private static func applyTaskSupport(
+        _ expression: ExprSyntax,
+        to parsed: inout ParsedToolArgs
+    ) {
+        guard let memberAccess = expression.as(MemberAccessExprSyntax.self) else { return }
+        parsed.taskSupportArg = ".\(memberAccess.declName.baseName.text)"
     }
 
     /// Applies the legacy `*Hint:` boolean arguments. Splitting these out

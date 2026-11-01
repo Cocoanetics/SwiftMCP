@@ -131,6 +131,13 @@ public extension MCPServer {
         // Advertise completion support
         capabilities.completions = .object([:])
 
+        // Official Tasks extension: advertise only when at least one tool opts in.
+        if await serverAdvertisesTasksExtension() {
+            capabilities.extensions = [
+                MCPTasksExtension.identifier: MCPTasksExtension.capability
+            ]
+        }
+
         return capabilities
     }
 

@@ -56,6 +56,7 @@ public struct MCPToolMacro: PeerMacro {
         var idempotentHintArg: String?
         var openWorldHintArg: String?
         var headerParameters: [String] = []
+        var taskSupportArg: String = ".forbidden"
     }
 
     /**
@@ -104,7 +105,8 @@ public struct MCPToolMacro: PeerMacro {
                 parameterInfoStrings: parameterInfoStrings,
                 commonMetadata: commonMetadata,
                 isConsequentialArg: attrArgs.isConsequentialArg,
-                annotationsArg: annotationsArg
+                annotationsArg: annotationsArg,
+                taskSupportArg: attrArgs.taskSupportArg
             )
         )
 
@@ -148,26 +150,56 @@ public struct MCPToolMacro: PeerMacro {
         to args: inout ToolAttributeArgs
     ) {
         guard let label = argument.label?.text else { return }
+        if applyPrimaryAttributeArgument(label: label, expression: argument.expression, to: &args) {
+            return
+        }
+        applyLegacyHintArgument(label: label, expression: argument.expression, to: &args)
+    }
+
+    /// Handles the non-legacy `@MCPTool` labels. Returns `true` when consumed.
+    private static func applyPrimaryAttributeArgument(
+        label: String,
+        expression: ExprSyntax,
+        to args: inout ToolAttributeArgs
+    ) -> Bool {
         switch label {
         case "name":
-            if let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
+            if let stringLiteral = expression.as(StringLiteralExprSyntax.self) {
                 args.customName = stringLiteral.segments.description
             }
         case "description":
-            if let stringLiteral = argument.expression.as(StringLiteralExprSyntax.self) {
+            if let stringLiteral = expression.as(StringLiteralExprSyntax.self) {
                 let stringValue = stringLiteral.segments.description
                 args.descriptionArg = "\"\(stringValue.escapedForSwiftString)\""
             }
         case "hints":
-            args.hintsFromOptionSet.append(contentsOf: parseHintsExpression(argument.expression))
+            args.hintsFromOptionSet.append(contentsOf: parseHintsExpression(expression))
         case "isConsequential":
-            if let boolLiteral = argument.expression.as(BooleanLiteralExprSyntax.self) {
+            if let boolLiteral = expression.as(BooleanLiteralExprSyntax.self) {
                 args.isConsequentialArg = boolLiteral.literal.text
             }
-        case "headerParameters":
-            args.headerParameters = parseStringArray(argument.expression)
+        case "headerParameters", "taskSupport":
+            applyWireOptionArgument(label: label, expression: expression, to: &args)
         default:
-            applyLegacyHintArgument(label: label, expression: argument.expression, to: &args)
+            return false
+        }
+        return true
+    }
+
+    private static func applyWireOptionArgument(
+        label: String,
+        expression: ExprSyntax,
+        to args: inout ToolAttributeArgs
+    ) {
+        switch label {
+        case "headerParameters":
+            args.headerParameters = parseStringArray(expression)
+        case "taskSupport":
+            if let memberAccess = expression.as(MemberAccessExprSyntax.self) {
+                args.taskSupportArg = ".\(memberAccess.declName.baseName.text)"
+            }
+        default:
+            break
         }
     }
 
@@ -205,6 +237,7 @@ public struct MCPToolMacro: PeerMacro {
         let commonMetadata: ExtractedFunctionMetadata
         let isConsequentialArg: String
         let annotationsArg: String
+        let taskSupportArg: String
     }
 
     private static func makeMetadataDeclaration(
@@ -223,7 +256,8 @@ nonisolated private let __mcpMetadata_\(inputs.functionName) = MCPToolMetadata(
    isAsync: \(inputs.commonMetadata.isAsync),
    isThrowing: \(inputs.commonMetadata.isThrowing),
    isConsequential: \(inputs.isConsequentialArg),
-   annotations: \(inputs.annotationsArg)
+   annotations: \(inputs.annotationsArg),
+   taskSupport: \(inputs.taskSupportArg)
 )
 """
     }
