@@ -30,6 +30,7 @@ extension SessionManager {
                 try? await session.sendToolListChanged()
             }
         }
+        await deliverToListeners(method: "notifications/tools/list_changed") { $0.toolsListChanged }
     }
 
     /// Broadcast a resources list-changed notification to all sessions.
@@ -40,6 +41,7 @@ extension SessionManager {
                 try? await session.sendResourceListChanged()
             }
         }
+        await deliverToListeners(method: "notifications/resources/list_changed") { $0.resourcesListChanged }
     }
 
     /// Broadcast a prompts list-changed notification to all sessions.
@@ -50,6 +52,7 @@ extension SessionManager {
                 try? await session.sendPromptListChanged()
             }
         }
+        await deliverToListeners(method: "notifications/prompts/list_changed") { $0.promptsListChanged }
     }
 
     /// Send a resource-updated notification to all sessions subscribed to the given URI.
@@ -66,6 +69,10 @@ extension SessionManager {
             let delivered = await deliverResourceUpdated(uri: uri, to: session)
             recordResourceUpdatedOutcome(delivered: delivered, sessionID: session.id, uri: uriString)
         }
+        await deliverToListeners(
+            method: "notifications/resources/updated",
+            params: ["uri": .string(uriString)]
+        ) { $0.resourceSubscriptions.contains(uriString) }
     }
 
     /// Deliver through the session's own transport, reporting whether it went

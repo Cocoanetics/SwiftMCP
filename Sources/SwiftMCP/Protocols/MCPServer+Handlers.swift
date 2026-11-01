@@ -340,8 +340,9 @@ public extension MCPServer {
 ///
 /// Deliberately excluded (legacy-only per `ProtocolVersionProfile`):
 /// `initialize`, `ping`, `logging/setLevel`, `resources/subscribe` /
-/// `resources/unsubscribe`. `subscriptions/listen` joins when Phase 4 implements
-/// it. Keep in sync with the `dispatch*Request` functions — the
+/// `resources/unsubscribe`. `subscriptions/listen` is part of the modern surface
+/// but is answered by the HTTP transport (it opens a long-lived stream), not by
+/// these dispatch functions — see ``isKnown(_:)``. Keep in sync with the `dispatch*Request` functions — the
 /// "modern method surface matches the dispatcher" test enforces this.
 enum ModernRequestMethods {
     static let known: Set<String> = [
@@ -352,4 +353,12 @@ enum ModernRequestMethods {
         "prompts/list", "prompts/get",
         "completion/complete"
     ]
+
+    /// The modern long-lived notification stream, served by the transport itself.
+    static let subscriptionsListen = "subscriptions/listen"
+
+    /// Whether `method` belongs to the modern request surface.
+    static func isKnown(_ method: String) -> Bool {
+        known.contains(method) || method == subscriptionsListen
+    }
 }

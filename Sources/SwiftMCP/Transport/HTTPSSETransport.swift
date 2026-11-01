@@ -207,6 +207,7 @@ public final class HTTPSSETransport: Transport, MCPTransport, Service, MCPHTTPEn
     public func stop() async throws {
         logger.info("Stopping server...")
         stopKeepAliveTimer()
+        await sessionManager.closeListenStreams()
         await sessionManager.removeAllSessions()
         // Cleared before the throwing shutdown: if shutdown throws, the adapter
         // must not linger as if it were still serving.
