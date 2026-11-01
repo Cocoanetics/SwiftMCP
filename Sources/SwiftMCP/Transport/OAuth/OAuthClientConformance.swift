@@ -1,4 +1,4 @@
-#if Server
+#if Server || Client
 import Foundation
 
 /// Errors raised by the MCP OAuth conformance helpers.
@@ -95,6 +95,7 @@ public struct OAuthClientCredentials: Sendable, Equatable, Codable {
 /// Stores client credentials per authorization-server issuer so they are never reused across issuers.
 public actor OAuthClientCredentialStore {
     private var stored: [String: OAuthClientCredentials] = [:]
+    private var inFlight: [String: Task<OAuthClientCredentials, Error>] = [:]
 
     public init() {}
 
@@ -114,11 +115,18 @@ public actor OAuthClientCredentialStore {
     /// Return credentials for `issuer`, calling `register` (dynamic registration) when none are bound to it.
     public func credentials(
         for issuer: String,
-        register: @Sendable (String) async throws -> OAuthClientCredentials
+        register: @escaping @Sendable (String) async throws -> OAuthClientCredentials
     ) async throws -> OAuthClientCredentials {
         if let existing = stored[issuer] { return existing }
-        let fresh = try await register(issuer)
-        let bound = OAuthClientCredentials(issuer: issuer, clientID: fresh.clientID, clientSecret: fresh.clientSecret)
+        // Actors are reentrant at `await`: share one in-flight registration per issuer.
+        if let pending = inFlight[issuer] { return try await pending.value }
+        let task = Task {
+            let fresh = try await register(issuer)
+            return OAuthClientCredentials(issuer: issuer, clientID: fresh.clientID, clientSecret: fresh.clientSecret)
+        }
+        inFlight[issuer] = task
+        defer { inFlight[issuer] = nil }
+        let bound = try await task.value
         stored[issuer] = bound
         return bound
     }
@@ -135,7 +143,7 @@ public enum ClientIDMetadataDocument {
         return url
     }
 
-    /// Validate a fetched document: `client_id` must equal its URL and `redirect_uris` must be present.
+    /// Validate a fetched document: `client_id` must equal its URL; `client_name` and `redirect_uris` must be present.
     public static func validate(document: Data, fetchedFrom clientID: String) throws {
         _ = try validateClientID(clientID)
         guard let json = try? JSONSerialization.jsonObject(with: document) as? [String: Any] else {
@@ -143,6 +151,10 @@ public enum ClientIDMetadataDocument {
         }
         guard json["client_id"] as? String == clientID else {
             throw OAuthConformanceError.invalidClientIDMetadataDocument("client_id does not match document URL")
+        }
+        guard let name = json["client_name"] as? String,
+              !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw OAuthConformanceError.invalidClientIDMetadataDocument("client_name is required")
         }
         guard let redirects = json["redirect_uris"] as? [String], !redirects.isEmpty else {
             throw OAuthConformanceError.invalidClientIDMetadataDocument("redirect_uris is required")

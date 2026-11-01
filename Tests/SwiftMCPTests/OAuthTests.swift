@@ -253,13 +253,34 @@ struct OAuthTests {
         #expect(await store.credentials(for: "https://c.example") == nil)
     }
 
+    @Test("Concurrent registrations for one issuer coalesce")
+    func concurrentRegistrationsCoalesce() async throws {
+        let store = OAuthClientCredentialStore()
+        let counter = RegistrationCounter()
+        let register: @Sendable (String) async throws -> OAuthClientCredentials = { issuer in
+            let count = await counter.next()
+            try await Task.sleep(nanoseconds: 50_000_000)
+            return OAuthClientCredentials(issuer: issuer, clientID: "client-\(count)")
+        }
+        async let one = store.credentials(for: "https://a.example", register: register)
+        async let two = store.credentials(for: "https://a.example", register: register)
+        let results = try await [one, two]
+        #expect(results[0] == results[1])
+        #expect(await counter.next() == 2)
+    }
+
     @Test("Client ID Metadata Documents are validated and preferred over DCR")
     func clientIDMetadataDocument() throws {
         let id = "https://app.example/client.json"
-        let valid = #"{"client_id":"https://app.example/client.json","redirect_uris":["http://127.0.0.1/cb"]}"#
+        let valid = #"{"client_id":"https://app.example/client.json","client_name":"App","#
+            + #""redirect_uris":["http://127.0.0.1/cb"]}"#
         try ClientIDMetadataDocument.validate(document: Data(valid.utf8), fetchedFrom: id)
+        let nameless = #"{"client_id":"https://app.example/client.json","redirect_uris":["x"]}"#
         #expect(throws: OAuthConformanceError.self) {
-            let foreign = #"{"client_id":"https://other.example/c.json","redirect_uris":["x"]}"#
+            try ClientIDMetadataDocument.validate(document: Data(nameless.utf8), fetchedFrom: id)
+        }
+        #expect(throws: OAuthConformanceError.self) {
+            let foreign = #"{"client_id":"https://other.example/c.json","client_name":"App","redirect_uris":["x"]}"#
             try ClientIDMetadataDocument.validate(document: Data(foreign.utf8), fetchedFrom: id)
         }
         #expect(throws: OAuthConformanceError.self) {
