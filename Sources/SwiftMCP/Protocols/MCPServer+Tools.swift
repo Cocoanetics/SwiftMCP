@@ -22,13 +22,17 @@ public extension MCPServer {
         let includeOutputSchema = await RequestContext.current?.supports(.structuredToolOutput) ?? true
         // The `x-mcp-header` inputSchema annotation is modern-only (2026-07-28).
         let includeHeaderAnnotations = await RequestContext.current?.supports(.xMcpHeader) ?? false
-        let toolMetadata = await toolProvider.mcpToolMetadata
+        // Sorted by name so the list is byte-stable across runs.
+        let toolMetadata = await toolProvider.mcpToolMetadata.sorted { $0.name < $1.name }
         let tools = toolMetadata.convertedToTools(includeOutputSchema: includeOutputSchema)
         if var encoded = try? JSONValue(encoding: tools) {
             if includeHeaderAnnotations {
                 encoded = Self.annotatingHeaderParameters(encoded, metadata: toolMetadata)
             }
-            return JSONRPCMessage.response(id: id, result: ["tools": encoded])
+            return JSONRPCMessage.response(
+                id: id,
+                result: await cacheableResult(["tools": encoded], for: .toolsList)
+            )
         }
         return JSONRPCMessage.errorResponse(
             id: id,

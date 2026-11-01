@@ -13,7 +13,10 @@ public extension MCPServer {
 
         let prompts = await promptProvider.mcpPromptMetadata.convertedToPrompts()
         if let promptsValue = try? JSONValue(encoding: prompts) {
-            return JSONRPCMessage.response(id: id, result: ["prompts": promptsValue])
+            return JSONRPCMessage.response(
+                id: id,
+                result: await cacheableResult(["prompts": promptsValue], for: .promptsList)
+            )
         }
         return JSONRPCMessage.errorResponse(
             id: id,
