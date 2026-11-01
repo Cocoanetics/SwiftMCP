@@ -89,6 +89,27 @@ struct CacheableResultTests {
         #expect(prop?["$ref"] == nil)
     }
 
+    @Test("Boolean-schema $ref targets and encoded pointers resolve")
+    func booleanAndEncodedRefs() {
+        let schema: JSONValue = .object([
+            "$defs": .object(["No": .bool(false), "A/B": .object(["type": .string("string")])]),
+            "properties": .object([
+                "a": .object(["$ref": .string("#/$defs/No")]),
+                "b": .object(["$ref": .string("#%2F$defs%2FA~1B")]),
+                "c": .object(["$ref": .string("#/$defs/A%7E1B")])
+            ])
+        ])
+        let props = schema.resolvingLocalRefs().dictionaryValue?["properties"]?.dictionaryValue
+        #expect(props?["a"] == .bool(false))
+        #expect(props?["b"]?.dictionaryValue?["type"] == .string("string"))
+        #expect(props?["c"]?.dictionaryValue?["type"] == .string("string"))
+    }
+
+    @Test("Negative ttlMs is clamped to zero")
+    func negativeTtl() {
+        #expect(MCPCacheHint(ttlMs: -5, cacheScope: .public).ttlMs == 0)
+    }
+
     @Test("Cyclic $ref is left unresolved")
     func cyclicRef() throws {
         let schema: JSONValue = .object([

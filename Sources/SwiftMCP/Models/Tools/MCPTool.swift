@@ -136,7 +136,18 @@ public extension JSONValue {
         case .object(let dict):
             if let ref = dict["$ref"]?.stringValue, ref.hasPrefix("#"), !visiting.contains(ref),
                let target = root.pointer(String(ref.dropFirst())) {
-                var merged = target.resolveRefs(root: root, visiting: visiting.union([ref])).dictionaryValue ?? [:]
+                let resolvedTarget = target.resolveRefs(root: root, visiting: visiting.union([ref]))
+                let siblings = dict.filter { $0.key != "$ref" }
+                if siblings.isEmpty {
+                    return resolvedTarget
+                }
+                // A boolean schema with siblings: `true` adds nothing, `false`
+                // rejects everything, so keep it as an `allOf` member.
+                guard var merged = resolvedTarget.dictionaryValue else {
+                    var wrapped = siblings.mapValues { $0.resolveRefs(root: root, visiting: visiting) }
+                    wrapped["allOf"] = .array([resolvedTarget])
+                    return .object(wrapped)
+                }
                 for (key, value) in dict where key != "$ref" {
                     merged[key] = value.resolveRefs(root: root, visiting: visiting)
                 }
@@ -150,11 +161,13 @@ public extension JSONValue {
 
     /// Looks up an RFC 6901 JSON Pointer (`""` is the root).
     private func pointer(_ path: String) -> JSONValue? {
+        // URI fragments are percent-encoded: decode before validating/splitting.
+        let path = path.removingPercentEncoding ?? path
         if path.isEmpty { return self }
         guard path.hasPrefix("/") else { return nil }
         var current: JSONValue = self
         for rawToken in path.dropFirst().split(separator: "/", omittingEmptySubsequences: false) {
-            let token = (rawToken.removingPercentEncoding ?? String(rawToken))
+            let token = String(rawToken)
                 .replacingOccurrences(of: "~1", with: "/")
                 .replacingOccurrences(of: "~0", with: "~")
             switch current {

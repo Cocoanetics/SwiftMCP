@@ -11,13 +11,16 @@ public enum MCPCacheScope: String, Codable, Sendable {
 /// Cache hint attached to cacheable results (`ttlMs` / `cacheScope`, SEP-2549).
 public struct MCPCacheHint: Equatable, Sendable {
     /// How long, in milliseconds, the result may be cached. `0` means "don't cache".
-    public var ttlMs: Int
+    /// Negative values are clamped to `0` (SEP-2549 requires `>= 0`).
+    public var ttlMs: Int {
+        didSet { ttlMs = max(0, ttlMs) }
+    }
 
     /// Who the result may be shared with.
     public var cacheScope: MCPCacheScope
 
     public init(ttlMs: Int, cacheScope: MCPCacheScope) {
-        self.ttlMs = ttlMs
+        self.ttlMs = max(0, ttlMs)
         self.cacheScope = cacheScope
     }
 
