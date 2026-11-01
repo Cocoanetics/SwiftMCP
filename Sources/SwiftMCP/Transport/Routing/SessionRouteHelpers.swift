@@ -114,9 +114,16 @@ extension HTTPSSETransport {
     /// Whether `version` is a well-formed `YYYY-MM-DD` revision newer than the
     /// latest legacy one — a future revision, as opposed to a malformed value.
     private static func isNewerDateVersion(_ version: String) -> Bool {
-        version.count == 10
-            && version.wholeMatch(of: /\d{4}-\d{2}-\d{2}/) != nil
-            && version > MCPProtocolVersion.latest
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        formatter.dateFormat = "yyyy-MM-dd"
+        // Round-tripping rejects impossible dates (`2099-99-99`, `2099-02-30`).
+        guard version.count == 10, let date = formatter.date(from: version),
+              formatter.string(from: date) == version else {
+            return false
+        }
+        return version > MCPProtocolVersion.latest
     }
 
     func resolvedHTTPProtocolVersion<Body: Sendable>(

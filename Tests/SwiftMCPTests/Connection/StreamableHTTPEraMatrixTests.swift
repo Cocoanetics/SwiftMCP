@@ -106,6 +106,18 @@ struct StreamableHTTPEraMatrixTests {
         #expect(exchange.headerFields[.mcpSessionID] != nil)
     }
 
+    @Test("An impossible calendar date on legacy initialize is rejected", arguments: ["2099-99-99", "2099-02-30"])
+    func impossibleDateVersionRejected(_ version: String) async throws {
+        let transport = HTTPSSETransport(server: Calculator())
+        let adapter = InMemoryHTTPServerAdapter(engine: transport)
+
+        var headers = jsonHeaders()
+        headers[.mcpProtocolVersion] = version
+        let body = try HTTPTransportTestHelpers.encode(HTTPTransportTestHelpers.initializeRequest())
+        let exchange = await adapter.send(method: .post, path: "/mcp", headerFields: headers, body: body)
+        #expect(exchange.status == .badRequest)
+    }
+
     @Test("An unknown newer version header on a non-initialize request is still rejected")
     func newerVersionHeaderOnOtherRequestRejected() async throws {
         let transport = HTTPSSETransport(server: Calculator())
