@@ -117,7 +117,7 @@ extension MCPServerProxy {
             method: method,
             params: requestParams.isEmpty ? nil : .object(requestParams)
         )
-        let response = try await send(request)
+        let response = try await sendCompletingInputRounds(request)
 
         switch response {
         case .response(let responseData):
@@ -131,7 +131,8 @@ extension MCPServerProxy {
             }
             return result
         case .errorResponse(let errorResponse):
-            throw MCPServerProxyError.communicationError(errorResponse.error.message)
+            throw typedModernError(errorResponse.error)
+                ?? MCPServerProxyError.communicationError(errorResponse.error.message)
         default:
             throw MCPServerProxyError.communicationError("Invalid response type for \(method)")
         }

@@ -36,25 +36,17 @@ extension MCPServerProxy {
         case .stdio(let stdioConfig):
             #if os(macOS) || os(Linux) || os(Windows)
                 sessionID = UUID().uuidString
-                // Spawn the server over JSONFoundation's swift-subprocess stdio
-                // transport — the shared, lock-free child-process transport LSP and
-                // SwiftACP use. The command keeps SwiftMCP's `/bin/zsh -lc` wrapping
-                // so a login shell resolves PATH and the user's environment.
-                let shellCommand = ([stdioConfig.command] + stdioConfig.args)
-                    .joined(separator: " ")
-                let launch = ProcessLaunch(
-                    executable: "/bin/zsh",
-                    arguments: ["-lc", shellCommand],
-                    environment: stdioConfig.environment,
-                    workingDirectory: stdioConfig.workingDirectory
+                await startLinePeer(transport: makeStdioTransport(stdioConfig))
+                try await establishConnection(
+                    clientName: clientName,
+                    clientVersion: clientVersion,
+                    reconnect: { [weak self] in
+                        // Re-spawn rather than reuse: a legacy server may have
+                        // wedged on the unknown pre-`initialize` probe.
+                        guard let self else { return }
+                        await self.restartStdioPeer(stdioConfig)
+                    }
                 )
-                // JSONRPCSubprocess's, not SwiftMCP's server-side StdioTransport.
-                let transport = JSONRPCSubprocess.StdioTransport(
-                    endpoint: .childProcess(launch),
-                    framing: LineFraming()
-                )
-                await startLinePeer(transport: transport)
-                try await initialize(clientName: clientName, clientVersion: clientVersion)
             #else
                 throw MCPServerProxyError.unsupportedPlatform(
                     "Stdio-based MCP servers require Process support."
@@ -69,7 +61,7 @@ extension MCPServerProxy {
             loopback.start()
             inProcessLoopback = loopback
             await startLinePeer(transport: loopback.clientTransport)
-            try await initialize(clientName: clientName, clientVersion: clientVersion)
+            try await establishConnection(clientName: clientName, clientVersion: clientVersion)
 
         case .tcp(let tcpConfig):
             try await connectTCP(
@@ -96,7 +88,7 @@ extension MCPServerProxy {
         let resolvedConfig = resolveTcpConfig(tcpConfig)
         let transport = try await makeTCPTransport(resolvedConfig)
         await startLinePeer(transport: transport)
-        try await initialize(clientName: clientName, clientVersion: clientVersion)
+        try await establishConnection(clientName: clientName, clientVersion: clientVersion)
     }
 
     /// Builds the line transport for a TCP connection. A direct host:port uses
@@ -326,6 +318,12 @@ extension MCPServerProxy {
 
     /// Sends a JSON-RPC notification (fire-and-forget, no response expected).
     internal func sendNotification(_ message: JSONRPCMessage) async throws {
+        var message = message
+        var modernHeaders: [String: String] = [:]
+        if negotiatedEra == .modern {
+            message = injectingModernMeta(into: message)
+            modernHeaders = try await modernRequestHeaders(for: message)
+        }
         switch config {
         case .stdio, .stdioHandles, .tcp:
             guard let linePeer else {
@@ -343,13 +341,14 @@ extension MCPServerProxy {
 
         case .sse(let sseConfig):
             let data = try JSONRPCMessage.makeEncoder().encode(message)
-            try await sendSSENotification(data: data, sseConfig: sseConfig)
+            try await sendSSENotification(data: data, sseConfig: sseConfig, extraHeaders: modernHeaders)
         }
     }
 
     private func sendSSENotification(
         data: Data,
-        sseConfig: MCPServerSseConfig
+        sseConfig: MCPServerSseConfig,
+        extraHeaders: [String: String]
     ) async throws {
         guard let url = endpointURL
             ?? (isStreamableMCPURL(sseConfig.url) ? sseConfig.url : nil) else {
@@ -360,6 +359,9 @@ extension MCPServerProxy {
         request.httpBody = data
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         configureSSEPOSTRequest(&request, sseConfig: sseConfig)
+        for (name, value) in extraHeaders {
+            request.setValue(value, forHTTPHeaderField: name)
+        }
         let (_, response) = try await URLSession.shared.data(for: request)
         if let httpResponse = response as? HTTPURLResponse,
            !(200...299).contains(httpResponse.statusCode) {

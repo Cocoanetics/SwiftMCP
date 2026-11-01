@@ -10,7 +10,8 @@ extension MCPServerProxy {
     // Linux / Windows / Android.
     internal func sendStreamableRequest(
         _ message: JSONRPCMessage,
-        sseConfig: MCPServerSseConfig
+        sseConfig: MCPServerSseConfig,
+        extraHeaders: [String: String] = [:]
     ) async throws -> JSONRPCMessage {
         guard let requestID = message.id else {
             throw MCPServerProxyError.communicationError("Message must have an ID")
@@ -33,7 +34,8 @@ extension MCPServerProxy {
             requestID: requestID,
             requestBody: requestBody,
             lastEventID: nil,
-            retryMilliseconds: 1000
+            retryMilliseconds: 1000,
+            extraHeaders: extraHeaders
         )
     }
 
@@ -44,7 +46,8 @@ extension MCPServerProxy {
         requestID: JSONRPCID,
         requestBody: Data?,
         lastEventID: String?,
-        retryMilliseconds: Int
+        retryMilliseconds: Int,
+        extraHeaders: [String: String] = [:]
     ) async throws -> JSONRPCMessage {
         let session = sharedURLSession()
         var request = URLRequest(url: endpointURL)
@@ -54,6 +57,9 @@ extension MCPServerProxy {
         if let requestBody {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             configureSSEPOSTRequest(&request, sseConfig: sseConfig)
+            for (name, value) in extraHeaders {
+                request.setValue(value, forHTTPHeaderField: name)
+            }
             request.httpBody = requestBody
         } else {
             configureSSEGETRequest(&request, sseConfig: sseConfig, lastEventID: lastEventID)
@@ -110,6 +116,17 @@ extension MCPServerProxy {
             }
             let responseBody = String(data: data, encoding: .utf8)?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+            // A modern server rejects with a JSON-RPC error body (`-32001`
+            // HeaderMismatch, `-32004`, `-32601`) over a 4xx status; hand that
+            // back as the response so callers see the typed protocol error.
+            if negotiatedEra == .modern, let rejection = try? responseMessage(for: requestID, from: data),
+               case .errorResponse = rejection {
+                return rejection
+            }
+            if negotiatedEra == .modern {
+                throw MCPServerProxyError.httpStatus(httpResponse.statusCode, responseBody)
+            }
 
             // A 404 to a POST carrying an `Mcp-Session-Id` means the server has
             // terminated the session (e.g. after a restart) — POSTs have no

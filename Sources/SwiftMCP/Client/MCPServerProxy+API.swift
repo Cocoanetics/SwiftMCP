@@ -25,11 +25,11 @@ extension MCPServerProxy {
             return cachedTools
         }
 
-        let result: ToolsListResult = try await requestResult(
-            method: "tools/list",
-            as: ToolsListResult.self
-        )
-        let tools = result.tools
+        let raw = try await requestResult(method: "tools/list")
+        if negotiatedEra == .modern {
+            recordHeaderParameters(from: raw)
+        }
+        let tools = try raw.decoded(ToolsListResult.self).tools
 
         if cacheToolsList {
             cachedTools = tools
@@ -144,7 +144,7 @@ extension MCPServerProxy {
             method: "tools/call",
             params: .object(params)
         )
-        let responseMessage = try await send(request)
+        let responseMessage = try await sendCompletingInputRounds(request)
 
         let result = try extractToolCallResult(from: responseMessage)
 

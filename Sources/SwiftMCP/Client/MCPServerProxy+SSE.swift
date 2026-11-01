@@ -56,7 +56,8 @@ extension MCPServerProxy {
         // `nil` omits the header entirely, which is what a pre-2025-06-18
         // negotiated revision requires (the header postdates it).
         request.setValue(mcpProtocolVersionHeaderValue, forHTTPField: .mcpProtocolVersion)
-        if let sessionID {
+        // Modern connections are sessionless.
+        if negotiatedEra != .modern, let sessionID {
             request.setValue(sessionID, forHTTPField: .mcpSessionID)
         }
     }
@@ -65,7 +66,10 @@ extension MCPServerProxy {
     /// requests: the negotiated revision once known, otherwise the `latest` the
     /// client is about to propose on the `initialize` request.
     internal var mcpProtocolVersionHeaderValue: String? {
-        Self.mcpProtocolVersionHeader(for: negotiatedProtocolVersion ?? MCPProtocolVersion.latest)
+        if negotiatedEra == .modern, let modernProtocolVersion {
+            return modernProtocolVersion
+        }
+        return Self.mcpProtocolVersionHeader(for: negotiatedProtocolVersion ?? MCPProtocolVersion.latest)
     }
 
     /// The `MCP-Protocol-Version` header value for `version`: the revision
@@ -123,8 +127,11 @@ extension MCPServerProxy {
         let isStreamableMCP = isStreamableMCPURL(sseConfig.url)
         if isStreamableMCP {
             endpointURL = sseConfig.url
-            try await initialize(clientName: clientName, clientVersion: clientVersion)
-            startStreamableGeneralSSE(sseConfig: sseConfig)
+            try await establishConnection(clientName: clientName, clientVersion: clientVersion)
+            // Modern connections are sessionless: no standalone GET stream.
+            if negotiatedEra != .modern {
+                startStreamableGeneralSSE(sseConfig: sseConfig)
+            }
             return
         }
 
