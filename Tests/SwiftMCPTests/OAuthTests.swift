@@ -199,5 +199,85 @@ struct OAuthTests {
         #expect(tokenResponse.scope == nil)
         #expect(tokenResponse.idToken == nil)
     }
+
+    // MARK: - MCP OAuth conformance (#224)
+
+    @Test("Authorization response issuer mismatch is rejected (RFC 9207)")
+    func issuerMismatchRejected() throws {
+        let mismatch = OAuthConformanceError.issuerMismatch(
+            expected: "https://a.example", received: "https://evil.example")
+        #expect(throws: mismatch) {
+            try OAuthAuthorizationResponse.validateIssuer(
+                redirectURL: URL(string: "https://app/cb?code=1&iss=https%3A%2F%2Fevil.example")!,
+                expectedIssuer: "https://a.example",
+                issuerParameterSupported: true)
+        }
+        #expect(throws: OAuthConformanceError.missingIssuer(expected: "https://a.example")) {
+            try OAuthAuthorizationResponse.validateIssuer(
+                responseIssuer: nil, expectedIssuer: "https://a.example", issuerParameterSupported: true)
+        }
+        try OAuthAuthorizationResponse.validateIssuer(
+            responseIssuer: nil, expectedIssuer: "https://a.example", issuerParameterSupported: false)
+        try OAuthAuthorizationResponse.validateIssuer(
+            responseIssuer: "https://a.example", expectedIssuer: "https://a.example", issuerParameterSupported: true)
+    }
+
+    @Test("Dynamic client registration requires application_type (SEP-837)")
+    func registrationRequiresApplicationType() throws {
+        try OAuthClientRegistrationValidator.validate(requestBody: Data(#"{"application_type":"native"}"#.utf8))
+        #expect(throws: OAuthConformanceError.invalidApplicationType(nil)) {
+            try OAuthClientRegistrationValidator.validate(requestBody: Data(#"{"client_name":"x"}"#.utf8))
+        }
+        #expect(throws: OAuthConformanceError.invalidApplicationType("mobile")) {
+            try OAuthClientRegistrationValidator.validate(requestBody: Data(#"{"application_type":"mobile"}"#.utf8))
+        }
+        #expect(throws: OAuthConformanceError.self) {
+            try OAuthClientRegistrationValidator.validate(requestBody: nil)
+        }
+    }
+
+    @Test("Client credentials are isolated per issuer (SEP-2352)")
+    func credentialsIsolatedPerIssuer() async throws {
+        let store = OAuthClientCredentialStore()
+        let counter = RegistrationCounter()
+        let register: @Sendable (String) async throws -> OAuthClientCredentials = { issuer in
+            let count = await counter.next()
+            return OAuthClientCredentials(issuer: issuer, clientID: "client-\(count)")
+        }
+        let first = try await store.credentials(for: "https://a.example", register: register)
+        let other = try await store.credentials(for: "https://b.example", register: register)
+        let again = try await store.credentials(for: "https://a.example", register: register)
+        #expect(first.clientID == "client-1")
+        #expect(other.clientID == "client-2")
+        #expect(first == again)
+        #expect(await store.credentials(for: "https://c.example") == nil)
+    }
+
+    @Test("Client ID Metadata Documents are validated and preferred over DCR")
+    func clientIDMetadataDocument() throws {
+        let id = "https://app.example/client.json"
+        let valid = #"{"client_id":"https://app.example/client.json","redirect_uris":["http://127.0.0.1/cb"]}"#
+        try ClientIDMetadataDocument.validate(document: Data(valid.utf8), fetchedFrom: id)
+        #expect(throws: OAuthConformanceError.self) {
+            let foreign = #"{"client_id":"https://other.example/c.json","redirect_uris":["x"]}"#
+            try ClientIDMetadataDocument.validate(document: Data(foreign.utf8), fetchedFrom: id)
+        }
+        #expect(throws: OAuthConformanceError.self) {
+            _ = try ClientIDMetadataDocument.validateClientID("http://app.example/c.json")
+        }
+        let reg = "https://x/register"
+        typealias Method = OAuthClientRegistrationMethod
+        #expect(Method.select(clientIDMetadataDocumentSupported: true, registrationEndpoint: reg)
+            == .clientIDMetadataDocument)
+        #expect(Method.select(clientIDMetadataDocumentSupported: false, registrationEndpoint: reg)
+            == .dynamicRegistration)
+        #expect(Method.select(clientIDMetadataDocumentSupported: false, registrationEndpoint: nil)
+            == .unavailable)
+    }
+}
+
+private actor RegistrationCounter {
+    private var value = 0
+    func next() -> Int { value += 1; return value }
 }
 #endif
