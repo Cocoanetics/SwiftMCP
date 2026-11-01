@@ -22,9 +22,7 @@ public final class RequestContext: Sendable {
 
         /// Optional authentication token for authorization.
         public let accessToken: String?
-
-        /// The protocol revision this request declares (modern `2026-07-28`+),
-        /// from `io.modelcontextprotocol/protocolVersion`.
+        /// The modern (`2026-07-28`+) protocol revision, from `io.modelcontextprotocol/protocolVersion`.
         public let protocolVersion: String?
 
         /// The client software identity, from `io.modelcontextprotocol/clientInfo`.
@@ -35,6 +33,11 @@ public final class RequestContext: Sendable {
 
         /// The log level requested for this request, from `io.modelcontextprotocol/logLevel`.
         public let logLevel: LogLevel?
+
+        /// W3C Trace Context `traceparent`, `tracestate` and `baggage` (SEP-414), raw and unvalidated.
+        public let traceparent: String?
+        public let tracestate: String?
+        public let baggage: String?
 
         init?(dictionary: JSONDictionary) {
             if dictionary.isEmpty {
@@ -50,6 +53,10 @@ public final class RequestContext: Sendable {
             self.clientInfo = try? dictionary[MCPMetaKey.clientInfo]?.decoded(Implementation.self)
             self.clientCapabilities = try? dictionary[MCPMetaKey.clientCapabilities]?.decoded(ClientCapabilities.self)
             self.logLevel = dictionary[MCPMetaKey.logLevel]?.stringValue.flatMap(LogLevel.init(string:))
+            // OpenTelemetry trace context (SEP-414); non-strings are absent.
+            self.traceparent = dictionary[MCPMetaKey.traceparent]?.stringValue
+            self.tracestate = dictionary[MCPMetaKey.tracestate]?.stringValue
+            self.baggage = dictionary[MCPMetaKey.baggage]?.stringValue
         }
     }
 

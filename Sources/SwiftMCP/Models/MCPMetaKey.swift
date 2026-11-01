@@ -27,4 +27,13 @@ public enum MCPMetaKey {
 
     /// The log level requested for this single request (modern per-request logging).
     public static let logLevel = "io.modelcontextprotocol/logLevel"
+
+    /// W3C Trace Context `traceparent` (SEP-414). Unprefixed, per the W3C spec.
+    public static let traceparent = "traceparent"
+
+    /// W3C Trace Context `tracestate` (SEP-414).
+    public static let tracestate = "tracestate"
+
+    /// W3C Baggage `baggage` (SEP-414).
+    public static let baggage = "baggage"
 }
