@@ -7,6 +7,8 @@ public enum OAuthConformanceError: Error, Equatable, LocalizedError {
     case issuerMismatch(expected: String, received: String)
     /// The server advertised `authorization_response_iss_parameter_supported` but the response had no `iss`.
     case missingIssuer(expected: String)
+    /// The authorization response repeated the `iss` parameter.
+    case duplicateIssuer
     /// The registration request lacks a valid `application_type` (SEP-837).
     case invalidApplicationType(String?)
     /// A Client ID Metadata Document URL or document is invalid.
@@ -18,6 +20,8 @@ public enum OAuthConformanceError: Error, Equatable, LocalizedError {
             return "Authorization response issuer '\(received)' does not match expected issuer '\(expected)'"
         case .missingIssuer(let expected):
             return "Authorization response is missing the required 'iss' parameter (expected '\(expected)')"
+        case .duplicateIssuer:
+            return "Authorization response contains more than one 'iss' parameter"
         case .invalidApplicationType(let value):
             return "Dynamic client registration requires application_type 'web' or 'native' (got \(value ?? "none"))"
         case .invalidClientIDMetadataDocument(let details):
@@ -54,8 +58,13 @@ public enum OAuthAuthorizationResponse {
         issuerParameterSupported: Bool
     ) throws {
         let items = URLComponents(url: redirectURL, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        let issuers = items.filter { $0.name == "iss" }
+        // RFC 9207 §2.4: the parameter MUST NOT be repeated.
+        guard issuers.count <= 1 else {
+            throw OAuthConformanceError.duplicateIssuer
+        }
         try validateIssuer(
-            responseIssuer: items.first { $0.name == "iss" }?.value,
+            responseIssuer: issuers.first?.value,
             expectedIssuer: expectedIssuer,
             issuerParameterSupported: issuerParameterSupported
         )
@@ -137,8 +146,14 @@ public enum ClientIDMetadataDocument {
     /// A `client_id` is usable as a metadata document URL if it is an `https` URL with a path and no fragment.
     public static func validateClientID(_ clientID: String) throws -> URL {
         guard let url = URL(string: clientID), url.scheme == "https", url.host != nil,
-              url.path.count > 1, url.fragment == nil else {
-            throw OAuthConformanceError.invalidClientIDMetadataDocument("client_id must be an https URL with a path")
+              url.path.count > 1, url.fragment == nil,
+              url.user == nil, url.password == nil else {
+            throw OAuthConformanceError.invalidClientIDMetadataDocument(
+                "client_id must be an https URL with a path, without credentials or fragment")
+        }
+        let segments = url.path.split(separator: "/", omittingEmptySubsequences: false)
+        guard !segments.contains(where: { $0 == "." || $0 == ".." }) else {
+            throw OAuthConformanceError.invalidClientIDMetadataDocument("client_id must not contain dot segments")
         }
         return url
     }
@@ -158,6 +173,19 @@ public enum ClientIDMetadataDocument {
         }
         guard let redirects = json["redirect_uris"] as? [String], !redirects.isEmpty else {
             throw OAuthConformanceError.invalidClientIDMetadataDocument("redirect_uris is required")
+        }
+        for redirect in redirects {
+            guard let uri = URL(string: redirect), uri.scheme?.isEmpty == false, uri.fragment == nil else {
+                throw OAuthConformanceError.invalidClientIDMetadataDocument("invalid redirect URI '\(redirect)'")
+            }
+        }
+        guard json["client_secret"] == nil else {
+            throw OAuthConformanceError.invalidClientIDMetadataDocument("client_secret must not be present")
+        }
+        let sharedSecretMethods: Set<String> = ["client_secret_basic", "client_secret_post", "client_secret_jwt"]
+        if let method = json["token_endpoint_auth_method"] as? String, sharedSecretMethods.contains(method) {
+            throw OAuthConformanceError.invalidClientIDMetadataDocument(
+                "token_endpoint_auth_method '\(method)' relies on a shared secret")
         }
     }
 }
