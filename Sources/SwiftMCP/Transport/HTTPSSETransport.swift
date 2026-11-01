@@ -71,6 +71,12 @@ public final class HTTPSSETransport: Transport, MCPTransport, Service, MCPHTTPEn
     internal var customRoutes: [HTTPRoute] = []
 
     /// Flag to determine whether to serve OpenAPI endpoints.
+    /// Whether this server also serves the legacy (session-based) era. A
+    /// modern-only server answers `GET`/`DELETE /mcp` with `405` regardless of
+    /// the request's declared version; a dual-era server keeps them for legacy
+    /// clients. Defaults to whether any negotiable revision is a legacy one.
+    public var servesLegacyEra: Bool = MCPProtocolVersion.supported.contains { !MCPProtocolVersion.isModern($0) }
+
     public var serveOpenAPI: Bool = false
 
     /// Maximum allowed HTTP message size in bytes (defaults to 4 MB).
