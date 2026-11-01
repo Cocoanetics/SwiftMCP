@@ -89,10 +89,14 @@ struct HTTPTransportResumeTests {
         }
         #expect(sawProgress)
 
-        let lastSeenEventID = try #require(requestCapture.events.value.last?.id)
+        // Resume after the first progress event rather than whichever event arrived last,
+        // so a late poll cannot skip past the second progress notification.
+        let capturedEvents = requestCapture.events.value
+        let firstProgress = try #require(
+            HTTPTransportTestHelpers.notificationEvent(capturedEvents, method: "notifications/progress")
+        )
+        let lastSeenEventID = try #require(firstProgress.id)
         requestCapture.task.cancel()
-
-        try? await Task.sleep(nanoseconds: 500_000_000)
 
         let resumedRequest = try await HTTPTransportTestHelpers.readFiniteSSEResponse(
             HTTPTransportTestHelpers.generalSSERequest(url: url, sessionID: sessionID, lastEventID: lastSeenEventID)
