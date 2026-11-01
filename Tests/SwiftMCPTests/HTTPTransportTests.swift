@@ -30,6 +30,7 @@ struct HTTPTransportTests {
         #expect(response.statusCode == 200)
         #expect(response.value(forHTTPHeaderField: "Content-Type")?.contains("text/event-stream") == true)
         #expect(response.value(forHTTPHeaderField: "Mcp-Session-Id") != nil)
+        #expect(response.value(forHTTPHeaderField: "Access-Control-Expose-Headers")?.contains("Mcp-Session-Id") == true)
 
         let primingEvent = try #require(events.first)
         #expect(primingEvent.id != nil)

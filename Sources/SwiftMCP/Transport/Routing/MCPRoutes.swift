@@ -280,6 +280,7 @@ extension HTTPSSETransport {
 			headerFields[.xAccelBuffering] = "no"
 		} else {
 			headerFields[.mcpSessionID] = context.sessionID.uuidString
+			headerFields[.accessControlExposeHeaders] = HTTPField.Name.corsExposedResponseHeaders
 		}
 
 		return RouteResponse(status: .ok, headerFields: headerFields, bodyStream: stream, streamInfo: streamInfo)
@@ -304,7 +305,10 @@ extension HTTPSSETransport {
 			await sessionManager.removeSession(id: context.sessionID)
 		}
 
-		let ackHeaders: HTTPFields = context.isModern ? [:] : [.mcpSessionID: context.sessionID.uuidString]
+		let ackHeaders: HTTPFields = context.isModern ? [:] : [
+			.mcpSessionID: context.sessionID.uuidString,
+			.accessControlExposeHeaders: HTTPField.Name.corsExposedResponseHeaders
+		]
 		return RouteResponse(status: .accepted, headerFields: ackHeaders)
 	}
 

@@ -162,6 +162,7 @@ extension HTTPSSETransport {
 
         if let sessionID {
             headerFields[.mcpSessionID] = sessionID.uuidString
+            headerFields[.accessControlExposeHeaders] = HTTPField.Name.corsExposedResponseHeaders
         }
 
         return RouteResponse(status: status, headerFields: headerFields, body: Data(body.utf8))
