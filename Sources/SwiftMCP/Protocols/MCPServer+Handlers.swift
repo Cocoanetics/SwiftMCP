@@ -119,6 +119,17 @@ public extension MCPServer {
             return unsupportedProtocolVersionError(id: requestData.id, requested: requested)
         }
 
+        // Modern drops `ping` and `logging/setLevel` (per-request `logLevel` and
+        // SSE comment keep-alive replace them); answer as unknown methods.
+        if let profile = await RequestContext.current?.modernProfile,
+           (requestData.method == "ping" && !profile.has(.ping))
+            || (requestData.method == "logging/setLevel" && !profile.has(.loggingSetLevel)) {
+            return JSONRPCMessage.errorResponse(
+                id: requestData.id,
+                error: .init(code: -32601, message: "Method not found")
+            )
+        }
+
         if let response = await dispatchInitializationOrMetaRequest(requestData) {
             return response
         }
@@ -264,7 +275,10 @@ public extension MCPServer {
             return nil
 
         case "notifications/roots/list_changed":
-            // Client's root list has changed
+            // Client's root list has changed (removed in modern: ignored there)
+            if let profile = await RequestContext.current?.modernProfile, !profile.has(.rootsListChangedNotification) {
+                return nil
+            }
             await self.handleRootsListChanged()
             return nil
 

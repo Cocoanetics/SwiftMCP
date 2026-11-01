@@ -29,10 +29,22 @@ extension Session {
         try? await transport?.send(notification)
     }
 
-    /// Send a log message notification to the client associated with this session, filtered by minimumLogLevel.
+    /// Send a log message notification to the client associated with this session.
+    ///
+    /// - Note: Logging is deprecated (SEP-2577) in favor of the host's own
+    ///   observability; it keeps working for legacy sessions and per-request
+    ///   `logLevel` on modern ones.
+    ///
+    /// Legacy sessions filter by ``minimumLogLevel`` (set via `logging/setLevel`).
+    /// A modern (`2026-07-28`) request is filtered by its own
+    /// `io.modelcontextprotocol/logLevel`, and receives nothing if it sent none.
     /// - Parameter message: The log message to send
     public func sendLogNotification(_ message: LogMessage) async {
-        guard message.level.isAtLeast(self.minimumLogLevel) else { return }
+        if let context = RequestContext.current {
+            guard await context.shouldEmitLog(message, session: self) else { return }
+        } else {
+            guard message.level.isAtLeast(self.minimumLogLevel) else { return }
+        }
         var params: JSONDictionary = [
             "level": .string(message.level.rawValue),
             "data": message.data
@@ -45,8 +57,13 @@ extension Session {
     }
 
     /// Send a roots/list request to the client and return the roots.
+    ///
+    /// - Note: Roots are deprecated (SEP-2577). Legacy sessions keep working
+    ///   unchanged; for modern (`2026-07-28`) clients, pass the directory or
+    ///   file scope as explicit tool arguments instead.
     /// - Returns: The list of roots available to the client
     /// - Throws: An error if the request fails
+    @available(*, deprecated, message: "Roots are deprecated (SEP-2577); pass scope as tool arguments.")
     public func listRoots() async throws -> [Root] {
         // Task-augmented: mid-flight roots listing rides `tasks/update`.
         if let task = MCPTaskRecord.current, let context = RequestContext.current {

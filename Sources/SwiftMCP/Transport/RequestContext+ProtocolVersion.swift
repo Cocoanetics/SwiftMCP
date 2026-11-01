@@ -67,11 +67,43 @@ public extension RequestContext {
     /// session-wide level set by `logging/setLevel`.
     var requestedLogLevel: LogLevel? { meta?.logLevel }
 
+    /// The modern profile explicitly in effect for this request, or `nil` for
+    /// legacy. Unlike ``protocolProfile`` there is no fall back to
+    /// ``MCPProtocolVersion/latest``: a legacy request (e.g. a pre-`initialize`
+    /// `ping`) is never mistaken for modern just because the server opted in to
+    /// advertising `2026-07-28`.
+    var modernProfile: ProtocolVersionProfile? {
+        get async {
+            if let version = await Session.current?.negotiatedProtocolVersion {
+                return MCPProtocolVersion.profile(for: version).flatMap { $0.isModern ? $0 : nil }
+            }
+            guard let version = meta?.protocolVersion,
+                  let profile = MCPProtocolVersion.profile(for: version), profile.isModern else {
+                return nil
+            }
+            return profile
+        }
+    }
+
     /// Whether the request's negotiated protocol version supports `feature`.
     ///
     /// Convenience over ``protocolProfile`` for the common version-gating case:
     /// `if await RequestContext.current?.supports(.structuredToolOutput) ?? true`.
     func supports(_ feature: MCPFeature) async -> Bool {
         await protocolProfile.has(feature)
+    }
+}
+
+extension RequestContext {
+
+    /// Whether `message` may be sent for this request. Modern requests use only
+    /// their own `logLevel` (none requested → no logs); legacy requests use the
+    /// session's `minimumLogLevel`.
+    func shouldEmitLog(_ message: LogMessage, session: Session) async -> Bool {
+        if await modernProfile?.has(.perRequestLogLevel) == true {
+            guard let requested = requestedLogLevel else { return false }
+            return message.level.isAtLeast(requested)
+        }
+        return message.level.isAtLeast(await session.minimumLogLevel)
     }
 }

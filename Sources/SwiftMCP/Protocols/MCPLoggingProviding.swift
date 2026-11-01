@@ -10,6 +10,12 @@ import Foundation
 ///
 /// The logging follows the MCP protocol specification and uses standard syslog
 /// severity levels as defined in RFC 5424.
+///
+/// - Note: Logging is deprecated (SEP-2577) in favor of the host's own
+///   observability. Legacy sessions are unchanged (`logging/setLevel` plus the
+///   session-wide ``minimumLogLevel``). Modern (`2026-07-28`) requests have no
+///   `logging/setLevel`; they receive log notifications only when the request
+///   carries `io.modelcontextprotocol/logLevel`, at or above that level.
 public protocol MCPLoggingProviding: MCPService {
     /// The current minimum log level for sending messages to clients.
     /// Only messages with this level or higher will be sent.
