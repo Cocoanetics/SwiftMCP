@@ -24,7 +24,7 @@ extension HTTPSSETransport {
 		// The standalone GET SSE stream is a legacy feature (absent in the modern
 		// era). A modern client hitting GET /mcp gets 405; the legacy GET /mcp and
 		// GET /sse streams are unchanged.
-		if !isLegacy, requestDeclaresModern(request) {
+		if !isLegacy, !servesLegacyEra || requestDeclaresModern(request) {
 			return textResponse(status: .methodNotAllowed, body: "GET is not supported for stateless (modern) requests.")
 		}
 

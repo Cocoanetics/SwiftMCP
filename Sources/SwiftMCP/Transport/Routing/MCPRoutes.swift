@@ -77,16 +77,15 @@ extension HTTPSSETransport {
 			}
 
 			guard let context = try await resolveStreamableContext(
-				sessionHeader: sessionHeader,
-				messages: messages,
-				acceptHeader: acceptHeader,
-				isModern: isModern
+				sessionHeader: sessionHeader, messages: messages, acceptHeader: acceptHeader, isModern: isModern
 			) else {
 				return textResponse(status: .internalServerError, body: "Session validation failed.")
 			}
 
-			if let errorResponse = await validateHTTPProtocolVersion(for: request, sessionID: context.authSessionID) {
-				return errorResponse
+			if let versionError = await validateHTTPProtocolVersion(
+				for: request, sessionID: context.authSessionID, messages: messages
+			) {
+				return versionError
 			}
 
 			// Reject JSON-RPC batches on protocol revisions that removed batching
@@ -379,7 +378,7 @@ extension HTTPSSETransport {
 	func handleDeleteSession(request: HTTPRouteRequest<Data?>) async throws -> RouteResponse {
 		// DELETE is a session-teardown verb; the modern (sessionless) era has no
 		// sessions, so a modern client using it gets 405 Method Not Allowed.
-		if requestDeclaresModern(request) {
+		if !servesLegacyEra || requestDeclaresModern(request) {
 			return textResponse(status: .methodNotAllowed, body: "DELETE is not supported for stateless (modern) requests.")
 		}
 

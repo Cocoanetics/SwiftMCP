@@ -79,9 +79,17 @@ extension HTTPSSETransport {
 
     func validateHTTPProtocolVersion<Body: Sendable>(
         for request: HTTPRouteRequest<Body>,
-        sessionID: UUID?
+        sessionID: UUID?,
+        messages: [JSONRPCMessage] = []
     ) async -> RouteResponse? {
         if let headerVersion = request.header("MCP-Protocol-Version") {
+            // A newer-than-known header on the opening legacy `initialize` is
+            // tolerated: the server answers with the version it can negotiate.
+            if sessionID == nil, SessionInitializationGate.batchStartsWithInitialize(messages),
+               !MCPProtocolVersion.isServable(headerVersion),
+               Self.isNewerDateVersion(headerVersion) {
+                return nil
+            }
             guard MCPProtocolVersion.isServable(headerVersion) else {
                 return textResponse(status: .badRequest, body: "Invalid or unsupported MCP-Protocol-Version header.")
             }
@@ -101,6 +109,21 @@ extension HTTPSSETransport {
         }
 
         return nil
+    }
+
+    /// Whether `version` is a well-formed `YYYY-MM-DD` revision newer than the
+    /// latest legacy one — a future revision, as opposed to a malformed value.
+    private static func isNewerDateVersion(_ version: String) -> Bool {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        formatter.dateFormat = "yyyy-MM-dd"
+        // Round-tripping rejects impossible dates (`2099-99-99`, `2099-02-30`).
+        guard version.count == 10, let date = formatter.date(from: version),
+              formatter.string(from: date) == version else {
+            return false
+        }
+        return version > MCPProtocolVersion.latest
     }
 
     func resolvedHTTPProtocolVersion<Body: Sendable>(
