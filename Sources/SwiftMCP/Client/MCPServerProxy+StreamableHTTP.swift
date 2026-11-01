@@ -120,7 +120,11 @@ extension MCPServerProxy {
             // A modern server rejects with a JSON-RPC error body (`-32001`
             // HeaderMismatch, `-32004`, `-32601`) over a 4xx status; hand that
             // back as the response so callers see the typed protocol error.
-            if negotiatedEra == .modern, let rejection = try? responseMessage(for: requestID, from: data),
+            // Auth failures keep their status so they are never mistaken for a
+            // protocol-level "not modern" answer.
+            let isAuthFailure = httpResponse.statusCode == 401 || httpResponse.statusCode == 403
+            if negotiatedEra == .modern, !isAuthFailure,
+               let rejection = try? responseMessage(for: requestID, from: data),
                case .errorResponse = rejection {
                 return rejection
             }

@@ -135,6 +135,12 @@ extension MCPServerProxy {
             return
         }
 
+        // The modern era needs the single streamable POST endpoint; the classic
+        // two-endpoint SSE transport can only run the legacy handshake.
+        if eraPreference == .modern {
+            throw MCPServerProxyError.unsupportedProtocolVersion(supported: [])
+        }
+
         let session = sharedURLSession()
         var request = URLRequest(url: sseConfig.url)
         request.httpMethod = "GET"
@@ -168,7 +174,9 @@ extension MCPServerProxy {
         }
 
         try await waitForEndpointIfNeeded(isStreamableMCP: isStreamableMCP)
-        try await initialize(clientName: clientName, clientVersion: clientVersion)
+        try await establishConnection(
+            clientName: clientName, clientVersion: clientVersion, supportsModern: false
+        )
     }
 
     // MARK: - Streamable general SSE

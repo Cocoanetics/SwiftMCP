@@ -204,6 +204,19 @@ struct ClientModernEraTests {
         await proxy.disconnect()
     }
 
+    @Test("Modern mode rejects the classic SSE transport without sending initialize")
+    func modernRejectsClassicSSE() async throws {
+        let url = try #require(URL(string: "http://127.0.0.1:9/sse"))
+        let proxy = MCPServerProxy(config: .sse(config: MCPServerSseConfig(url: url)))
+        await proxy.setEraPreference(.modern)
+        do {
+            try await proxy.connect()
+            Issue.record("expected unsupportedProtocolVersion")
+        } catch MCPServerProxyError.unsupportedProtocolVersion {
+            // expected
+        }
+    }
+
     @Test("Modern connections send the selected version header and no session id")
     func modernVersionHeader() async throws {
         let fake = makeModernServer()
