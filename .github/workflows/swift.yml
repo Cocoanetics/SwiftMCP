@@ -167,7 +167,10 @@ jobs:
   # hung teardown) surfaces as a red check in ~25 min, and keep the job timeout
   # just above it.
   build-android:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest now resolves to Ubuntu 26.04, and swift-android-action
+    # then downloads an `ubuntu2604` host toolchain that swift.org doesn't
+    # publish (404). Move back to ubuntu-latest once that toolchain exists.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
