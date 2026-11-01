@@ -19,14 +19,13 @@ public struct MCPTaskPrincipal: Hashable, Sendable {
 
     /// Resolves the principal for the current request / session context.
     ///
-    /// Prefer a bearer / user identity when present. Legacy sessions (those that
-    /// completed `initialize`) bind to the stable session id. Ephemeral modern
-    /// sessions are not an identity — without a token they share the
-    /// `"anonymous"` principal and the unguessable task id is the capability.
+    /// Prefer the transport-authenticated session identity (user / bearer /
+    /// initialize-bound session id) over client-controlled `_meta.accessToken`,
+    /// so a stale or conflicting metadata token cannot rebind ownership. Fall
+    /// back to `_meta.accessToken` only when no authenticated session identity
+    /// exists. Ephemeral modern sessions without a token share `"anonymous"`
+    /// and the unguessable task id is the capability.
     public static func current() async -> MCPTaskPrincipal {
-        if let token = RequestContext.current?.meta?.accessToken, !token.isEmpty {
-            return MCPTaskPrincipal(rawValue: "token:\(token)")
-        }
         if let session = Session.current {
             if let userID = await session.userID, !userID.isEmpty {
                 return MCPTaskPrincipal(rawValue: "user:\(userID)")
@@ -38,6 +37,9 @@ public struct MCPTaskPrincipal: Hashable, Sendable {
             if await session.negotiatedProtocolVersion != nil {
                 return MCPTaskPrincipal(rawValue: "session:\(session.id.uuidString)")
             }
+        }
+        if let token = RequestContext.current?.meta?.accessToken, !token.isEmpty {
+            return MCPTaskPrincipal(rawValue: "token:\(token)")
         }
         return MCPTaskPrincipal(rawValue: "anonymous")
     }

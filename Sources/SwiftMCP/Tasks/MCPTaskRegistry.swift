@@ -38,7 +38,8 @@ public actor MCPTaskRegistry {
         owner: MCPTaskPrincipal,
         ttlMs: Int? = nil,
         pollIntervalMs: Int? = nil
-    ) -> MCPTaskRecord {
+    ) async -> MCPTaskRecord {
+        await purgeExpired()
         let taskId = UUID().uuidString
         let record = MCPTaskRecord(
             taskId: taskId,
@@ -55,6 +56,7 @@ public actor MCPTaskRegistry {
     /// - Returns: The task, or `nil` when missing, expired (purged), or owned by
     ///   a different principal (existence is not leaked across principals).
     public func task(id taskId: String, for owner: MCPTaskPrincipal) async -> MCPTaskRecord? {
+        await purgeExpired()
         guard let record = tasks[taskId] else { return nil }
         let recordOwner = await record.owner
         guard recordOwner == owner else { return nil }
@@ -68,5 +70,14 @@ public actor MCPTaskRegistry {
     /// Drops a task from the registry (e.g. after an explicit purge).
     public func remove(id taskId: String) {
         tasks.removeValue(forKey: taskId)
+    }
+
+    /// Removes every task whose TTL has elapsed, so abandoned records do not
+    /// accumulate when clients stop polling.
+    func purgeExpired() async {
+        for (id, record) in Array(tasks) {
+            guard await record.isExpired else { continue }
+            tasks.removeValue(forKey: id)
+        }
     }
 }

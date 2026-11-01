@@ -93,7 +93,13 @@ public extension MCPServer {
                 error: .init(code: -32602, message: "Invalid params: missing taskId")
             )
         }
-        let responses = request.params?["inputResponses"]?.dictionaryValue ?? [:]
+        // Schema requires `inputResponses` as an object; omit / non-object → -32602.
+        guard let responses = request.params?["inputResponses"]?.dictionaryValue else {
+            return JSONRPCMessage.errorResponse(
+                id: request.id,
+                error: .init(code: -32602, message: "Invalid params: missing or invalid inputResponses")
+            )
+        }
         let owner = await MCPTaskPrincipal.current()
         guard let record = await MCPTaskRegistry.shared.task(id: taskId, for: owner) else {
             return JSONRPCMessage.errorResponse(

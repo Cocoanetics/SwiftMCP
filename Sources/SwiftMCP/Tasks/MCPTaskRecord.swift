@@ -123,6 +123,12 @@ public actor MCPTaskRecord {
         method: String,
         params: JSONValue?
     ) async throws -> JSONValue {
+        // Cancel / terminal transitions that raced ahead of this call must not
+        // be overwritten with `input_required` or left waiting forever.
+        if status.isTerminal || cancellationRequested {
+            throw CancellationError()
+        }
+
         let key = "input-\(inputOrdinal)"
         inputOrdinal += 1
         inputRequests[key] = InputRequest(method: method, params: params)
