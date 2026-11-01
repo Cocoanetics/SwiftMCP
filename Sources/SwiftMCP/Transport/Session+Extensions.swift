@@ -40,7 +40,9 @@ extension Session {
     /// `io.modelcontextprotocol/logLevel`, and receives nothing if it sent none.
     /// - Parameter message: The log message to send
     public func sendLogNotification(_ message: LogMessage) async {
-        if let context = RequestContext.current {
+        // Per-request filtering applies only to the request's own session; other
+        // recipients of a broadcast keep their session-level threshold.
+        if let context = RequestContext.current, Session.current?.id == self.id {
             guard await context.shouldEmitLog(message, session: self) else { return }
         } else {
             guard message.level.isAtLeast(self.minimumLogLevel) else { return }
