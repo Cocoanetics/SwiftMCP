@@ -14,9 +14,8 @@ extension HTTPSSETransport {
 				handler: { (_: HTTPSSETransport, _: HTTPRouteRequest<Data?>) in
 					RouteResponse(status: .ok, headerFields: [
 						.accessControlAllowMethods: "GET, POST, DELETE, OPTIONS",
-						.accessControlAllowHeaders:
-							"Content-Type, Content-Disposition, Authorization, "
-								+ "MCP-Protocol-Version, Mcp-Session-Id"
+						.accessControlAllowHeaders: HTTPField.Name.corsAllowedRequestHeaders,
+						.accessControlExposeHeaders: HTTPField.Name.corsExposedResponseHeaders
 					])
 				}
 			)

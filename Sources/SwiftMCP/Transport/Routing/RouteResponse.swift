@@ -62,6 +62,7 @@ struct RouteResponse: Sendable {
 		var headerFields: HTTPFields = [.contentType: "application/json"]
 		if let sessionId {
 			headerFields[.mcpSessionID] = sessionId
+			headerFields[.accessControlExposeHeaders] = HTTPField.Name.corsExposedResponseHeaders
 		}
 		return RouteResponse(status: status, headerFields: headerFields, body: data)
 	}

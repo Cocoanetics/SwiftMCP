@@ -36,3 +36,16 @@ extension HTTPField.Name {
 	/// buffering reverse proxies (nginx et al.) pass events through immediately.
 	public static let xAccelBuffering = Self("X-Accel-Buffering")!
 }
+
+extension HTTPField.Name {
+	/// The request headers a cross-origin MCP client may send: the legacy set plus
+	/// the modern routing headers (`Mcp-Method`, `Mcp-Name`) and `Last-Event-ID`.
+	/// `Mcp-Param-*` is a dynamic family, so it is covered by the `*` wildcard —
+	/// which does not match `Authorization`, so that is still named explicitly.
+	public static let corsAllowedRequestHeaders =
+		"Content-Type, Content-Disposition, Authorization, Accept, MCP-Protocol-Version, "
+		+ "Mcp-Session-Id, Mcp-Method, Mcp-Name, Last-Event-ID, *"
+
+	/// The response headers a browser client must be able to read.
+	public static let corsExposedResponseHeaders = "Mcp-Session-Id, MCP-Protocol-Version"
+}

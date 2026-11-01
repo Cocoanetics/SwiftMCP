@@ -43,6 +43,9 @@ enum MCPToolDiagnostic: DiagnosticMessage {
     /// Error when `headerParameters` names a parameter the function does not have.
     case unknownHeaderParameter(paramName: String, functionName: String)
 
+    /// Error when a `headerParameters` element is not a plain string literal.
+    case nonLiteralHeaderParameter
+
     var message: String {
         switch self {
         case .onlyFunctions:
@@ -66,6 +69,9 @@ enum MCPToolDiagnostic: DiagnosticMessage {
         case .unknownHeaderParameter(let paramName, let functionName):
             // swiftlint:disable:next line_length
             return "headerParameters names '\(paramName)', which is not a parameter of '\(functionName)'. Header annotations must match parameter names exactly."
+        case .nonLiteralHeaderParameter:
+            // swiftlint:disable:next line_length
+            return "headerParameters must be an array of plain string literals; the macro cannot evaluate other expressions at compile time."
         }
     }
 
@@ -77,7 +83,8 @@ enum MCPToolDiagnostic: DiagnosticMessage {
              .closureTypeNotSupported,
              .optionalParameterNeedsDefault,
              .missingMCPExtensionAttribute,
-             .unknownHeaderParameter:
+             .unknownHeaderParameter,
+             .nonLiteralHeaderParameter:
             return .error
         case .missingDescription:
             return .warning
@@ -102,6 +109,8 @@ enum MCPToolDiagnostic: DiagnosticMessage {
             return MessageID(domain: "SwiftMCP", id: "missingMCPExtensionAttribute")
         case .unknownHeaderParameter:
             return MessageID(domain: "SwiftMCP", id: "unknownHeaderParameter")
+        case .nonLiteralHeaderParameter:
+            return MessageID(domain: "SwiftMCP", id: "nonLiteralHeaderParameter")
         }
     }
 }
