@@ -30,6 +30,9 @@ A Swift implementation of the MCP (Model Context Protocol) for JSON-RPC over var
 
 ## Installation
 
+CI builds and tests with Swift 6.4 across macOS, iOS, Linux, Windows, and Android.
+Apple CI lanes use Xcode 27.1; Linux, Windows, and Android use Swift 6.4.2.
+
 Add SwiftMCP as a dependency in your `Package.swift`:
 
 ```swift
