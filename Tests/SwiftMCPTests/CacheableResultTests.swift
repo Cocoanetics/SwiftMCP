@@ -4,9 +4,11 @@ import Testing
 
 @MCPServer(name: "CacheTestServer", version: "1.0")
 actor CacheTestServer: MCPCacheHintProviding {
+    /// Returns the zebra fixture value.
     @MCPTool
     func zebra() -> String { "z" }
 
+    /// Returns the alpha fixture value.
     @MCPTool
     func alpha() -> String { "a" }
 
