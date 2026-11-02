@@ -125,6 +125,7 @@ struct RootsTests {
         }
 
         @Test("Session roots error when no capabilities")
+        @available(*, deprecated)
         func sessionRootsErrorTest() async {
             let session = Session(id: UUID())
 

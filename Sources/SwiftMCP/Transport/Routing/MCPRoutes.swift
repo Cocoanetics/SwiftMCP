@@ -4,7 +4,6 @@ import HTTPTypes
 
 /// New streamable HTTP MCP protocol routes (`/mcp`).
 extension HTTPSSETransport {
-
 	/// Returns the streamable HTTP MCP routes.
 	func mcpRoutes() -> [HTTPRoute] {
 		[

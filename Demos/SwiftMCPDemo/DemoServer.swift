@@ -348,6 +348,7 @@ actor DemoServer {
     // MARK: - Notifications
 
     /// Handles the roots list changed notification by retrieving and logging the updated roots.
+    @available(*, deprecated, message: "Roots are deprecated (SEP-2577); still served to legacy clients.")
     func handleRootsListChanged() async {
         guard let session = Session.current else { return }
         do {

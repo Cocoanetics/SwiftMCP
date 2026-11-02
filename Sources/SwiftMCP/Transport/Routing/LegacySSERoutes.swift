@@ -3,6 +3,9 @@ import Foundation
 import HTTPTypes
 
 /// Legacy SSE protocol routes (`/sse`, `/messages/:sessionID`).
+///
+/// - Note: The HTTP+SSE transport (`2024-11-05`) is deprecated in favor of
+///   Streamable HTTP (`/mcp`); these routes remain for legacy clients only.
 extension HTTPSSETransport {
 
 	/// Returns the legacy SSE protocol routes.
