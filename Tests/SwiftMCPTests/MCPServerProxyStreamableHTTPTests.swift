@@ -72,6 +72,8 @@ struct MCPServerProxyStreamableHTTPTests {
         defer { LoopbackTeardown.run { try? await transport.stop() } }
 
         let proxy = MCPServerProxy(config: .sse(config: MCPServerSseConfig(url: url)))
+        // Exercises the legacy session (Mcp-Session-Id, general GET stream).
+        await proxy.setEraPreference(.legacy)
         defer { LoopbackTeardown.run { await proxy.disconnect() } }
 
         try await proxy.connect()
@@ -94,6 +96,8 @@ struct MCPServerProxyStreamableHTTPTests {
 
         let handler = ToolsListChangedCapture()
         let proxy = MCPServerProxy(config: .sse(config: MCPServerSseConfig(url: url)))
+        // Exercises the legacy session (Mcp-Session-Id, general GET stream).
+        await proxy.setEraPreference(.legacy)
         await proxy.setToolsListChangedHandler(handler)
         defer { LoopbackTeardown.run { await proxy.disconnect() } }
 
@@ -112,12 +116,36 @@ struct MCPServerProxyStreamableHTTPTests {
         #expect(delivered)
     }
 
+    @Test("A default (modern) proxy receives list-changed notifications over subscriptions/listen")
+    func receivesToolsListChangedOverListen() async throws {
+        let (transport, url) = try await startTransport()
+        defer { LoopbackTeardown.run { try? await transport.stop() } }
+
+        let handler = ToolsListChangedCapture()
+        let proxy = MCPServerProxy(config: .sse(config: MCPServerSseConfig(url: url)))
+        await proxy.setToolsListChangedHandler(handler)
+        defer { LoopbackTeardown.run { await proxy.disconnect() } }
+
+        try await proxy.connect()
+        #expect(await proxy.negotiatedEra == .modern)
+        #expect(await proxy.sessionID == nil)
+
+        // Broadcast until the listen stream is up and delivers one.
+        let delivered = await waitForCondition {
+            await transport.broadcastToolsListChanged()
+            return await handler.count > 0
+        }
+        #expect(delivered)
+    }
+
     @Test("Tool call after the server forgets the session throws sessionInvalidated and keeps the session ID")
     func sessionInvalidationSurfacesTypedError() async throws {
         let (transport, url) = try await startTransport()
         defer { LoopbackTeardown.run { try? await transport.stop() } }
 
         let proxy = MCPServerProxy(config: .sse(config: MCPServerSseConfig(url: url)))
+        // Exercises the legacy session (Mcp-Session-Id, general GET stream).
+        await proxy.setEraPreference(.legacy)
         defer { LoopbackTeardown.run { await proxy.disconnect() } }
 
         try await proxy.connect()
@@ -153,6 +181,8 @@ struct MCPServerProxyStreamableHTTPTests {
         defer { LoopbackTeardown.run { try? await transport.stop() } }
 
         let proxy = MCPServerProxy(config: .sse(config: MCPServerSseConfig(url: url)))
+        // Exercises the legacy session (Mcp-Session-Id, general GET stream).
+        await proxy.setEraPreference(.legacy)
         defer { LoopbackTeardown.run { await proxy.disconnect() } }
 
         try await proxy.connect()

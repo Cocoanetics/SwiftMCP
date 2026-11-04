@@ -71,7 +71,16 @@ extension MCPServerProxy {
     /// to advertise `resources.subscribe` capability.
     /// The URI is recorded locally only when the server accepts the request;
     /// after any re-initialize the proxy replays all recorded subscriptions.
+    /// On a modern connection the URI joins the `subscriptions/listen` filter
+    /// instead (modern servers have no `resources/subscribe`).
     public func subscribeResource(uri: URL) async throws {
+        if negotiatedEra == .modern {
+            if subscribedResourceURIs.insert(uri).inserted {
+                refreshListenSubscription()
+                await awaitListenAcknowledgement()
+            }
+            return
+        }
         try await requestResult(
             method: "resources/subscribe",
             params: ["uri": .string(uri.absoluteString)]
@@ -83,7 +92,14 @@ extension MCPServerProxy {
     /// The URI is removed from the locally-recorded set immediately so it will
     /// not be replayed after a re-initialize.
     public func unsubscribeResource(uri: URL) async throws {
-        subscribedResourceURIs.remove(uri)
+        let removed = subscribedResourceURIs.remove(uri) != nil
+        if negotiatedEra == .modern {
+            if removed {
+                refreshListenSubscription()
+                await awaitListenAcknowledgement()
+            }
+            return
+        }
         try await requestResult(
             method: "resources/unsubscribe",
             params: ["uri": .string(uri.absoluteString)]

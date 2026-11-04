@@ -100,6 +100,8 @@ extension MCPServerProxy {
             logProgressNotification(notification)
         case NotificationMethod.log:
             logIncomingLogMessage(notification)
+        case NotificationMethod.subscriptionsAcknowledged:
+            listenAcknowledged(notification)
         default:
             logger.trace("[MCP DEBUG] Received notification: \(notification.method)")
         }

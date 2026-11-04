@@ -117,15 +117,19 @@ struct ClientModernEraTests {
         await proxy.disconnect()
     }
 
-    @Test("The default preference is legacy: no discover probe is sent")
-    func defaultIsLegacy() async throws {
+    @Test("The default preference is auto")
+    func defaultIsAuto() async throws {
+        let fresh = MCPServerProxy(config: .stdioHandles(server: ClientDiscoverTestServer()))
+        #expect(await fresh.eraPreference == .auto)
+    }
+
+    @Test("The legacy preference sends no discover probe")
+    func legacySkipsProbe() async throws {
         let fake = FakeLineServer { message in
             guard case .request(let request) = message else { return nil }
             return FakeLineServer.ok(request, FakeLineServer.initializeResult)
         }
         let proxy = await makeModernProxy(fake, preference: .legacy)
-        let fresh = MCPServerProxy(config: .stdioHandles(server: ClientDiscoverTestServer()))
-        #expect(await fresh.eraPreference == .legacy)
         try await proxy.establishConnection(clientName: "t", clientVersion: "1")
         #expect(fake.requests("server/discover").isEmpty)
         #expect(await proxy.negotiatedEra == .legacy)

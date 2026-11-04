@@ -130,6 +130,11 @@ public extension MCPServer {
             )
         }
 
+        // Answered later (or never), so it cannot ride the `nil`-means-unhandled
+        // dispatch chain below.
+        if requestData.method == ModernRequestMethods.subscriptionsListen {
+            return await handleLineSubscriptionsListen(requestData)
+        }
         if let response = await dispatchInitializationOrMetaRequest(requestData) {
             return response
         }
@@ -354,9 +359,10 @@ public extension MCPServer {
 ///
 /// Deliberately excluded (legacy-only per `ProtocolVersionProfile`):
 /// `initialize`, `ping`, `logging/setLevel`, `resources/subscribe` /
-/// `resources/unsubscribe`. `subscriptions/listen` is part of the modern surface
-/// but is answered by the HTTP transport (it opens a long-lived stream), not by
-/// these dispatch functions — see ``isKnown(_:)``. Keep in sync with the `dispatch*Request` functions — the
+/// `resources/unsubscribe`. `subscriptions/listen` is part of the modern surface;
+/// the HTTP transport answers it itself (it opens a long-lived stream), line
+/// transports reach `handleLineSubscriptionsListen` — see ``isKnown(_:)``.
+/// Keep in sync with the `dispatch*Request` functions — the
 /// "modern method surface matches the dispatcher" test enforces this.
 enum ModernRequestMethods {
     static let known: Set<String> = [

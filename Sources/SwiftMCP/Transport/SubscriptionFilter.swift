@@ -1,4 +1,3 @@
-#if Server
 import Foundation
 
 /// The notification types a client opts in to on a modern `subscriptions/listen`
@@ -72,4 +71,3 @@ struct SubscriptionFilter: Sendable, Equatable {
         return .object(object)
     }
 }
-#endif

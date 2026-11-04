@@ -154,16 +154,28 @@ actor MyServer {
 }
 ```
 
-On the client, `MCPServerProxy.eraPreference` picks the era: `.legacy`
-(`initialize` only, the current default), `.auto` (probe `server/discover`,
-fall back to `initialize`) or `.modern` (modern only). `.legacy` stays the
-default until the client can receive server pushes in the modern era
-(`subscriptions/listen`).
+On the client, `MCPServerProxy.eraPreference` picks the era: `.auto` (the
+default: probe `server/discover`, fall back to `initialize`), `.legacy`
+(`initialize` only, no probe) or `.modern` (modern only).
+
+Server pushes work in both eras. On a modern connection the proxy holds one
+`subscriptions/listen` request open — a long-lived SSE stream over HTTP, the
+connection itself over stdio and TCP — whose filter follows the registered
+list-changed handlers and `subscribeResource(uri:)`. `subscribeResource` and
+`unsubscribeResource` update that filter and return once the server has
+acknowledged it.
 
 ### Migrating
 
 - **Servers** need no changes. Opt out with `advertisesModernEra == false` if
   a host must keep seeing a legacy-only server.
+- **Clients** probe `server/discover` before `initialize`. A legacy server
+  answers with an error and the client falls back, but a stdio server that
+  ignores unknown methods costs `eraProbeTimeout` (3 s) and a respawn. Set
+  `eraPreference = .legacy` for such servers, and for code that depends on
+  legacy session state (`sessionID`, `negotiatedProtocolVersion`, `logging/setLevel`).
+- Modern servers do not implement `ping`. `MCPServerProxy.ping()` still
+  completes, since the server's `-32601` reply proves the connection is alive.
 - `MCPProtocolVersion.supported` now includes `2026-07-28`. Code that used it
   as "what `initialize` negotiates" should use
   `MCPProtocolVersion.legacySupported` instead.

@@ -14,6 +14,13 @@ private actor LoopbackNotificationServer {
         "ok"
     }
 
+    /// A prompt, so the server advertises the prompts capability (a modern
+    /// listen filter only honors list-changed types the server can produce).
+    @MCPPrompt
+    func greeting() -> String {
+        "Hello"
+    }
+
     /// Captures the calling session.
     @MCPTool
     func saveSession() -> String {
@@ -54,16 +61,18 @@ private final class NotificationRecorder: MCPServerProxyResourceNotificationHand
 
 struct InProcessLoopbackNotificationTests {
     @Test("STDIO in-process: a captured session delivers notifications outside a request",
-          .timeLimit(.minutes(1)))
-    func capturedSessionDeliversNotifications() async throws {
+          .timeLimit(.minutes(1)), arguments: [MCPClientEraPreference.legacy, .auto])
+    func capturedSessionDeliversNotifications(era: MCPClientEraPreference) async throws {
         let server = LoopbackNotificationServer()
         let proxy = MCPServerProxy(config: .stdioHandles(server: server))
+        await proxy.setEraPreference(era)
         let recorder = NotificationRecorder()
         await proxy.setResourceNotificationHandler(recorder)
         await proxy.setToolsListChangedHandler(recorder)
         await proxy.setResourcesListChangedHandler(recorder)
         await proxy.setPromptsListChangedHandler(recorder)
         try await proxy.connect()
+        #expect(await proxy.negotiatedEra == (era == .legacy ? .legacy : .modern))
 
         let uri = try #require(URL(string: "loopback://status"))
         try await proxy.subscribeResource(uri: uri)
