@@ -44,8 +44,8 @@ struct InMemoryHTTPAdapterTests {
         let adapter = InMemoryHTTPServerAdapter(engine: transport)
 
         // No prior initialize and no Mcp-Session-Id: the modern negotiation entry
-        // point must still be reachable (the init gate exempts server/discover) —
-        // it just has no modern era to report yet, hence the in-band -32601.
+        // point must still be reachable (the init gate exempts server/discover)
+        // and answer with the advertised revisions, modern included.
         let body = try HTTPTransportTestHelpers.encode(
             JSONRPCMessage.request(id: 1, method: "server/discover", params: nil)
         )
@@ -53,7 +53,8 @@ struct InMemoryHTTPAdapterTests {
 
         #expect(exchange.status == .ok)
         let text = await drain(exchange.body)
-        #expect(text.contains("\"code\":-32601"))
+        #expect(text.contains("supportedVersions"))
+        #expect(text.contains("2026-07-28"))
     }
 
     @Test("POST /mcp: a batch hiding work behind server/discover is rejected pre-init")
@@ -102,7 +103,7 @@ struct InMemoryHTTPAdapterTests {
 
     @Test("POST /mcp: a sessionless request with an unservable _meta version gets -32004, not the session gate")
     func unservableMetaVersionYields32004BeforeSessionGate() async throws {
-        let transport = HTTPSSETransport(server: ModernDiscoverTestServer())
+        let transport = HTTPSSETransport(server: DiscoverTestServer())
         let adapter = InMemoryHTTPServerAdapter(engine: transport)
 
         let ping = JSONRPCMessage.request(
@@ -120,12 +121,12 @@ struct InMemoryHTTPAdapterTests {
         let text = String(bytes: data ?? Data(), encoding: .utf8) ?? ""
         #expect(text.contains("-32004"))
         #expect(text.contains("2027-01-01"))
-        #expect(text.contains("2026-07-28"))   // opted-in server advertises modern
+        #expect(text.contains("2026-07-28"))   // a default server advertises modern
     }
 
     @Test("POST /mcp: server/discover with an unservable _meta version still answers, not -32004")
     func discoverExemptFromUnservableMetaVersionOverHTTP() async throws {
-        let transport = HTTPSSETransport(server: ModernDiscoverTestServer())
+        let transport = HTTPSSETransport(server: DiscoverTestServer())
         let adapter = InMemoryHTTPServerAdapter(engine: transport)
 
         let discover = JSONRPCMessage.request(
@@ -138,7 +139,7 @@ struct InMemoryHTTPAdapterTests {
         #expect(exchange.status == .ok)
         let text = await drain(exchange.body)
         #expect(text.contains("supportedVersions"))
-        #expect(!text.contains("-32004"))
+        #expect(!text.contains("\"code\":-32004"))
     }
 
     @Test("POST /mcp: a modern header without matching _meta is not served sessionless")

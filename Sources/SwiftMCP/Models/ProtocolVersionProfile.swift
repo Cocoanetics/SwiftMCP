@@ -9,9 +9,9 @@
 //  (`MCPServerProxy`) consult it during version negotiation without linking the
 //  HTTP transport.
 //
-//  This is the pure data model (Phase 0 of the 2026-07-28 adoption plan). It
-//  describes versions that are not yet negotiable — `profile(for:)` is
-//  intentionally a superset of `MCPProtocolVersion.supported`.
+//  This is the pure data model (Phase 0 of the 2026-07-28 adoption plan).
+//  `profile(for:)` is intentionally a superset of `MCPProtocolVersion.supported`:
+//  it also describes `2024-11-05`, which is no longer negotiable.
 //
 
 import Foundation
@@ -227,15 +227,15 @@ public extension MCPProtocolVersion {
 
     /// The modern (stateless, per-request-metadata) revision.
     ///
-    /// Not yet part of ``supported``: the runtime can *describe* it via
-    /// ``profile(for:)`` before it advertises or negotiates it.
+    /// The modern (stateless, per-request-metadata) revision. Part of
+    /// ``supported`` and advertised by `server/discover` unless a server opts out
+    /// (`MCPServer.advertisesModernEra`); never negotiated by legacy `initialize`.
     static let modern = "2026-07-28"
 
     /// Every revision SwiftMCP has a capability profile for.
     ///
     /// Intentionally a superset of ``supported`` (the set the server will
-    /// negotiate): it also covers `2024-11-05` (context only) and ``modern``
-    /// (described ahead of implementation).
+    /// negotiate): it also covers `2024-11-05` (context only).
     static var allKnownProfiles: [ProtocolVersionProfile] {
         [.v20241105, .v20250326, .v20250618, .v20251125, .v20260728]
     }
@@ -252,12 +252,10 @@ public extension MCPProtocolVersion {
     }
 
     /// Whether the server will **process** a request declaring `version`, as
-    /// opposed to what it will **advertise** (``supported``). A version is
-    /// servable when it is negotiable (in ``supported``) *or* a known modern
-    /// revision: the modern era is functional-but-unadvertised as it is built, so
-    /// a modern client that declares `2026-07-28` reaches the modern path even
-    /// though `2026-07-28` is not yet in ``supported`` / `server/discover`. The
-    /// final "flip" that advertises modern is simply adding it to ``supported``.
+    /// opposed to what it will **advertise**. A version is servable when it is
+    /// negotiable (in ``supported``) *or* a known modern revision, so a modern
+    /// client that declares `2026-07-28` still reaches the modern path on a
+    /// server that opted out of advertising it (`MCPServer.advertisesModernEra`).
     static func isServable(_ version: String) -> Bool {
         supported.contains(version) || isModern(version)
     }

@@ -74,7 +74,7 @@ public final class HTTPSSETransport: Transport, MCPTransport, Service, MCPHTTPEn
     /// modern-only server answers `GET`/`DELETE /mcp` with `405` regardless of
     /// the request's declared version; a dual-era server keeps them for legacy
     /// clients. Defaults to whether any negotiable revision is a legacy one.
-    public var servesLegacyEra: Bool = MCPProtocolVersion.supported.contains { !MCPProtocolVersion.isModern($0) }
+    public var servesLegacyEra: Bool = !MCPProtocolVersion.legacySupported.isEmpty
 
     /// Flag to determine whether to serve OpenAPI endpoints.
     public var serveOpenAPI: Bool = false

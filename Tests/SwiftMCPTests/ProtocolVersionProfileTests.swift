@@ -91,26 +91,27 @@ struct ProtocolVersionProfileTests {
         }
     }
 
-    @Test("modern is described but not yet negotiable")
-    func modernNotYetSupported() {
+    @Test("modern is described and negotiable, but not by initialize")
+    func modernSupported() {
         #expect(MCPProtocolVersion.profile(for: MCPProtocolVersion.modern) != nil)
-        #expect(!MCPProtocolVersion.supported.contains(MCPProtocolVersion.modern))
+        #expect(MCPProtocolVersion.supported.contains(MCPProtocolVersion.modern))
+        #expect(!MCPProtocolVersion.legacySupported.contains(MCPProtocolVersion.modern))
     }
 
-    /// Guardrail: the server must only advertise the latest stable version it
-    /// more or less fully supports. Until the modern (`2026-07-28`) surface
-    /// (server/discover, MRTR, sessionless transport, …) is implemented, every
-    /// advertised version must be legacy-era, and `latest` must be advertised.
-    /// Adding a modern version here must be a deliberate change to this test.
-    @Test("Only fully-supported (legacy-era) versions are advertised")
+    /// Guardrail: the server must only advertise versions it more or less fully
+    /// supports. `initialize` negotiates legacy-era revisions only; the modern
+    /// (`2026-07-28`) revision is the single modern entry, reached through
+    /// `server/discover`. Adding a version here must be a deliberate change to
+    /// this test.
+    @Test("Only fully-supported versions are advertised")
     func advertisesOnlyImplementedVersions() {
-        for version in MCPProtocolVersion.supported {
+        for version in MCPProtocolVersion.legacySupported {
             let profile = MCPProtocolVersion.profile(for: version)
             #expect(profile != nil, "advertised version \(version) has no profile")
-            #expect(profile?.era == .legacy, "advertised version \(version) is not a fully-supported version")
+            #expect(profile?.era == .legacy, "legacy version \(version) is not a legacy-era version")
         }
-        #expect(MCPProtocolVersion.supported.contains(MCPProtocolVersion.latest))
-        #expect(!MCPProtocolVersion.supported.contains(MCPProtocolVersion.modern))
+        #expect(MCPProtocolVersion.legacySupported.contains(MCPProtocolVersion.latest))
+        #expect(MCPProtocolVersion.supported == MCPProtocolVersion.legacySupported.union([MCPProtocolVersion.modern]))
     }
 
     // MARK: - The batching delta (the motivating case)

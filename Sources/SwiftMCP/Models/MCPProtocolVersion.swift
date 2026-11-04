@@ -21,12 +21,16 @@ public enum MCPProtocolVersion {
     /// Oldest revision still accepted over the HTTP transport.
     public static let fallbackHTTP = "2025-03-26"
 
-    /// The full set of protocol revisions this package can negotiate.
-    public static let supported: Set<String> = [
+    /// The revisions the legacy `initialize` handshake can negotiate.
+    public static let legacySupported: Set<String> = [
         latest,
         intermediateHTTP,
         fallbackHTTP
     ]
+
+    /// The full set of protocol revisions this package can negotiate: the legacy
+    /// revisions plus ``modern``, which is reached through `server/discover`.
+    public static let supported: Set<String> = legacySupported.union([modern])
 
     /// The negotiable revisions, newest first. Revision strings are ISO dates, so
     /// a descending lexical sort yields newest-first — a deterministic ordering for
@@ -35,10 +39,11 @@ public enum MCPProtocolVersion {
         supported.sorted(by: >)
     }
 
-    /// The revisions a server advertises: ``supported``, plus ``modern`` when the
-    /// server opts in to the modern era (`MCPServer.advertisesModernEra`).
+    /// The revisions a server advertises: ``supported`` by default, or only
+    /// ``legacySupported`` when the server opts out of the modern era
+    /// (`MCPServer.advertisesModernEra` returns `false`).
     public static func advertised(modernEra: Bool) -> Set<String> {
-        modernEra ? supported.union([modern]) : supported
+        modernEra ? supported : legacySupported
     }
 
     /// ``advertised(modernEra:)``, newest first.
@@ -51,8 +56,8 @@ public enum MCPProtocolVersion {
         versions.contains(where: isModern)
     }
 
-    /// Whether this server's negotiable revisions (``supported``) include a modern
-    /// era — i.e. whether `server/discover` can truthfully describe one. `false`
-    /// until the dual-era rollout (#137) adds a modern revision to ``supported``.
+    /// Whether this package's negotiable revisions (``supported``) include a modern
+    /// era — i.e. whether `server/discover` can truthfully describe one. The #199
+    /// safety net: `server/discover` answers `-32601` whenever this is `false`.
     public static var supportsModernEra: Bool { includesModernEra(supported) }
 }

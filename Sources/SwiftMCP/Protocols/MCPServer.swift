@@ -56,12 +56,13 @@ public protocol MCPServer {
     var serverInstructions: String? { get }
 
     /**
-     Whether this server opts in to advertising the modern (`2026-07-28`) revision.
+     Whether this server advertises the modern (`2026-07-28`) revision.
 
-     Defaults to `false`: ``MCPProtocolVersion/supported`` stays legacy-only and
-     `server/discover` answers `-32601`. Return `true` to add
-     ``MCPProtocolVersion/modern`` to the revisions `server/discover` and the
-     `-32004` error advertise. Legacy `initialize` negotiation is unaffected.
+     Defaults to `true`: `server/discover` and the `-32004` error advertise
+     ``MCPProtocolVersion/supported``, which includes ``MCPProtocolVersion/modern``.
+     Return `false` to stay legacy-only: `server/discover` then answers `-32601`,
+     so discover-first clients fall back to `initialize`. Legacy `initialize`
+     negotiation is unaffected either way.
      */
     var advertisesModernEra: Bool { get }
 
@@ -141,9 +142,9 @@ public extension MCPServer {
     }
 
     /**
-     Modern era is opt-in; see the requirement's documentation.
+     Modern era is on by default; see the requirement's documentation.
      */
-    var advertisesModernEra: Bool { false }
+    var advertisesModernEra: Bool { true }
 
     /**
      The server's usage instructions, derived from the `@MCPServer(instructions:)`

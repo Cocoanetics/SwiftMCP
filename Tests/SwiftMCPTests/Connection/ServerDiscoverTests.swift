@@ -15,10 +15,10 @@ actor DiscoverTestServer {
     func echo(text: String) -> String { text }
 }
 
-/// Same server, opted in to advertising the modern revision.
+/// Same server, opted out of advertising the modern revision.
 @MCPServer(name: "DiscoverTest", version: "2.0", instructions: "Always echo politely.")
-actor ModernDiscoverTestServer {
-    nonisolated var advertisesModernEra: Bool { true }
+actor LegacyOnlyDiscoverTestServer {
+    nonisolated var advertisesModernEra: Bool { false }
 
     /// Echoes its input.
     /// - Parameter text: The text to echo.
@@ -48,9 +48,9 @@ struct ServerDiscoverTests {
         .object(["_meta": .object(["io.modelcontextprotocol/protocolVersion": .string(version)])])
     }
 
-    @Test("server/discover answers -32601 before initialize while no modern era is supported")
+    @Test("An opted-out server answers server/discover with -32601 before initialize")
     func discoverBeforeInitialize() async throws {
-        let server = DiscoverTestServer()
+        let server = LegacyOnlyDiscoverTestServer()
         let transport = InMemoryTransport()
         let serveTask = Task {
             try await server.serve(over: [transport], gracefulShutdownSignals: [], logger: Self.logger)
@@ -59,7 +59,7 @@ struct ServerDiscoverTests {
         let connection = transport.accept()
         var outbound = connection.outbound.makeAsyncIterator()
         // No prior `initialize`: discover must still be reachable (pre-init
-        // exemption) — it just has nothing modern to report yet.
+        // exemption) — an opted-out server just has nothing modern to report.
         connection.clientSends([request(id: 1, method: "server/discover")])
 
         let frame = try #require(await outbound.next())
@@ -69,7 +69,7 @@ struct ServerDiscoverTests {
             return
         }
         #expect(err.id == .integer(1))
-        #expect(err.error.code == -32601)   // not gated with -32000: it's reachable, just unimplemented for now
+        #expect(err.error.code == -32601)   // not gated with -32000: it's reachable, just opted out
 
         transport.stop()
         try await serveTask.value
@@ -133,15 +133,15 @@ struct ServerDiscoverTests {
         var outbound = connection.outbound.makeAsyncIterator()
         connection.clientSends([request(id: 1, method: "server/discover", params: metaVersion("2099-01-01"))])
 
+        // A DiscoverResult, not -32004: the unsupported _meta version never trips
+        // the negotiation guard — discover is exempt from it.
         let frame = try #require(await outbound.next())
-        guard case .errorResponse(let err) = frame.first else {
-            Issue.record("discover must answer despite an unsupported _meta version")
+        guard case .response(let response) = frame.first else {
+            Issue.record("discover must answer an unsupported _meta version, got \(String(describing: frame.first))")
             transport.stop()
             return
         }
-        // -32601 (no modern era to report), not -32004: the unsupported _meta
-        // version never trips the negotiation guard — discover is exempt from it.
-        #expect(err.error.code == -32601)
+        #expect(response.result?["supportedVersions"] != nil)
         transport.stop()
         try await serveTask.value
     }
@@ -159,7 +159,7 @@ struct ServerDiscoverTests {
 
     @Test("A modern _meta request is served before initialize (gate exemption + reachability)")
     func modernRequestServedPreInitialize() async throws {
-        let server = DiscoverTestServer()
+        let server = LegacyOnlyDiscoverTestServer()
         let transport = InMemoryTransport()
         let serveTask = Task {
             try await server.serve(over: [transport], gracefulShutdownSignals: [], logger: Self.logger)
@@ -169,7 +169,8 @@ struct ServerDiscoverTests {
         var outbound = connection.outbound.makeAsyncIterator()
         // A modern client: no initialize handshake, a tools/list carrying the
         // modern `_meta` protocol version. It must be served (not gate-rejected,
-        // not -32004'd), proving `2026-07-28` is reachable while unadvertised.
+        // not -32004'd), proving `2026-07-28` is reachable even on a server that
+        // opted out of advertising it.
         connection.clientSends([request(id: 1, method: "tools/list", params: metaVersion("2026-07-28"))])
 
         let frame = try #require(await outbound.next())
@@ -185,9 +186,9 @@ struct ServerDiscoverTests {
         try await serveTask.value
     }
 
-    @Test("An opted-in server answers server/discover with a spec-shaped DiscoverResult")
-    func optedInDiscoverConformance() async throws {
-        let server = ModernDiscoverTestServer()
+    @Test("A default server answers server/discover with a spec-shaped DiscoverResult")
+    func defaultDiscoverConformance() async throws {
+        let server = DiscoverTestServer()
         let transport = InMemoryTransport()
         let serveTask = Task {
             try await server.serve(over: [transport], gracefulShutdownSignals: [], logger: Self.logger)
@@ -214,16 +215,13 @@ struct ServerDiscoverTests {
         #expect(result["ttlMs"] != nil)
         #expect(result["cacheScope"] != nil)
 
-        // The default (legacy) set is untouched by the opt-in.
-        #expect(!MCPProtocolVersion.supported.contains("2026-07-28"))
-
         transport.stop()
         try await serveTask.value
     }
 
-    @Test("An opted-in server's -32004 lists the modern revision")
-    func optedInUnsupportedVersionListsModern() async throws {
-        let server = ModernDiscoverTestServer()
+    @Test("A default server's -32004 lists the modern revision")
+    func defaultUnsupportedVersionListsModern() async throws {
+        let server = DiscoverTestServer()
         let transport = InMemoryTransport()
         let serveTask = Task {
             try await server.serve(over: [transport], gracefulShutdownSignals: [], logger: Self.logger)

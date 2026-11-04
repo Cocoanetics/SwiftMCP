@@ -113,7 +113,8 @@ public final actor MCPServerProxy {
     public internal(set) var negotiatedProtocolVersion: String?
 
     /// Which era `connect()` should negotiate. Defaults to ``MCPClientEraPreference/legacy``
-    /// — modern support is opt-in until the dual-era rollout (#137) completes.
+    /// until the client can receive server pushes in the modern era
+    /// (`subscriptions/listen`); `.auto` then becomes the default (#252).
     public var eraPreference: MCPClientEraPreference = .legacy
 
     /// The era of the current connection; `nil` before `connect()` completes.

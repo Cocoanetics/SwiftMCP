@@ -130,6 +130,44 @@ by the client and request small data samples for preview. See the demo server fo
 simple implementations of these features. The <doc:ServerCapabilities> and <doc:Sampling>
 articles describe the APIs in detail.
 
+## Protocol Revisions
+
+SwiftMCP serves both MCP eras side by side:
+
+- **Legacy** (`2025-03-26`, `2025-06-18`, `2025-11-25`): sessions opened with
+  the `initialize` handshake.
+- **Modern** (`2026-07-28`): stateless requests that carry the version,
+  identity and capabilities in `_meta`, discovered through `server/discover`.
+
+Servers advertise `2026-07-28` by default: `server/discover` and the `-32004`
+unsupported-version error list `MCPProtocolVersion.supported`, newest first.
+Legacy `initialize` only negotiates the legacy revisions, so a client that
+proposes `2026-07-28` (or anything unknown) there still gets `2025-11-25`.
+
+To stay legacy-only, opt out on the server. `server/discover` then answers
+`-32601`, which discover-first clients treat as "fall back to `initialize`":
+
+```swift
+@MCPServer
+actor MyServer {
+    nonisolated var advertisesModernEra: Bool { false }
+}
+```
+
+On the client, `MCPServerProxy.eraPreference` picks the era: `.legacy`
+(`initialize` only, the current default), `.auto` (probe `server/discover`,
+fall back to `initialize`) or `.modern` (modern only). `.legacy` stays the
+default until the client can receive server pushes in the modern era
+(`subscriptions/listen`).
+
+### Migrating
+
+- **Servers** need no changes. Opt out with `advertisesModernEra == false` if
+  a host must keep seeing a legacy-only server.
+- `MCPProtocolVersion.supported` now includes `2026-07-28`. Code that used it
+  as "what `initialize` negotiates" should use
+  `MCPProtocolVersion.legacySupported` instead.
+
 ## Custom Server Implementation
 
 To implement your own MCP server:
