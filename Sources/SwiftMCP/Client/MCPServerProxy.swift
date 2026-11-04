@@ -43,6 +43,7 @@ public final actor MCPServerProxy {
         static let resourcesListChanged = "notifications/resources/list_changed"
         static let promptsListChanged = "notifications/prompts/list_changed"
         static let resourceUpdated = "notifications/resources/updated"
+        static let subscriptionsAcknowledged = "notifications/subscriptions/acknowledged"
     }
 
     public let logger = Logger(label: "com.cocoanetics.SwiftMCP.MCPServerProxy")
@@ -112,9 +113,10 @@ public final actor MCPServerProxy {
     /// requests.
     public internal(set) var negotiatedProtocolVersion: String?
 
-    /// Which era `connect()` should negotiate. Defaults to ``MCPClientEraPreference/legacy``
-    /// — modern support is opt-in until the dual-era rollout (#137) completes.
-    public var eraPreference: MCPClientEraPreference = .legacy
+    /// Which era `connect()` should negotiate. Defaults to ``MCPClientEraPreference/auto``:
+    /// probe `server/discover`, falling back to `initialize` for legacy servers.
+    /// Set ``MCPClientEraPreference/legacy`` to skip the probe.
+    public var eraPreference: MCPClientEraPreference = .auto
 
     /// The era of the current connection; `nil` before `connect()` completes.
     public internal(set) var negotiatedEra: MCPClientEra?
@@ -152,6 +154,25 @@ public final actor MCPServerProxy {
     /// dance. Cleared by `disconnect()` — an intentional teardown starts fresh.
     internal var subscribedResourceURIs: Set<URL> = []
 
+    /// The task holding the modern `subscriptions/listen` request open, and the
+    /// generation that invalidates superseded ones (`MCPServerProxy+Listen.swift`).
+    internal var listenTask: Task<Void, Never>?
+    internal var listenGeneration: Int = 0
+    /// The generation each in-flight listen request belongs to, by request id.
+    internal var listenRequestGenerations: [JSONRPCID: Int] = [:]
+    /// Line transports re-number requests in their peer, so their listen
+    /// acknowledgements are matched in send order instead.
+    internal var lineListenAcknowledgementQueue: [Int] = []
+    /// Callers waiting for a generation's `notifications/subscriptions/acknowledged`.
+    internal var listenAcknowledgementWaiters: [
+        Int: [CheckedContinuation<SubscriptionFilter, Error>]
+    ] = [:]
+    /// An acknowledgement that arrived before its caller began waiting. Kept
+    /// per generation so the caller still observes the honored filter or error.
+    internal var listenAcknowledgementResults: [
+        Int: Result<SubscriptionFilter, MCPServerProxyError>
+    ] = [:]
+
     /// Optional handler for log notifications from the server.
     public var logNotificationHandler: (any MCPServerProxyLogNotificationHandling)? {
         didSet {
@@ -182,6 +203,7 @@ public final actor MCPServerProxy {
     public var toolsListChangedHandler: (any MCPServerProxyToolsListChangedHandling)? {
         didSet {
             updateToolsListChangedRegistration()
+            refreshListenSubscription()
         }
     }
 
@@ -191,6 +213,7 @@ public final actor MCPServerProxy {
     public var resourcesListChangedHandler: (any MCPServerProxyResourcesListChangedHandling)? {
         didSet {
             updateResourcesListChangedRegistration()
+            refreshListenSubscription()
         }
     }
 
@@ -200,6 +223,7 @@ public final actor MCPServerProxy {
     public var promptsListChangedHandler: (any MCPServerProxyPromptsListChangedHandling)? {
         didSet {
             updatePromptsListChangedRegistration()
+            refreshListenSubscription()
         }
     }
 

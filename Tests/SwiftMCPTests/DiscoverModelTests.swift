@@ -61,15 +61,23 @@ struct DiscoverModelTests {
 
     @Test("supportedDescending orders the negotiable revisions newest-first")
     func supportedDescendingOrder() {
-        #expect(MCPProtocolVersion.supportedDescending == ["2025-11-25", "2025-06-18", "2025-03-26"])
+        #expect(MCPProtocolVersion.supportedDescending == ["2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26"])
+    }
+
+    @Test("advertised(modernEra:) drops the modern revision for an opted-out server")
+    func advertisedHonorsOptOut() {
+        #expect(MCPProtocolVersion.advertisedDescending(modernEra: true) == MCPProtocolVersion.supportedDescending)
+        #expect(MCPProtocolVersion.advertisedDescending(modernEra: false) == ["2025-11-25", "2025-06-18", "2025-03-26"])
     }
 
     @Test("isModern / isServable split advertised from processable versions")
     func modernAndServable() {
-        // 2026-07-28 is a known modern revision, servable, but NOT advertised.
+        // 2026-07-28 is a known modern revision: servable and negotiable, but not
+        // through legacy initialize.
         #expect(MCPProtocolVersion.isModern("2026-07-28"))
         #expect(MCPProtocolVersion.isServable("2026-07-28"))
-        #expect(!MCPProtocolVersion.supported.contains("2026-07-28"))
+        #expect(MCPProtocolVersion.supported.contains("2026-07-28"))
+        #expect(!MCPProtocolVersion.legacySupported.contains("2026-07-28"))
 
         // Negotiable legacy revisions: servable, not modern.
         #expect(!MCPProtocolVersion.isModern("2025-11-25"))
@@ -87,8 +95,8 @@ struct DiscoverModelTests {
     @Test("includesModernEra detects a modern revision in an arbitrary version set")
     func includesModernEraDetection() {
         #expect(MCPProtocolVersion.includesModernEra(["2026-07-28"]))
-        #expect(!MCPProtocolVersion.includesModernEra(MCPProtocolVersion.supported))
-        // Flips once #137 adds a modern version to `supported`.
-        #expect(!MCPProtocolVersion.supportsModernEra)
+        #expect(!MCPProtocolVersion.includesModernEra(MCPProtocolVersion.legacySupported))
+        #expect(MCPProtocolVersion.includesModernEra(MCPProtocolVersion.supported))
+        #expect(MCPProtocolVersion.supportsModernEra)
     }
 }

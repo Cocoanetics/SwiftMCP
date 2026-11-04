@@ -176,7 +176,7 @@ struct HTTPTransportTests {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
-        request.httpBody = try HTTPTransportTestHelpers.encode(JSONRPCMessage.request(id: 1, method: "ping"))
+        request.httpBody = try HTTPTransportTestHelpers.encode(JSONRPCMessage.request(id: 1, method: "tools/list"))
 
         let (_, response) = try await session.data(for: request)
         let http = response as! HTTPURLResponse

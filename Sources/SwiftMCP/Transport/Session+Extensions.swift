@@ -116,19 +116,34 @@ extension Session {
 
     /// Send a notification that the list of available tools changed.
     public func sendToolListChanged() async throws {
-        let notification = JSONRPCMessage.notification(method: "notifications/tools/list_changed")
+        guard let notification = listenNotification(
+            method: "notifications/tools/list_changed",
+            accepts: { $0.toolsListChanged }
+        ) else {
+            return
+        }
         try await transport?.send(notification)
     }
 
     /// Send a notification that the list of available resources changed.
     public func sendResourceListChanged() async throws {
-        let notification = JSONRPCMessage.notification(method: "notifications/resources/list_changed")
+        guard let notification = listenNotification(
+            method: "notifications/resources/list_changed",
+            accepts: { $0.resourcesListChanged }
+        ) else {
+            return
+        }
         try await transport?.send(notification)
     }
 
     /// Send a notification that the list of available prompts changed.
     public func sendPromptListChanged() async throws {
-        let notification = JSONRPCMessage.notification(method: "notifications/prompts/list_changed")
+        guard let notification = listenNotification(
+            method: "notifications/prompts/list_changed",
+            accepts: { $0.promptsListChanged }
+        ) else {
+            return
+        }
         try await transport?.send(notification)
     }
 
@@ -144,16 +159,43 @@ extension Session {
 
     /// Returns `true` if this session is subscribed to updates for the given URI.
     public func isSubscribedToResource(uri: String) -> Bool {
-        subscribedResourceURIs.contains(uri)
+        subscribedResourceURIs.contains(uri) || lineListen?.filter.resourceSubscriptions.contains(uri) == true
     }
 
     /// Send a notification that a subscribed resource has been updated.
     /// - Parameter uri: The URI of the resource that was updated.
     public func sendResourceUpdated(uri: URL) async throws {
-        let notification = JSONRPCMessage.notification(
+        let uriString = uri.absoluteString
+        guard let notification = listenNotification(
             method: "notifications/resources/updated",
-            params: ["uri": .string(uri.absoluteString)]
-        )
+            params: ["uri": .string(uriString)],
+            accepts: { $0.resourceSubscriptions.contains(uriString) }
+        ) else {
+            return
+        }
         try await transport?.send(notification)
+    }
+}
+
+// MARK: - Initialize state
+extension Session {
+    /// Update the client capabilities stored for this session.
+    public func setClientCapabilities(_ capabilities: ClientCapabilities?) {
+        self.clientCapabilities = capabilities
+    }
+
+    /// Update the client info stored for this session.
+    public func setClientInfo(_ info: Implementation?) {
+        self.clientInfo = info
+    }
+
+    /// Update the negotiated protocol version for this session.
+    public func setNegotiatedProtocolVersion(_ version: String?) {
+        self.negotiatedProtocolVersion = version
+    }
+
+    /// Mark the session as having received an MCP initialize request.
+    public func markInitializeRequestReceived() {
+        hasReceivedInitializeRequest = true
     }
 }

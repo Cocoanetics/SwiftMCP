@@ -59,7 +59,8 @@ extension HTTPSSETransport {
 			return nil
 		}
 		let error = MCPProtocolVersion.unsupportedVersionError(
-			id: id, requested: requested, modernEra: server?.advertisesModernEra ?? false
+			id: id, requested: requested,
+			modernEra: dispatcher?.advertisesModernEra ?? server?.advertisesModernEra ?? false
 		)
 		return .json(error, status: .badRequest, sessionId: nil)
 	}

@@ -148,6 +148,7 @@ extension MCPServerProxy {
         }
 
         retireStream()
+        cancelListenSubscription()
         urlSession?.invalidateAndCancel()
         urlSession = nil
         endpointURL = nil

@@ -93,14 +93,4 @@ extension SessionManager {
         }
     }
 }
-
-extension JSONRPCID {
-    /// The id as a JSON value, for the `subscriptionId` `_meta` key.
-    var jsonValue: JSONValue {
-        switch self {
-        case .integer(let value): return .integer(value)
-        case .string(let value): return .string(value)
-        }
-    }
-}
 #endif

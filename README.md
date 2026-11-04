@@ -130,6 +130,57 @@ by the client and request small data samples for preview. See the demo server fo
 simple implementations of these features. The <doc:ServerCapabilities> and <doc:Sampling>
 articles describe the APIs in detail.
 
+## Protocol Revisions
+
+SwiftMCP serves both MCP eras side by side:
+
+- **Legacy** (`2025-03-26`, `2025-06-18`, `2025-11-25`): sessions opened with
+  the `initialize` handshake.
+- **Modern** (`2026-07-28`): stateless requests that carry the version,
+  identity and capabilities in `_meta`, discovered through `server/discover`.
+
+Servers advertise `2026-07-28` by default: `server/discover` and the `-32004`
+unsupported-version error list `MCPProtocolVersion.supported`, newest first.
+Legacy `initialize` only negotiates the legacy revisions, so a client that
+proposes `2026-07-28` (or anything unknown) there still gets `2025-11-25`.
+
+To stay legacy-only, opt out on the server. `server/discover` then answers
+`-32601`, which discover-first clients treat as "fall back to `initialize`":
+
+```swift
+@MCPServer
+actor MyServer {
+    nonisolated var advertisesModernEra: Bool { false }
+}
+```
+
+On the client, `MCPServerProxy.eraPreference` picks the era: `.auto` (the
+default: probe `server/discover`, fall back to `initialize`), `.legacy`
+(`initialize` only, no probe) or `.modern` (modern only).
+
+Server pushes work in both eras. On a modern connection the proxy holds one
+`subscriptions/listen` request open — a long-lived SSE stream over HTTP, the
+connection itself over stdio and TCP — whose filter follows the registered
+list-changed handlers and `subscribeResource(uri:)`. `subscribeResource` and
+`unsubscribeResource` update that filter and return once the server has
+acknowledged it.
+
+### Migrating
+
+- **Servers** need no changes. Opt out with `advertisesModernEra == false` if
+  a host must keep seeing a legacy-only server.
+- **Clients** probe `server/discover` before `initialize`. A legacy server
+  answers with an error and the client falls back, but a stdio server that
+  ignores unknown methods costs `eraProbeTimeout` (3 s) and a respawn. Set
+  `eraPreference = .legacy` for such servers, and for code that depends on
+  legacy session state (`sessionID`, `negotiatedProtocolVersion`, `logging/setLevel`).
+- Modern servers do not implement modern-shaped `ping`. On a dual-era server,
+  `MCPServerProxy.ping()` sends a legacy-shaped ping; on a modern-only server it
+  uses a `server/discover` round trip as the liveness check.
+- `MCPProtocolVersion.supported` now includes `2026-07-28`. Code that used it
+  as "what `initialize` negotiates" should use
+  `MCPProtocolVersion.legacySupported` instead.
+
 ## Custom Server Implementation
 
 To implement your own MCP server:

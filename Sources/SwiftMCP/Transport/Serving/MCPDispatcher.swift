@@ -23,6 +23,10 @@ import Foundation
 /// `Session.current` — so a transport never reimplements "reject before
 /// initialize" or "reject a batch on a no-batching revision."
 public protocol MCPDispatcher: Sendable {
+    /// Whether the server advertises modern revisions in discovery and
+    /// unsupported-version errors. Defaults to `false` for custom dispatchers.
+    var advertisesModernEra: Bool { get }
+
     /// Dispatches a single inbound message, returning its reply — or `nil` for a
     /// notification, an accepted request, or a gated-away message.
     func handle(_ message: JSONRPCMessage) async -> JSONRPCMessage?
@@ -34,6 +38,10 @@ public protocol MCPDispatcher: Sendable {
     func handle(_ batch: [JSONRPCMessage]) async -> [JSONRPCMessage]
 }
 
+public extension MCPDispatcher {
+    var advertisesModernEra: Bool { false }
+}
+
 /// The ``MCPDispatcher`` `serve` hands its transports.
 ///
 /// It gates each payload against the bound `Session.current` — opening the
@@ -43,6 +51,8 @@ public protocol MCPDispatcher: Sendable {
 /// applied wherever the transport calls in.
 struct MCPServerDispatcher<Server: MCPServer & Sendable>: MCPDispatcher {
     let server: Server
+
+    var advertisesModernEra: Bool { server.advertisesModernEra }
 
     func handle(_ message: JSONRPCMessage) async -> JSONRPCMessage? {
         guard let session = Session.current else {

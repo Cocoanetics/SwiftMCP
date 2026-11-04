@@ -81,6 +81,9 @@ public actor Session {
     /// URIs that this session has subscribed to for resource-updated notifications.
     internal var subscribedResourceURIs: Set<String> = []
 
+    /// Modern `subscriptions/listen` on a line transport; see `Session+Listen.swift`.
+    internal var lineListen: LineListenSubscription?
+
     /// Cancellation hooks for the requests currently being processed on this
     /// session, keyed by JSON-RPC id. Fired by `notifications/cancelled`.
     private var inFlightRequests: [JSONRPCID: @Sendable () -> Void] = [:]
@@ -234,26 +237,6 @@ public actor Session {
     /// Update the ID token stored for this session.
     public func setIDToken(_ token: String?) {
         self.idToken = token
-    }
-
-    /// Update the client capabilities stored for this session.
-    public func setClientCapabilities(_ capabilities: ClientCapabilities?) {
-        self.clientCapabilities = capabilities
-    }
-
-    /// Update the client info stored for this session.
-    public func setClientInfo(_ info: Implementation?) {
-        self.clientInfo = info
-    }
-
-    /// Update the negotiated protocol version for this session.
-    public func setNegotiatedProtocolVersion(_ version: String?) {
-        self.negotiatedProtocolVersion = version
-    }
-
-    /// Mark the session as having received an MCP initialize request.
-    public func markInitializeRequestReceived() {
-        hasReceivedInitializeRequest = true
     }
 
     /// Record session activity and clear any pending expiry.

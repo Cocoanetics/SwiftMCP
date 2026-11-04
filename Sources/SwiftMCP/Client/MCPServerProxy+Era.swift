@@ -45,6 +45,7 @@ extension MCPServerProxy {
             }
             switch try await probeModernEra() {
             case .modern:
+                refreshListenSubscription()
                 return
             case .legacy(let reuseConnection):
                 if !reuseConnection, let reconnect {

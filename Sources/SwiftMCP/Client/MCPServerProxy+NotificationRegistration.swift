@@ -54,9 +54,17 @@ extension MCPServerProxy {
                     as: ResourceUpdatedParams.self
                 )
                 guard let url = URL(string: params.uri) else { return }
+                guard await proxy.shouldDeliverResourceUpdate(url) else { return }
                 await handler.mcpServerProxy(proxy, resourceUpdatedAt: url)
             }
         )
+    }
+
+    /// Modern updates are meaningful only while their URI remains in the active
+    /// listen filter. This also drops an in-flight stale notification while an
+    /// unsubscribe is clearing the server-side line subscription.
+    private func shouldDeliverResourceUpdate(_ uri: URL) -> Bool {
+        negotiatedEra != .modern || subscribedResourceURIs.contains(uri)
     }
 
     // MARK: - List Changed Registration

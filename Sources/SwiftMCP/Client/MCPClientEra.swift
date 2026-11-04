@@ -11,11 +11,11 @@ public enum MCPClientEra: String, Sendable {
 
 /// Which era ``MCPServerProxy/connect(clientName:clientVersion:)`` should use.
 public enum MCPClientEraPreference: String, Sendable {
-    /// Always run the legacy `initialize` handshake (the default until the
-    /// dual-era rollout in #137 completes).
+    /// Always run the legacy `initialize` handshake, without a `server/discover`
+    /// probe. Pin this for servers that misbehave on unknown methods.
     case legacy
     /// Probe `server/discover` first; fall back to the legacy handshake when the
-    /// server does not offer a modern revision this client supports.
+    /// server does not offer a modern revision this client supports. The default.
     case auto
     /// Require a modern revision; never send `initialize`.
     case modern

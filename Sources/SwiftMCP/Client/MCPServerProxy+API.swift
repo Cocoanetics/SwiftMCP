@@ -71,7 +71,31 @@ extension MCPServerProxy {
     /// to advertise `resources.subscribe` capability.
     /// The URI is recorded locally only when the server accepts the request;
     /// after any re-initialize the proxy replays all recorded subscriptions.
+    /// On a modern connection the URI joins the `subscriptions/listen` filter
+    /// instead (modern servers have no `resources/subscribe`).
     public func subscribeResource(uri: URL) async throws {
+        if negotiatedEra == .modern {
+            guard serverCapabilities?.resources?.subscribe == true else {
+                throw MCPServerProxyError.communicationError(
+                    "Server does not support resource subscriptions"
+                )
+            }
+            guard subscribedResourceURIs.insert(uri).inserted else { return }
+            refreshListenSubscription()
+            do {
+                let honored = try await awaitListenAcknowledgement()
+                guard honored.resourceSubscriptions.contains(uri.absoluteString) else {
+                    throw MCPServerProxyError.communicationError(
+                        "Server did not honor the resource subscription"
+                    )
+                }
+            } catch {
+                subscribedResourceURIs.remove(uri)
+                refreshListenSubscription()
+                throw error
+            }
+            return
+        }
         try await requestResult(
             method: "resources/subscribe",
             params: ["uri": .string(uri.absoluteString)]
@@ -83,7 +107,14 @@ extension MCPServerProxy {
     /// The URI is removed from the locally-recorded set immediately so it will
     /// not be replayed after a re-initialize.
     public func unsubscribeResource(uri: URL) async throws {
-        subscribedResourceURIs.remove(uri)
+        let removed = subscribedResourceURIs.remove(uri) != nil
+        if negotiatedEra == .modern {
+            if removed {
+                refreshListenSubscription()
+                _ = try await awaitListenAcknowledgement()
+            }
+            return
+        }
         try await requestResult(
             method: "resources/unsubscribe",
             params: ["uri": .string(uri.absoluteString)]
@@ -268,10 +299,29 @@ extension MCPServerProxy {
     }
 
     /// Sends a ping request to the server.
+    ///
+    /// The modern era has no `ping`. On a modern connection to a dual-era server
+    /// the ping goes out as a legacy request (no `_meta`, a legacy
+    /// `MCP-Protocol-Version`), which the legacy lifecycle allows outside a
+    /// session; a modern-only server (or one that refuses it) is probed with
+    /// `server/discover` instead.
     public func ping() async throws {
         let requestId = nextRequestID()
         let request = JSONRPCMessage.request(id: requestId, method: "ping", params: nil)
-        _ = try await send(request)
+        guard negotiatedEra == .modern else {
+            _ = try await send(request)
+            return
+        }
+        if let legacy = lastDiscover?.supportedVersions.filter(MCPProtocolVersion.legacySupported.contains).max() {
+            do {
+                if case .response = try await sendLegacyShaped(request, version: legacy) {
+                    return
+                }
+            } catch MCPServerProxyError.httpStatus {
+                // Refused outside a session: fall back to discovery.
+            }
+        }
+        _ = try await send(.request(id: nextRequestID(), method: "server/discover", params: nil))
     }
 }
 #endif

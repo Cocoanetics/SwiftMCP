@@ -117,15 +117,107 @@ struct ClientModernEraTests {
         await proxy.disconnect()
     }
 
-    @Test("The default preference is legacy: no discover probe is sent")
-    func defaultIsLegacy() async throws {
+    @Test("ping on a modern connection to a dual-era server is a legacy ping")
+    func modernPingIsLegacyShaped() async throws {
+        let fake = FakeLineServer { message in
+            guard case .request(let request) = message else { return nil }
+            switch request.method {
+            case "server/discover":
+                let versions = [MCPProtocolVersion.modern, "2025-11-25"]
+                return FakeLineServer.ok(request, FakeLineServer.discoverResult(versions))
+            case "ping":
+                let isLegacy = request.params?["_meta"] == nil
+                return isLegacy ? FakeLineServer.ok(request, [:]) : FakeLineServer.fail(request, -32601)
+            default:
+                return FakeLineServer.fail(request, -32601)
+            }
+        }
+        let proxy = await makeModernProxy(fake, preference: .auto)
+        try await proxy.establishConnection(clientName: "t", clientVersion: "1")
+        #expect(await proxy.negotiatedEra == .modern)
+
+        try await proxy.ping()
+        let ping = try #require(fake.requests("ping").first)
+        #expect(ping.params?["_meta"] == nil)
+        #expect(fake.requests("server/discover").count == 1)
+        await proxy.disconnect()
+    }
+
+    @Test("ping on a modern-only server probes server/discover instead")
+    func modernOnlyPingUsesDiscover() async throws {
+        let fake = makeModernServer(versions: [MCPProtocolVersion.modern])
+        let proxy = await makeModernProxy(fake, preference: .auto)
+        try await proxy.establishConnection(clientName: "t", clientVersion: "1")
+        #expect(await proxy.negotiatedEra == .modern)
+
+        try await proxy.ping()
+        #expect(fake.requests("ping").isEmpty)
+        #expect(fake.requests("server/discover").count == 2)
+        await proxy.disconnect()
+    }
+
+    @Test("The default preference is auto")
+    func defaultIsAuto() async throws {
+        let fresh = MCPServerProxy(config: .stdioHandles(server: ClientDiscoverTestServer()))
+        #expect(await fresh.eraPreference == .auto)
+    }
+}
+
+extension ClientModernEraTests {
+    @Test("Modern resource subscribe rejects a missing server capability without recording the URI")
+    func resourceSubscribeRequiresCapability() async throws {
+        let fake = makeModernServer()
+        let proxy = await makeModernProxy(fake, preference: .modern)
+        try await proxy.establishConnection(clientName: "t", clientVersion: "1")
+        let uri = try #require(URL(string: "push://status"))
+
+        await #expect(throws: MCPServerProxyError.self) {
+            try await proxy.subscribeResource(uri: uri)
+        }
+        #expect(await proxy.subscribedResourceURIs.isEmpty)
+        #expect(fake.requests("subscriptions/listen").isEmpty)
+        await proxy.disconnect()
+    }
+
+    @Test("A rejected modern listen makes subscribe throw and rolls back the URI")
+    func resourceSubscribeSurfacesListenRejection() async throws {
+        let capabilities: JSONDictionary = [
+            "resources": .object(["subscribe": .bool(true)])
+        ]
+        let fake = FakeLineServer { message in
+            guard case .request(let request) = message else { return nil }
+            switch request.method {
+            case "server/discover":
+                return FakeLineServer.ok(
+                    request,
+                    FakeLineServer.discoverResult(
+                        [MCPProtocolVersion.modern], capabilities: capabilities
+                    )
+                )
+            case "subscriptions/listen":
+                return FakeLineServer.fail(request, -32601)
+            default:
+                return FakeLineServer.fail(request, -32601)
+            }
+        }
+        let proxy = await makeModernProxy(fake, preference: .modern)
+        try await proxy.establishConnection(clientName: "t", clientVersion: "1")
+        let uri = try #require(URL(string: "push://status"))
+
+        await #expect(throws: MCPServerProxyError.self) {
+            try await proxy.subscribeResource(uri: uri)
+        }
+        #expect(await proxy.subscribedResourceURIs.isEmpty)
+        await proxy.disconnect()
+    }
+
+    @Test("The legacy preference sends no discover probe")
+    func legacySkipsProbe() async throws {
         let fake = FakeLineServer { message in
             guard case .request(let request) = message else { return nil }
             return FakeLineServer.ok(request, FakeLineServer.initializeResult)
         }
         let proxy = await makeModernProxy(fake, preference: .legacy)
-        let fresh = MCPServerProxy(config: .stdioHandles(server: ClientDiscoverTestServer()))
-        #expect(await fresh.eraPreference == .legacy)
         try await proxy.establishConnection(clientName: "t", clientVersion: "1")
         #expect(fake.requests("server/discover").isEmpty)
         #expect(await proxy.negotiatedEra == .legacy)

@@ -114,6 +114,21 @@ extension HTTPSSETransport {
 		}
 	}
 
+	/// A sessionless legacy `ping` is a liveness probe — from a client before
+	/// `initialize`, or a modern client checking a dual-era server. It is answered
+	/// here instead of opening a session for every probe. (A legacy request without
+	/// an inbound `Mcp-Session-Id` reaches dispatch with `context.session == nil`.)
+	private func sessionlessPingResponse(
+		context: StreamableHTTPContext,
+		messages: [JSONRPCMessage]
+	) -> RouteResponse? {
+		guard servesLegacyEra, !context.isModern, context.session == nil,
+		      SessionInitializationGate.isLoneLegacyPing(messages), let id = messages.first?.id else {
+			return nil
+		}
+		return .json(JSONRPCMessage.response(id: id, result: [:]), status: .ok, sessionId: nil)
+	}
+
 	/// Early rejection for malformed/unknown session headers.
 	private func streamableEarlyRejection(for sessionHeader: SessionHeaderResolution) -> RouteResponse? {
 		switch sessionHeader {
@@ -220,6 +235,9 @@ extension HTTPSSETransport {
 		token: String?,
 		context: StreamableHTTPContext
 	) async -> RouteResponse {
+		if let pong = sessionlessPingResponse(context: context, messages: messages) {
+			return pong
+		}
 		if context.isModern, let listen = messages.first, listen.method == ModernRequestMethods.subscriptionsListen {
 			return await handleSubscriptionsListen(listen, token: token, context: context)
 		}
