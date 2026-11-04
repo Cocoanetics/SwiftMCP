@@ -53,10 +53,15 @@ struct SubscriptionFilter: Sendable, Equatable {
         result.toolsListChanged = toolsListChanged && capabilities.tools != nil
         result.promptsListChanged = promptsListChanged && capabilities.prompts != nil
         result.resourcesListChanged = resourcesListChanged && capabilities.resources != nil
-        if capabilities.resources == nil {
+        if capabilities.resources?.subscribe != true {
             result.resourceSubscriptions = []
         }
         return result
+    }
+
+    /// Whether the filter asks for no notifications at all.
+    var isEmpty: Bool {
+        !toolsListChanged && !promptsListChanged && !resourcesListChanged && resourceSubscriptions.isEmpty
     }
 
     /// The wire form: only requested types appear.

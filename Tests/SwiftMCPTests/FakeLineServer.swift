@@ -62,11 +62,14 @@ final class FakeLineServer: @unchecked Sendable {
         .errorResponse(id: request.id, error: .init(code: code, message: "error \(code)", data: data))
     }
 
-    static func discoverResult(_ versions: [String]) -> JSONDictionary {
+    static func discoverResult(
+        _ versions: [String],
+        capabilities: JSONDictionary = [:]
+    ) -> JSONDictionary {
         [
             "resultType": .string("complete"),
             "supportedVersions": .array(versions.map { .string($0) }),
-            "capabilities": .object([:]),
+            "capabilities": .object(capabilities),
             "serverInfo": .object(["name": .string("Fake"), "version": .string("1.0")])
         ]
     }

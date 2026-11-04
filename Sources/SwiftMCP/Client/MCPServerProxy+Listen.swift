@@ -38,12 +38,24 @@ extension MCPServerProxy {
     /// closed; on a line transport the server ends the previous request when the
     /// new one supersedes it.
     internal func refreshListenSubscription() {
+        let hadListen = listenTask != nil
         if case .sse = config {
             listenTask?.cancel()
         }
         listenTask = nil
-        guard negotiatedEra == .modern, !isDisconnecting, let filter = listenFilter() else {
+        guard negotiatedEra == .modern, !isDisconnecting else {
             return
+        }
+        let filter: JSONValue
+        if let current = listenFilter() {
+            filter = current
+        } else {
+            // HTTP tears down its old subscription by cancelling the SSE stream.
+            // A line transport has no stream to close, so supersede its stored
+            // filter with an acknowledged, one-shot empty listen.
+            guard hadListen else { return }
+            if case .sse = config { return }
+            filter = .object([:])
         }
         listenGeneration += 1
         let generation = listenGeneration
@@ -56,22 +68,31 @@ extension MCPServerProxy {
         listenTask?.cancel()
         listenTask = nil
         listenGeneration += 1
-        resumeListenWaiters(upTo: listenGeneration)
+        failListenAcknowledgements(
+            upTo: listenGeneration,
+            with: .communicationError("subscriptions/listen was cancelled")
+        )
     }
 
     /// Waits until the server acknowledged the current listen subscription (its
     /// filter is in effect), the attempt ended, or a timeout passed — so a
     /// modern `subscribeResource` returns only once updates can arrive.
-    internal func awaitListenAcknowledgement() async {
+    internal func awaitListenAcknowledgement() async throws -> SubscriptionFilter {
         let generation = listenGeneration
-        guard listenTask != nil, acknowledgedListenGeneration < generation else {
-            return
+        if let result = listenAcknowledgementResults[generation] {
+            return try result.get()
+        }
+        guard listenTask != nil else {
+            throw MCPServerProxyError.communicationError("subscriptions/listen was not started")
         }
         Task { [weak self] in
             try? await Task.sleep(nanoseconds: Self.listenAcknowledgementTimeout)
-            await self?.resumeListenWaiters(upTo: generation)
+            await self?.completeListenAcknowledgement(
+                generation: generation,
+                result: .failure(.communicationError("Timed out waiting for subscriptions/listen acknowledgement"))
+            )
         }
-        await withCheckedContinuation { continuation in
+        return try await withCheckedThrowingContinuation { continuation in
             listenAcknowledgementWaiters[generation, default: []].append(continuation)
         }
     }
@@ -88,16 +109,45 @@ extension MCPServerProxy {
         } else {
             return
         }
-        acknowledgedListenGeneration = max(acknowledgedListenGeneration, generation)
-        resumeListenWaiters(upTo: generation)
+        guard let honored = SubscriptionFilter(notification.params?["notifications"]) else {
+            completeListenAcknowledgement(
+                generation: generation,
+                result: .failure(.communicationError("Invalid subscriptions/listen acknowledgement"))
+            )
+            return
+        }
+        completeListenAcknowledgement(generation: generation, result: .success(honored))
     }
 
-    private func resumeListenWaiters(upTo generation: Int) {
+    private func completeListenAcknowledgement(
+        generation: Int,
+        result: Result<SubscriptionFilter, MCPServerProxyError>
+    ) {
+        guard listenAcknowledgementResults[generation] == nil else { return }
+        if generation >= (listenAcknowledgementResults.keys.max() ?? generation) {
+            listenAcknowledgementResults = listenAcknowledgementResults.filter { $0.key >= generation }
+        }
+        listenAcknowledgementResults[generation] = result
+        if let waiters = listenAcknowledgementWaiters.removeValue(forKey: generation), !waiters.isEmpty {
+            for continuation in waiters {
+                switch result {
+                case .success(let filter):
+                    continuation.resume(returning: filter)
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+            return
+        }
+    }
+
+    private func failListenAcknowledgements(upTo generation: Int, with error: MCPServerProxyError) {
         for waiting in listenAcknowledgementWaiters.keys where waiting <= generation {
             for continuation in listenAcknowledgementWaiters.removeValue(forKey: waiting) ?? [] {
-                continuation.resume()
+                continuation.resume(throwing: error)
             }
         }
+        listenAcknowledgementResults = listenAcknowledgementResults.filter { $0.key > generation }
     }
 
     private func isCurrentListen(_ generation: Int) -> Bool {
@@ -110,45 +160,77 @@ extension MCPServerProxy {
     private func runListen(filter: JSONValue, generation: Int) async {
         var retryDelay: UInt64 = 1_000_000_000
         while isCurrentListen(generation) {
-            let requestID = nextRequestID()
-            let request = JSONRPCMessage.request(
-                id: requestID,
-                method: "subscriptions/listen",
-                params: .object(["notifications": filter])
-            )
-            if case .sse = config {
-                listenRequestGenerations[requestID] = generation
-            } else {
-                lineListenAcknowledgementQueue.append(generation)
-            }
-            defer {
-                listenRequestGenerations[requestID] = nil
-                lineListenAcknowledgementQueue.removeAll { $0 == generation }
-                resumeListenWaiters(upTo: generation)
-            }
-            do {
-                let response = try await send(request)
-                if case .errorResponse(let error) = response {
-                    logger.warning("[MCP] subscriptions/listen rejected: \(error.error.message)")
-                    return
+            switch await runListenAttempt(filter: filter, generation: generation) {
+            case .stop:
+                return
+            case .retry(let resetDelay):
+                if resetDelay {
+                    retryDelay = 1_000_000_000
                 }
-                guard case .sse = config else {
-                    return
-                }
-                retryDelay = 1_000_000_000
-            } catch {
-                guard case .sse = config, isCurrentListen(generation) else {
-                    return
-                }
-                if case MCPServerProxyError.httpStatus(let status, _) = error, [404, 405].contains(status) {
-                    logger.warning("[MCP] Server does not support subscriptions/listen (HTTP \(status))")
-                    return
-                }
-                logger.info("[MCP] subscriptions/listen stream ended: \(error.localizedDescription); re-opening")
             }
             try? await Task.sleep(nanoseconds: retryDelay)
             retryDelay = min(retryDelay * 2, Self.maxListenRetryDelay)
         }
+    }
+
+    private enum ListenAttemptResult {
+        case stop
+        case retry(resetDelay: Bool)
+    }
+
+    private func runListenAttempt(filter: JSONValue, generation: Int) async -> ListenAttemptResult {
+        let requestID = nextRequestID()
+        let request = JSONRPCMessage.request(
+            id: requestID,
+            method: "subscriptions/listen",
+            params: .object(["notifications": filter])
+        )
+        recordListenRequest(requestID, generation: generation)
+        defer { finishListenRequest(requestID, generation: generation) }
+        do {
+            let response = try await send(request)
+            if case .errorResponse(let error) = response {
+                logger.warning("[MCP] subscriptions/listen rejected: \(error.error.message)")
+                completeListenAcknowledgement(
+                    generation: generation,
+                    result: .failure(typedModernError(error.error)
+                        ?? .communicationError(error.error.message))
+                )
+                return .stop
+            }
+            guard case .sse = config else { return .stop }
+            return .retry(resetDelay: true)
+        } catch {
+            completeListenAcknowledgement(
+                generation: generation,
+                result: .failure(error as? MCPServerProxyError
+                    ?? .communicationError(error.localizedDescription))
+            )
+            guard case .sse = config, isCurrentListen(generation) else { return .stop }
+            if case MCPServerProxyError.httpStatus(let status, _) = error, [404, 405].contains(status) {
+                logger.warning("[MCP] Server does not support subscriptions/listen (HTTP \(status))")
+                return .stop
+            }
+            logger.info("[MCP] subscriptions/listen stream ended: \(error.localizedDescription); re-opening")
+            return .retry(resetDelay: false)
+        }
+    }
+
+    private func recordListenRequest(_ requestID: JSONRPCID, generation: Int) {
+        if case .sse = config {
+            listenRequestGenerations[requestID] = generation
+        } else {
+            lineListenAcknowledgementQueue.append(generation)
+        }
+    }
+
+    private func finishListenRequest(_ requestID: JSONRPCID, generation: Int) {
+        listenRequestGenerations[requestID] = nil
+        lineListenAcknowledgementQueue.removeAll { $0 == generation }
+        completeListenAcknowledgement(
+            generation: generation,
+            result: .failure(.communicationError("subscriptions/listen ended before acknowledgement"))
+        )
     }
 }
 #endif

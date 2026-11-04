@@ -37,13 +37,20 @@ private final class NotificationRecorder: MCPServerProxyResourceNotificationHand
     @unchecked Sendable {
     let events: AsyncStream<String>
     private let continuation: AsyncStream<String>.Continuation
+    private let lock = NSLock()
+    private var recordedCount = 0
 
     init() {
         (events, continuation) = AsyncStream.makeStream()
     }
 
     func mcpServerProxy(_ proxy: MCPServerProxy, resourceUpdatedAt uri: URL) async {
+        lock.withLock { recordedCount += 1 }
         continuation.yield("updated \(uri.absoluteString)")
+    }
+
+    var count: Int {
+        lock.withLock { recordedCount }
     }
 
     func mcpServerProxyToolsListDidChange(_ proxy: MCPServerProxy) async {
@@ -92,6 +99,31 @@ struct InProcessLoopbackNotificationTests {
             if received.count == 4 { break }
         }
         #expect(Set(received) == ["updated loopback://status", "tools", "resources", "prompts"])
+
+        await proxy.disconnect()
+    }
+
+    @Test("Modern line unsubscribe clears the server listen and drops stale updates")
+    func modernUnsubscribeClearsLineListen() async throws {
+        let server = LoopbackNotificationServer()
+        let proxy = MCPServerProxy(config: .stdioHandles(server: server))
+        let recorder = NotificationRecorder()
+        await proxy.setResourceNotificationHandler(recorder)
+        try await proxy.connect()
+
+        let uri = try #require(URL(string: "loopback://status"))
+        try await proxy.subscribeResource(uri: uri)
+        _ = try await proxy.callTool("saveSession")
+        let session = try #require(await server.savedSession)
+        #expect(await session.isSubscribedToResource(uri: uri.absoluteString))
+
+        try await proxy.unsubscribeResource(uri: uri)
+        #expect(!(await session.isSubscribedToResource(uri: uri.absoluteString)))
+        try await session.work { session in
+            try await session.sendResourceUpdated(uri: uri)
+        }
+        await Task.yield()
+        #expect(recorder.count == 0)
 
         await proxy.disconnect()
     }

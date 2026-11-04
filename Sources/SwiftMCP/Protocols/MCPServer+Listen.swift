@@ -29,7 +29,12 @@ extension MCPServer {
         }
 
         let honored = requested.honored(by: await buildServerCapabilities())
-        let previous = await session.replaceLineListen(LineListenSubscription(id: request.id, filter: honored))
+        let previous: LineListenSubscription?
+        if honored.isEmpty {
+            previous = await session.clearLineListen()
+        } else {
+            previous = await session.replaceLineListen(LineListenSubscription(id: request.id, filter: honored))
+        }
         if let previous {
             try? await session.transport?.send(Self.listenCompletion(id: previous.id))
         }
@@ -43,7 +48,10 @@ extension MCPServer {
             ])
         )
         try? await session.transport?.send(acknowledgement)
-        return nil
+        // On line transports an empty filter is a one-shot way to clear the
+        // session's stored subscription. Acknowledge it, then complete it so no
+        // useless request remains pending until disconnect.
+        return honored.isEmpty ? Self.listenCompletion(id: request.id) : nil
     }
 
     /// The empty result that ends a listen subscription.

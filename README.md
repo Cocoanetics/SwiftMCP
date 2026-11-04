@@ -174,8 +174,9 @@ acknowledged it.
   ignores unknown methods costs `eraProbeTimeout` (3 s) and a respawn. Set
   `eraPreference = .legacy` for such servers, and for code that depends on
   legacy session state (`sessionID`, `negotiatedProtocolVersion`, `logging/setLevel`).
-- Modern servers do not implement `ping`. `MCPServerProxy.ping()` still
-  completes, since the server's `-32601` reply proves the connection is alive.
+- Modern servers do not implement modern-shaped `ping`. On a dual-era server,
+  `MCPServerProxy.ping()` sends a legacy-shaped ping; on a modern-only server it
+  uses a `server/discover` round trip as the liveness check.
 - `MCPProtocolVersion.supported` now includes `2026-07-28`. Code that used it
   as "what `initialize` negotiates" should use
   `MCPProtocolVersion.legacySupported` instead.

@@ -125,6 +125,44 @@ struct LineSubscriptionsListenTests {
         try await serveTask.value
     }
 
+    @Test("An empty listen clears and completes the stored line subscription")
+    func emptyListenClears() async throws {
+        let server = LineListenTestServer()
+        let transport = InMemoryTransport()
+        let serveTask = Task {
+            try await server.serve(over: [transport], gracefulShutdownSignals: [], logger: Self.logger)
+        }
+        let connection = transport.accept()
+        var outbound = connection.outbound.makeAsyncIterator()
+
+        connection.clientSends([listen(id: 5, fullFilter)])
+        _ = await outbound.next()   // acknowledgement of 5
+        connection.clientSends([listen(id: 6, .object([:]))])
+
+        guard case .response(let previous) = try #require(await outbound.next()).first else {
+            Issue.record("expected the previous listen to complete")
+            transport.stop()
+            return
+        }
+        #expect(previous.id == .integer(5))
+        guard case .notification(let acknowledgement) = try #require(await outbound.next()).first else {
+            Issue.record("expected the empty listen acknowledgement")
+            transport.stop()
+            return
+        }
+        #expect(acknowledgement.params?["notifications"] == .object([:]))
+        guard case .response(let cleared) = try #require(await outbound.next()).first else {
+            Issue.record("expected the empty listen to complete")
+            transport.stop()
+            return
+        }
+        #expect(cleared.id == .integer(6))
+        #expect(!(await transport.session.isSubscribedToResource(uri: "line://status")))
+
+        transport.stop()
+        try await serveTask.value
+    }
+
     @Test("A legacy (non-modern) subscriptions/listen is an unknown method")
     func legacyListenRejected() async throws {
         let server = LineListenTestServer()

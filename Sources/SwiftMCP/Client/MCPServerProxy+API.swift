@@ -75,9 +75,24 @@ extension MCPServerProxy {
     /// instead (modern servers have no `resources/subscribe`).
     public func subscribeResource(uri: URL) async throws {
         if negotiatedEra == .modern {
-            if subscribedResourceURIs.insert(uri).inserted {
+            guard serverCapabilities?.resources?.subscribe == true else {
+                throw MCPServerProxyError.communicationError(
+                    "Server does not support resource subscriptions"
+                )
+            }
+            guard subscribedResourceURIs.insert(uri).inserted else { return }
+            refreshListenSubscription()
+            do {
+                let honored = try await awaitListenAcknowledgement()
+                guard honored.resourceSubscriptions.contains(uri.absoluteString) else {
+                    throw MCPServerProxyError.communicationError(
+                        "Server did not honor the resource subscription"
+                    )
+                }
+            } catch {
+                subscribedResourceURIs.remove(uri)
                 refreshListenSubscription()
-                await awaitListenAcknowledgement()
+                throw error
             }
             return
         }
@@ -96,7 +111,7 @@ extension MCPServerProxy {
         if negotiatedEra == .modern {
             if removed {
                 refreshListenSubscription()
-                await awaitListenAcknowledgement()
+                _ = try await awaitListenAcknowledgement()
             }
             return
         }

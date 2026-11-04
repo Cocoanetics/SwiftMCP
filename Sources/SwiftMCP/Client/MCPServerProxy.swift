@@ -164,8 +164,14 @@ public final actor MCPServerProxy {
     /// acknowledgements are matched in send order instead.
     internal var lineListenAcknowledgementQueue: [Int] = []
     /// Callers waiting for a generation's `notifications/subscriptions/acknowledged`.
-    internal var listenAcknowledgementWaiters: [Int: [CheckedContinuation<Void, Never>]] = [:]
-    internal var acknowledgedListenGeneration: Int = 0
+    internal var listenAcknowledgementWaiters: [
+        Int: [CheckedContinuation<SubscriptionFilter, Error>]
+    ] = [:]
+    /// An acknowledgement that arrived before its caller began waiting. Kept
+    /// per generation so the caller still observes the honored filter or error.
+    internal var listenAcknowledgementResults: [
+        Int: Result<SubscriptionFilter, MCPServerProxyError>
+    ] = [:]
 
     /// Optional handler for log notifications from the server.
     public var logNotificationHandler: (any MCPServerProxyLogNotificationHandling)? {

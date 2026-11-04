@@ -17,6 +17,13 @@ extension Session {
         return previous
     }
 
+    /// Clears the active line listen, returning the request it superseded.
+    func clearLineListen() -> LineListenSubscription? {
+        let previous = lineListen
+        lineListen = nil
+        return previous
+    }
+
     /// The notification to send for `method`. A session with a line listen
     /// subscription gets it only when the subscription's filter `accepts` it,
     /// tagged with the subscription id; any other session gets it untagged, as
