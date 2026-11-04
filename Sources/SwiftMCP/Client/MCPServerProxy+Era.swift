@@ -35,6 +35,11 @@ extension MCPServerProxy {
         modernProtocolVersion = nil
         headerParameters = nil
 
+        if try preferredVersionRequiresLegacy() {
+            try await initializeLegacy(clientName: clientName, clientVersion: clientVersion)
+            return
+        }
+
         if eraPreference != .legacy {
             guard supportsModern else {
                 if eraPreference == .modern {
@@ -54,6 +59,30 @@ extension MCPServerProxy {
             }
         }
         try await initializeLegacy(clientName: clientName, clientVersion: clientVersion)
+    }
+
+    /// The revision `initialize` proposes: ``preferredProtocolVersion`` unless it is
+    /// modern (never negotiated by `initialize`), otherwise the newest legacy one.
+    internal var proposedLegacyProtocolVersion: String {
+        guard let preferred = preferredProtocolVersion, !MCPProtocolVersion.isModern(preferred) else {
+            return MCPProtocolVersion.latest
+        }
+        return preferred
+    }
+
+    /// Whether ``preferredProtocolVersion`` pins the legacy handshake (skipping the
+    /// probe). Throws when it contradicts ``eraPreference``.
+    private func preferredVersionRequiresLegacy() throws -> Bool {
+        guard let preferred = preferredProtocolVersion else {
+            return false
+        }
+        let isModern = MCPProtocolVersion.isModern(preferred)
+        if isModern ? eraPreference == .legacy : eraPreference == .modern {
+            throw MCPServerProxyError.communicationError(
+                "preferredProtocolVersion \(preferred) contradicts eraPreference .\(eraPreference.rawValue)"
+            )
+        }
+        return !isModern
     }
 
     private func initializeLegacy(clientName: String, clientVersion: String) async throws {
@@ -84,10 +113,7 @@ extension MCPServerProxy {
                 throw MCPServerProxyError.communicationError("Invalid server/discover response")
             }
             lastDiscover = discovered
-            let mutual = discovered.supportedVersions
-                .filter { MCPProtocolVersion.isModern($0) && Self.clientModernVersions.contains($0) }
-                .max()
-            guard let version = mutual else {
+            guard let version = mutualModernVersion(in: discovered.supportedVersions) else {
                 resetEraSelection()
                 if eraPreference == .modern {
                     throw MCPServerProxyError.unsupportedProtocolVersion(supported: discovered.supportedVersions)
@@ -118,6 +144,15 @@ extension MCPServerProxy {
             resetEraSelection()
             throw MCPServerProxyError.communicationError("Invalid server/discover response")
         }
+    }
+
+    /// The newest modern revision both sides implement, narrowed to
+    /// ``preferredProtocolVersion`` when one is set.
+    private func mutualModernVersion(in supportedVersions: [String]) -> String? {
+        supportedVersions
+            .filter { MCPProtocolVersion.isModern($0) && Self.clientModernVersions.contains($0) }
+            .filter { preferredProtocolVersion == nil || $0 == preferredProtocolVersion }
+            .max()
     }
 
     private func resetEraSelection() {

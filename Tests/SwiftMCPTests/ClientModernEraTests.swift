@@ -271,7 +271,6 @@ struct ClientModernEraTests {
 }
 
 extension MCPServerProxy {
-    func setEraPreference(_ value: MCPClientEraPreference) { eraPreference = value }
     func setEraProbeTimeout(_ value: TimeInterval) { eraProbeTimeout = value }
     func setRequestLogLevel(_ value: LogLevel?) { requestLogLevel = value }
     func setInputHandler(_ value: (any MCPClientInputHandler)?) { inputHandler = value }

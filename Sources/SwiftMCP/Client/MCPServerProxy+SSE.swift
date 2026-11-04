@@ -63,13 +63,13 @@ extension MCPServerProxy {
     }
 
     /// The value for the `MCP-Protocol-Version` header on streamable-HTTP
-    /// requests: the negotiated revision once known, otherwise the `latest` the
-    /// client is about to propose on the `initialize` request.
+    /// requests: the negotiated revision once known, otherwise the one the client
+    /// is about to propose on the `initialize` request.
     internal var mcpProtocolVersionHeaderValue: String? {
         if negotiatedEra == .modern, let modernProtocolVersion {
             return modernProtocolVersion
         }
-        return Self.mcpProtocolVersionHeader(for: negotiatedProtocolVersion ?? MCPProtocolVersion.latest)
+        return Self.mcpProtocolVersionHeader(for: negotiatedProtocolVersion ?? proposedLegacyProtocolVersion)
     }
 
     /// The `MCP-Protocol-Version` header value for `version`: the revision

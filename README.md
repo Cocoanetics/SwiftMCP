@@ -158,6 +158,18 @@ On the client, `MCPServerProxy.eraPreference` picks the era: `.auto` (the
 default: probe `server/discover`, fall back to `initialize`), `.legacy`
 (`initialize` only, no probe) or `.modern` (modern only).
 
+To steer the revision itself, set `preferredProtocolVersion`. A legacy revision
+is proposed in `initialize` without a probe (the server may still answer with
+an older one; `negotiatedProtocolVersion` holds the result). A modern revision
+is selected from `server/discover`, with `.auto` still falling back to
+`initialize`. `connect()` throws if the two settings contradict each other.
+
+```swift
+let proxy = MCPServerProxy(config: config)
+await proxy.setPreferredProtocolVersion("2025-06-18")
+try await proxy.connect()
+```
+
 Server pushes work in both eras. On a modern connection the proxy holds one
 `subscriptions/listen` request open — a long-lived SSE stream over HTTP, the
 connection itself over stdio and TCP — whose filter follows the registered
@@ -174,8 +186,10 @@ acknowledged it.
   ignores unknown methods costs `eraProbeTimeout` (3 s) and a respawn. Set
   `eraPreference = .legacy` for such servers, and for code that depends on
   legacy session state (`sessionID`, `negotiatedProtocolVersion`, `logging/setLevel`).
-- Modern servers do not implement `ping`. `MCPServerProxy.ping()` still
-  completes, since the server's `-32601` reply proves the connection is alive.
+- The modern era has no `ping`. A dual-era server still answers a legacy
+  `ping` at any time, even before `initialize`. On a modern connection
+  `MCPServerProxy.ping()` sends that legacy ping when `server/discover` listed
+  a legacy revision, and a `server/discover` round trip otherwise.
 - `MCPProtocolVersion.supported` now includes `2026-07-28`. Code that used it
   as "what `initialize` negotiates" should use
   `MCPProtocolVersion.legacySupported` instead.

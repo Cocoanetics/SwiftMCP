@@ -74,3 +74,37 @@ struct UtilitiesEraMatrixTests {
         #expect(await session.work { sess in await legacy.shouldEmitLog(message, session: sess) } == false)
     }
 }
+
+/// Counts `notifications/roots/list_changed` deliveries.
+@MCPServer(name: "RootsCounter", version: "1.0")
+actor RootsCounterServer {
+    private(set) var rootsChanges = 0
+
+    func handleRootsListChanged() async {
+        rootsChanges += 1
+    }
+
+    /// Echoes its input.
+    /// - Parameter text: The text to echo.
+    /// - Returns: The same text.
+    @MCPTool
+    func echo(text: String) -> String { text }
+}
+
+extension UtilitiesEraMatrixTests {
+    @Test("roots/list_changed reaches the server in legacy and is ignored in modern")
+    func rootsListChangedByEra() async {
+        let server = RootsCounterServer()
+        let method = "notifications/roots/list_changed"
+
+        let legacy = JSONRPCMessage.notification(method: method)
+        _ = await context(method: method, meta: nil).work { _ in await server.handleMessage(legacy) }
+        #expect(await server.rootsChanges == 1)
+
+        let modernParams: JSONDictionary = ["_meta": .object(modernMeta())]
+        let modern = JSONRPCMessage.notification(method: method, params: .object(modernParams))
+        let modernContext = RequestContext(message: modern)
+        _ = await modernContext.work { _ in await server.handleMessage(modern) }
+        #expect(await server.rootsChanges == 1)
+    }
+}

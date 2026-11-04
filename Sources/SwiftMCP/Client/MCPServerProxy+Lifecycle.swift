@@ -263,7 +263,7 @@ extension MCPServerProxy {
     internal func initialize(clientName: String, clientVersion: String) async throws {
         let requestId = nextRequestID()
         var params: JSONDictionary = [
-            "protocolVersion": .string(MCPProtocolVersion.latest),
+            "protocolVersion": .string(proposedLegacyProtocolVersion),
             "clientInfo": .object([
                 "name": .string(clientName),
                 "version": .string(clientVersion)
