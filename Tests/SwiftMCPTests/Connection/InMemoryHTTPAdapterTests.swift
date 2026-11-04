@@ -100,14 +100,39 @@ struct InMemoryHTTPAdapterTests {
         #expect(text.contains("tools"))       // the tools/list result was served
         #expect(!text.contains("-32004"))     // not rejected as an unsupported version
     }
+}
 
-    @Test("POST /mcp: a sessionless request with an unservable _meta version gets -32004, not the session gate")
-    func unservableMetaVersionYields32004BeforeSessionGate() async throws {
-        let transport = HTTPSSETransport(server: DiscoverTestServer())
+extension InMemoryHTTPAdapterTests {
+    private func discoveryTransport<Server: MCPServer & Sendable>(server: Server, decoupled: Bool) -> HTTPSSETransport {
+        guard decoupled else { return HTTPSSETransport(server: server) }
+        let transport = HTTPSSETransport()
+        transport.connect(to: MCPServerDispatcher(server: server))
+        return transport
+    }
+
+    @Test("POST /mcp: -32004 advertises the server's revisions in coupled and decoupled modes",
+          arguments: [false, true], [false, true])
+    func unservableMetaVersionYields32004BeforeSessionGate(modernEra: Bool, decoupled: Bool) async throws {
+        let transport = modernEra
+            ? discoveryTransport(server: DiscoverTestServer(), decoupled: decoupled)
+            : discoveryTransport(server: LegacyOnlyDiscoverTestServer(), decoupled: decoupled)
         let adapter = InMemoryHTTPServerAdapter(engine: transport)
 
+        let discoverBody = try HTTPTransportTestHelpers.encode(
+            JSONRPCMessage.request(id: 1, method: "server/discover")
+        )
+        let discovery = await adapter.send(method: .post, path: "/mcp", headerFields: jsonHeaders(), body: discoverBody)
+        #expect(discovery.status == .ok)
+        let discoveryText = await drain(discovery.body)
+        if modernEra {
+            #expect(discoveryText.contains("supportedVersions"))
+            #expect(discoveryText.contains(MCPProtocolVersion.modern))
+        } else {
+            #expect(discoveryText.contains("\"code\":-32601"))
+        }
+
         let ping = JSONRPCMessage.request(
-            id: 1, method: "ping",
+            id: 2, method: "ping",
             params: .object(["_meta": .object(["io.modelcontextprotocol/protocolVersion": .string("2027-01-01")])])
         )
         let body = try HTTPTransportTestHelpers.encode(ping)
@@ -118,10 +143,16 @@ struct InMemoryHTTPAdapterTests {
             Issue.record("expected a buffered -32004, got \(exchange.body)")
             return
         }
-        let text = String(bytes: data ?? Data(), encoding: .utf8) ?? ""
-        #expect(text.contains("-32004"))
-        #expect(text.contains("2027-01-01"))
-        #expect(text.contains("2026-07-28"))   // a default server advertises modern
+        let response = try JSONDecoder().decode(JSONRPCMessage.self, from: #require(data))
+        guard case .errorResponse(let error) = response else {
+            Issue.record("expected -32004, got \(response)")
+            return
+        }
+        #expect(error.id == .integer(2))
+        #expect(error.error.code == -32004)
+        #expect(error.error.data?["requested"]?.stringValue == "2027-01-01")
+        let supported = error.error.data?["supported"]?.arrayValue?.compactMap { $0.stringValue }
+        #expect(supported == MCPProtocolVersion.advertisedDescending(modernEra: modernEra))
     }
 
     @Test("POST /mcp: server/discover with an unservable _meta version still answers, not -32004")
