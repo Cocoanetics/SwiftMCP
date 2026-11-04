@@ -124,7 +124,9 @@ struct ProtocolVersionEndToEndTests {
             return Connection(
                 proxy: proxy,
                 push: { uri in
+                    // Like a broadcast: only to a session that is subscribed.
                     let session = try #require(await server.savedSession)
+                    guard await session.isSubscribedToResource(uri: uri.absoluteString) else { return }
                     try await session.work { try await $0.sendResourceUpdated(uri: uri) }
                 },
                 stop: { await proxy.disconnect() }
@@ -210,6 +212,11 @@ struct ProtocolVersionEndToEndTests {
         _ = try await proxy.callTool("saveSession")
         try await connection.push(uri)
         #expect(await recorder.next(within: 10) == uri.absoluteString)
+
+        // Unsubscribing succeeds and stops the pushes.
+        try await proxy.unsubscribeResource(uri: uri)
+        try await connection.push(uri)
+        #expect(await recorder.next(within: 1) == nil)
 
         await connection.stop()
     }
