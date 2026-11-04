@@ -31,6 +31,22 @@ extension MCPServerProxy {
         }
     }
 
+    /// Sends `message` as a legacy request on a modern connection: no `_meta`,
+    /// and `version` (a legacy revision) in the `MCP-Protocol-Version` header —
+    /// for what a dual-era server still answers outside a session (`ping`).
+    internal func sendLegacyShaped(_ message: JSONRPCMessage, version: String) async throws -> JSONRPCMessage {
+        switch config {
+        case .stdio, .stdioHandles, .tcp:
+            return try await sendLineMessage(message)
+        case .sse(let sseConfig):
+            var headers: [String: String] = [:]
+            if let header = Self.mcpProtocolVersionHeader(for: version) {
+                headers[HTTPField.Name.mcpProtocolVersion.rawName] = header
+            }
+            return try await sendStreamable(message, sseConfig: sseConfig, extraHeaders: headers)
+        }
+    }
+
     private func sendStreamable(
         _ message: JSONRPCMessage,
         sseConfig: MCPServerSseConfig,

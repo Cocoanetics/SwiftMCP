@@ -214,7 +214,7 @@ struct ServeOverTransportsTests {
 
         let connection = transport.accept()
         var outbound = connection.outbound.makeAsyncIterator()
-        connection.clientSends([.request(id: 7, method: "ping")])
+        connection.clientSends([.request(id: 7, method: "tools/list")])
 
         let frame = try #require(await outbound.next())
         guard case .errorResponse(let error) = frame.first else {

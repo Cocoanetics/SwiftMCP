@@ -35,7 +35,7 @@ struct LineTransportInitializationTests {
     @Test("Uninitialized session rejects non-initialize requests")
     func uninitializedSessionRejectsNonInitialize() async {
         let session = Session(id: UUID())
-        let messages = [JSONRPCMessage.request(id: 1, method: "ping")]
+        let messages = [JSONRPCMessage.request(id: 1, method: "tools/list")]
 
         #expect(await SessionInitializationGate.shouldReject(messages, for: session))
     }
@@ -78,8 +78,8 @@ struct LineTransportInitializationTests {
         #expect(responses.isEmpty)
     }
 
-    @Test("In-process stdio rejects ping before initialize", .enabled(if: isStdioProcessSupported))
-    func inProcessStdioRejectsPingBeforeInitialize() async throws {
+    @Test("In-process stdio rejects requests before initialize", .enabled(if: isStdioProcessSupported))
+    func inProcessStdioRejectsRequestsBeforeInitialize() async throws {
         let bridge = InProcessStdioBridge(server: LocalStdioServer())
         try await bridge.start()
         defer { Task { await bridge.stop() } }
@@ -87,7 +87,7 @@ struct LineTransportInitializationTests {
         let lines = await bridge.lines()
         var iterator = lines.makeAsyncIterator()
 
-        await bridge.write(try encodeLine(JSONRPCMessage.request(id: 1, method: "ping")))
+        await bridge.write(try encodeLine(JSONRPCMessage.request(id: 1, method: "tools/list")))
 
         guard let line = try await iterator.next() else {
             Issue.record("Expected response line")

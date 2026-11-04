@@ -117,6 +117,10 @@ struct ServerDiscoverTests {
         // would otherwise smuggle `tools/list` past the gate before initialize.
         #expect(SessionInitializationGate.batchStartsWithPreInitMethod([discover]))
         #expect(!SessionInitializationGate.batchStartsWithPreInitMethod([discover, tools]))
+        // A lone legacy ping is allowed before initialize, never as a batch lead.
+        let ping = JSONRPCMessage.request(id: 4, method: "ping", params: nil)
+        #expect(SessionInitializationGate.batchStartsWithPreInitMethod([ping]))
+        #expect(!SessionInitializationGate.batchStartsWithPreInitMethod([ping, tools]))
         // `initialize` opens the session, so its pipelined batch stays admitted.
         #expect(SessionInitializationGate.batchStartsWithPreInitMethod([initMsg, tools]))
     }
@@ -142,6 +146,38 @@ struct ServerDiscoverTests {
             return
         }
         #expect(response.result?["supportedVersions"] != nil)
+        transport.stop()
+        try await serveTask.value
+    }
+
+    @Test("A legacy ping before initialize is answered, a modern one is an unknown method")
+    func pingBeforeInitialize() async throws {
+        let server = DiscoverTestServer()
+        let transport = InMemoryTransport()
+        let serveTask = Task {
+            try await server.serve(over: [transport], gracefulShutdownSignals: [], logger: Self.logger)
+        }
+
+        let connection = transport.accept()
+        var outbound = connection.outbound.makeAsyncIterator()
+        connection.clientSends([request(id: 1, method: "ping")])
+        let legacy = try #require(await outbound.next()).first
+        guard case .response(let pong) = legacy else {
+            Issue.record("expected a pong, got \(String(describing: legacy))")
+            transport.stop()
+            return
+        }
+        #expect(pong.id == .integer(1))
+
+        connection.clientSends([request(id: 2, method: "ping", params: metaVersion("2026-07-28"))])
+        let modern = try #require(await outbound.next()).first
+        guard case .errorResponse(let error) = modern else {
+            Issue.record("expected -32601 for a modern ping, got \(String(describing: modern))")
+            transport.stop()
+            return
+        }
+        #expect(error.error.code == -32601)
+
         transport.stop()
         try await serveTask.value
     }

@@ -14,9 +14,10 @@ enum SessionInitializationGate {
     ///
     /// `initialize` admits the whole batch — it opens the session, so pipelined
     /// follow-ups in the same frame are legitimately post-init. `server/discover`
-    /// is sessionless and does **not** open the session, so it is admitted only as
-    /// a *standalone* request: it must never carry additional, still-ungated work
-    /// (e.g. a trailing `tools/call`) past the gate by leading a batch with it.
+    /// and `ping` (which the legacy lifecycle allows before `initialize`) do
+    /// **not** open the session, so they are admitted only as a *standalone*
+    /// request: they must never carry additional, still-ungated work (e.g. a
+    /// trailing `tools/call`) past the gate by leading a batch.
     static func batchStartsWithPreInitMethod(_ messages: [JSONRPCMessage]) -> Bool {
         if batchStartsWithInitialize(messages) {
             return true
@@ -24,7 +25,15 @@ enum SessionInitializationGate {
         guard messages.count == 1, let only = messages.first, only.isRequest else {
             return false
         }
-        return only.method == "server/discover"
+        return only.method == "server/discover" || only.method == "ping"
+    }
+
+    /// Whether the payload is a lone legacy `ping` — no modern `_meta` version.
+    static func isLoneLegacyPing(_ messages: [JSONRPCMessage]) -> Bool {
+        guard messages.count == 1, let only = messages.first, only.isRequest, only.method == "ping" else {
+            return false
+        }
+        return !batchIsModern(messages)
     }
 
     /// The `protocolVersion` declared by a leading `initialize` request, if the

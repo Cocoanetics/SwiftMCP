@@ -57,6 +57,31 @@ struct InMemoryHTTPAdapterTests {
         #expect(text.contains("2026-07-28"))
     }
 
+    @Test("POST /mcp: a sessionless legacy ping is answered without opening a session")
+    func sessionlessLegacyPing() async throws {
+        let transport = HTTPSSETransport(server: Calculator())
+        let adapter = InMemoryHTTPServerAdapter(engine: transport)
+
+        var headers = jsonHeaders()
+        headers[.mcpProtocolVersion] = "2025-11-25"
+        let body = try HTTPTransportTestHelpers.encode(JSONRPCMessage.request(id: 1, method: "ping", params: nil))
+        let exchange = await adapter.send(method: .post, path: "/mcp", headerFields: headers, body: body)
+
+        #expect(exchange.status == .ok)
+        #expect(exchange.headerFields[.mcpSessionID] == nil)
+        guard case .buffered(let data) = exchange.body else {
+            Issue.record("expected a buffered pong, got \(exchange.body)")
+            return
+        }
+        let reply = try JSONDecoder().decode(JSONRPCMessage.self, from: data ?? Data())
+        guard case .response(let pong) = reply else {
+            Issue.record("expected a pong, got \(reply)")
+            return
+        }
+        #expect(pong.id == .integer(1))
+        #expect(await transport.sessionManager.sessions.isEmpty)
+    }
+
     @Test("POST /mcp: a batch hiding work behind server/discover is rejected pre-init")
     func discoverBatchSmuggleRejectedOverHTTP() async throws {
         let transport = HTTPSSETransport(server: Calculator())

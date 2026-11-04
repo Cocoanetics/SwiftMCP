@@ -117,6 +117,45 @@ struct ClientModernEraTests {
         await proxy.disconnect()
     }
 
+    @Test("ping on a modern connection to a dual-era server is a legacy ping")
+    func modernPingIsLegacyShaped() async throws {
+        let fake = FakeLineServer { message in
+            guard case .request(let request) = message else { return nil }
+            switch request.method {
+            case "server/discover":
+                let versions = [MCPProtocolVersion.modern, "2025-11-25"]
+                return FakeLineServer.ok(request, FakeLineServer.discoverResult(versions))
+            case "ping":
+                let isLegacy = request.params?["_meta"] == nil
+                return isLegacy ? FakeLineServer.ok(request, [:]) : FakeLineServer.fail(request, -32601)
+            default:
+                return FakeLineServer.fail(request, -32601)
+            }
+        }
+        let proxy = await makeModernProxy(fake, preference: .auto)
+        try await proxy.establishConnection(clientName: "t", clientVersion: "1")
+        #expect(await proxy.negotiatedEra == .modern)
+
+        try await proxy.ping()
+        let ping = try #require(fake.requests("ping").first)
+        #expect(ping.params?["_meta"] == nil)
+        #expect(fake.requests("server/discover").count == 1)
+        await proxy.disconnect()
+    }
+
+    @Test("ping on a modern-only server probes server/discover instead")
+    func modernOnlyPingUsesDiscover() async throws {
+        let fake = makeModernServer(versions: [MCPProtocolVersion.modern])
+        let proxy = await makeModernProxy(fake, preference: .auto)
+        try await proxy.establishConnection(clientName: "t", clientVersion: "1")
+        #expect(await proxy.negotiatedEra == .modern)
+
+        try await proxy.ping()
+        #expect(fake.requests("ping").isEmpty)
+        #expect(fake.requests("server/discover").count == 2)
+        await proxy.disconnect()
+    }
+
     @Test("The default preference is auto")
     func defaultIsAuto() async throws {
         let fresh = MCPServerProxy(config: .stdioHandles(server: ClientDiscoverTestServer()))

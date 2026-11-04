@@ -284,10 +284,29 @@ extension MCPServerProxy {
     }
 
     /// Sends a ping request to the server.
+    ///
+    /// The modern era has no `ping`. On a modern connection to a dual-era server
+    /// the ping goes out as a legacy request (no `_meta`, a legacy
+    /// `MCP-Protocol-Version`), which the legacy lifecycle allows outside a
+    /// session; a modern-only server (or one that refuses it) is probed with
+    /// `server/discover` instead.
     public func ping() async throws {
         let requestId = nextRequestID()
         let request = JSONRPCMessage.request(id: requestId, method: "ping", params: nil)
-        _ = try await send(request)
+        guard negotiatedEra == .modern else {
+            _ = try await send(request)
+            return
+        }
+        if let legacy = lastDiscover?.supportedVersions.filter(MCPProtocolVersion.legacySupported.contains).max() {
+            do {
+                if case .response = try await sendLegacyShaped(request, version: legacy) {
+                    return
+                }
+            } catch MCPServerProxyError.httpStatus {
+                // Refused outside a session: fall back to discovery.
+            }
+        }
+        _ = try await send(.request(id: nextRequestID(), method: "server/discover", params: nil))
     }
 }
 #endif
