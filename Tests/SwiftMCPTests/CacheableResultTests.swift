@@ -138,3 +138,55 @@ struct CacheableResultTests {
         }
     }
 }
+
+/// Every cacheable method, per revision: hints in the modern era only, never on a
+/// legacy session whatever revision it negotiated.
+@Suite("Cacheable results by revision")
+struct CacheableResultEraMatrixTests {
+
+    static let requests: [(method: String, params: JSONDictionary)] = [
+        ("tools/list", [:]),
+        ("prompts/list", [:]),
+        ("resources/list", [:]),
+        ("resources/templates/list", [:]),
+        ("resources/read", ["uri": .string("cfg://app")])
+    ]
+
+    private func hints(_ response: JSONRPCMessage?) -> (ttl: JSONValue?, scope: JSONValue?)? {
+        guard case .response(let data)? = response, let result = data.result else { return nil }
+        return (result["ttlMs"], result["cacheScope"])
+    }
+
+    @Test("Legacy sessions never carry cache hints", arguments: ["2025-03-26", "2025-06-18", "2025-11-25"])
+    func legacyHasNoHints(version: String) async throws {
+        let server = CacheTestServer()
+        let session = Session(id: UUID())
+        await session.setNegotiatedProtocolVersion(version)
+        for (method, params) in Self.requests {
+            let request = JSONRPCMessage.request(id: 1, method: method, params: .object(params))
+            let response = await session.work { _ in await server.handleMessage(request) }
+            let found = try #require(hints(response), "\(method) did not answer")
+            #expect(found.ttl == nil, "\(method)")
+            #expect(found.scope == nil, "\(method)")
+        }
+    }
+
+    @Test("Modern requests carry cache hints on every cacheable method")
+    func modernHasHints() async throws {
+        let server = CacheTestServer()
+        let meta: JSONDictionary = [
+            MCPMetaKey.protocolVersion: .string(MCPProtocolVersion.modern),
+            MCPMetaKey.clientInfo: .object(["name": .string("t"), "version": .string("1")]),
+            MCPMetaKey.clientCapabilities: .object([:])
+        ]
+        for (method, params) in Self.requests {
+            var withMeta = params
+            withMeta["_meta"] = .object(meta)
+            let request = JSONRPCMessage.request(id: 1, method: method, params: .object(withMeta))
+            let response = await RequestContext(message: request).work { _ in await server.handleMessage(request) }
+            let found = try #require(hints(response), "\(method) did not answer")
+            #expect(found.ttl != nil, "\(method)")
+            #expect(found.scope != nil, "\(method)")
+        }
+    }
+}

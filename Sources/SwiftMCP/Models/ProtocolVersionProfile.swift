@@ -225,8 +225,6 @@ public extension ProtocolVersionProfile {
 
 public extension MCPProtocolVersion {
 
-    /// The modern (stateless, per-request-metadata) revision.
-    ///
     /// The modern (stateless, per-request-metadata) revision. Part of
     /// ``supported`` and advertised by `server/discover` unless a server opts out
     /// (`MCPServer.advertisesModernEra`); never negotiated by legacy `initialize`.

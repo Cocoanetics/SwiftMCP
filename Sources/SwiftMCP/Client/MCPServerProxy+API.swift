@@ -111,7 +111,10 @@ extension MCPServerProxy {
         if negotiatedEra == .modern {
             if removed {
                 refreshListenSubscription()
-                _ = try await awaitListenAcknowledgement()
+                // An emptied filter over HTTP only closes the stream: nothing to await.
+                if listenTask != nil {
+                    _ = try await awaitListenAcknowledgement()
+                }
             }
             return
         }

@@ -118,6 +118,23 @@ public final actor MCPServerProxy {
     /// Set ``MCPClientEraPreference/legacy`` to skip the probe.
     public var eraPreference: MCPClientEraPreference = .auto
 
+    /// The protocol revision `connect()` proposes; `nil` (the default) proposes the
+    /// newest one this client implements.
+    ///
+    /// - A legacy revision (`2025-03-26`, `2025-06-18`, `2025-11-25`) is proposed in
+    ///   `initialize` without a `server/discover` probe. The server may still answer
+    ///   with an older revision it supports; ``negotiatedProtocolVersion`` holds the
+    ///   result.
+    /// - A modern revision (`2026-07-28`) is selected from `server/discover` when the
+    ///   server offers it; under ``MCPClientEraPreference/auto`` a server without it
+    ///   falls back to the legacy handshake.
+    ///
+    /// `connect()` throws before opening a transport when this is not in
+    /// ``MCPProtocolVersion/supported``. It also throws when this contradicts
+    /// ``eraPreference`` (a legacy revision with ``MCPClientEraPreference/modern``,
+    /// or the reverse).
+    public var preferredProtocolVersion: String?
+
     /// The era of the current connection; `nil` before `connect()` completes.
     public internal(set) var negotiatedEra: MCPClientEra?
 

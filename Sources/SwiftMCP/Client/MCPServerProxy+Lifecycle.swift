@@ -10,6 +10,13 @@ extension MCPServerProxy {
         clientName: String = "swiftmcp-client",
         clientVersion: String = "1.0.0"
     ) async throws {
+        if let preferred = preferredProtocolVersion, !MCPProtocolVersion.supported.contains(preferred) {
+            throw MCPServerProxyError.communicationError(
+                "Unsupported preferredProtocolVersion: \(preferred). "
+                    + "Supported versions: \(MCPProtocolVersion.supportedDescending.joined(separator: ", "))"
+            )
+        }
+
         isDisconnecting = false
         streamFailure = nil
         endpointURL = nil
@@ -263,7 +270,7 @@ extension MCPServerProxy {
     internal func initialize(clientName: String, clientVersion: String) async throws {
         let requestId = nextRequestID()
         var params: JSONDictionary = [
-            "protocolVersion": .string(MCPProtocolVersion.latest),
+            "protocolVersion": .string(proposedLegacyProtocolVersion),
             "clientInfo": .object([
                 "name": .string(clientName),
                 "version": .string(clientVersion)
