@@ -145,6 +145,33 @@ struct ClientPreferredProtocolVersionTests {
         await proxy.disconnect()
     }
 
+    @Test(
+        "An unsupported preference fails before opening HTTP or stdio",
+        arguments: ["2024-11-05", "typo"], [false, true]
+    )
+    func unsupportedPreferenceThrows(version: String, overHTTP: Bool) async throws {
+        let proxy: MCPServerProxy
+        if overHTTP {
+            let url = try #require(URL(string: "http://127.0.0.1:1/mcp"))
+            proxy = MCPServerProxy(config: .sse(config: MCPServerSseConfig(url: url)))
+        } else {
+            proxy = MCPServerProxy(config: .stdioHandles(server: ClientDiscoverTestServer()))
+        }
+        await proxy.setPreferredProtocolVersion(version)
+        do {
+            try await proxy.connect()
+            Issue.record("expected the unsupported preference to throw")
+        } catch MCPServerProxyError.communicationError(let message) {
+            #expect(message.contains("Unsupported preferredProtocolVersion: \(version)"))
+            #expect(message.contains(MCPProtocolVersion.supportedDescending.joined(separator: ", ")))
+        }
+        #expect(await proxy.linePeer == nil)
+        #expect(await proxy.urlSession == nil)
+        #expect(await proxy.sessionID == nil)
+        #expect(await proxy.negotiatedProtocolVersion == nil)
+        await proxy.disconnect()
+    }
+
     @Test("Before negotiation the HTTP version header follows the preferred revision")
     func headerFollowsPreference() async throws {
         let url = try #require(URL(string: "http://127.0.0.1:1/mcp"))

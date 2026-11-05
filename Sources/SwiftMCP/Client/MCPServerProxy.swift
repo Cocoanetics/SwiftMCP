@@ -129,8 +129,10 @@ public final actor MCPServerProxy {
     ///   server offers it; under ``MCPClientEraPreference/auto`` a server without it
     ///   falls back to the legacy handshake.
     ///
-    /// `connect()` throws when this contradicts ``eraPreference`` (a legacy revision
-    /// with ``MCPClientEraPreference/modern``, or the reverse).
+    /// `connect()` throws before opening a transport when this is not in
+    /// ``MCPProtocolVersion/supported``. It also throws when this contradicts
+    /// ``eraPreference`` (a legacy revision with ``MCPClientEraPreference/modern``,
+    /// or the reverse).
     public var preferredProtocolVersion: String?
 
     /// The era of the current connection; `nil` before `connect()` completes.
