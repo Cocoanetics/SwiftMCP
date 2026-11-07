@@ -36,4 +36,8 @@ public enum StandardWebhooksHeader {
 
     /// Space-delimited, version-prefixed signature(s), e.g. `v1,<base64>`.
     public static let signature = "webhook-signature"
+
+    /// MCP-specific (not Standard Webhooks) header carrying the subscription `id`,
+    /// so the receiver can pick the right secret before parsing the body.
+    public static let subscriptionId = "X-MCP-Subscription-Id"
 }

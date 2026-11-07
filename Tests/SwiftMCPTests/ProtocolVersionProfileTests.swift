@@ -166,7 +166,7 @@ struct ProtocolVersionProfileTests {
             description: "An issue was opened",
             inputSchema: .object(.init(properties: ["repo": .string()], required: ["repo"])),
             payloadSchema: .object(.init(properties: ["number": .number()], required: [])),
-            delivery: .init(modes: ["webhook"])
+            delivery: ["webhook"]
         )
         let data = try JSONEncoder().encode(descriptor)
         #expect(try JSONDecoder().decode(EventDescriptor.self, from: data) == descriptor)
@@ -177,17 +177,34 @@ struct ProtocolVersionProfileTests {
         let params = EventsSubscribeParams(
             name: "issue.opened",
             arguments: .object(["repo": .string("a/b")]),
-            callbackUrl: "https://example.com/hook",
-            subscriptionId: "sub-1",
-            secret: "whsec_abc"
+            delivery: EventsWebhookDelivery(url: "https://example.com/hook", secret: "whsec_abc"),
+            cursor: "c1",
+            ttlMs: 60_000
         )
         let paramsData = try JSONEncoder().encode(params)
         #expect(try JSONDecoder().decode(EventsSubscribeParams.self, from: paramsData) == params)
 
         let result = EventsSubscribeResult(
-            subscriptionId: "sub-1", expiresAt: "2026-08-01T00:00:00Z", renewAfterMs: 60_000)
+            id: "sub-1", refreshBefore: "2026-08-01T00:00:00Z", cursor: "c2", truncated: false,
+            deliveryStatus: .init(active: true))
         let resultData = try JSONEncoder().encode(result)
         #expect(try JSONDecoder().decode(EventsSubscribeResult.self, from: resultData) == result)
+    }
+
+    @Test("Conforming wire JSON decodes")
+    func conformingWireJSON() throws {
+        let descriptor = #"{"name":"e","delivery":["poll","webhook"]}"#
+        let decoded = try JSONDecoder().decode(EventDescriptor.self, from: Data(descriptor.utf8))
+        #expect(decoded.delivery == ["poll", "webhook"])
+
+        let subscribe = """
+            {"name":"e","arguments":{},"delivery":{"mode":"webhook","url":"https://x/h","secret":"whsec_a"}}
+            """
+        let params = try JSONDecoder().decode(EventsSubscribeParams.self, from: Data(subscribe.utf8))
+        #expect(params.delivery.url == "https://x/h")
+
+        let result = #"{"id":"s","refreshBefore":null,"cursor":null,"truncated":true}"#
+        #expect(try JSONDecoder().decode(EventsSubscribeResult.self, from: Data(result.utf8)).id == "s")
     }
 
     @Test("List and unsubscribe models round-trip; constants match the spec")
@@ -196,7 +213,8 @@ struct ProtocolVersionProfileTests {
         let listData = try JSONEncoder().encode(list)
         #expect(try JSONDecoder().decode(EventsListResult.self, from: listData) == list)
 
-        let params = EventsUnsubscribeParams(subscriptionId: "sub-1")
+        let params = EventsUnsubscribeParams(
+            name: "e", delivery: EventsWebhookDelivery(url: "https://x/h"))
         let data = try JSONEncoder().encode(params)
         #expect(try JSONDecoder().decode(EventsUnsubscribeParams.self, from: data) == params)
 
