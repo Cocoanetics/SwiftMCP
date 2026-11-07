@@ -150,6 +150,9 @@ public extension MCPServer {
         if let response = await dispatchPromptRequest(requestData) {
             return response
         }
+        if requestData.method == MCPEventsExtension.listMethod {
+            return await handleEventsList(requestData)
+        }
         if let response = await dispatchLoggingRequest(requestData) {
             return response
         }
@@ -371,7 +374,8 @@ enum ModernRequestMethods {
         "tasks/get", "tasks/update", "tasks/cancel",
         "resources/list", "resources/templates/list", "resources/read",
         "prompts/list", "prompts/get",
-        "completion/complete"
+        "completion/complete",
+        "events/list"
     ]
 
     /// The modern long-lived notification stream, served by the transport itself.

@@ -194,4 +194,25 @@ MCPPromptMetadata(
    }
 """
     }
+
+    // MARK: - Event section
+
+    static func renderEventSection(
+        eventFns: [(funcDecl: FunctionDeclSyntax, attribute: AttributeSyntax)],
+        context: some MacroExpansionContext
+    ) throws -> String {
+        guard !eventFns.isEmpty else { return "" }
+
+        let literals = try eventFns.map { funcDecl, attribute in
+            let extracted = try FunctionMetadataExtractor(funcDecl: funcDecl, context: context).extract()
+            return MCPEventMacro.metadataLiteral(attribute: attribute, extracted: extracted)
+        }
+
+        return """
+
+   public static let eventMetadata: [MCPEventMetadata] = [
+      \(literals.joined(separator: ",\n      "))
+   ]
+"""
+    }
 }

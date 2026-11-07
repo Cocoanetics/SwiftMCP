@@ -134,10 +134,18 @@ public extension MCPServer {
         capabilities.completions = .object([:])
 
         // Official Tasks extension: advertise only when at least one tool opts in.
+        var extensions: JSONDictionary = [:]
         if await serverAdvertisesTasksExtension() {
-            capabilities.extensions = [
-                MCPTasksExtension.identifier: MCPTasksExtension.capability
-            ]
+            extensions[MCPTasksExtension.identifier] = MCPTasksExtension.capability
+        }
+
+        // MCP Events extension: advertise only when at least one event is declared.
+        if await serverDeclaresEvents() {
+            extensions[MCPEventsExtension.identifier] = MCPEventsExtension.capability
+        }
+
+        if !extensions.isEmpty {
+            capabilities.extensions = extensions
         }
 
         return capabilities

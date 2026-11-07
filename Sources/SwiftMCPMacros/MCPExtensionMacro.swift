@@ -55,12 +55,18 @@ public struct MCPExtensionMacro: MemberMacro {
             context: context
         )
 
+        let eventSection = try renderEventSection(
+            eventFns: annotations.eventFns,
+            context: context
+        )
+
         let initArgs = makeContributionInitArgs(annotations: annotations)
         let nestedEnum = """
 public enum \(extensionName) {
 \(toolSection)
 \(resourceSection)
 \(promptSection)
+\(eventSection)
    /// Installs this extension's contributions on `server`. Idempotent —
    /// calling more than once with the same server has no effect.
    ///
@@ -108,6 +114,7 @@ public enum \(extensionName) {
         var toolFns: [(funcDecl: FunctionDeclSyntax, attribute: AttributeSyntax)] = []
         var resourceFns: [(funcDecl: FunctionDeclSyntax, attribute: AttributeSyntax)] = []
         var promptFns: [(funcDecl: FunctionDeclSyntax, attribute: AttributeSyntax)] = []
+        var eventFns: [(funcDecl: FunctionDeclSyntax, attribute: AttributeSyntax)] = []
     }
 
     /// Walks the extension members and classifies each function by the MCP
@@ -123,6 +130,7 @@ public enum \(extensionName) {
                 case "MCPTool":     result.toolFns.append((funcDecl, attrSyntax))
                 case "MCPResource": result.resourceFns.append((funcDecl, attrSyntax))
                 case "MCPPrompt":   result.promptFns.append((funcDecl, attrSyntax))
+                case "MCPEvent":    result.eventFns.append((funcDecl, attrSyntax))
                 default: continue
                 }
                 break
@@ -144,6 +152,9 @@ public enum \(extensionName) {
         if !annotations.promptFns.isEmpty {
             contributionInit.append("promptMetadata: promptMetadata")
             contributionInit.append("promptDispatcher: callPrompt")
+        }
+        if !annotations.eventFns.isEmpty {
+            contributionInit.append("eventMetadata: eventMetadata")
         }
         if contributionInit.isEmpty { return "" }
         return "\n         " + contributionInit.joined(separator: ",\n         ") + "\n      "
