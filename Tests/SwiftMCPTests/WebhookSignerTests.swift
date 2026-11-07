@@ -78,12 +78,15 @@ struct WebhookSignerTests {
             try Self.check(other, timestamp: "abc", signature: Self.signature, body: Self.body, now: Self.now)
         }
         #expect(throws: WebhookVerificationError.invalidSecret) { try WebhookSigner(secret: "whsec_!!!") }
+        #expect(throws: WebhookVerificationError.invalidSecret) { try WebhookSigner(secret: "whsec_YQ==") }
+        let long = "whsec_" + Data(repeating: 1, count: 65).base64EncodedString()
+        #expect(throws: WebhookVerificationError.invalidSecret) { try WebhookSigner(secret: long) }
     }
 
     @Test func callbackChallengeHandshake() throws {
         let challenge = WebhookCallbackVerification.Challenge()
         let body = try challenge.body()
-        #expect(String(data: body, encoding: .utf8)?.contains("webhook.verification") == true)
+        #expect(String(data: body, encoding: .utf8)?.contains("\"verification\"") == true)
         let plain = Data(challenge.challenge.utf8)
         let json = Data(#"{"challenge":"\#(challenge.challenge)"}"#.utf8)
         typealias Handshake = WebhookCallbackVerification

@@ -33,7 +33,7 @@ struct WebhookURLPolicyTests {
         "https://169.254.169.254/", "https://100.64.0.1/", "https://0.0.0.0/",
         "https://[::1]/", "https://[::]/", "https://[fe80::1]/", "https://[fc00::1]/",
         "https://[fd12:3456::1]/", "https://[::ffff:127.0.0.1]/", "https://[::ffff:10.0.0.1]/",
-        "https://[::ffff:a9fe:a9fe]/", "https://[64:ff9b::7f00:1]/"
+        "https://[::ffff:a9fe:a9fe]/", "https://[64:ff9b::7f00:1]/", "https://[64:ff9b:1::7f00:1]/"
     ])
     func rejectsPrivateLoopbackLinkLocal(url: String) {
         #expect(throws: WebhookURLPolicyError.self) { try policy.validate(url) }

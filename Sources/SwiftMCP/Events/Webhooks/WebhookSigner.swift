@@ -25,6 +25,8 @@ public enum WebhookVerificationError: Error, Equatable, Sendable {
 /// Signs and verifies Standard Webhooks deliveries.
 public struct WebhookSigner: Sendable {
     public static let secretPrefix = "whsec_"
+    /// Allowed size of the decoded secret, per the MCP Events profile.
+    public static let secretByteRange = 24...64
     public static let idHeader = "webhook-id"
     public static let timestampHeader = "webhook-timestamp"
     public static let signatureHeader = "webhook-signature"
@@ -38,7 +40,7 @@ public struct WebhookSigner: Sendable {
         if encoded.hasPrefix(Self.secretPrefix) {
             encoded.removeFirst(Self.secretPrefix.count)
         }
-        guard let data = Data(base64Encoded: encoded), !data.isEmpty else {
+        guard let data = Data(base64Encoded: encoded), Self.secretByteRange.contains(data.count) else {
             throw WebhookVerificationError.invalidSecret
         }
         self.key = SymmetricKey(data: data)

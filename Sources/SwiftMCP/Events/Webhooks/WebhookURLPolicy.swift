@@ -138,6 +138,7 @@ struct IPAddress {
             if bytes[0] == 0xFE && bytes[1] & 0xC0 == 0xC0 { return true }             // fec0::/10 site-local
             if bytes[0] == 0xFF { return true }                                    // multicast
             if bytes[0..<4] == [0x20, 0x01, 0x0D, 0xB8] { return true }        // documentation
+            if bytes[0..<6] == [0x00, 0x64, 0xFF, 0x9B, 0x00, 0x01] { return true } // local-use NAT64 (RFC 8215)
             // IPv4-mapped (::ffff:a.b.c.d), IPv4-compatible (::a.b.c.d) and NAT64 (64:ff9b::/96)
             let mapped = bytes[0..<10].allSatisfy { $0 == 0 } && bytes[10] == 0xFF && bytes[11] == 0xFF
             let compatible = bytes[0..<12].allSatisfy { $0 == 0 }

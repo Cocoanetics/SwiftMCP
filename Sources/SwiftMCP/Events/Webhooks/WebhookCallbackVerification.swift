@@ -13,7 +13,7 @@ import Foundation
 /// Pure logic for the webhook callback verification handshake.
 public enum WebhookCallbackVerification {
     /// `type` of the challenge body.
-    public static let challengeType = "webhook.verification"
+    public static let challengeType = "verification"
 
     /// Body POSTed to the callback URL.
     public struct Challenge: Codable, Sendable, Equatable {
