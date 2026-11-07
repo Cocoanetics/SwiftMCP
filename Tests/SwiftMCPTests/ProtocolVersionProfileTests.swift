@@ -43,7 +43,7 @@ struct ProtocolVersionProfileTests {
         "2026-07-28": [
             .perRequestMetadata, .serverDiscover, .standardRequestHeaders,
             .xMcpHeader, .protocolVersionHeader,
-            .mrtr, .subscriptionsListen,
+            .mrtr, .subscriptionsListen, .events,
             .elicitation, .structuredToolOutput, .resourceLinks,
             .toolAnnotations, .audioContent, .completionsCapability, .titleField,
             .perRequestLogLevel, .cacheableListResults
@@ -147,6 +147,79 @@ struct ProtocolVersionProfileTests {
         #expect(modern?.has(.loggingSetLevel) == false)
         #expect(modern?.has(.mrtr) == true)
         #expect(modern?.has(.serverInitiatedRequests) == false)
+    }
+
+    @Test("Events is modern-only")
+    func eventsIsModernOnly() {
+        #expect(MCPProtocolVersion.profile(for: "2026-07-28")?.has(.events) == true)
+        for version in ["2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"] {
+            #expect(MCPProtocolVersion.profile(for: version)?.has(.events) == false)
+        }
+    }
+
+    // MARK: - Events models
+
+    @Test("EventDescriptor round-trips through JSON")
+    func eventDescriptorRoundTrip() throws {
+        let descriptor = EventDescriptor(
+            name: "issue.opened",
+            description: "An issue was opened",
+            inputSchema: .object(.init(properties: ["repo": .string()], required: ["repo"])),
+            payloadSchema: .object(.init(properties: ["number": .number()], required: [])),
+            delivery: ["webhook"]
+        )
+        let data = try JSONEncoder().encode(descriptor)
+        #expect(try JSONDecoder().decode(EventDescriptor.self, from: data) == descriptor)
+    }
+
+    @Test("Subscribe params and result round-trip through JSON")
+    func subscribeRoundTrip() throws {
+        let params = EventsSubscribeParams(
+            name: "issue.opened",
+            arguments: .object(["repo": .string("a/b")]),
+            delivery: EventsWebhookDelivery(url: "https://example.com/hook", secret: "whsec_abc"),
+            cursor: "c1",
+            ttlMs: 60_000
+        )
+        let paramsData = try JSONEncoder().encode(params)
+        #expect(try JSONDecoder().decode(EventsSubscribeParams.self, from: paramsData) == params)
+
+        let result = EventsSubscribeResult(
+            id: "sub-1", refreshBefore: "2026-08-01T00:00:00Z", cursor: "c2", truncated: false,
+            deliveryStatus: .init(active: true))
+        let resultData = try JSONEncoder().encode(result)
+        #expect(try JSONDecoder().decode(EventsSubscribeResult.self, from: resultData) == result)
+    }
+
+    @Test("Conforming wire JSON decodes")
+    func conformingWireJSON() throws {
+        let descriptor = #"{"name":"e","delivery":["poll","webhook"]}"#
+        let decoded = try JSONDecoder().decode(EventDescriptor.self, from: Data(descriptor.utf8))
+        #expect(decoded.delivery == ["poll", "webhook"])
+
+        let subscribe = """
+            {"name":"e","arguments":{},"delivery":{"mode":"webhook","url":"https://x/h","secret":"whsec_a"}}
+            """
+        let params = try JSONDecoder().decode(EventsSubscribeParams.self, from: Data(subscribe.utf8))
+        #expect(params.delivery.url == "https://x/h")
+
+        let result = #"{"id":"s","refreshBefore":null,"cursor":null,"truncated":true}"#
+        #expect(try JSONDecoder().decode(EventsSubscribeResult.self, from: Data(result.utf8)).id == "s")
+    }
+
+    @Test("List and unsubscribe models round-trip; constants match the spec")
+    func listAndUnsubscribeRoundTrip() throws {
+        let list = EventsListResult(events: [EventDescriptor(name: "e")], nextCursor: "c2")
+        let listData = try JSONEncoder().encode(list)
+        #expect(try JSONDecoder().decode(EventsListResult.self, from: listData) == list)
+
+        let params = EventsUnsubscribeParams(
+            name: "e", delivery: EventsWebhookDelivery(url: "https://x/h"))
+        let data = try JSONEncoder().encode(params)
+        #expect(try JSONDecoder().decode(EventsUnsubscribeParams.self, from: data) == params)
+
+        #expect(MCPEventsExtension.listMethod == "events/list")
+        #expect(StandardWebhooksHeader.signature == "webhook-signature")
     }
 
     // MARK: - Derived value facets

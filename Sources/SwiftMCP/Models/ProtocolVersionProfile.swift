@@ -69,6 +69,8 @@ public enum MCPFeature: String, Sendable, CaseIterable {
     case subscribeUnsubscribe
     /// The `subscriptions/listen` long-lived notification stream (modern).
     case subscriptionsListen
+    /// MCP Events: `events/list|subscribe|unsubscribe` with webhook delivery (modern).
+    case events
 
     // MARK: Payload features
 
@@ -213,7 +215,7 @@ public extension ProtocolVersionProfile {
         features: [
             .perRequestMetadata, .serverDiscover, .standardRequestHeaders,
             .xMcpHeader, .protocolVersionHeader,
-            .mrtr, .subscriptionsListen,
+            .mrtr, .subscriptionsListen, .events,
             .elicitation, .structuredToolOutput, .resourceLinks,
             .toolAnnotations, .audioContent, .completionsCapability, .titleField,
             .perRequestLogLevel, .cacheableListResults
