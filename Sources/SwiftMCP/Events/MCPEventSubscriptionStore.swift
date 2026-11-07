@@ -151,17 +151,24 @@ final class MCPDefaultEventStoreRegistry: @unchecked Sendable {
     }
 
     private let lock = NSLock()
-    private let instances = NSMapTable<AnyObject, Box>.weakToStrongObjects()
+    private struct Entry {
+        weak var owner: AnyObject?
+        let box: Box
+    }
+
+    private var instances: [ObjectIdentifier: Entry] = [:]
     private var types: [String: Box] = [:]
 
     func store(for server: Any) -> any MCPEventSubscriptionStore {
         lock.lock()
         defer { lock.unlock() }
         if type(of: server) is AnyClass {
+            // Drop entries of deallocated servers so identifiers cannot be reused stale.
+            instances = instances.filter { $0.value.owner != nil }
             let object = server as AnyObject
-            if let box = instances.object(forKey: object) { return box.store }
+            if let entry = instances[ObjectIdentifier(object)] { return entry.box.store }
             let box = Box()
-            instances.setObject(box, forKey: object)
+            instances[ObjectIdentifier(object)] = Entry(owner: object, box: box)
             return box.store
         }
         let name = String(reflecting: type(of: server))
