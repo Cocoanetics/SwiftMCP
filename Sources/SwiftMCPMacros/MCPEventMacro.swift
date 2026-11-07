@@ -57,11 +57,11 @@ MCPEventMetadata(
 """
     }
 
-    /// The `delivery:` array literal source, or `nil`.
+    /// The `delivery:` argument expression source (literal or not), or `nil`.
     private static func deliveryArgument(attribute: AttributeSyntax) -> String {
         guard let args = attribute.arguments?.as(LabeledExprListSyntax.self),
               let arg = args.first(where: { $0.label?.text == "delivery" }),
-              arg.expression.is(ArrayExprSyntax.self) else { return "nil" }
+              !arg.expression.is(NilLiteralExprSyntax.self) else { return "nil" }
         return arg.expression.trimmedDescription
     }
 }

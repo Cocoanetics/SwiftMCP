@@ -55,13 +55,17 @@ public struct MCPEventMetadata: Sendable {
             additionalProperties: properties.isEmpty ? false : nil
         ))
 
-        // Reuse the tool return-schema derivation for the payload.
-        let payloadSchema = MCPToolMetadata(
-            name: name,
-            parameters: [],
-            returnType: returnType,
-            returnTypeDescription: functionMetadata.returnTypeDescription
-        ).outputSchema
+        // Any payload type is valid (scalars and arrays included), so use the
+        // general return schema rather than the restricted tool output schema.
+        var payloadSchema: JSONSchema?
+        if let returnType, returnType != Void.self {
+            payloadSchema = MCPToolMetadata(
+                name: name,
+                parameters: [],
+                returnType: returnType,
+                returnTypeDescription: functionMetadata.returnTypeDescription
+            ).returnSchemaInfo.schema.withoutRequired
+        }
 
         return EventDescriptor(
             name: name,

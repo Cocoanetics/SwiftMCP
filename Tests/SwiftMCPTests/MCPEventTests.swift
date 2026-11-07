@@ -13,6 +13,12 @@ actor EventTestServer {
 
     @MCPTool
     func noop() {}
+
+    /// A heartbeat.
+    @MCPEvent(delivery: EventTestServer.modes)
+    func heartbeat() -> String { "" }
+
+    static let modes = ["poll"]
 }
 
 @Schema
@@ -53,8 +59,11 @@ struct MCPEventTests {
             return
         }
         let list = try result.decoded(EventsListResult.self)
-        #expect(list.events.count == 1)
-        let event = try #require(list.events.first)
+        #expect(list.events.count == 2)
+        let heartbeat = try #require(list.events.first { $0.name == "heartbeat" })
+        #expect(heartbeat.delivery == ["poll"])
+        #expect(heartbeat.payloadSchema != nil)
+        let event = try #require(list.events.first { $0.name == "buildFinished" })
         #expect(event.name == "buildFinished")
         #expect(event.description == "A build finished.")
         #expect(event.delivery == ["push", "webhook"])
