@@ -30,11 +30,6 @@ extension MCPServer {
             )
         }
     }
-}
-
-#if Server
-// MARK: - events/subscribe and events/unsubscribe (modern only, webhook delivery)
-extension MCPServer {
 
     /// Revocation hook: drops every webhook subscription owned by `principal`
     /// (for example after its token was revoked) and returns the removed records.
@@ -43,6 +38,11 @@ extension MCPServer {
         guard let provider = self as? MCPEventProviding else { return [] }
         return try await provider.eventSubscriptionStore.revoke(principal: principal)
     }
+}
+
+#if Server
+// MARK: - events/subscribe and events/unsubscribe (modern only, webhook delivery)
+extension MCPServer {
 
     private func eventsError(_ id: JSONRPCID?, _ code: Int, _ message: String) -> JSONRPCMessage {
         JSONRPCMessage.errorResponse(id: id, error: .init(code: code, message: message))

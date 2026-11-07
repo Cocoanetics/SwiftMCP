@@ -1,3 +1,4 @@
+#if Server
 import Foundation
 import Testing
 @testable import SwiftMCP
@@ -240,3 +241,4 @@ struct MCPEventSubscriptionTests {
         #expect((attributes[.posixPermissions] as? Int) == 0o600)
     }
 }
+#endif
