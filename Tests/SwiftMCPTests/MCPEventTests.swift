@@ -92,6 +92,17 @@ struct MCPEventTests {
         #expect(without.extensions?[MCPEventsExtension.identifier] == nil)
     }
 
+    @Test("A legacy initialize response does not advertise the events extension")
+    func legacyInitializeOmitsEvents() async throws {
+        let response = await EventTestServer().createInitializeResponse(id: 1, protocolVersion: "2025-11-25")
+        guard case .response(let data) = response, let result = data.result else {
+            Issue.record("expected a result")
+            return
+        }
+        let capabilities = try #require(result["capabilities"])
+        #expect(capabilities["extensions"]?[MCPEventsExtension.identifier] == nil)
+    }
+
     @Test("Extension-contributed events are listed and advertised")
     func extensionEvents() async throws {
         let server = ExtensionEventServer()
