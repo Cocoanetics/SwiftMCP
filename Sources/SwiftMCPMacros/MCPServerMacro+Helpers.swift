@@ -241,6 +241,14 @@ extension MCPServerMacro {
         return (mcpPrompts, promptFunctions)
     }
 
+    static func collectEventFunctions(declaration: some DeclGroupSyntax) -> [String] {
+        declaration.memberBlock.members.compactMap { member in
+            guard let funcDecl = member.decl.as(FunctionDeclSyntax.self),
+                  mcpAttribute(named: "MCPEvent", on: funcDecl) != nil else { return nil }
+            return funcDecl.name.text
+        }
+    }
+
     static func mcpAttribute(named name: String, on funcDecl: FunctionDeclSyntax) -> AttributeSyntax? {
         for attribute in funcDecl.attributes {
             if let identifierAttr = attribute.as(AttributeSyntax.self),

@@ -14,6 +14,12 @@ public enum MCPEventsExtension {
     /// Key under which a server advertises Events in its capabilities.
     public static let capabilityKey = "events"
 
+    /// Identifier used in the string-keyed `capabilities.extensions` map.
+    public static let identifier = "io.modelcontextprotocol/events"
+
+    /// Wire capability value — an empty object indicates support.
+    public static let capability: JSONValue = .object([:])
+
     /// Method name of the event-type listing request.
     public static let listMethod = "events/list"
 

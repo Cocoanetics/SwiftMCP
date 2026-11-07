@@ -75,7 +75,14 @@ public extension MCPServer {
         id: JSONRPCID,
         protocolVersion: String = MCPProtocolVersion.latest
     ) async -> JSONRPCMessage {
-        let capabilities = await buildServerCapabilities()
+        var capabilities = await buildServerCapabilities()
+
+        // `initialize` is the legacy handshake; Events are modern-only
+        // (`server/discover`), so never advertise them here.
+        capabilities.extensions?[MCPEventsExtension.identifier] = nil
+        if capabilities.extensions?.isEmpty == true {
+            capabilities.extensions = nil
+        }
 
         // `title` / `icons` / `websiteUrl` are richer serverInfo identity fields
         // introduced in 2025-06-18; include them only for clients negotiating
@@ -134,10 +141,18 @@ public extension MCPServer {
         capabilities.completions = .object([:])
 
         // Official Tasks extension: advertise only when at least one tool opts in.
+        var extensions: JSONDictionary = [:]
         if await serverAdvertisesTasksExtension() {
-            capabilities.extensions = [
-                MCPTasksExtension.identifier: MCPTasksExtension.capability
-            ]
+            extensions[MCPTasksExtension.identifier] = MCPTasksExtension.capability
+        }
+
+        // MCP Events extension: advertise only when at least one event is declared.
+        if await serverDeclaresEvents() {
+            extensions[MCPEventsExtension.identifier] = MCPEventsExtension.capability
+        }
+
+        if !extensions.isEmpty {
+            capabilities.extensions = extensions
         }
 
         return capabilities

@@ -173,7 +173,12 @@ struct ModernResponseShapeTests {
         // -32601 fallback (malformed-params errors are fine — they prove the
         // method itself is routed).
         for method in ModernRequestMethods.known {
-            let response = await server.handleMessage(.request(id: 1, method: method, params: nil))
+            // `events/list` is modern-only, so dispatch under a modern context.
+            let message = JSONRPCMessage.request(
+                id: 1, method: method,
+                params: .object(["_meta": .object([MCPMetaKey.protocolVersion: .string("2026-07-28")])])
+            )
+            let response = await server.handleMessage(message)
             if case .errorResponse(let err) = response {
                 #expect(err.error.code != -32601, "\(method) fell through to -32601 — set is stale")
             }

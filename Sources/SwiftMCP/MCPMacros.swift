@@ -161,6 +161,7 @@ public macro MCPAppIntentTool(
         named(callResourceAsFunction),
         named(mcpPromptMetadata),
         named(callPrompt),
+        named(mcpEventMetadata),
         named(Client),
         named(__mcpExtensionContributions),
         named(__mcpRegisterExtension),
@@ -169,7 +170,10 @@ public macro MCPAppIntentTool(
         named(__mcpExtensionStorageBox)
 )
 @attached(memberAttribute)
-@attached(extension, conformances: MCPServer, MCPToolProviding, MCPResourceProviding, MCPPromptProviding)
+@attached(
+    extension,
+    conformances: MCPServer, MCPToolProviding, MCPResourceProviding, MCPPromptProviding, MCPEventProviding
+)
 public macro MCPServer(
     name: String? = nil,
     version: String? = nil,
@@ -208,6 +212,16 @@ public macro MCPResource<T>(
 
 @attached(peer, names: prefixed(__mcpPromptMetadata_), prefixed(__mcpPromptCall_))
 public macro MCPPrompt(description: String? = nil) = #externalMacro(module: "SwiftMCPMacros", type: "MCPPromptMacro")
+
+/// Declares an MCP event type (`events/list`).
+///
+/// Apply to a function: its parameters describe the filter a subscriber may pass
+/// (`inputSchema`) and its return type the delivered payload (`payloadSchema`).
+/// The event name is the function name. `delivery` optionally restricts the
+/// supported modes (`"poll"`, `"push"`, `"webhook"`).
+@attached(peer, names: prefixed(__mcpEventMetadata_))
+public macro MCPEvent(description: String? = nil, delivery: [String]? = nil) =
+    #externalMacro(module: "SwiftMCPMacros", type: "MCPEventMacro")
 
 /// Marks an extension as contributing tools, resources, and/or prompts to a
 /// `@MCPServer` type.

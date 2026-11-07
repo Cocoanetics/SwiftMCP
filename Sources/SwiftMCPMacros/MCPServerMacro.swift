@@ -100,6 +100,7 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro, MemberAttributeMacro 
         )
         let (mcpResources, resourceFunctions) = collectResourceFunctions(declaration: declaration)
         let (mcpPrompts, promptFunctions) = collectPromptFunctions(declaration: declaration)
+        let mcpEvents = collectEventFunctions(declaration: declaration)
 
         // Extract the host name for typing the per-instance contributions storage.
         let serverTypeName = declaration.as(ClassDeclSyntax.self)?.name.text
@@ -146,9 +147,11 @@ public struct MCPServerMacro: MemberMacro, ExtensionMacro, MemberAttributeMacro 
 
         // Always emit prompt-related machinery: extensions may contribute
         // prompts even when the primary type declares none.
-        for promptDecl in makePromptDeclarations(mcpPrompts: mcpPrompts, host: host) {
-            declarations.append(DeclSyntax(stringLiteral: promptDecl))
-        }
+        declarations += makePromptDeclarations(mcpPrompts: mcpPrompts, host: host)
+            .map { DeclSyntax(stringLiteral: $0) }
+
+        // Always emit the event metadata: extensions may contribute events.
+        declarations.append(DeclSyntax(stringLiteral: makeEventMetadataProperty(mcpEvents, host: host)))
 
         // Always emit the nested `Client` type. `@MCPExtension` peer
         // expansions extend `<Type>.Client` with extension-contributed

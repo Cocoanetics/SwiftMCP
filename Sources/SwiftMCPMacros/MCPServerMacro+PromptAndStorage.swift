@@ -98,6 +98,25 @@ public func callPrompt(
         return [promptMetadataProperty, callPromptMethod]
     }
 
+    // MARK: - Event metadata
+    static func makeEventMetadataProperty(_ mcpEvents: [String], host: MCPServerHostKind) -> String {
+        let names = mcpEvents.map { "__mcpEventMetadata_\($0)" }.joined(separator: ", ")
+        let seed = "[\(names)]"
+        return """
+/// Returns an array of all declared event metadata, \
+including contributions from `@MCPExtension`-annotated extensions.
+\(host.metadataIsolation)public var mcpEventMetadata: [MCPEventMetadata] {
+   var metadata: [MCPEventMetadata] = \(seed)
+   for contribution in __mcpExtensionContributions {
+      for m in contribution.eventMetadata where !metadata.contains(where: { $0.name == m.name }) {
+         metadata.append(m)
+      }
+   }
+   return metadata
+}
+"""
+    }
+
     // MARK: - Extension storage
     static func makeExtensionStorageDeclarations(serverTypeName: String, host: MCPServerHostKind) -> [String] {
         if case .structType = host {

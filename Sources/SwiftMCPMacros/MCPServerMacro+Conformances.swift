@@ -34,6 +34,10 @@ extension MCPServerMacro {
             type.type.trimmedDescription == "MCPPromptProviding"
         }
 
+        let alreadyConformsToEventProviding = inheritedTypes.contains { type in
+            type.type.trimmedDescription == "MCPEventProviding"
+        }
+
         // Determine which protocols need to be added
         var protocolsToAdd: [String] = []
 
@@ -54,6 +58,9 @@ extension MCPServerMacro {
         }
         if !alreadyConformsToPromptProviding {
             protocolsToAdd.append("MCPPromptProviding")
+        }
+        if !alreadyConformsToEventProviding {
+            protocolsToAdd.append("MCPEventProviding")
         }
 
         // If we have protocols to add, create a single extension with all needed conformances

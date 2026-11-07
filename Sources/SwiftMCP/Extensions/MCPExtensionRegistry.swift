@@ -37,13 +37,18 @@ public struct MCPExtensionContribution<Server>: Sendable {
     public let promptMetadata: [MCPPromptMetadata]
     public let promptDispatcher: PromptDispatcher?
 
+    /// Events declared by the extension. Events have no dispatcher: `events/list`
+    /// only needs their metadata.
+    public let eventMetadata: [MCPEventMetadata]
+
     public init(
         toolMetadata: [MCPToolMetadata] = [],
         toolDispatcher: ToolDispatcher? = nil,
         resourceMetadata: [MCPResourceMetadata] = [],
         resourceDispatcher: ResourceDispatcher? = nil,
         promptMetadata: [MCPPromptMetadata] = [],
-        promptDispatcher: PromptDispatcher? = nil
+        promptDispatcher: PromptDispatcher? = nil,
+        eventMetadata: [MCPEventMetadata] = []
     ) {
         self.toolMetadata = toolMetadata
         self.toolDispatcher = toolDispatcher
@@ -51,5 +56,6 @@ public struct MCPExtensionContribution<Server>: Sendable {
         self.resourceDispatcher = resourceDispatcher
         self.promptMetadata = promptMetadata
         self.promptDispatcher = promptDispatcher
+        self.eventMetadata = eventMetadata
     }
 }
