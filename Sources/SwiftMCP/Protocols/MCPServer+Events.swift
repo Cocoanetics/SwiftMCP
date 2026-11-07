@@ -30,19 +30,35 @@ extension MCPServer {
             )
         }
     }
+}
+
+#if Server
+import Crypto
+
+// MARK: - events/subscribe and events/unsubscribe (modern only, webhook delivery)
+extension MCPServer {
+
+    /// Stable digest under which a principal is stored, so a bearer token never
+    /// reaches the store or its file.
+    public static func eventPrincipalDigest(_ principal: String) -> String {
+        "sha256:" + SHA256.hash(data: Data(principal.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
 
     /// Revocation hook: drops every webhook subscription owned by `principal`
     /// (for example after its token was revoked) and returns the removed records.
     @discardableResult
     public func revokeEventSubscriptions(forPrincipal principal: String) async throws -> [MCPEventSubscription] {
         guard let provider = self as? MCPEventProviding else { return [] }
-        return try await provider.eventSubscriptionStore.revoke(principal: principal)
+        return try await provider.eventSubscriptionStore.revoke(principal: Self.eventPrincipalDigest(principal))
     }
-}
 
-#if Server
-// MARK: - events/subscribe and events/unsubscribe (modern only, webhook delivery)
-extension MCPServer {
+    /// The caller's stored principal, or `nil` when the request is unauthenticated.
+    /// An anonymous caller has no identity to bind a subscription to, and the
+    /// compound key is guessable, so it could remove or overwrite another's.
+    private func eventsPrincipal() async -> String? {
+        let principal = await MCPTaskPrincipal.current().rawValue
+        return principal == "anonymous" ? nil : Self.eventPrincipalDigest(principal)
+    }
 
     private func eventsError(_ id: JSONRPCID?, _ code: Int, _ message: String) -> JSONRPCMessage {
         JSONRPCMessage.errorResponse(id: id, error: .init(code: code, message: message))
@@ -89,6 +105,9 @@ extension MCPServer {
         guard let provider = await eventsProvider(for: request) else {
             return eventsError(request.id, -32601, "Method not found")
         }
+        guard let principal = await eventsPrincipal() else {
+            return eventsError(request.id, -32600, "Event subscriptions require an authenticated caller")
+        }
         guard let params = try? request.params?.decoded(EventsSubscribeParams.self) else {
             return eventsError(request.id, -32602, "Invalid params")
         }
@@ -108,7 +127,7 @@ extension MCPServer {
         let expiresAt = now.addingTimeInterval(ttl)
 
         let subscription = MCPEventSubscription(
-            principal: await MCPTaskPrincipal.current().rawValue,
+            principal: principal,
             name: params.name,
             arguments: params.arguments,
             url: params.delivery.url,
@@ -137,11 +156,14 @@ extension MCPServer {
         guard let provider = await eventsProvider(for: request) else {
             return eventsError(request.id, -32601, "Method not found")
         }
+        guard let principal = await eventsPrincipal() else {
+            return eventsError(request.id, -32600, "Event subscriptions require an authenticated caller")
+        }
         guard let params = try? request.params?.decoded(EventsUnsubscribeParams.self) else {
             return eventsError(request.id, -32602, "Invalid params")
         }
         let key = MCPEventSubscriptionKey(
-            principal: await MCPTaskPrincipal.current().rawValue,
+            principal: principal,
             name: params.name,
             arguments: params.arguments,
             url: params.delivery.url

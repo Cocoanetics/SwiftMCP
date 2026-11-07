@@ -28,6 +28,7 @@ actor SubscribeTestServer {
 struct MCPEventSubscriptionTests {
 
     private static let url = "https://example.com/hook"
+    private func digest(_ principal: String) -> String { SubscribeTestServer.eventPrincipalDigest(principal) }
     private let secret = WebhookSigner.generateSecret()
 
     private func makeStores() throws -> [(String, any MCPEventSubscriptionStore)] {
@@ -58,7 +59,7 @@ struct MCPEventSubscriptionTests {
         _ server: any MCPServer,
         method: String,
         params: JSONDictionary,
-        token: String? = nil
+        token: String? = "alice"
     ) async throws -> JSONRPCMessage {
         var params = params
         var meta: JSONDictionary = [MCPMetaKey.protocolVersion: .string("2026-07-28")]
@@ -72,7 +73,7 @@ struct MCPEventSubscriptionTests {
 
     private func subscribe(
         _ server: SubscribeTestServer,
-        token: String? = nil,
+        token: String? = "alice",
         params: JSONDictionary
     ) async throws -> EventsSubscribeResult? {
         let response = try await send(server, method: "events/subscribe", params: params, token: token)
@@ -105,7 +106,7 @@ struct MCPEventSubscriptionTests {
                 params: try subscribeParams(arguments: .object(["project": .string("B")]), secret: secret)
             ))
             #expect(differentFilter.id != first.id)
-            #expect(try await store.subscriptions(principal: "token:alice", now: Date()).count == 2)
+            #expect(try await store.subscriptions(principal: digest("token:alice"), now: Date()).count == 2)
 
             // Bob cannot remove Alice's subscription.
             let unsubscribe = try JSONDictionary(encoding: EventsUnsubscribeParams(
@@ -215,8 +216,8 @@ struct MCPEventSubscriptionTests {
 
             let removed = try await server.revokeEventSubscriptions(forPrincipal: "token:alice")
             #expect(removed.count == 1, "\(label)")
-            #expect(try await store.subscriptions(principal: "token:alice", now: Date()).isEmpty, "\(label)")
-            #expect(try await store.subscriptions(principal: "token:bob", now: Date()).count == 1, "\(label)")
+            #expect(try await store.subscriptions(principal: digest("token:alice"), now: Date()).isEmpty, "\(label)")
+            #expect(try await store.subscriptions(principal: digest("token:bob"), now: Date()).count == 1, "\(label)")
         }
     }
 
@@ -279,5 +280,76 @@ struct MCPEventSubscriptionTests {
         await #expect(throws: (any Error).self) { try await store.upsert(subscription, now: now) }
         #expect(try await store.subscriptions(principal: nil, now: now).isEmpty)
     }
+
+}
+
+extension MCPEventSubscriptionTests {
+    @Test("Anonymous callers cannot subscribe or unsubscribe")
+    func anonymousRejected() async throws {
+        let server = SubscribeTestServer(store: MCPInMemoryEventSubscriptionStore())
+        let subscribe = try await send(server, method: "events/subscribe",
+                                       params: try subscribeParams(secret: secret), token: nil)
+        #expect(errorCode(subscribe) == -32600)
+        let unsubscribe = try JSONDictionary(encoding: EventsUnsubscribeParams(
+            name: "buildFinished", arguments: .object(["project": .string("A")]),
+            delivery: EventsWebhookDelivery(url: Self.url)
+        ))
+        let response = try await send(server, method: "events/unsubscribe", params: unsubscribe, token: nil)
+        #expect(errorCode(response) == -32600)
+    }
+
+    @Test("Stored principals are digests: no bearer token reaches the store or its file")
+    func principalIsDigested() async throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("events-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: file) }
+        let server = SubscribeTestServer(store: try MCPFileEventSubscriptionStore(fileURL: file))
+        _ = try await subscribe(server, token: "super-secret-token", params: try subscribeParams(secret: secret))
+        let contents = try String(contentsOf: file, encoding: .utf8)
+        #expect(!contents.contains("super-secret-token"))
+        #expect(contents.contains(digest("token:super-secret-token")))
+    }
+
+    @Test("Servers without an explicit store do not share subscriptions")
+    func defaultStoresAreIsolated() async throws {
+        let first = DefaultStoreServer()
+        let second = DefaultStoreServer()
+        let now = Date()
+        _ = try await first.eventSubscriptionStore.upsert(
+            MCPEventSubscription(principal: "p", name: "heartbeat", arguments: .object([:]), url: Self.url,
+                                 secret: secret, createdAt: now, expiresAt: now.addingTimeInterval(60)),
+            now: now
+        )
+        #expect(try await first.eventSubscriptionStore.subscriptions(principal: nil, now: now).count == 1)
+        #expect(try await second.eventSubscriptionStore.subscriptions(principal: nil, now: now).isEmpty)
+        #expect(try await first.eventSubscriptionStore.subscriptions(principal: nil, now: now).count == 1)
+    }
+
+    @Test("Writes drop lapsed records so they cannot accumulate (both stores)")
+    func upsertPurgesLapsed() async throws {
+        for (label, store) in try makeStores() {
+            let start = Date(timeIntervalSince1970: 1_800_000_000)
+            for index in 0..<3 {
+                _ = try await store.upsert(
+                    MCPEventSubscription(principal: "p\(index)", name: "buildFinished", arguments: .object([:]),
+                                         url: Self.url, secret: secret, createdAt: start,
+                                         expiresAt: start.addingTimeInterval(60)),
+                    now: start
+                )
+            }
+            let later = start.addingTimeInterval(120)
+            _ = try await store.upsert(
+                MCPEventSubscription(principal: "p9", name: "buildFinished", arguments: .object([:]),
+                                     url: Self.url, secret: secret, createdAt: later,
+                                     expiresAt: later.addingTimeInterval(60)),
+                now: later
+            )
+            // Nothing lapsed is left to purge: only the fresh record remains.
+            #expect(try await store.purgeExpired(now: later.addingTimeInterval(3600)).count == 1, "\(label)")
+        }
+    }
+}
+
+actor DefaultStoreServer: MCPServer, MCPEventProviding {
+    var mcpEventMetadata: [MCPEventMetadata] { [] }
 }
 #endif

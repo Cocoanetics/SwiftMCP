@@ -8,8 +8,8 @@ public protocol MCPEventProviding {
     /// requirement with an actor-isolated property.
     var mcpEventMetadata: [MCPEventMetadata] { get async }
 
-    /// Where `events/subscribe` subscriptions are kept. Defaults to a shared
-    /// in-memory store; return an ``MCPFileEventSubscriptionStore`` to persist.
+    /// Where `events/subscribe` subscriptions are kept. Defaults to an
+    /// in-memory store private to this server; return an ``MCPFileEventSubscriptionStore`` to persist.
     var eventSubscriptionStore: any MCPEventSubscriptionStore { get }
 
     /// Longest lifetime granted to a subscription, and the one used when the
@@ -19,7 +19,7 @@ public protocol MCPEventProviding {
 
 extension MCPEventProviding {
     public var eventSubscriptionStore: any MCPEventSubscriptionStore {
-        MCPInMemoryEventSubscriptionStore.shared
+        MCPDefaultEventStoreRegistry.shared.store(for: self)
     }
 
     public var eventSubscriptionMaxTTL: TimeInterval { 3600 }

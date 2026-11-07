@@ -21,7 +21,9 @@ public struct MCPEventSubscription: Codable, Sendable, Equatable {
     /// Server-derived routing handle, stable for the lifetime of the record.
     public let id: String
 
-    /// The authorization principal that owns the subscription.
+    /// Digest of the authorization principal that owns the subscription (see
+    /// ``MCPServer/eventPrincipalDigest(_:)``); the raw principal can be a bearer
+    /// token and is never stored.
     public let principal: String
 
     /// Event type name.
@@ -136,11 +138,42 @@ public protocol MCPEventSubscriptionStore: Sendable {
     func purgeExpired(now: Date) async throws -> [MCPEventSubscription]
 }
 
+/// Hands out the default in-memory store of each server, so servers in one
+/// process never share subscriptions unless they are given the same store.
+///
+/// A reference-type server (class or actor) gets one store per instance; a value
+/// type has no identity, so its instances share one store per type.
+final class MCPDefaultEventStoreRegistry: @unchecked Sendable {
+    static let shared = MCPDefaultEventStoreRegistry()
+
+    private final class Box {
+        let store = MCPInMemoryEventSubscriptionStore()
+    }
+
+    private let lock = NSLock()
+    private let instances = NSMapTable<AnyObject, Box>.weakToStrongObjects()
+    private var types: [String: Box] = [:]
+
+    func store(for server: Any) -> any MCPEventSubscriptionStore {
+        lock.lock()
+        defer { lock.unlock() }
+        if type(of: server) is AnyClass {
+            let object = server as AnyObject
+            if let box = instances.object(forKey: object) { return box.store }
+            let box = Box()
+            instances.setObject(box, forKey: object)
+            return box.store
+        }
+        let name = String(reflecting: type(of: server))
+        if let box = types[name] { return box.store }
+        let box = Box()
+        types[name] = box
+        return box.store
+    }
+}
+
 /// Default store: subscriptions live in memory and are lost on restart.
 public actor MCPInMemoryEventSubscriptionStore: MCPEventSubscriptionStore {
-    /// Shared default instance used by servers that do not supply a store.
-    public static let shared = MCPInMemoryEventSubscriptionStore()
-
     private var records: [MCPEventSubscriptionKey: MCPEventSubscription] = [:]
 
     public init() {}
@@ -150,6 +183,8 @@ public actor MCPInMemoryEventSubscriptionStore: MCPEventSubscriptionStore {
         now: Date
     ) async throws -> MCPEventUpsertResult {
         let result = Self.merge(subscription, into: records[subscription.key], now: now)
+        // Lapsed records are dropped on write so they cannot accumulate.
+        records = records.filter { !$0.value.isExpired(at: now) }
         records[subscription.key] = result.subscription
         return result
     }
@@ -227,7 +262,7 @@ public actor MCPFileEventSubscriptionStore: MCPEventSubscriptionStore {
         now: Date
     ) async throws -> MCPEventUpsertResult {
         let result = MCPInMemoryEventSubscriptionStore.merge(subscription, into: records[subscription.key], now: now)
-        var updated = records
+        var updated = records.filter { !$0.value.isExpired(at: now) }
         updated[subscription.key] = result.subscription
         try save(updated)
         records = updated
@@ -278,12 +313,29 @@ public actor MCPFileEventSubscriptionStore: MCPEventSubscriptionStore {
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let sorted = records.values.sorted { ($0.createdAt, $0.id) < ($1.createdAt, $1.id) }
-        try FileManager.default.createDirectory(
-            at: fileURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try encoder.encode(sorted).write(to: fileURL, options: .atomic)
-        // The file holds webhook signing secrets.
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
+        let directory = fileURL.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        // The file holds webhook signing secrets: create the temporary file
+        // private from the start, then move it into place, so it is never
+        // readable by others, not even briefly.
+        let temporary = directory.appendingPathComponent(".\(fileURL.lastPathComponent).\(UUID().uuidString).tmp")
+        guard FileManager.default.createFile(
+            atPath: temporary.path,
+            contents: try encoder.encode(sorted),
+            attributes: [.posixPermissions: 0o600]
+        ) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        do {
+            if FileManager.default.fileExists(atPath: fileURL.path) {
+                _ = try FileManager.default.replaceItemAt(fileURL, withItemAt: temporary)
+            } else {
+                try FileManager.default.moveItem(at: temporary, to: fileURL)
+            }
+        } catch {
+            try? FileManager.default.removeItem(at: temporary)
+            throw error
+        }
     }
 }
