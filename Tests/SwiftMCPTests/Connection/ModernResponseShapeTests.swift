@@ -168,7 +168,8 @@ struct ModernResponseShapeTests {
 
     @Test("The modern method surface matches the dispatcher (no drift)")
     func modernMethodSurfaceMatchesDispatcher() async throws {
-        let server = Calculator()
+        // Events methods answer -32601 unless the server declares events.
+        let server = EventTestServer()
         // Every method in the set must dispatch to something other than the
         // -32601 fallback (malformed-params errors are fine — they prove the
         // method itself is routed).
