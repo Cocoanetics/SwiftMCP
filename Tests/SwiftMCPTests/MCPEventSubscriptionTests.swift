@@ -240,5 +240,44 @@ struct MCPEventSubscriptionTests {
         let attributes = try FileManager.default.attributesOfItem(atPath: file.path)
         #expect((attributes[.posixPermissions] as? Int) == 0o600)
     }
+
+    @Test("A refresh without a cursor clears the stored one (both stores)")
+    func refreshClearsCursor() async throws {
+        for (label, store) in try makeStores() {
+            let now = Date(timeIntervalSince1970: 1_800_000_000)
+            func make(cursor: String?) -> MCPEventSubscription {
+                MCPEventSubscription(
+                    principal: "alice", name: "buildFinished", arguments: .object([:]), url: Self.url,
+                    secret: secret, createdAt: now, expiresAt: now.addingTimeInterval(600), cursor: cursor
+                )
+            }
+            _ = try await store.upsert(make(cursor: "c1"), now: now)
+            let refreshed = try await store.upsert(make(cursor: nil), now: now)
+            #expect(refreshed.subscription.cursor == nil, "\(label)")
+        }
+    }
+
+    @Test("A failed file save leaves the in-memory state unchanged")
+    func failedSaveIsNotCommitted() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("events-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let store = try MCPFileEventSubscriptionStore(fileURL: directory.appendingPathComponent("subs.json"))
+        let now = Date()
+        let subscription = MCPEventSubscription(
+            principal: "alice", name: "buildFinished", arguments: .object([:]), url: Self.url,
+            secret: secret, createdAt: now, expiresAt: now.addingTimeInterval(600)
+        )
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: directory.path)
+        guard (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) != nil,
+              !FileManager.default.isWritableFile(atPath: directory.path) else {
+            return // running as a user that ignores directory permissions
+        }
+        await #expect(throws: (any Error).self) { try await store.upsert(subscription, now: now) }
+        #expect(try await store.subscriptions(principal: nil, now: now).isEmpty)
+    }
 }
 #endif

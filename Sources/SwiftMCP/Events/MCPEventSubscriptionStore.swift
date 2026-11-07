@@ -193,7 +193,7 @@ public actor MCPInMemoryEventSubscriptionStore: MCPEventSubscriptionStore {
         refreshed.secret = incoming.secret
         refreshed.refreshedAt = incoming.refreshedAt
         refreshed.expiresAt = incoming.expiresAt
-        refreshed.cursor = incoming.cursor ?? existing.cursor
+        refreshed.cursor = incoming.cursor
         return (refreshed, false)
     }
 }
@@ -227,8 +227,10 @@ public actor MCPFileEventSubscriptionStore: MCPEventSubscriptionStore {
         now: Date
     ) async throws -> MCPEventUpsertResult {
         let result = MCPInMemoryEventSubscriptionStore.merge(subscription, into: records[subscription.key], now: now)
-        records[subscription.key] = result.subscription
-        try save()
+        var updated = records
+        updated[subscription.key] = result.subscription
+        try save(updated)
+        records = updated
         return result
     }
 
@@ -243,28 +245,35 @@ public actor MCPFileEventSubscriptionStore: MCPEventSubscriptionStore {
     }
 
     public func remove(key: MCPEventSubscriptionKey) async throws -> Bool {
-        guard records.removeValue(forKey: key) != nil else { return false }
-        try save()
+        var updated = records
+        guard updated.removeValue(forKey: key) != nil else { return false }
+        try save(updated)
+        records = updated
         return true
     }
 
     public func revoke(principal: String) async throws -> [MCPEventSubscription] {
         let removed = records.filter { $0.key.principal == principal }
         guard !removed.isEmpty else { return [] }
-        for key in removed.keys { records.removeValue(forKey: key) }
-        try save()
+        var updated = records
+        for key in removed.keys { updated.removeValue(forKey: key) }
+        try save(updated)
+        records = updated
         return Array(removed.values)
     }
 
     public func purgeExpired(now: Date) async throws -> [MCPEventSubscription] {
         let lapsed = records.filter { $0.value.isExpired(at: now) }
         guard !lapsed.isEmpty else { return [] }
-        for key in lapsed.keys { records.removeValue(forKey: key) }
-        try save()
+        var updated = records
+        for key in lapsed.keys { updated.removeValue(forKey: key) }
+        try save(updated)
+        records = updated
         return Array(lapsed.values)
     }
 
-    private func save() throws {
+    /// Persists `records`; the in-memory state is only replaced after this succeeds.
+    private func save(_ records: [MCPEventSubscriptionKey: MCPEventSubscription]) throws {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
