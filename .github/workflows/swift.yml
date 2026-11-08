@@ -185,9 +185,8 @@ jobs:
           swift-version: "6.4.2"
           # Use the backend that fixes macro-dependent Android test discovery (SwiftPM #8094).
           swift-build-flags: --build-system swiftbuild
-          # Swift Testing's verbose mode names every test and event as it runs,
-          # so a process that dies mid-run leaves the unfinished test behind.
-          swift-test-flags: --verbose
+          # Test flags reach both XCTest and Swift Testing; XCTest rejects
+          # --verbose before the Swift Testing invocation can run.
           free-disk-space: true
       - name: Android logcat after failure
         if: failure()
