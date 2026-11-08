@@ -27,8 +27,14 @@ extension DemoServer {
     func ciFailed(pipeline: String? = nil, branch: String? = nil) -> CIFailedPayload {
         CIFailedPayload(pipeline: "", branch: "", commit: "", url: "", message: "")
     }
+}
 
-    #if Server
+#if Server
+/// Webhook emission tools need the Server trait (`emit` / Crypto). The whole
+/// extension is gated — not individual members — so `@MCPExtension` still
+/// collects `@MCPTool` functions (it does not walk `IfConfigDecl` members).
+@MCPExtension("EventEmission")
+extension DemoServer {
     /// Emits a sample `ci.failed` event to every matching webhook subscription.
     /// - Returns: How many webhook deliveries were attempted
     @MCPTool(description: "Emits a sample ci.failed event to matching webhook subscribers")
@@ -50,7 +56,6 @@ extension DemoServer {
             url: url,
             message: message
         )
-        // `emit` lives behind the Server trait (webhook transport / Crypto).
         let outcomes = try await emit(
             "ci.failed",
             payload,
@@ -61,14 +66,18 @@ extension DemoServer {
         )
         return outcomes.count
     }
-    #endif
 }
+#endif
 
 extension DemoServer {
-    /// Creates a demo server with the Events extension registered.
+    /// Creates a demo server with the Events extension registered
+    /// (and EventEmission when the Server trait is enabled).
     static func makeWithEvents() async -> DemoServer {
         let server = DemoServer()
         await Events.register(in: server)
+        #if Server
+        await EventEmission.register(in: server)
+        #endif
         return server
     }
 }

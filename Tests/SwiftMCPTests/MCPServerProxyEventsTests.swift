@@ -16,9 +16,51 @@ actor ProxyEventsTestServer {
     func noop() {}
 }
 
+/// Mirrors the demo's Events / EventEmission split: the emit tool must live in
+/// its own `@MCPExtension` (optionally file-gated with `#if Server`), not inside
+/// an `IfConfigDecl` member of another extension — `@MCPExtension` does not
+/// collect those.
+@MCPServer(name: "EmissionVisibilityServer", version: "1.0")
+actor EmissionVisibilityServer {
+    /// Baseline tool so the tools capability is advertised.
+    @MCPTool
+    func noop() {}
+}
+
+@MCPExtension("Events")
+extension EmissionVisibilityServer {
+    /// A continuous-integration run failed.
+    @MCPEvent(name: "ci.failed", delivery: ["webhook"])
+    func ciFailed() -> String { "" }
+}
+
+@MCPExtension("EventEmission")
+extension EmissionVisibilityServer {
+    /// Sample emit helper listed by `tools/list` after register.
+    @MCPTool(description: "Emits a sample ci.failed event")
+    func emitCIFailed() -> Int { 0 }
+}
+
 @Suite("MCPServerProxy events client API")
 struct MCPServerProxyEventsTests {
     private static let webhookURL = "https://example.com/mcp-events/hook"
+
+    @Test("Server-gated EventEmission extension registers emitCIFailed for tools/list")
+    func emitToolIsListedAfterRegister() async throws {
+        let server = EmissionVisibilityServer()
+        await EmissionVisibilityServer.Events.register(in: server)
+        await EmissionVisibilityServer.EventEmission.register(in: server)
+
+        let proxy = MCPServerProxy(config: .stdioHandles(server: server))
+        await proxy.setEraPreference(.modern)
+        try await proxy.connect()
+        defer { Task { await proxy.disconnect() } }
+
+        let tools = try await proxy.listTools()
+        #expect(tools.contains { $0.name == "emitCIFailed" })
+        let events = try await proxy.listEvents()
+        #expect(events.events.contains { $0.name == "ci.failed" })
+    }
 
     @Test("Modern era: listEvents returns ci.failed; subscribe and unsubscribe round-trip")
     func modernListSubscribeUnsubscribe() async throws {
