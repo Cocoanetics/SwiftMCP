@@ -3,6 +3,56 @@ import Foundation
 import Testing
 @testable import SwiftMCP
 
+private struct DelayedLookupEventSubscriptionStore: MCPEventSubscriptionStore {
+    let base = MCPInMemoryEventSubscriptionStore()
+    let lookupCount = HTTPTransportBox(0)
+    let finalLookupStarted = HTTPTransportBox(false)
+    let releaseFinalLookup = HTTPTransportBox(false)
+
+    func upsert(_ subscription: MCPEventSubscription, now: Date) async throws -> MCPEventUpsertResult {
+        try await base.upsert(subscription, now: now)
+    }
+
+    func subscription(id: String, now: Date) async throws -> MCPEventSubscription? {
+        lookupCount.modify { $0 += 1 }
+        if lookupCount.value == 2 {
+            finalLookupStarted.value = true
+            while !releaseFinalLookup.value { try await Task.sleep(nanoseconds: 10_000_000) }
+        }
+        return try await base.subscription(id: id, now: now)
+    }
+
+    func subscriptions(principal: String?, now: Date) async throws -> [MCPEventSubscription] {
+        try await base.subscriptions(principal: principal, now: now)
+    }
+
+    func remove(key: MCPEventSubscriptionKey) async throws -> Bool {
+        try await base.remove(key: key)
+    }
+
+    func revoke(principal: String) async throws -> [MCPEventSubscription] {
+        try await base.revoke(principal: principal)
+    }
+
+    func purgeExpired(now: Date) async throws -> [MCPEventSubscription] {
+        try await base.purgeExpired(now: now)
+    }
+
+    func applyDeliveryOutcome(
+        id: String,
+        update: MCPEventSubscriptionDeliveryUpdate,
+        now: Date,
+        disableAfterConsecutiveFailures: Int
+    ) async throws -> MCPEventSubscription? {
+        try await base.applyDeliveryOutcome(
+            id: id,
+            update: update,
+            now: now,
+            disableAfterConsecutiveFailures: disableAfterConsecutiveFailures
+        )
+    }
+}
+
 extension MCPEventDeliveryTests {
     @Test("Dictionary payloads validate as open objects")
     func dictionaryPayloadIsOpen() async throws {
@@ -133,6 +183,32 @@ extension MCPEventDeliveryTests {
         #expect(byId[queuedId]?.attempts == 0)
         #expect(receiver.requests.count == 1)
         #expect(receiver.requests.first?.headers["x-mcp-subscription-id"] == heldId)
+    }
+
+    @Test("Webhook signatures are generated after the final activity lookup")
+    func signatureFollowsFinalActivityLookup() async throws {
+        let receiver = try LocalWebhookReceiver { _, _ in (200, [:]) }
+        defer { receiver.stop() }
+        let initialTime = Date(timeIntervalSince1970: 1_700_000_000)
+        let deliveryTime = initialTime.addingTimeInterval(WebhookSigner.defaultTolerance + 1)
+        let clock = HTTPTransportBox(initialTime)
+        let store = DelayedLookupEventSubscriptionStore()
+        defer { store.releaseFinalLookup.value = true }
+        var config = configuration(port: receiver.port)
+        config.now = { clock.value }
+        let server = DeliveryTestServer(store: store, configuration: config)
+        _ = try #require(try await subscribe(server))
+
+        let task = Task { try await emitBuild(server, eventId: "evt_fresh_signature") }
+        while !store.finalLookupStarted.value { try await Task.sleep(nanoseconds: 10_000_000) }
+        clock.value = deliveryTime
+        store.releaseFinalLookup.value = true
+
+        let outcome = try #require(try await task.value.first)
+        #expect(outcome.status == .delivered)
+        let request = try #require(receiver.requests.first)
+        #expect(request.headers[WebhookSigner.timestampHeader] == String(Int(deliveryTime.timeIntervalSince1970)))
+        try WebhookSigner(secret: secret).verify(headers: request.headers, body: request.body, now: deliveryTime)
     }
 
     @Test("Cancelling emit cancels the in-flight transfer and stops later attempts")

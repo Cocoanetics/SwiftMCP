@@ -195,9 +195,6 @@ enum MCPEventDeliveryEngine {
                 return outcome(.failed, attempt - 1, lastStatus, "subscription inactive")
             }
 
-            guard let signer = try? WebhookSigner(secret: current.secret) else {
-                return outcome(.failed, attempt - 1, nil, "invalid signing secret")
-            }
             guard let url = URL(string: current.url) else {
                 return outcome(.failed, attempt - 1, nil, "invalid URL")
             }
@@ -212,18 +209,21 @@ enum MCPEventDeliveryEngine {
                 return result
             }
 
-            // The webhook-id is the event id on every attempt; timestamp and signature are fresh.
-            var headers = signer.headers(
-                id: eventId, timestamp: Int(configuration.now().timeIntervalSince1970), body: body
-            )
-            headers[subscriptionIdHeader] = current.id
-            headers["Content-Type"] = "application/json"
-
             // Activity can change while awaiting DNS validation, before the POST starts.
             guard let latest = try await store.subscription(id: subscription.id, now: configuration.now()),
                   latest.isDeliverable(at: configuration.now()) else {
                 return outcome(.failed, attempt - 1, lastStatus, "subscription inactive")
             }
+            guard let signer = try? WebhookSigner(secret: latest.secret) else {
+                return outcome(.failed, attempt - 1, nil, "invalid signing secret")
+            }
+
+            // Sign only after the final asynchronous check so the replay timestamp is fresh.
+            var headers = signer.headers(
+                id: eventId, timestamp: Int(configuration.now().timeIntervalSince1970), body: body
+            )
+            headers[subscriptionIdHeader] = latest.id
+            headers["Content-Type"] = "application/json"
 
             do {
                 try Task.checkCancellation()
