@@ -151,31 +151,41 @@ actor DeliveryTestServer {
     /// - Parameter project: Only builds of this project.
     @MCPEvent(delivery: ["webhook"])
     func buildFinished(project: String? = nil) -> String { "" }
+
+    /// A free-form dictionary change.
+    ///
+    /// - Parameter count: Only changes with this count.
+    @MCPEvent(delivery: ["webhook"])
+    func changed(count: Int? = nil) -> [String: String] { [:] }
 }
 
 @Suite("MCPEvent: webhook delivery engine and emit")
 struct MCPEventDeliveryTests {
-    private static let url = "https://hooks.example.com/hook"
-    private let secret = WebhookSigner.generateSecret()
-    private let publicResolver: WebhookURLPolicy.Resolver = { _ in ["93.184.216.34"] }
+    static let url = "https://hooks.example.com/hook"
+    let secret = WebhookSigner.generateSecret()
+    let publicResolver: WebhookURLPolicy.Resolver = { _ in ["93.184.216.34"] }
 
-    private func configuration(
+    func configuration(
         port: Int,
         resolver: WebhookURLPolicy.Resolver? = nil,
         delays: HTTPTransportBox<[TimeInterval]> = .init([]),
-        maxAttempts: Int = 4
+        maxAttempts: Int = 4,
+        maxConcurrentDeliveries: Int = 16,
+        disableAfterConsecutiveFailures: Int = 3
     ) -> MCPEventDeliveryConfiguration {
         MCPEventDeliveryConfiguration(
             resolver: resolver ?? publicResolver,
             transport: LoopbackTransport(port: port),
             maxAttempts: maxAttempts,
             initialBackoff: 1,
+            maxConcurrentDeliveries: maxConcurrentDeliveries,
+            disableAfterConsecutiveFailures: disableAfterConsecutiveFailures,
             jitter: { 1 },
             sleep: { delay in delays.modify { $0.append(delay) } }
         )
     }
 
-    private func makeServer(
+    func makeServer(
         port: Int, resolver: WebhookURLPolicy.Resolver? = nil, delays: HTTPTransportBox<[TimeInterval]> = .init([])
     ) -> DeliveryTestServer {
         DeliveryTestServer(
@@ -184,7 +194,7 @@ struct MCPEventDeliveryTests {
         )
     }
 
-    private func subscribe(
+    func subscribe(
         _ server: DeliveryTestServer, project: String = "A", token: String = "alice", unsubscribe: Bool = false
     ) async throws -> String? {
         let arguments: JSONValue = .object(["project": .string(project)])
@@ -207,7 +217,7 @@ struct MCPEventDeliveryTests {
         return try? result.decoded(EventsSubscribeResult.self).id
     }
 
-    private func emitBuild(
+    func emitBuild(
         _ server: DeliveryTestServer, project: String = "A", eventId: String? = nil
     ) async throws -> [MCPEventDeliveryOutcome] {
         try await server.emit(

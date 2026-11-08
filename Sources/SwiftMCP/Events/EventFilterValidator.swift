@@ -3,7 +3,7 @@
 //  SwiftMCP
 //
 //  Validates `events/subscribe` filter arguments against the event's declared
-//  input schema.
+//  input schema, and emit payloads against its payload schema.
 //
 
 import Foundation
@@ -13,18 +13,36 @@ public struct EventFilterValidationError: Error, Equatable, Sendable, CustomStri
     public let description: String
 }
 
-/// Checks a filter against the schema produced by ``MCPEventMetadata/descriptor``.
+/// How undeclared object properties are treated when `additionalProperties` is omitted.
+public enum EventSchemaAdditionalProperties: Sendable {
+    /// Filters are closed sets: reject unknown members unless the schema sets
+    /// `additionalProperties` to `true`.
+    case closedUnlessAllowed
+    /// Payloads follow JSON Schema's open-object default: allow unknown members
+    /// unless the schema sets `additionalProperties` to `false`. A dictionary
+    /// schema with no properties and a nil flag is therefore open.
+    case openUnlessForbidden
+}
+
+/// Checks a value against the schema produced by ``MCPEventMetadata/descriptor``.
 public enum EventFilterValidator {
     /// Throws ``EventFilterValidationError`` when `arguments` does not satisfy `schema`.
-    public static func validate(_ arguments: JSONValue, against schema: JSONSchema?) throws {
+    public static func validate(
+        _ arguments: JSONValue,
+        against schema: JSONSchema?,
+        additionalProperties: EventSchemaAdditionalProperties = .closedUnlessAllowed
+    ) throws {
         guard let schema else { return }
-        try check(arguments, schema, path: "arguments")
+        try check(arguments, schema, path: "arguments", additionalProperties: additionalProperties)
     }
 
-    // Filters are closed sets (the event's parameters), so unknown properties
-    // are rejected unless the schema explicitly allows them.
     // swiftlint:disable:next cyclomatic_complexity
-    private static func check(_ value: JSONValue, _ schema: JSONSchema, path: String) throws {
+    private static func check(
+        _ value: JSONValue,
+        _ schema: JSONSchema,
+        path: String,
+        additionalProperties: EventSchemaAdditionalProperties
+    ) throws {
         switch schema {
         case .object(let object, _):
             guard case .object(let dictionary) = value else { throw fail(path, "must be an object") }
@@ -35,9 +53,12 @@ public enum EventFilterValidator {
                 if let propertySchema = object.properties[name] {
                     // An explicit null stands for an omitted optional property.
                     if member == .null && !object.required.contains(name) { continue }
-                    try check(member, propertySchema, path: "\(path).\(name)")
-                } else if object.additionalProperties != true {
-                    throw fail("\(path).\(name)", "is not a recognized filter property")
+                    try check(
+                        member, propertySchema, path: "\(path).\(name)",
+                        additionalProperties: additionalProperties
+                    )
+                } else if !allowsAdditionalProperties(object.additionalProperties, mode: additionalProperties) {
+                    throw fail("\(path).\(name)", "is not a recognized property")
                 }
             }
         case .string(_, _, _, let minLength, let maxLength, _):
@@ -59,16 +80,28 @@ public enum EventFilterValidator {
         case .array(let items, _, _, _):
             guard case .array(let elements) = value else { throw fail(path, "must be an array") }
             for (index, element) in elements.enumerated() {
-                try check(element, items, path: "\(path)[\(index)]")
+                try check(
+                    element, items, path: "\(path)[\(index)]", additionalProperties: additionalProperties
+                )
             }
         case .enum(let values, _, _, _, _):
             guard case .string(let string) = value, values.contains(string) else {
                 throw fail(path, "must be one of \(values.joined(separator: ", "))")
             }
         case .oneOf(let schemas, _, _):
-            guard schemas.contains(where: { (try? check(value, $0, path: path)) != nil }) else {
-                throw fail(path, "does not match any allowed shape")
+            let matches = schemas.contains {
+                (try? check(value, $0, path: path, additionalProperties: additionalProperties)) != nil
             }
+            guard matches else { throw fail(path, "does not match any allowed shape") }
+        }
+    }
+
+    private static func allowsAdditionalProperties(
+        _ flag: Bool?, mode: EventSchemaAdditionalProperties
+    ) -> Bool {
+        switch mode {
+        case .closedUnlessAllowed: return flag == true
+        case .openUnlessForbidden: return flag != false
         }
     }
 

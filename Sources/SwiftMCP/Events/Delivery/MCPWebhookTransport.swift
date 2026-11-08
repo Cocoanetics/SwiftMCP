@@ -50,9 +50,14 @@ public struct URLSessionWebhookTransport: MCPWebhookTransport {
         let session = URLSession(configuration: configuration, delegate: collector, delegateQueue: nil)
         defer { session.finishTasksAndInvalidate() }
 
-        let http: HTTPURLResponse = try await withCheckedThrowingContinuation { continuation in
-            collector.continuation = continuation
-            session.dataTask(with: request).resume()
+        let task = session.dataTask(with: request)
+        let http: HTTPURLResponse = try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                collector.continuation = continuation
+                task.resume()
+            }
+        } onCancel: {
+            task.cancel()
         }
         let retryAfter = Self.parseRetryAfter(http.value(forHTTPHeaderField: "Retry-After"))
         return MCPWebhookResponse(statusCode: http.statusCode, retryAfter: retryAfter)

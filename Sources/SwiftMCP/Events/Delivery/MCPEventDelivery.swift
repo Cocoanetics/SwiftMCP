@@ -107,9 +107,13 @@ public struct MCPEventDeliveryConfiguration: Sendable {
     public var maxBodyBytes: Int
     /// Deliveries of one `emit` running at once.
     public var maxConcurrentDeliveries: Int
-    /// Scales each backoff; defaults to a random factor in 0.5...1.
+    /// Exhausted transient failures after which a subscription is auto-disabled.
+    public var disableAfterConsecutiveFailures: Int
+    /// Scales each generated exponential backoff; defaults to a random factor in 0.5...1.
     public var jitter: @Sendable () -> Double
-    public var sleep: @Sendable (TimeInterval) async -> Void
+    /// Delay between attempts; must propagate `CancellationError` so a cancelled
+    /// `emit` stops retrying instead of sleeping through the backoff.
+    public var sleep: @Sendable (TimeInterval) async throws -> Void
     public var now: @Sendable () -> Date
 
     public init(
@@ -122,9 +126,10 @@ public struct MCPEventDeliveryConfiguration: Sendable {
         timeout: TimeInterval = 10,
         maxBodyBytes: Int = 256 * 1024,
         maxConcurrentDeliveries: Int = 16,
+        disableAfterConsecutiveFailures: Int = 3,
         jitter: @escaping @Sendable () -> Double = { Double.random(in: 0.5...1) },
-        sleep: @escaping @Sendable (TimeInterval) async -> Void = {
-            try? await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000))
+        sleep: @escaping @Sendable (TimeInterval) async throws -> Void = {
+            try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000))
         },
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
@@ -137,6 +142,7 @@ public struct MCPEventDeliveryConfiguration: Sendable {
         self.timeout = timeout
         self.maxBodyBytes = maxBodyBytes
         self.maxConcurrentDeliveries = max(1, maxConcurrentDeliveries)
+        self.disableAfterConsecutiveFailures = max(1, disableAfterConsecutiveFailures)
         self.jitter = jitter
         self.sleep = sleep
         self.now = now
@@ -160,12 +166,15 @@ enum MCPEventDeliveryEngine {
         }
     }
 
+    // Retry, activity recheck, cancellation and outcome recording live together here.
+    // swiftlint:disable:next cyclomatic_complexity function_body_length
     static func deliver(
         eventId: String,
         body: Data,
         to subscription: MCPEventSubscription,
+        store: any MCPEventSubscriptionStore,
         configuration: MCPEventDeliveryConfiguration
-    ) async -> MCPEventDeliveryOutcome {
+    ) async throws -> MCPEventDeliveryOutcome {
         func outcome(
             _ status: MCPEventDeliveryStatus, _ attempts: Int, _ code: Int? = nil, _ error: String? = nil
         ) -> MCPEventDeliveryOutcome {
@@ -175,52 +184,101 @@ enum MCPEventDeliveryEngine {
             )
         }
 
-        guard let signer = try? WebhookSigner(secret: subscription.secret) else {
-            return outcome(.failed, 0, nil, "invalid signing secret")
-        }
-        guard let url = URL(string: subscription.url) else { return outcome(.failed, 0, nil, "invalid URL") }
-
         var lastStatus: Int?
         var lastError = "no attempt made"
         for attempt in 1...configuration.maxAttempts {
+            try Task.checkCancellation()
+
+            // Revoke, unsubscribe, expiry or auto-disable can land while queued.
+            guard let current = try await store.subscription(id: subscription.id, now: configuration.now()),
+                  current.isDeliverable(at: configuration.now()) else {
+                return outcome(.failed, attempt - 1, lastStatus, "subscription inactive")
+            }
+
+            guard let signer = try? WebhookSigner(secret: current.secret) else {
+                return outcome(.failed, attempt - 1, nil, "invalid signing secret")
+            }
+            guard let url = URL(string: current.url) else {
+                return outcome(.failed, attempt - 1, nil, "invalid URL")
+            }
+
             var retryAfter: TimeInterval?
             do {
                 // Re-vetted on every attempt: DNS answers can change between retries.
-                _ = try await configuration.urlPolicy.validate(subscription.url, resolver: configuration.resolver)
+                _ = try await configuration.urlPolicy.validate(current.url, resolver: configuration.resolver)
             } catch {
-                return outcome(.failed, attempt - 1, lastStatus, "URL rejected: \(error)")
+                let result = outcome(.failed, attempt - 1, lastStatus, "URL rejected: \(error)")
+                await record(result, store: store, configuration: configuration)
+                return result
             }
 
             // The webhook-id is the event id on every attempt; timestamp and signature are fresh.
             var headers = signer.headers(
                 id: eventId, timestamp: Int(configuration.now().timeIntervalSince1970), body: body
             )
-            headers[subscriptionIdHeader] = subscription.id
+            headers[subscriptionIdHeader] = current.id
             headers["Content-Type"] = "application/json"
 
             do {
+                try Task.checkCancellation()
                 let response = try await configuration.transport.post(
                     url: url, headers: headers, body: body, timeout: configuration.timeout
                 )
                 lastStatus = response.statusCode
                 lastError = "HTTP \(response.statusCode)"
                 switch disposition(of: response.statusCode) {
-                case .delivered: return outcome(.delivered, attempt, response.statusCode)
-                case .rejected: return outcome(.rejected, attempt, response.statusCode, lastError)
+                case .delivered:
+                    let result = outcome(.delivered, attempt, response.statusCode)
+                    await record(result, store: store, configuration: configuration)
+                    return result
+                case .rejected:
+                    let result = outcome(.rejected, attempt, response.statusCode, lastError)
+                    await record(result, store: store, configuration: configuration)
+                    return result
                 case .retry: retryAfter = response.retryAfter
                 }
+            } catch is CancellationError {
+                throw CancellationError()
             } catch {
+                if Task.isCancelled { throw CancellationError() }
                 lastStatus = nil
                 lastError = "\(error)"
             }
 
             if attempt < configuration.maxAttempts {
-                let backoff = min(configuration.maxBackoff, configuration.initialBackoff * pow(2, Double(attempt - 1)))
-                let delay = max(backoff * configuration.jitter(), min(retryAfter ?? 0, configuration.maxBackoff))
-                await configuration.sleep(delay)
+                // Cap only the generated exponential backoff; honor Retry-After fully.
+                let backoff = min(
+                    configuration.maxBackoff,
+                    configuration.initialBackoff * pow(2, Double(attempt - 1))
+                ) * configuration.jitter()
+                let delay = max(backoff, retryAfter ?? 0)
+                try await configuration.sleep(delay)
+                // Custom sleeps may ignore cancellation; always recheck before retrying.
+                try Task.checkCancellation()
             }
         }
-        return outcome(.failed, configuration.maxAttempts, lastStatus, lastError)
+        let result = outcome(.failed, configuration.maxAttempts, lastStatus, lastError)
+        await record(result, store: store, configuration: configuration)
+        return result
+    }
+
+    private static func record(
+        _ outcome: MCPEventDeliveryOutcome,
+        store: any MCPEventSubscriptionStore,
+        configuration: MCPEventDeliveryConfiguration
+    ) async {
+        let update: MCPEventSubscriptionDeliveryUpdate
+        switch outcome.status {
+        case .delivered: update = .delivered
+        case .rejected: update = .rejected(error: outcome.error)
+        case .failed: update = .failed(error: outcome.error)
+        }
+        _ = try? await store.applyDeliveryOutcome(
+            id: outcome.subscriptionId,
+            update: update,
+            now: configuration.now(),
+            disableAfterConsecutiveFailures: configuration.disableAfterConsecutiveFailures
+        )
     }
 }
 
@@ -248,11 +306,6 @@ extension MCPEventProviding {
     /// included (up to `maxAttempts` with backoff), so wrap it in a `Task` where
     /// that wait is unwanted.
     ///
-    /// A subscription matches when each non-null entry of its filter equals the
-    /// same-named entry of `attributes`; `attributes` defaults to the top-level
-    /// fields of an object payload. A payload that is not an object, and has no
-    /// `attributes`, matches only subscriptions with an empty filter.
-    ///
     /// - Parameters:
     ///   - eventId: Stable id used for deduplication; generated when omitted.
     ///     Pass the upstream's own id so repeated surfacing of one event collapses.
@@ -275,7 +328,9 @@ extension MCPEventProviding {
         let data: JSONValue
         do {
             data = try JSONDecoder().decode(JSONValue.self, from: encoder.encode(payload))
-            try EventFilterValidator.validate(data, against: metadata.descriptor.payloadSchema)
+            try EventFilterValidator.validate(
+                data, against: metadata.descriptor.payloadSchema, additionalProperties: .openUnlessForbidden
+            )
         } catch {
             throw MCPEventEmitError.invalidPayload("\(error)")
         }
@@ -294,35 +349,28 @@ extension MCPEventProviding {
         _ = try await store.purgeExpired(now: now)
         let attributes = attributes ?? data
         let targets = try await store.subscriptions(principal: nil, now: now).filter {
-            $0.name == name && Self.filter($0.arguments, matches: attributes)
+            $0.name == name && $0.isDeliveryActive && Self.filter($0.arguments, matches: attributes)
         }
 
-        return await withTaskGroup(of: MCPEventDeliveryOutcome.self) { group in
+        return try await withThrowingTaskGroup(of: MCPEventDeliveryOutcome.self) { group in
             var outcomes: [MCPEventDeliveryOutcome] = []
             var running = 0
             for subscription in targets {
-                if running >= configuration.maxConcurrentDeliveries, let outcome = await group.next() {
+                try Task.checkCancellation()
+                if running >= configuration.maxConcurrentDeliveries, let outcome = try await group.next() {
                     outcomes.append(outcome)
                     running -= 1
                 }
                 group.addTask {
-                    await MCPEventDeliveryEngine.deliver(
-                        eventId: id, body: body, to: subscription, configuration: configuration
+                    try await MCPEventDeliveryEngine.deliver(
+                        eventId: id, body: body, to: subscription, store: store, configuration: configuration
                     )
                 }
                 running += 1
             }
-            for await outcome in group { outcomes.append(outcome) }
+            while let outcome = try await group.next() { outcomes.append(outcome) }
             return outcomes.sorted { $0.subscriptionId < $1.subscriptionId }
         }
-    }
-
-    private static func filter(_ filter: JSONValue, matches attributes: JSONValue) -> Bool {
-        guard case .object(let wanted) = filter else { return true }
-        let present = wanted.filter { $0.value != .null }
-        if present.isEmpty { return true }
-        guard case .object(let actual) = attributes else { return false }
-        return present.allSatisfy { actual[$0.key] == $0.value }
     }
 }
 #endif
