@@ -18,6 +18,7 @@ A Swift implementation of the MCP (Model Context Protocol) for JSON-RPC over var
 - **Tools** – expose functions with `@MCPTool`
 - **Resources** – publish data with `@MCPResource`
 - **Prompts** – build prompts using `@MCPPrompt`
+- **Events** – declare webhook events with `@MCPEvent` and publish with `emit` (modern `2026-07-28`)
 - **Utilities**
   - Progress notifications via `RequestContext.current`
   - Structured logging streamed through `Session.current`
@@ -27,6 +28,7 @@ A Swift implementation of the MCP (Model Context Protocol) for JSON-RPC over var
 
 - **Roots** – dynamic filesystem roots announced by the client
 - **Sampling** – request small previews of client files
+- **Events** – `listEvents` / `subscribeEvent` / `unsubscribeEvent` on `MCPServerProxy` (era-gated)
 
 ## Installation
 
@@ -327,6 +329,33 @@ Notes:
 - Client generation is opt-in (`generateClient` defaults to `false`).
 - Client methods always `throw` to surface transport or server errors.
 - Prefer the Streamable HTTP `/mcp` endpoint for new clients. The legacy `/sse` endpoint remains available for backwards compatibility.
+
+## MCP Events
+
+On a modern (`2026-07-28`) connection, servers can advertise application events
+and deliver them to webhook subscribers. Declare a type with `@MCPEvent`
+(optional `name:` for dotted wire names such as `ci.failed`), publish with
+`emit`, and use the era-gated client helpers:
+
+```swift
+let events = try await proxy.listEvents()
+let delivery = EventsWebhookDelivery(
+    url: "https://receiver.example.com/hook",
+    secret: WebhookSigner.generateSecret()
+)
+let subscription = try await proxy.subscribeEvent(name: "ci.failed", delivery: delivery)
+try await proxy.unsubscribeEvent(
+    name: "ci.failed",
+    delivery: EventsWebhookDelivery(url: delivery.url)
+)
+```
+
+Subscribe requires an authenticated principal (for example
+`proxy.meta["accessToken"] = .string("…")`). The demo server exposes `ci.failed`
+and an `emitCIFailed` tool. For ChatGPT Work interop, see
+[`docs/chatgpt-work-events-runbook.md`](docs/chatgpt-work-events-runbook.md).
+Events are not a replacement for protocol notifications — see the DocC article
+*Events vs. subscriptions/listen*.
 
 ## Client Notification Handlers
 
