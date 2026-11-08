@@ -69,7 +69,6 @@ struct MCPServerProxyEventsTests {
 
         #expect(await proxy.negotiatedEra == .legacy)
 
-
         let delivery = EventsWebhookDelivery(url: Self.webhookURL, secret: WebhookSigner.generateSecret())
 
         await expectEventsUnsupported {
