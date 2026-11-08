@@ -65,7 +65,7 @@ final class LocalWebhookReceiver: @unchecked Sendable {
         let listener = descriptor
         descriptor = -1
         lock.unlock()
-        if listener >= 0 { shutdown(listener, SHUT_RDWR); close(listener) }
+        if listener >= 0 { shutdown(listener, Int32(SHUT_RDWR)); close(listener) }
     }
 
     private func serve(_ listener: Int32) {
