@@ -75,7 +75,7 @@ extension MCPServerProxy {
     private func requireEventsSupport() throws {
         guard negotiatedEra == .modern,
               let version = modernProtocolVersion,
-              ProtocolVersionProfile.profile(for: version)?.has(.events) == true else {
+              MCPProtocolVersion.profile(for: version)?.has(.events) == true else {
             throw MCPServerProxyError.communicationError(
                 "Events require a negotiated modern protocol revision that supports them"
             )
