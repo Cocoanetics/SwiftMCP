@@ -52,7 +52,7 @@ struct StdioCommand: AsyncParsableCommand {
         LoggingSystem.bootstrapWithOSLog()
 #endif
 
-        let calculator = DemoServer()
+        let calculator = await DemoServer.makeWithEvents()
 
         do {
             // need to output to stderror or else npx complains

@@ -14,7 +14,7 @@ Protocol revision `2026-07-28` offers two distinct ways for a server to tell a c
 | Authentication | The connection | Standard Webhooks signing (`webhook-id`, `webhook-timestamp`, `webhook-signature`) |
 | Methods | `subscriptions/listen` | `events/list`, `events/subscribe`, `events/unsubscribe` |
 
-The wire models live in `Models/Events` (``MCPEventsExtension``, ``EventDescriptor``, ``EventsSubscribeParams`` and friends). As of Phase 0 of the Events work (#204) they are data types only: nothing is advertised, routed or delivered.
+The wire models live in `Models/Events` (``MCPEventsExtension``, ``EventDescriptor``, ``EventsSubscribeParams`` and friends). Servers declare types with ``MCPEvent``, advertise them when the negotiated profile has ``MCPFeature/events``, and deliver matching occurrences with ``MCPEventProviding/emit(_:_:eventId:attributes:cursor:)``. Clients use ``MCPServerProxy/listEvents(cursor:)``, ``MCPServerProxy/subscribeEvent(name:arguments:delivery:cursor:maxAgeMs:ttlMs:)`` and ``MCPServerProxy/unsubscribeEvent(name:arguments:delivery:)``. See <doc:Events>.
 
 ## Inventory of what SwiftMCP sends today
 

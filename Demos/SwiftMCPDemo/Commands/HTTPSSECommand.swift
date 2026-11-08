@@ -121,7 +121,7 @@ final class HTTPSSECommand: AsyncParsableCommand {
         LoggingSystem.bootstrapWithOSLog()
 #endif
 
-        let calculator = DemoServer()
+        let calculator = await DemoServer.makeWithEvents()
 
         let host = ProcessInfo.processInfo.hostName
         print(

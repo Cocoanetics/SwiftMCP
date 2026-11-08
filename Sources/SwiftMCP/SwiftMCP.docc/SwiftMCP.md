@@ -55,6 +55,7 @@ Start with <doc:GettingStarted> to create your first MCP server, then explore <d
 - <doc:ServerCapabilities>
 - <doc:ClientCapabilities>
 - <doc:Sampling>
+- <doc:Events>
 - <doc:Events-vs-Listen>
 
 ### Core Types
