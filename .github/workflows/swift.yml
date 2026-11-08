@@ -157,15 +157,24 @@ jobs:
   # (`adb emu kill` → "stop: Not implemented"), so a fast test failure would
   # otherwise run out the whole job timeout and report as a confusing
   # "cancelled". Bound the action with a step-level timeout so a failure (or a
-  # hung teardown) surfaces as a red check in ~25 min, and keep the job timeout
+  # hung teardown) surfaces as a red check in ~15 min, and keep the job timeout
   # just above it.
   build-android:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
+      # The emulator is killed as soon as the test step fails, taking a crash's
+      # only record (logcat) with it, and the test process's exit code 1 carries
+      # no text (#268). Stream logcat to a file from the moment the emulator
+      # appears so a failed run can print what the process died of.
+      - name: Capture emulator logcat
+        run: |
+          adb=/usr/local/lib/android/sdk/platform-tools/adb
+          setsid nohup sh -c "$adb wait-for-device && $adb logcat -v time" \
+            > "$RUNNER_TEMP/android-logcat.txt" 2>&1 < /dev/null &
       - name: Build & test (Android emulator)
-        timeout-minutes: 25
+        timeout-minutes: 15
         uses: skiptools/swift-android-action@v2
         with:
           # Swift 6.3's SwiftBuild backend emits an incompatible Android target
@@ -176,7 +185,17 @@ jobs:
           swift-version: "6.4.2"
           # Use the backend that fixes macro-dependent Android test discovery (SwiftPM #8094).
           swift-build-flags: --build-system swiftbuild
+          # Test flags reach both XCTest and Swift Testing; XCTest rejects
+          # --verbose before the Swift Testing invocation can run.
           free-disk-space: true
+      - name: Android logcat after failure
+        if: failure()
+        run: |
+          echo "== crash-related logcat =="
+          grep -E "FATAL|Fatal error|signal [0-9]+|SIGABRT|SIGSEGV|SIGKILL|lowmemorykiller|Out of memory|am_kill|DEBUG +:" \
+            "$RUNNER_TEMP/android-logcat.txt" | tail -n 200 || true
+          echo "== last 150 logcat lines =="
+          tail -n 150 "$RUNNER_TEMP/android-logcat.txt" || true
       # The action installs its own host compiler without adding it to PATH.
       # Verify that compiler, rather than the runner's preinstalled Swift.
       - name: Verify Swift version
