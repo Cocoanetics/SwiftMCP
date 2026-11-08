@@ -11,6 +11,15 @@
 
 import Foundation
 import SwiftCross
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#elseif canImport(Musl)
+import Musl
+#elseif canImport(Bionic)
+import Bionic
+#endif
 
 /// One event occurrence as POSTed to a subscriber's webhook.
 public struct MCPEventOccurrence: Codable, Sendable, Equatable {
