@@ -86,7 +86,7 @@ extension MCPServer {
             return "Invalid filter: \(error)"
         }
         do {
-            try WebhookURLPolicy().validate(params.delivery.url)
+            try provider.eventDeliveryConfiguration.urlPolicy.validate(params.delivery.url)
         } catch {
             return "Invalid webhook URL: \(error)"
         }

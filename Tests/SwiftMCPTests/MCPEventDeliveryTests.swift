@@ -320,6 +320,36 @@ struct MCPEventDeliveryTests {
         #expect(receiver.requests.isEmpty)
     }
 
+    @Test("Retry-After accepts delay-seconds and HTTP-date forms")
+    func retryAfterParsing() {
+        let now = Date(timeIntervalSince1970: 1_000_000_000)
+        #expect(URLSessionWebhookTransport.parseRetryAfter("7", now: now) == 7)
+        #expect(URLSessionWebhookTransport.parseRetryAfter("Sun, 09 Sep 2001 01:46:50 GMT", now: now) == 10)
+        #expect(URLSessionWebhookTransport.parseRetryAfter("Sun, 09 Sep 2001 01:46:30 GMT", now: now) == 0)
+        #expect(URLSessionWebhookTransport.parseRetryAfter("soon", now: now) == nil)
+    }
+
+    @Test("The subscribe-time URL policy is the configured one")
+    func configuredPolicyAtSubscribe() async throws {
+        var config = configuration(port: 1)
+        config.urlPolicy = WebhookURLPolicy(allowedPorts: [8443])
+        let server = DeliveryTestServer(store: MCPInMemoryEventSubscriptionStore(), configuration: config)
+        #expect(try await subscribe(server) == nil, "the default URL uses port 443")
+    }
+
+    @Test("Many subscriptions are delivered with bounded concurrency")
+    func boundedConcurrency() async throws {
+        let receiver = try LocalWebhookReceiver { _, _ in (200, [:]) }
+        defer { receiver.stop() }
+        var config = configuration(port: receiver.port)
+        config.maxConcurrentDeliveries = 2
+        let server = DeliveryTestServer(store: MCPInMemoryEventSubscriptionStore(), configuration: config)
+        for index in 0..<5 { _ = try await subscribe(server, token: "user\(index)") }
+        let outcomes = try await emitBuild(server)
+        #expect(outcomes.count == 5)
+        #expect(outcomes.allSatisfy { $0.status == .delivered })
+    }
+
     @Test("Unknown events and payloads that violate the schema are refused")
     func emitValidation() async throws {
         let server = makeServer(port: 1)
