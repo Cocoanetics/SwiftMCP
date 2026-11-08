@@ -72,6 +72,17 @@ extension MCPServer {
         return provider
     }
 
+    /// Wire delivery status reported on subscribe refresh.
+    private static func deliveryStatus(of subscription: MCPEventSubscription) -> EventsSubscribeResult.DeliveryStatus {
+        let formatter = ISO8601DateFormatter()
+        return .init(
+            active: subscription.isDeliveryActive,
+            lastDeliveryAt: subscription.lastDeliveryAt.map(formatter.string(from:)),
+            lastError: subscription.lastDeliveryError,
+            failedSince: subscription.failedSince.map(formatter.string(from:))
+        )
+    }
+
     /// Describes why `params` is not an acceptable subscription, or `nil` if it is.
     private func validateSubscribe(_ params: EventsSubscribeParams, provider: any MCPEventProviding) async -> String? {
         guard let event = await provider.mcpEventMetadata.first(where: { $0.name == params.name }) else {
@@ -86,7 +97,7 @@ extension MCPServer {
             return "Invalid filter: \(error)"
         }
         do {
-            try WebhookURLPolicy().validate(params.delivery.url)
+            try provider.eventDeliveryConfiguration.urlPolicy.validate(params.delivery.url)
         } catch {
             return "Invalid webhook URL: \(error)"
         }
@@ -142,7 +153,7 @@ extension MCPServer {
                 id: stored.subscription.id,
                 refreshBefore: ISO8601DateFormatter().string(from: stored.subscription.expiresAt ?? expiresAt),
                 cursor: stored.subscription.cursor,
-                deliveryStatus: stored.created ? nil : .init(active: true)
+                deliveryStatus: stored.created ? nil : Self.deliveryStatus(of: stored.subscription)
             )
             return JSONRPCMessage.response(id: request.id, result: .object(try JSONDictionary(encoding: result)))
         } catch {
