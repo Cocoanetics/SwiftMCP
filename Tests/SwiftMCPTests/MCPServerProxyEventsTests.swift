@@ -11,6 +11,7 @@ actor ProxyEventsTestServer {
     @MCPEvent(name: "ci.failed", delivery: ["webhook"])
     func ciFailed(project: String? = nil) -> String { "" }
 
+    /// Keeps the tools capability advertised for negotiation.
     @MCPTool
     func noop() {}
 }
@@ -24,7 +25,7 @@ struct MCPServerProxyEventsTests {
         let server = ProxyEventsTestServer()
         let proxy = MCPServerProxy(config: .stdioHandles(server: server))
         await proxy.setEraPreference(.modern)
-        proxy.meta["accessToken"] = .string("alice")
+        await proxy.setMeta(["accessToken": .string("alice")])
         try await proxy.connect()
         defer { Task { await proxy.disconnect() } }
 
@@ -62,11 +63,12 @@ struct MCPServerProxyEventsTests {
         let server = ProxyEventsTestServer()
         let proxy = MCPServerProxy(config: .stdioHandles(server: server))
         await proxy.setEraPreference(.legacy)
-        proxy.meta["accessToken"] = .string("alice")
+        await proxy.setMeta(["accessToken": .string("alice")])
         try await proxy.connect()
         defer { Task { await proxy.disconnect() } }
 
         #expect(await proxy.negotiatedEra == .legacy)
+
 
         let delivery = EventsWebhookDelivery(url: Self.webhookURL, secret: WebhookSigner.generateSecret())
 

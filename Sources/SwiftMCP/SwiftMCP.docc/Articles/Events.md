@@ -45,7 +45,7 @@ and POSTs a Standard Webhooks–signed body to each callback URL.
 
 ```swift
 let proxy = MCPServerProxy(config: .stdioHandles(server: server))
-proxy.meta["accessToken"] = .string("alice")  // required for subscribe/unsubscribe
+await proxy.setMeta(["accessToken": .string("alice")])  // required for subscribe/unsubscribe
 try await proxy.connect()
 
 let events = try await proxy.listEvents()

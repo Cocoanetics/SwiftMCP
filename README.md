@@ -351,7 +351,7 @@ try await proxy.unsubscribeEvent(
 ```
 
 Subscribe requires an authenticated principal (for example
-`proxy.meta["accessToken"] = .string("…")`). The demo server exposes `ci.failed`
+`await proxy.setMeta(["accessToken": .string("…")])`). The demo server exposes `ci.failed`
 and an `emitCIFailed` tool. For ChatGPT Work interop, see
 [`docs/chatgpt-work-events-runbook.md`](docs/chatgpt-work-events-runbook.md).
 Events are not a replacement for protocol notifications — see the DocC article
