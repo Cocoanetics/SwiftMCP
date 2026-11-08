@@ -323,6 +323,14 @@ struct MCPEventDeliveryTests {
         #expect(receiver.requests.isEmpty)
     }
 
+    @Test("The system resolver returns numeric loopback addresses for localhost")
+    func systemResolver() async throws {
+        let addresses = try await WebhookURLPolicy.systemResolver("localhost")
+        #expect(!addresses.isEmpty)
+        #expect(addresses.allSatisfy { WebhookURLPolicy.isBlocked(address: $0) })
+        #expect(addresses.contains { $0 == "127.0.0.1" || $0 == "::1" })
+    }
+
     @Test("Retry-After accepts delay-seconds and HTTP-date forms")
     func retryAfterParsing() {
         let now = Date(timeIntervalSince1970: 1_000_000_000)

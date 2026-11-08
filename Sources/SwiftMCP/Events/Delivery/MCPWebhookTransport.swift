@@ -133,13 +133,25 @@ extension WebhookURLPolicy {
                 var addresses: [String] = []
                 var cursor: UnsafeMutablePointer<addrinfo>? = first
                 while let entry = cursor {
-                    var buffer = [CChar](repeating: 0, count: 1025)
-                    let length = socklen_t(buffer.count)
-                    if let address = entry.pointee.ai_addr,
-                       getnameinfo(address, entry.pointee.ai_addrlen, &buffer, length, nil, 0, NI_NUMERICHOST) == 0 {
-                        let text = String(cString: buffer)
-                        if !addresses.contains(text) { addresses.append(text) }
+                    // inet_ntop has the same signature everywhere, unlike getnameinfo's buffer length.
+                    var buffer = [CChar](repeating: 0, count: 64)
+                    var text: String?
+                    if let address = entry.pointee.ai_addr {
+                        if entry.pointee.ai_family == AF_INET {
+                            var source = UnsafeRawPointer(address).assumingMemoryBound(to: sockaddr_in.self)
+                                .pointee.sin_addr
+                            if inet_ntop(AF_INET, &source, &buffer, socklen_t(buffer.count)) != nil {
+                                text = String(cString: buffer)
+                            }
+                        } else if entry.pointee.ai_family == AF_INET6 {
+                            var source = UnsafeRawPointer(address).assumingMemoryBound(to: sockaddr_in6.self)
+                                .pointee.sin6_addr
+                            if inet_ntop(AF_INET6, &source, &buffer, socklen_t(buffer.count)) != nil {
+                                text = String(cString: buffer)
+                            }
+                        }
                     }
+                    if let text, !addresses.contains(text) { addresses.append(text) }
                     cursor = entry.pointee.ai_next
                 }
                 continuation.resume(returning: addresses)
