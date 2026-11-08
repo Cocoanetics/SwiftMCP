@@ -9,6 +9,9 @@ private let streamSocket = Int32(SOCK_STREAM.rawValue)
 #elseif canImport(Musl)
 import Musl
 private let streamSocket = SOCK_STREAM
+#elseif canImport(Android)
+import Android
+private let streamSocket = SOCK_STREAM
 #elseif canImport(Bionic)
 import Bionic
 private let streamSocket = SOCK_STREAM

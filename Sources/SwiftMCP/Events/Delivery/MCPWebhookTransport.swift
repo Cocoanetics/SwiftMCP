@@ -14,6 +14,8 @@ import Darwin
 import Glibc
 #elseif canImport(Musl)
 import Musl
+#elseif canImport(Android)
+import Android
 #elseif canImport(Bionic)
 import Bionic
 #endif
@@ -112,7 +114,7 @@ private final class HeadOnlyCollector: NSObject, URLSessionDataDelegate, @unchec
 }
 #endif
 
-#if Server && (canImport(Darwin) || canImport(Glibc) || canImport(Musl) || canImport(Bionic))
+#if Server && (canImport(Darwin) || canImport(Glibc) || canImport(Musl) || canImport(Android) || canImport(Bionic))
 extension WebhookURLPolicy {
     /// Resolves a host with `getaddrinfo` to numeric address strings (IPv4 and IPv6).
     public static let systemResolver: Resolver = { host in
