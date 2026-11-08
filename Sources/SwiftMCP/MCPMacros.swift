@@ -217,11 +217,15 @@ public macro MCPPrompt(description: String? = nil) = #externalMacro(module: "Swi
 ///
 /// Apply to a function: its parameters describe the filter a subscriber may pass
 /// (`inputSchema`) and its return type the delivered payload (`payloadSchema`).
-/// The event name is the function name. `delivery` optionally restricts the
-/// supported modes (`"poll"`, `"push"`, `"webhook"`).
+/// The event name defaults to the function name; pass `name:` for a dotted wire
+/// name such as `"ci.failed"`. `delivery` optionally restricts the supported
+/// modes (`"poll"`, `"push"`, `"webhook"`).
 @attached(peer, names: prefixed(__mcpEventMetadata_))
-public macro MCPEvent(description: String? = nil, delivery: [String]? = nil) =
-    #externalMacro(module: "SwiftMCPMacros", type: "MCPEventMacro")
+public macro MCPEvent(
+    name: String? = nil,
+    description: String? = nil,
+    delivery: [String]? = nil
+) = #externalMacro(module: "SwiftMCPMacros", type: "MCPEventMacro")
 
 /// Marks an extension as contributing tools, resources, and/or prompts to a
 /// `@MCPServer` type.

@@ -11,5 +11,10 @@ extension MCPServerProxy {
     public func setPreferredProtocolVersion(_ version: String?) {
         preferredProtocolVersion = version
     }
+
+    /// Replaces ``meta`` (base `_meta` included on every request, e.g. `accessToken`).
+    public func setMeta(_ meta: JSONDictionary) {
+        self.meta = meta
+    }
 }
 #endif

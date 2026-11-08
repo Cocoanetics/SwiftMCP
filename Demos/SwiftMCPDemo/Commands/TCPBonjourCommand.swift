@@ -43,7 +43,7 @@ struct TCPBonjourCommand: AsyncParsableCommand {
         LoggingSystem.bootstrapWithOSLog()
 #endif
 
-        let calculator = DemoServer()
+        let calculator = await DemoServer.makeWithEvents()
 
         do {
             logToStderr(
