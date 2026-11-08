@@ -15,6 +15,12 @@ public protocol MCPEventProviding {
     /// Longest lifetime granted to a subscription, and the one used when the
     /// subscriber suggests none. Subscribers must refresh before it lapses.
     var eventSubscriptionMaxTTL: TimeInterval { get }
+
+    #if Server
+    /// URL policy, transport and retry limits used by ``emit(_:_:eventId:attributes:cursor:)``.
+    /// Defaults to HTTPS-only delivery to public addresses.
+    var eventDeliveryConfiguration: MCPEventDeliveryConfiguration { get }
+    #endif
 }
 
 extension MCPEventProviding {
@@ -23,6 +29,10 @@ extension MCPEventProviding {
     }
 
     public var eventSubscriptionMaxTTL: TimeInterval { 3600 }
+
+    #if Server
+    public var eventDeliveryConfiguration: MCPEventDeliveryConfiguration { MCPEventDeliveryConfiguration() }
+    #endif
 
     public var mcpEventMetadata: [MCPEventMetadata] {
         get async { [] }
