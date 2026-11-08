@@ -53,6 +53,18 @@ private struct DelayedLookupEventSubscriptionStore: MCPEventSubscriptionStore {
     }
 }
 
+/// Records the subscription id of every POST instead of using a socket.
+private struct RecordingWebhookTransport: MCPWebhookTransport {
+    let posted: HTTPTransportBox<[String]>
+
+    func post(
+        url: URL, headers: [String: String], body: Data, timeout: TimeInterval
+    ) async throws -> MCPWebhookResponse {
+        posted.modify { $0.append(headers[MCPEventDeliveryEngine.subscriptionIdHeader] ?? "") }
+        return MCPWebhookResponse(statusCode: 200)
+    }
+}
+
 extension MCPEventDeliveryTests {
     @Test("Dictionary payloads validate as open objects")
     func dictionaryPayloadIsOpen() async throws {
@@ -146,17 +158,14 @@ extension MCPEventDeliveryTests {
         let releaseValidation = HTTPTransportBox(false)
         defer { releaseValidation.modify { $0 = true } }
         let validating = HTTPTransportBox(0)
-        let receiver = try LocalWebhookReceiver { _, _ in (200, [:]) }
-        defer { receiver.stop() }
-        let config = configuration(
-            port: receiver.port,
-            resolver: { _ in
-                validating.modify { $0 += 1 }
-                while !releaseValidation.value { try await Task.sleep(nanoseconds: 10_000_000) }
-                return ["93.184.216.34"]
-            },
-            maxConcurrentDeliveries: 2
-        )
+        let posted = HTTPTransportBox<[String]>([])
+        let resolver: WebhookURLPolicy.Resolver = { _ in
+            validating.modify { $0 += 1 }
+            while !releaseValidation.value { try await Task.sleep(nanoseconds: 10_000_000) }
+            return ["93.184.216.34"]
+        }
+        var config = configuration(port: 0, resolver: resolver, maxConcurrentDeliveries: 2)
+        config.transport = RecordingWebhookTransport(posted: posted)
         let store = MCPInMemoryEventSubscriptionStore()
         let server = DeliveryTestServer(store: store, configuration: config)
         let firstId = try #require(try await subscribe(server, token: "alice"))
@@ -181,8 +190,7 @@ extension MCPEventDeliveryTests {
         #expect(byId[queuedId]?.status == .failed)
         #expect(byId[queuedId]?.error == "subscription inactive")
         #expect(byId[queuedId]?.attempts == 0)
-        #expect(receiver.requests.count == 1)
-        #expect(receiver.requests.first?.headers["x-mcp-subscription-id"] == heldId)
+        #expect(posted.value == [heldId])
     }
 
     @Test("Webhook signatures are generated after the final activity lookup")
