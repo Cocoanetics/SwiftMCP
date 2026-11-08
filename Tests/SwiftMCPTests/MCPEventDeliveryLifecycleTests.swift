@@ -3,6 +3,68 @@ import Foundation
 import Testing
 @testable import SwiftMCP
 
+private struct DelayedLookupEventSubscriptionStore: MCPEventSubscriptionStore {
+    let base = MCPInMemoryEventSubscriptionStore()
+    let lookupCount = HTTPTransportBox(0)
+    let finalLookupStarted = HTTPTransportBox(false)
+    let releaseFinalLookup = HTTPTransportBox(false)
+
+    func upsert(_ subscription: MCPEventSubscription, now: Date) async throws -> MCPEventUpsertResult {
+        try await base.upsert(subscription, now: now)
+    }
+
+    func subscription(id: String, now: Date) async throws -> MCPEventSubscription? {
+        lookupCount.modify { $0 += 1 }
+        if lookupCount.value == 2 {
+            finalLookupStarted.value = true
+            while !releaseFinalLookup.value { try await Task.sleep(nanoseconds: 10_000_000) }
+        }
+        return try await base.subscription(id: id, now: now)
+    }
+
+    func subscriptions(principal: String?, now: Date) async throws -> [MCPEventSubscription] {
+        try await base.subscriptions(principal: principal, now: now)
+    }
+
+    func remove(key: MCPEventSubscriptionKey) async throws -> Bool {
+        try await base.remove(key: key)
+    }
+
+    func revoke(principal: String) async throws -> [MCPEventSubscription] {
+        try await base.revoke(principal: principal)
+    }
+
+    func purgeExpired(now: Date) async throws -> [MCPEventSubscription] {
+        try await base.purgeExpired(now: now)
+    }
+
+    func applyDeliveryOutcome(
+        id: String,
+        update: MCPEventSubscriptionDeliveryUpdate,
+        now: Date,
+        disableAfterConsecutiveFailures: Int
+    ) async throws -> MCPEventSubscription? {
+        try await base.applyDeliveryOutcome(
+            id: id,
+            update: update,
+            now: now,
+            disableAfterConsecutiveFailures: disableAfterConsecutiveFailures
+        )
+    }
+}
+
+/// Records the subscription id of every POST instead of using a socket.
+private struct RecordingWebhookTransport: MCPWebhookTransport {
+    let posted: HTTPTransportBox<[String]>
+
+    func post(
+        url: URL, headers: [String: String], body: Data, timeout: TimeInterval
+    ) async throws -> MCPWebhookResponse {
+        posted.modify { $0.append(headers[MCPEventDeliveryEngine.subscriptionIdHeader] ?? "") }
+        return MCPWebhookResponse(statusCode: 200)
+    }
+}
+
 extension MCPEventDeliveryTests {
     @Test("Dictionary payloads validate as open objects")
     func dictionaryPayloadIsOpen() async throws {
@@ -51,9 +113,11 @@ extension MCPEventDeliveryTests {
     @Test("Queued deliveries recheck activity before the first POST and before retries")
     func recheckActivityBeforeDelivery() async throws {
         let releaseFirst = HTTPTransportBox(false)
+        defer { releaseFirst.modify { $0 = true } }
         let sawFirst = HTTPTransportBox(false)
-        let receiver = try LocalWebhookReceiver { number, _ in
-            if number == 1 {
+        let heldSubscription = HTTPTransportBox<String?>(nil)
+        let receiver = try LocalWebhookReceiver { _, request in
+            if request.headers["x-mcp-subscription-id"] == heldSubscription.value {
                 sawFirst.modify { $0 = true }
                 while !releaseFirst.value { Thread.sleep(forTimeInterval: 0.01) }
             }
@@ -65,21 +129,94 @@ extension MCPEventDeliveryTests {
         let server = DeliveryTestServer(store: store, configuration: config)
         let firstId = try #require(try await subscribe(server, token: "alice"))
         let secondId = try #require(try await subscribe(server, token: "bob"))
+        let ordered = try await store.subscriptions(principal: nil, now: Date())
+        let heldId = try #require(ordered.first?.id)
+        let queuedId = try #require(ordered.last?.id)
+        #expect(Set(ordered.map(\.id)) == [firstId, secondId])
+        heldSubscription.modify { $0 = heldId }
 
         let task = Task { try await emitBuild(server) }
         while !sawFirst.value { try await Task.sleep(nanoseconds: 10_000_000) }
-        let removed = try await server.revokeEventSubscriptions(forPrincipal: "token:bob")
-        #expect(removed.contains { $0.id == secondId })
+        let queuedPrincipal = queuedId == secondId ? "token:bob" : "token:alice"
+        let removed = try await server.revokeEventSubscriptions(forPrincipal: queuedPrincipal)
+        #expect(removed.contains { $0.id == queuedId })
         releaseFirst.modify { $0 = true }
 
         let outcomes = try await task.value
         #expect(outcomes.count == 2)
         let byId = Dictionary(uniqueKeysWithValues: outcomes.map { ($0.subscriptionId, $0) })
-        #expect(byId[firstId]?.status == .delivered)
-        #expect(byId[secondId]?.status == .failed)
-        #expect(byId[secondId]?.error == "subscription inactive")
-        #expect(byId[secondId]?.attempts == 0)
+        #expect(byId[heldId]?.status == .delivered)
+        #expect(byId[queuedId]?.status == .failed)
+        #expect(byId[queuedId]?.error == "subscription inactive")
+        #expect(byId[queuedId]?.attempts == 0)
         #expect(receiver.requests.count == 1)
+        #expect(receiver.requests.first?.headers["x-mcp-subscription-id"] == heldId)
+    }
+
+    @Test("Concurrent deliveries recheck activity after URL validation and before POST")
+    func recheckActivityAfterURLValidation() async throws {
+        let releaseValidation = HTTPTransportBox(false)
+        defer { releaseValidation.modify { $0 = true } }
+        let validating = HTTPTransportBox(0)
+        let posted = HTTPTransportBox<[String]>([])
+        let resolver: WebhookURLPolicy.Resolver = { _ in
+            validating.modify { $0 += 1 }
+            while !releaseValidation.value { try await Task.sleep(nanoseconds: 10_000_000) }
+            return ["93.184.216.34"]
+        }
+        var config = configuration(port: 0, resolver: resolver, maxConcurrentDeliveries: 2)
+        config.transport = RecordingWebhookTransport(posted: posted)
+        let store = MCPInMemoryEventSubscriptionStore()
+        let server = DeliveryTestServer(store: store, configuration: config)
+        let firstId = try #require(try await subscribe(server, token: "alice"))
+        let secondId = try #require(try await subscribe(server, token: "bob"))
+        let ordered = try await store.subscriptions(principal: nil, now: Date())
+        let heldId = try #require(ordered.first?.id)
+        let queuedId = try #require(ordered.last?.id)
+        #expect(Set(ordered.map(\.id)) == [firstId, secondId])
+
+        let task = Task { try await emitBuild(server) }
+        // Both attempts have passed the initial activity check and are suspended in DNS validation.
+        while validating.value < 2 { try await Task.sleep(nanoseconds: 10_000_000) }
+        let queuedPrincipal = queuedId == secondId ? "token:bob" : "token:alice"
+        let removed = try await server.revokeEventSubscriptions(forPrincipal: queuedPrincipal)
+        #expect(removed.contains { $0.id == queuedId })
+        releaseValidation.modify { $0 = true }
+
+        let outcomes = try await task.value
+        #expect(outcomes.count == 2)
+        let byId = Dictionary(uniqueKeysWithValues: outcomes.map { ($0.subscriptionId, $0) })
+        #expect(byId[heldId]?.status == .delivered)
+        #expect(byId[queuedId]?.status == .failed)
+        #expect(byId[queuedId]?.error == "subscription inactive")
+        #expect(byId[queuedId]?.attempts == 0)
+        #expect(posted.value == [heldId])
+    }
+
+    @Test("Webhook signatures are generated after the final activity lookup")
+    func signatureFollowsFinalActivityLookup() async throws {
+        let receiver = try LocalWebhookReceiver { _, _ in (200, [:]) }
+        defer { receiver.stop() }
+        let initialTime = Date(timeIntervalSince1970: 1_700_000_000)
+        let deliveryTime = initialTime.addingTimeInterval(WebhookSigner.defaultTolerance + 1)
+        let clock = HTTPTransportBox(initialTime)
+        let store = DelayedLookupEventSubscriptionStore()
+        defer { store.releaseFinalLookup.value = true }
+        var config = configuration(port: receiver.port)
+        config.now = { clock.value }
+        let server = DeliveryTestServer(store: store, configuration: config)
+        _ = try #require(try await subscribe(server))
+
+        let task = Task { try await emitBuild(server, eventId: "evt_fresh_signature") }
+        while !store.finalLookupStarted.value { try await Task.sleep(nanoseconds: 10_000_000) }
+        clock.value = deliveryTime
+        store.releaseFinalLookup.value = true
+
+        let outcome = try #require(try await task.value.first)
+        #expect(outcome.status == .delivered)
+        let request = try #require(receiver.requests.first)
+        #expect(request.headers[WebhookSigner.timestampHeader] == String(Int(deliveryTime.timeIntervalSince1970)))
+        try WebhookSigner(secret: secret).verify(headers: request.headers, body: request.body, now: deliveryTime)
     }
 
     @Test("Cancelling emit cancels the in-flight transfer and stops later attempts")
