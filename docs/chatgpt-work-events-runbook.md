@@ -7,11 +7,11 @@ against a local receiver; ChatGPT Work itself is not exercised in CI.
 
 ## Prerequisites
 
-- A reachable SwiftMCP server on Streamable HTTP (`/mcp`) or MCP 2.0 HTTP that
-  advertises Events (modern `2026-07-28`, or legacy `initialize` with an
-  `events` capability when that path is configured).
+- A reachable SwiftMCP server on Streamable HTTP (`/mcp`) negotiating the
+  modern protocol revision (`2026-07-28`). Events are a modern-only feature:
+  legacy `initialize` sessions never advertise or serve `events/*`.
 - The demo server declares `ci.failed` (`@MCPEvent(name: "ci.failed")`) and a
-  tool `emitCIFailed` that calls `emit` for that event.
+  tool `emitCIFailed` that calls `emit` for that event (Server trait builds).
 - Persistent subscription storage if the process may restart
   (`MCPFileEventSubscriptionStore`).
 - Outbound HTTPS from the server host to ChatGPT’s callback URLs (public
@@ -22,10 +22,9 @@ against a local receiver; ChatGPT Work itself is not exercised in CI.
 
 1. **Register the server** as a ChatGPT plugin / connector pointing at your MCP
    HTTP endpoint. Prefer Streamable HTTP. Rescan whenever tools or events change.
-2. **Confirm discovery.** On modern HTTP the server answers `server/discover`
-   with `capabilities.extensions["io.modelcontextprotocol/events"]` (or the
-   wire `events` object). On a legacy initialize path, confirm `events` appears
-   in capabilities when Events are enabled for that session.
+2. **Confirm discovery.** The server answers `server/discover` with
+   `capabilities.extensions["io.modelcontextprotocol/events"]` (or the wire
+   `events` object) for revision `2026-07-28`.
 3. **Confirm listing.** ChatGPT (or a client) calls `events/list`. Expect
    `ci.failed` with `delivery: ["webhook"]`, a filter `inputSchema`
    (`pipeline`, `branch` on the demo), and a `payloadSchema`.

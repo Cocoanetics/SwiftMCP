@@ -31,7 +31,7 @@ extension DemoServer {
     #if Server
     /// Emits a sample `ci.failed` event to every matching webhook subscription.
     /// - Returns: How many webhook deliveries were attempted
-    @MCPTool(description: "Emits a sample ci.failed event to matching webhook subscribers", hints: [.idempotent])
+    @MCPTool(description: "Emits a sample ci.failed event to matching webhook subscribers")
     func emitCIFailed(
         pipeline: String,
         branch: String,
