@@ -150,8 +150,8 @@ public extension MCPServer {
         if let response = await dispatchPromptRequest(requestData) {
             return response
         }
-        if requestData.method == MCPEventsExtension.listMethod {
-            return await handleEventsList(requestData)
+        if let response = await dispatchEventsRequest(requestData) {
+            return response
         }
         if let response = await dispatchLoggingRequest(requestData) {
             return response
@@ -375,7 +375,7 @@ enum ModernRequestMethods {
         "resources/list", "resources/templates/list", "resources/read",
         "prompts/list", "prompts/get",
         "completion/complete",
-        "events/list"
+        "events/list", "events/subscribe", "events/unsubscribe"
     ]
 
     /// The modern long-lived notification stream, served by the transport itself.
@@ -384,5 +384,17 @@ enum ModernRequestMethods {
     /// Whether `method` belongs to the modern request surface.
     static func isKnown(_ method: String) -> Bool {
         known.contains(method) || method == subscriptionsListen
+    }
+}
+
+extension MCPServer {
+    /// Routes the `events/*` methods; `nil` when `request` is not one of them.
+    fileprivate func dispatchEventsRequest(_ request: JSONRPCMessage.JSONRPCRequestData) async -> JSONRPCMessage? {
+        switch request.method {
+        case MCPEventsExtension.listMethod: return await handleEventsList(request)
+        case MCPEventsExtension.subscribeMethod: return await handleEventsSubscribe(request)
+        case MCPEventsExtension.unsubscribeMethod: return await handleEventsUnsubscribe(request)
+        default: return nil
+        }
     }
 }
