@@ -51,9 +51,11 @@ extension MCPEventDeliveryTests {
     @Test("Queued deliveries recheck activity before the first POST and before retries")
     func recheckActivityBeforeDelivery() async throws {
         let releaseFirst = HTTPTransportBox(false)
+        defer { releaseFirst.modify { $0 = true } }
         let sawFirst = HTTPTransportBox(false)
-        let receiver = try LocalWebhookReceiver { number, _ in
-            if number == 1 {
+        let heldSubscription = HTTPTransportBox<String?>(nil)
+        let receiver = try LocalWebhookReceiver { _, request in
+            if request.headers["x-mcp-subscription-id"] == heldSubscription.value {
                 sawFirst.modify { $0 = true }
                 while !releaseFirst.value { Thread.sleep(forTimeInterval: 0.01) }
             }
@@ -65,21 +67,72 @@ extension MCPEventDeliveryTests {
         let server = DeliveryTestServer(store: store, configuration: config)
         let firstId = try #require(try await subscribe(server, token: "alice"))
         let secondId = try #require(try await subscribe(server, token: "bob"))
+        let ordered = try await store.subscriptions(principal: nil, now: Date())
+        let heldId = try #require(ordered.first?.id)
+        let queuedId = try #require(ordered.last?.id)
+        #expect(Set(ordered.map(\.id)) == [firstId, secondId])
+        heldSubscription.modify { $0 = heldId }
 
         let task = Task { try await emitBuild(server) }
         while !sawFirst.value { try await Task.sleep(nanoseconds: 10_000_000) }
-        let removed = try await server.revokeEventSubscriptions(forPrincipal: "token:bob")
-        #expect(removed.contains { $0.id == secondId })
+        let queuedPrincipal = queuedId == secondId ? "token:bob" : "token:alice"
+        let removed = try await server.revokeEventSubscriptions(forPrincipal: queuedPrincipal)
+        #expect(removed.contains { $0.id == queuedId })
         releaseFirst.modify { $0 = true }
 
         let outcomes = try await task.value
         #expect(outcomes.count == 2)
         let byId = Dictionary(uniqueKeysWithValues: outcomes.map { ($0.subscriptionId, $0) })
-        #expect(byId[firstId]?.status == .delivered)
-        #expect(byId[secondId]?.status == .failed)
-        #expect(byId[secondId]?.error == "subscription inactive")
-        #expect(byId[secondId]?.attempts == 0)
+        #expect(byId[heldId]?.status == .delivered)
+        #expect(byId[queuedId]?.status == .failed)
+        #expect(byId[queuedId]?.error == "subscription inactive")
+        #expect(byId[queuedId]?.attempts == 0)
         #expect(receiver.requests.count == 1)
+        #expect(receiver.requests.first?.headers["x-mcp-subscription-id"] == heldId)
+    }
+
+    @Test("Concurrent deliveries recheck activity after URL validation and before POST")
+    func recheckActivityAfterURLValidation() async throws {
+        let releaseValidation = HTTPTransportBox(false)
+        defer { releaseValidation.modify { $0 = true } }
+        let validating = HTTPTransportBox(0)
+        let receiver = try LocalWebhookReceiver { _, _ in (200, [:]) }
+        defer { receiver.stop() }
+        let config = configuration(
+            port: receiver.port,
+            resolver: { _ in
+                validating.modify { $0 += 1 }
+                while !releaseValidation.value { try await Task.sleep(nanoseconds: 10_000_000) }
+                return ["93.184.216.34"]
+            },
+            maxConcurrentDeliveries: 2
+        )
+        let store = MCPInMemoryEventSubscriptionStore()
+        let server = DeliveryTestServer(store: store, configuration: config)
+        let firstId = try #require(try await subscribe(server, token: "alice"))
+        let secondId = try #require(try await subscribe(server, token: "bob"))
+        let ordered = try await store.subscriptions(principal: nil, now: Date())
+        let heldId = try #require(ordered.first?.id)
+        let queuedId = try #require(ordered.last?.id)
+        #expect(Set(ordered.map(\.id)) == [firstId, secondId])
+
+        let task = Task { try await emitBuild(server) }
+        // Both attempts have passed the initial activity check and are suspended in DNS validation.
+        while validating.value < 2 { try await Task.sleep(nanoseconds: 10_000_000) }
+        let queuedPrincipal = queuedId == secondId ? "token:bob" : "token:alice"
+        let removed = try await server.revokeEventSubscriptions(forPrincipal: queuedPrincipal)
+        #expect(removed.contains { $0.id == queuedId })
+        releaseValidation.modify { $0 = true }
+
+        let outcomes = try await task.value
+        #expect(outcomes.count == 2)
+        let byId = Dictionary(uniqueKeysWithValues: outcomes.map { ($0.subscriptionId, $0) })
+        #expect(byId[heldId]?.status == .delivered)
+        #expect(byId[queuedId]?.status == .failed)
+        #expect(byId[queuedId]?.error == "subscription inactive")
+        #expect(byId[queuedId]?.attempts == 0)
+        #expect(receiver.requests.count == 1)
+        #expect(receiver.requests.first?.headers["x-mcp-subscription-id"] == heldId)
     }
 
     @Test("Cancelling emit cancels the in-flight transfer and stops later attempts")

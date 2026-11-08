@@ -219,6 +219,12 @@ enum MCPEventDeliveryEngine {
             headers[subscriptionIdHeader] = current.id
             headers["Content-Type"] = "application/json"
 
+            // Activity can change while awaiting DNS validation, before the POST starts.
+            guard let latest = try await store.subscription(id: subscription.id, now: configuration.now()),
+                  latest.isDeliverable(at: configuration.now()) else {
+                return outcome(.failed, attempt - 1, lastStatus, "subscription inactive")
+            }
+
             do {
                 try Task.checkCancellation()
                 let response = try await configuration.transport.post(
