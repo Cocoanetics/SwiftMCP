@@ -94,8 +94,16 @@ struct HTTPTransportLifecycleTests {
             let port = transport.port
             let churn = ConnectionChurn(port: port, threads: churnThreads)
             churn.start()
-            try await Task.sleep(nanoseconds: 2_000_000)
-            try await transport.stop()
+            // The time limit cancels this task: the churn threads ignore task
+            // cancellation, so they and the transport are wound down on every exit.
+            defer { churn.stop() }
+            do {
+                try await Task.sleep(nanoseconds: 2_000_000)
+                try await transport.stop()
+            } catch {
+                try? await transport.stop()
+                throw error
+            }
             churn.stop()
             // The listener is gone before stop() returns: nothing accepts anymore.
             #expect(!ConnectionChurn.connectOnce(port: port))
