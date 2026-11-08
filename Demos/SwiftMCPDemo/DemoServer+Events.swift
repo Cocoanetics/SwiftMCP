@@ -28,6 +28,7 @@ extension DemoServer {
         CIFailedPayload(pipeline: "", branch: "", commit: "", url: "", message: "")
     }
 
+    #if Server
     /// Emits a sample `ci.failed` event to every matching webhook subscription.
     /// - Returns: How many webhook deliveries were attempted
     @MCPTool(description: "Emits a sample ci.failed event to matching webhook subscribers", hints: [.idempotent])
@@ -49,6 +50,7 @@ extension DemoServer {
             url: url,
             message: message
         )
+        // `emit` lives behind the Server trait (webhook transport / Crypto).
         let outcomes = try await emit(
             "ci.failed",
             payload,
@@ -59,6 +61,7 @@ extension DemoServer {
         )
         return outcomes.count
     }
+    #endif
 }
 
 extension DemoServer {
