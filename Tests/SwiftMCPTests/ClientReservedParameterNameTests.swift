@@ -1,3 +1,4 @@
+import Dispatch
 import Foundation
 import Testing
 @testable import SwiftMCP
@@ -36,42 +37,71 @@ final class ReservedNamesFixtureServer: Sendable {
     }
 }
 
-@Suite("Client reserved parameter names")
+@Suite("Client reserved parameter names", .timeLimit(.minutes(1)))
 struct ClientReservedParameterNameTests {
 
-    private func makeClient() async throws -> (MCPServerProxy, ReservedNamesFixtureServer.Client) {
+    private func withClient(
+        _ operation: (ReservedNamesFixtureServer.Client) async throws -> Void
+    ) async throws {
         let proxy = MCPServerProxy(config: .stdioHandles(server: ReservedNamesFixtureServer()))
-        try await proxy.connect(clientName: "reserved-names", clientVersion: "1")
-        return (proxy, ReservedNamesFixtureServer.Client(proxy: proxy))
+        do {
+            try await proxy.connect(clientName: "reserved-names", clientVersion: "1")
+            try await operation(ReservedNamesFixtureServer.Client(proxy: proxy))
+        } catch {
+            await proxy.disconnect()
+            throw error
+        }
+        await proxy.disconnect()
+    }
+
+    /// Synchronous clients wait on a semaphore. Keep that wait off the cooperative
+    /// executor so the request can run even on the two-core Android emulator.
+    private func callSynchronously<Value: Sendable>(
+        _ operation: @escaping @Sendable () throws -> Value
+    ) async throws -> Value {
+        try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global().async {
+                continuation.resume(with: Result(catching: operation))
+            }
+        }
     }
 
     @Test("a synchronous tool parameter named `arguments` reaches the server")
     func syncToolArguments() async throws {
-        let (proxy, client) = try await makeClient()
-        defer { Task { await proxy.disconnect() } }
-        #expect(try client.count(arguments: ["a"]) == 1)
+        try await withClient { client in
+            let count = try await callSynchronously { try client.count(arguments: ["a"]) }
+            #expect(count == 1)
+        }
     }
 
     @Test("an async tool parameter named `arguments` reaches the server")
     func asyncToolArguments() async throws {
-        let (proxy, client) = try await makeClient()
-        defer { Task { await proxy.disconnect() } }
-        #expect(try await client.countAsync(arguments: ["a", "b"]) == 2)
+        try await withClient { client in
+            let count = try await client.countAsync(arguments: ["a", "b"])
+            #expect(count == 2)
+        }
     }
 
     @Test("a tool parameter named `capturedArguments` reaches the server")
     func toolCapturedArguments() async throws {
-        let (proxy, client) = try await makeClient()
-        defer { Task { await proxy.disconnect() } }
-        #expect(try client.join(capturedArguments: ["x"], arguments: ["y"]) == "x,y")
+        try await withClient { client in
+            let joined = try await callSynchronously {
+                try client.join(capturedArguments: ["x"], arguments: ["y"])
+            }
+            #expect(joined == "x,y")
+        }
     }
 
     @Test("parameters named like the generated locals' default names reach the server")
     func toolReservedLocalNames() async throws {
-        let (proxy, client) = try await makeClient()
-        defer { Task { await proxy.disconnect() } }
-        #expect(try client.joinReserved(__mcpArguments: ["x"], __mcpCapturedArguments: "y") == "x,y")
-        #expect(try client.joinReserved(__mcpArguments: ["x"]) == "x,-")
+        try await withClient { client in
+            let joined = try await callSynchronously {
+                try client.joinReserved(__mcpArguments: ["x"], __mcpCapturedArguments: "y")
+            }
+            #expect(joined == "x,y")
+            let defaulted = try await callSynchronously { try client.joinReserved(__mcpArguments: ["x"]) }
+            #expect(defaulted == "x,-")
+        }
     }
 
     @Test("ProxyGenerator does not shadow a tool parameter named `arguments`")
