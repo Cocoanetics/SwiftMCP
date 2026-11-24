@@ -28,24 +28,44 @@ extension ProxyGenerator {
             return lines
         }
 
-        lines.append("        var __mcpArguments: JSONDictionary = [:]")
+        let argumentsName = argumentsLocalName(for: parameters)
+        lines.append(contentsOf: encodedArgumentLines(for: parameters, variableName: argumentsName))
+        if decodesStructured(returnType) {
+            let call = "proxy.callTool(\"\(tool.name)\", arguments: \(argumentsName), as: \(returnType).self)"
+            lines.append("        return try await \(call)")
+        } else {
+            lines.append("        let text = try await proxy.callTool(\"\(tool.name)\", arguments: \(argumentsName))")
+            lines.append(contentsOf: returnLines(returnType: returnType))
+        }
+        lines.append("    }")
+        return lines
+    }
+
+    /// Name of the generated local that collects encoded arguments. A local
+    /// named like a parameter shadows it, so the (empty) dictionary itself
+    /// gets encoded (#274); append underscores until it is unique.
+    static func argumentsLocalName(for parameters: [MethodParameter]) -> String {
+        let parameterNames = Set(parameters.map {
+            $0.swiftName.trimmingCharacters(in: CharacterSet(charactersIn: "`"))
+        })
+        var name = "__mcpArguments"
+        while parameterNames.contains(name) {
+            name += "_"
+        }
+        return name
+    }
+
+    static func encodedArgumentLines(for parameters: [MethodParameter], variableName: String) -> [String] {
+        var lines = ["        var \(variableName): JSONDictionary = [:]"]
         for param in parameters {
             let key = param.originalName
             let encode = "try MCPClientArgumentEncoder.encode(\(param.swiftName))"
             if param.isOptional {
-                lines.append("        if let \(param.swiftName) { __mcpArguments[\"\(key)\"] = \(encode) }")
+                lines.append("        if let \(param.swiftName) { \(variableName)[\"\(key)\"] = \(encode) }")
             } else {
-                lines.append("        __mcpArguments[\"\(key)\"] = \(encode)")
+                lines.append("        \(variableName)[\"\(key)\"] = \(encode)")
             }
         }
-        if decodesStructured(returnType) {
-            let call = "proxy.callTool(\"\(tool.name)\", arguments: __mcpArguments, as: \(returnType).self)"
-            lines.append("        return try await \(call)")
-        } else {
-            lines.append("        let text = try await proxy.callTool(\"\(tool.name)\", arguments: __mcpArguments)")
-            lines.append(contentsOf: returnLines(returnType: returnType))
-        }
-        lines.append("    }")
         return lines
     }
 

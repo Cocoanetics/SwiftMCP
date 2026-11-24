@@ -10,14 +10,22 @@ import Foundation
 import SwiftSyntax
 
 extension MCPServerMacro {
-    /// Name of the generated local that collects encoded arguments. The `__mcp`
-    /// prefix keeps it from shadowing a tool parameter such as `arguments`,
-    /// which would otherwise encode the (empty) dictionary itself (#274).
-    static let clientArgumentsName = "__mcpArguments"
-
-    /// Name of the immutable copy captured by the blocking call closure in
-    /// synchronous client methods.
-    static let clientCapturedArgumentsName = "__mcpCapturedArguments"
+    /// Names of the generated locals that collect encoded arguments and the
+    /// immutable copy captured by the blocking call closure in synchronous
+    /// client methods. A local named like a parameter shadows it, so the
+    /// (empty) dictionary itself gets encoded (#274); append underscores
+    /// until neither name collides with one of the method's parameters.
+    static func clientLocalNames(for parameters: [ClientParameter]) -> (arguments: String, captured: String) {
+        let parameterNames = Set(parameters.map { $0.name.trimmingCharacters(in: CharacterSet(charactersIn: "`")) })
+        func uniqueName(_ base: String) -> String {
+            var name = base
+            while parameterNames.contains(name) {
+                name += "_"
+            }
+            return name
+        }
+        return (uniqueName("__mcpArguments"), uniqueName("__mcpCapturedArguments"))
+    }
 
     static func makeClientMethodLines(metadata: ClientFunctionMetadata, wireToolName: String? = nil) -> [String] {
         var lines: [String] = []
@@ -71,6 +79,7 @@ extension MCPServerMacro {
         wireToolName: String?
     ) -> [String] {
         var lines: [String] = []
+        let localNames = clientLocalNames(for: metadata.parameters)
         // Use .MCPClientReturn for all return types. For most types this resolves to Self
         // (via extension Decodable). For @Schema single-array wrapper structs it resolves
         // to [Element], so the generated proxy returns the unwrapped array automatically.
@@ -83,13 +92,13 @@ extension MCPServerMacro {
         )
         lines.append(contentsOf: encodedArgumentLines(
             for: metadata.parameters,
-            variableName: clientArgumentsName,
+            variableName: localNames.arguments,
             indent: "        "
         ))
 
-        let argumentsName = (hasParameters && !metadata.isAsync) ? clientCapturedArgumentsName : clientArgumentsName
+        let argumentsName = (hasParameters && !metadata.isAsync) ? localNames.captured : localNames.arguments
         if hasParameters && !metadata.isAsync {
-            lines.append("        let \(clientCapturedArgumentsName) = \(clientArgumentsName)")
+            lines.append("        let \(localNames.captured) = \(localNames.arguments)")
         }
 
         let callExpression = toolCallExpression(
@@ -126,6 +135,7 @@ extension MCPServerMacro {
         templates: [String]
     ) -> [String] {
         var lines: [String] = []
+        let localNames = clientLocalNames(for: metadata.parameters)
         let clientReturnType = metadata.hasReturnClause ? "\(metadata.returnTypeString).MCPClientReturn" : nil
         let returnClause = clientReturnType.map { " -> \($0)" } ?? ""
 
@@ -135,15 +145,15 @@ extension MCPServerMacro {
         )
         lines.append(contentsOf: encodedArgumentLines(
             for: metadata.parameters,
-            variableName: clientArgumentsName,
+            variableName: localNames.arguments,
             indent: "        "
         ))
 
         let argumentsName = hasParameters
-            ? (metadata.isAsync ? clientArgumentsName : clientCapturedArgumentsName)
+            ? (metadata.isAsync ? localNames.arguments : localNames.captured)
             : "[:]"
         if hasParameters && !metadata.isAsync {
-            lines.append("        let \(clientCapturedArgumentsName) = \(clientArgumentsName)")
+            lines.append("        let \(localNames.captured) = \(localNames.arguments)")
         }
 
         let orderedTemplates = templates.sorted {
@@ -262,19 +272,20 @@ extension MCPServerMacro {
         hasParameters: Bool
     ) -> [String] {
         var lines: [String] = []
+        let localNames = clientLocalNames(for: metadata.parameters)
         lines.append(
             "    public func \(metadata.name)(\(signature))"
             + "\(effectSpecifiers) -> PromptResult {"
         )
         lines.append(contentsOf: encodedArgumentLines(
             for: metadata.parameters,
-            variableName: clientArgumentsName,
+            variableName: localNames.arguments,
             indent: "        "
         ))
 
-        let argumentsName = (hasParameters && !metadata.isAsync) ? clientCapturedArgumentsName : clientArgumentsName
+        let argumentsName = (hasParameters && !metadata.isAsync) ? localNames.captured : localNames.arguments
         if hasParameters && !metadata.isAsync {
-            lines.append("        let \(clientCapturedArgumentsName) = \(clientArgumentsName)")
+            lines.append("        let \(localNames.captured) = \(localNames.arguments)")
         }
 
         let callExpression = promptCallExpression(
