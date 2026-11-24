@@ -112,7 +112,7 @@ func emitToolClientMethod(_ method: DiscoveredMethod, wireToolName: String) -> S
     out.append("    public func \(method.functionName)(\(signature))\(effects)\(returnClause) {\n")
     out.append(encodedArgumentsLines(parameters: method.parameters, indent: "        "))
 
-    let argumentsName = toolArgumentsName(hasParams: hasParams, isAsync: method.isAsync, out: &out)
+    let argumentsName = toolArgumentsName(parameters: method.parameters, isAsync: method.isAsync, out: &out)
 
     let call = hasParams
         ? "proxy.callTool(\"\(wireToolName)\", arguments: \(argumentsName))"
@@ -134,14 +134,15 @@ func emitToolClientMethod(_ method: DiscoveredMethod, wireToolName: String) -> S
 }
 
 /// Computes the variable name to reference encoded arguments and, when
-/// the call site is synchronous, emits the `let capturedArguments` line.
-private func toolArgumentsName(hasParams: Bool, isAsync: Bool, out: inout String) -> String {
-    if hasParams && !isAsync {
-        out.append("        let capturedArguments = arguments\n")
-        return "capturedArguments"
+/// the call site is synchronous, emits the line that captures them.
+private func toolArgumentsName(parameters: [DiscoveredParameter], isAsync: Bool, out: inout String) -> String {
+    let names = argumentLocalNames(for: parameters)
+    if !parameters.isEmpty && !isAsync {
+        out.append("        let \(names.captured) = \(names.arguments)\n")
+        return names.captured
     }
-    if hasParams {
-        return "arguments"
+    if !parameters.isEmpty {
+        return names.arguments
     }
     return ""
 }
@@ -155,7 +156,7 @@ func emitResourceClientMethod(_ method: DiscoveredMethod, templates: [String]) -
     out.append(encodedArgumentsLines(parameters: method.parameters, indent: "        "))
 
     let hasParams = !method.parameters.isEmpty
-    let argumentsName = resourceArgumentsName(hasParams: hasParams, isAsync: method.isAsync, out: &out)
+    let argumentsName = resourceArgumentsName(parameters: method.parameters, isAsync: method.isAsync, out: &out)
 
     out.append(resourceURIConstructionLines(method: method, templates: templates, argumentsName: argumentsName))
 
@@ -178,13 +179,14 @@ private func resourceMethodSignature(_ method: DiscoveredMethod) -> String {
     return "    public func \(method.functionName)(\(signature))\(effects)\(returnClause) {\n"
 }
 
-private func resourceArgumentsName(hasParams: Bool, isAsync: Bool, out: inout String) -> String {
-    if hasParams && !isAsync {
-        out.append("        let capturedArguments = arguments\n")
-        return "capturedArguments"
+private func resourceArgumentsName(parameters: [DiscoveredParameter], isAsync: Bool, out: inout String) -> String {
+    let names = argumentLocalNames(for: parameters)
+    if !parameters.isEmpty && !isAsync {
+        out.append("        let \(names.captured) = \(names.arguments)\n")
+        return names.captured
     }
-    if hasParams {
-        return "arguments"
+    if !parameters.isEmpty {
+        return names.arguments
     }
     return "[:]"
 }
@@ -272,7 +274,7 @@ func emitPromptClientMethod(_ method: DiscoveredMethod) -> String {
     out.append("    public func \(method.functionName)(\(signature))\(effects) -> PromptResult {\n")
     out.append(encodedArgumentsLines(parameters: method.parameters, indent: "        "))
 
-    let argumentsName = toolArgumentsName(hasParams: hasParams, isAsync: method.isAsync, out: &out)
+    let argumentsName = toolArgumentsName(parameters: method.parameters, isAsync: method.isAsync, out: &out)
 
     let call = hasParams
         ? "proxy.getPrompt(name: \"\(method.functionName)\", arguments: \(argumentsName))"
@@ -308,15 +310,32 @@ func effectSpecifiers(isAsync: Bool, throwsKeyword: String) -> String {
     return " " + parts.joined(separator: " ")
 }
 
+/// Names of the generated locals that collect encoded arguments and the copy
+/// captured by a synchronous call's closure. A local named like a parameter
+/// shadows it, so the (empty) dictionary itself gets encoded (#274); append
+/// underscores until neither name collides with one of the parameters.
+func argumentLocalNames(for parameters: [DiscoveredParameter]) -> (arguments: String, captured: String) {
+    let parameterNames = Set(parameters.map { $0.name.trimmingCharacters(in: CharacterSet(charactersIn: "`")) })
+    func uniqueName(_ base: String) -> String {
+        var name = base
+        while parameterNames.contains(name) {
+            name += "_"
+        }
+        return name
+    }
+    return (uniqueName("__mcpArguments"), uniqueName("__mcpCapturedArguments"))
+}
+
 func encodedArgumentsLines(parameters: [DiscoveredParameter], indent: String) -> String {
     guard !parameters.isEmpty else { return "" }
-    var out = "\(indent)var arguments: JSONDictionary = [:]\n"
+    let variableName = argumentLocalNames(for: parameters).arguments
+    var out = "\(indent)var \(variableName): JSONDictionary = [:]\n"
     for param in parameters {
         let encode = "try MCPClientArgumentEncoder.encode(\(param.name))"
         if param.isOptional {
-            out.append("\(indent)if let \(param.name) { arguments[\"\(param.name)\"] = \(encode) }\n")
+            out.append("\(indent)if let \(param.name) { \(variableName)[\"\(param.name)\"] = \(encode) }\n")
         } else {
-            out.append("\(indent)arguments[\"\(param.name)\"] = \(encode)\n")
+            out.append("\(indent)\(variableName)[\"\(param.name)\"] = \(encode)\n")
         }
     }
     return out
