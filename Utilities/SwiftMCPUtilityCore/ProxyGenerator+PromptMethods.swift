@@ -70,17 +70,17 @@ extension ProxyGenerator {
             return
         }
 
-        lines.append("        var arguments: JSONDictionary = [:]")
+        lines.append("        var __mcpArguments: JSONDictionary = [:]")
         for parameter in parameters {
             let key = parameter.originalName
             let encode = "try MCPClientArgumentEncoder.encode(\(parameter.swiftName))"
             if parameter.isOptional {
-                lines.append("        if let \(parameter.swiftName) { arguments[\"\(key)\"] = \(encode) }")
+                lines.append("        if let \(parameter.swiftName) { __mcpArguments[\"\(key)\"] = \(encode) }")
             } else {
-                lines.append("        arguments[\"\(key)\"] = \(encode)")
+                lines.append("        __mcpArguments[\"\(key)\"] = \(encode)")
             }
         }
-        lines.append("        return try await getPrompt(name: \"\(escapedName)\", arguments: arguments)")
+        lines.append("        return try await getPrompt(name: \"\(escapedName)\", arguments: __mcpArguments)")
         lines.append("    }")
     }
 

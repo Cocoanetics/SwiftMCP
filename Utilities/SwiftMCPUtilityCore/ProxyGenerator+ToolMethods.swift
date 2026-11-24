@@ -28,21 +28,21 @@ extension ProxyGenerator {
             return lines
         }
 
-        lines.append("        var arguments: JSONDictionary = [:]")
+        lines.append("        var __mcpArguments: JSONDictionary = [:]")
         for param in parameters {
             let key = param.originalName
             let encode = "try MCPClientArgumentEncoder.encode(\(param.swiftName))"
             if param.isOptional {
-                lines.append("        if let \(param.swiftName) { arguments[\"\(key)\"] = \(encode) }")
+                lines.append("        if let \(param.swiftName) { __mcpArguments[\"\(key)\"] = \(encode) }")
             } else {
-                lines.append("        arguments[\"\(key)\"] = \(encode)")
+                lines.append("        __mcpArguments[\"\(key)\"] = \(encode)")
             }
         }
         if decodesStructured(returnType) {
-            let call = "proxy.callTool(\"\(tool.name)\", arguments: arguments, as: \(returnType).self)"
+            let call = "proxy.callTool(\"\(tool.name)\", arguments: __mcpArguments, as: \(returnType).self)"
             lines.append("        return try await \(call)")
         } else {
-            lines.append("        let text = try await proxy.callTool(\"\(tool.name)\", arguments: arguments)")
+            lines.append("        let text = try await proxy.callTool(\"\(tool.name)\", arguments: __mcpArguments)")
             lines.append(contentsOf: returnLines(returnType: returnType))
         }
         lines.append("    }")

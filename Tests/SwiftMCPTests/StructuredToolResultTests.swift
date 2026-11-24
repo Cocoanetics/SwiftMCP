@@ -124,7 +124,7 @@ struct StructuredToolResultTests {
             tools: [tool("get_ride", output: .object(.init(properties: ["ride": ride], required: ["ride"])))]
         ).description
         #expect(source.contains(
-            "return try await proxy.callTool(\"get_ride\", arguments: arguments, as: GetRideResponse.self)"
+            "return try await proxy.callTool(\"get_ride\", arguments: __mcpArguments, as: GetRideResponse.self)"
         ))
         #expect(!source.contains("MCPClientResultDecoder"))
     }
@@ -132,7 +132,7 @@ struct StructuredToolResultTests {
     @Test("a text return keeps the text path")
     func generatorKeepsTextPath() throws {
         let source = ProxyGenerator.generate(typeName: "P", tools: [tool("echo", output: nil)]).description
-        #expect(source.contains("let text = try await proxy.callTool(\"echo\", arguments: arguments)"))
+        #expect(source.contains("let text = try await proxy.callTool(\"echo\", arguments: __mcpArguments)"))
         #expect(source.contains("return text"))
     }
 

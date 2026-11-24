@@ -51,9 +51,9 @@ struct ProxyGeneratorParameterNamingTests {
         #expect(source.contains("rideId: String"))
         #expect(source.contains("pushDestination: Bool? = nil"))
         // The JSON argument keys must stay exactly as the server declared them.
-        #expect(source.contains("arguments[\"ride_id\"] = try MCPClientArgumentEncoder.encode(rideId)"))
-        #expect(source.contains("arguments[\"push_destination\"]"))
-        #expect(!source.contains("arguments[\"rideId\"]"))
+        #expect(source.contains("__mcpArguments[\"ride_id\"] = try MCPClientArgumentEncoder.encode(rideId)"))
+        #expect(source.contains("__mcpArguments[\"push_destination\"]"))
+        #expect(!source.contains("__mcpArguments[\"rideId\"]"))
     }
 
     @Test("snakeCase renames camelCased parameter labels")
@@ -69,7 +69,7 @@ struct ProxyGeneratorParameterNamingTests {
         ).description
 
         #expect(source.contains("ride_id: String"))
-        #expect(source.contains("arguments[\"rideId\"] = try MCPClientArgumentEncoder.encode(ride_id)"))
+        #expect(source.contains("__mcpArguments[\"rideId\"] = try MCPClientArgumentEncoder.encode(ride_id)"))
     }
 
     @Test("Function naming is independent of parameter naming")
@@ -103,7 +103,7 @@ struct ProxyGeneratorParameterNamingTests {
         // Both parameters survive, and both wire keys are still sent.
         #expect(source.contains("ride_id: String"))
         #expect(source.contains("rideId: String"))
-        #expect(source.contains("arguments[\"ride_id\"]"))
-        #expect(source.contains("arguments[\"rideId\"]"))
+        #expect(source.contains("__mcpArguments[\"ride_id\"]"))
+        #expect(source.contains("__mcpArguments[\"rideId\"]"))
     }
 }

@@ -10,6 +10,15 @@ import Foundation
 import SwiftSyntax
 
 extension MCPServerMacro {
+    /// Name of the generated local that collects encoded arguments. The `__mcp`
+    /// prefix keeps it from shadowing a tool parameter such as `arguments`,
+    /// which would otherwise encode the (empty) dictionary itself (#274).
+    static let clientArgumentsName = "__mcpArguments"
+
+    /// Name of the immutable copy captured by the blocking call closure in
+    /// synchronous client methods.
+    static let clientCapturedArgumentsName = "__mcpCapturedArguments"
+
     static func makeClientMethodLines(metadata: ClientFunctionMetadata, wireToolName: String? = nil) -> [String] {
         var lines: [String] = []
         lines.append(contentsOf: docCommentLines(for: metadata))
@@ -74,13 +83,13 @@ extension MCPServerMacro {
         )
         lines.append(contentsOf: encodedArgumentLines(
             for: metadata.parameters,
-            variableName: "arguments",
+            variableName: clientArgumentsName,
             indent: "        "
         ))
 
-        let argumentsName = (hasParameters && !metadata.isAsync) ? "capturedArguments" : "arguments"
+        let argumentsName = (hasParameters && !metadata.isAsync) ? clientCapturedArgumentsName : clientArgumentsName
         if hasParameters && !metadata.isAsync {
-            lines.append("        let capturedArguments = arguments")
+            lines.append("        let \(clientCapturedArgumentsName) = \(clientArgumentsName)")
         }
 
         let callExpression = toolCallExpression(
@@ -126,15 +135,15 @@ extension MCPServerMacro {
         )
         lines.append(contentsOf: encodedArgumentLines(
             for: metadata.parameters,
-            variableName: "arguments",
+            variableName: clientArgumentsName,
             indent: "        "
         ))
 
         let argumentsName = hasParameters
-            ? (metadata.isAsync ? "arguments" : "capturedArguments")
+            ? (metadata.isAsync ? clientArgumentsName : clientCapturedArgumentsName)
             : "[:]"
         if hasParameters && !metadata.isAsync {
-            lines.append("        let capturedArguments = arguments")
+            lines.append("        let \(clientCapturedArgumentsName) = \(clientArgumentsName)")
         }
 
         let orderedTemplates = templates.sorted {
@@ -259,13 +268,13 @@ extension MCPServerMacro {
         )
         lines.append(contentsOf: encodedArgumentLines(
             for: metadata.parameters,
-            variableName: "arguments",
+            variableName: clientArgumentsName,
             indent: "        "
         ))
 
-        let argumentsName = (hasParameters && !metadata.isAsync) ? "capturedArguments" : "arguments"
+        let argumentsName = (hasParameters && !metadata.isAsync) ? clientCapturedArgumentsName : clientArgumentsName
         if hasParameters && !metadata.isAsync {
-            lines.append("        let capturedArguments = arguments")
+            lines.append("        let \(clientCapturedArgumentsName) = \(clientArgumentsName)")
         }
 
         let callExpression = promptCallExpression(

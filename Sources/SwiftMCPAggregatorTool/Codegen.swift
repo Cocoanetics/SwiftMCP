@@ -134,14 +134,14 @@ func emitToolClientMethod(_ method: DiscoveredMethod, wireToolName: String) -> S
 }
 
 /// Computes the variable name to reference encoded arguments and, when
-/// the call site is synchronous, emits the `let capturedArguments` line.
+/// the call site is synchronous, emits the `let __mcpCapturedArguments` line.
 private func toolArgumentsName(hasParams: Bool, isAsync: Bool, out: inout String) -> String {
     if hasParams && !isAsync {
-        out.append("        let capturedArguments = arguments\n")
-        return "capturedArguments"
+        out.append("        let __mcpCapturedArguments = __mcpArguments\n")
+        return "__mcpCapturedArguments"
     }
     if hasParams {
-        return "arguments"
+        return "__mcpArguments"
     }
     return ""
 }
@@ -180,11 +180,11 @@ private func resourceMethodSignature(_ method: DiscoveredMethod) -> String {
 
 private func resourceArgumentsName(hasParams: Bool, isAsync: Bool, out: inout String) -> String {
     if hasParams && !isAsync {
-        out.append("        let capturedArguments = arguments\n")
-        return "capturedArguments"
+        out.append("        let __mcpCapturedArguments = __mcpArguments\n")
+        return "__mcpCapturedArguments"
     }
     if hasParams {
-        return "arguments"
+        return "__mcpArguments"
     }
     return "[:]"
 }
@@ -310,13 +310,13 @@ func effectSpecifiers(isAsync: Bool, throwsKeyword: String) -> String {
 
 func encodedArgumentsLines(parameters: [DiscoveredParameter], indent: String) -> String {
     guard !parameters.isEmpty else { return "" }
-    var out = "\(indent)var arguments: JSONDictionary = [:]\n"
+    var out = "\(indent)var __mcpArguments: JSONDictionary = [:]\n"
     for param in parameters {
         let encode = "try MCPClientArgumentEncoder.encode(\(param.name))"
         if param.isOptional {
-            out.append("\(indent)if let \(param.name) { arguments[\"\(param.name)\"] = \(encode) }\n")
+            out.append("\(indent)if let \(param.name) { __mcpArguments[\"\(param.name)\"] = \(encode) }\n")
         } else {
-            out.append("\(indent)arguments[\"\(param.name)\"] = \(encode)\n")
+            out.append("\(indent)__mcpArguments[\"\(param.name)\"] = \(encode)\n")
         }
     }
     return out
