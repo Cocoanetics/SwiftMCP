@@ -8,13 +8,18 @@
 import Foundation
 
 extension String {
+    /// Removes control characters (Unicode category Cc), keeping tab, newline and carriage return.
+    ///
+    /// Everything else is kept, including non-ASCII text such as em dashes, en dashes in
+    /// ranges ("1–600"), arrows, accented letters and other scripts: a Swift string literal
+    /// holds them as they are, and dropping them changed what descriptions said.
     var removingUnprintableCharacters: String {
-        // Create a character set of printable ASCII characters (32-126) plus newline, tab, etc.
-        let printableASCII = CharacterSet(charactersIn: UnicodeScalar(32)...UnicodeScalar(126))
-        let printableCharacters = CharacterSet(charactersIn: " \t\n\r").union(printableASCII)
-
-        // Filter out any characters that are not in the printable set
-        return unicodeScalars.filter { printableCharacters.contains($0) }.map { String($0) }.joined()
+        let kept: Set<Unicode.Scalar> = ["\t", "\n", "\r"]
+        var result = String.UnicodeScalarView()
+        result.append(contentsOf: unicodeScalars.filter {
+            $0.properties.generalCategory != .control || kept.contains($0)
+        })
+        return String(result)
     }
 
     /// Escapes a string for use in a Swift string literal.

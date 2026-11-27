@@ -329,3 +329,28 @@ func testURLParameters() async throws {
 }
 
 // Schema tests live in MCPToolSchemaTests.swift
+
+// Test class whose documentation uses non-ASCII text
+@MCPServer
+final class UnicodeDocumentation {
+    /// Waits — between 1–600 seconds, then reports “done” › next
+    /// - Parameter seconds: How long to wait (1–600)
+    @MCPTool
+    func wait(seconds: Int) -> String {
+        return "done"
+    }
+}
+
+@Test("Tool and parameter descriptions keep non-ASCII text")
+func testUnicodeDocumentation() throws {
+    let tools = UnicodeDocumentation().mcpToolMetadata.convertedToTools()
+    let tool = try #require(tools.first { $0.name == "wait" })
+    #expect(tool.description == "Waits — between 1–600 seconds, then reports “done” › next")
+    guard case .object(let object, _) = tool.inputSchema,
+          case .number(title: _, description: let description, minimum: _, maximum: _, defaultValue: _) =
+              object.properties["seconds"] else {
+        Issue.record("Expected an object schema with a number parameter 'seconds'")
+        return
+    }
+    #expect(description == "How long to wait (1–600)")
+}
