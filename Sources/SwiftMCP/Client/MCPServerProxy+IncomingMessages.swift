@@ -73,8 +73,8 @@ extension MCPServerProxy {
     private func handlePingRequest(_ request: JSONRPCMessage.JSONRPCRequestData) async {
         guard let endpointURL = endpointURL else { return }
         guard case .sse(let sseConfig) = config else { return }
+        guard let session = try? sharedURLSession() else { return }
         let response = JSONRPCMessage.response(id: request.id, result: [:])
-        let session = sharedURLSession()
         var urlRequest = URLRequest(url: endpointURL)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")

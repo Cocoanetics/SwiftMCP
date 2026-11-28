@@ -27,20 +27,27 @@ extension MCPServerProxy {
         }
 
         let requestBody = try JSONRPCMessage.makeEncoder().encode(message)
+        let session = try sharedURLSession()
 
-        return try await streamableRequestResponse(
-            endpointURL: endpointURL,
-            sseConfig: sseConfig,
-            requestID: requestID,
-            requestBody: requestBody,
-            lastEventID: nil,
-            retryMilliseconds: 1000,
-            extraHeaders: extraHeaders
-        )
+        // Run the whole exchange under the session so `disconnect()` also ends
+        // a response that is still streaming.
+        return try await session.run {
+            try await self.streamableRequestResponse(
+                session: session,
+                endpointURL: endpointURL,
+                sseConfig: sseConfig,
+                requestID: requestID,
+                requestBody: requestBody,
+                lastEventID: nil,
+                retryMilliseconds: 1000,
+                extraHeaders: extraHeaders
+            )
+        }
     }
 
     // swiftlint:disable:next function_parameter_count function_body_length cyclomatic_complexity
     internal func streamableRequestResponse(
+        session: MCPProxyHTTPSession,
         endpointURL: URL,
         sseConfig: MCPServerSseConfig,
         requestID: JSONRPCID,
@@ -49,7 +56,6 @@ extension MCPServerProxy {
         retryMilliseconds: Int,
         extraHeaders: [String: String] = [:]
     ) async throws -> JSONRPCMessage {
-        let session = sharedURLSession()
         var request = URLRequest(url: endpointURL)
         request.httpMethod = requestBody == nil ? "GET" : "POST"
         request.timeoutInterval = Self.streamTimeout
@@ -94,6 +100,7 @@ extension MCPServerProxy {
             if contentType.contains("text/event-stream") {
                 return try await readStreamableSSE(
                     asyncBytes: asyncBytes,
+                    session: session,
                     endpointURL: endpointURL,
                     sseConfig: sseConfig,
                     requestID: requestID,
@@ -156,6 +163,7 @@ extension MCPServerProxy {
     // swiftlint:disable:next function_parameter_count function_body_length cyclomatic_complexity
     internal func readStreamableSSE(
         asyncBytes: URLSession.AsyncBytes,
+        session: MCPProxyHTTPSession,
         endpointURL: URL,
         sseConfig: MCPServerSseConfig,
         requestID: JSONRPCID,
@@ -196,9 +204,16 @@ extension MCPServerProxy {
                 "Request stream cancelled before response was received"
             )
         } catch {
+            // `disconnect()` cancelled the stream; there is nothing to resume.
+            if session.retired {
+                throw CancellationError()
+            }
             if let latestEventID {
                 try await Task.sleep(nanoseconds: UInt64(retryMilliseconds) * 1_000_000)
+                // Resume on the session this request started on: a retired one
+                // refuses, so the retry never lands on a later connection.
                 return try await streamableRequestResponse(
+                    session: session,
                     endpointURL: endpointURL,
                     sseConfig: sseConfig,
                     requestID: requestID,
@@ -213,6 +228,7 @@ extension MCPServerProxy {
         if let latestEventID {
             try await Task.sleep(nanoseconds: UInt64(retryMilliseconds) * 1_000_000)
             return try await streamableRequestResponse(
+                session: session,
                 endpointURL: endpointURL,
                 sseConfig: sseConfig,
                 requestID: requestID,
