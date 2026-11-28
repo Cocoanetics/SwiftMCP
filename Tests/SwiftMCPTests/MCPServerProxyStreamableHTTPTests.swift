@@ -66,6 +66,117 @@ struct MCPServerProxyStreamableHTTPTests {
         try await proxy.ping()
     }
 
+    @Test("A request held at task startup across disconnect throws instead of using the invalidated session")
+    func disconnectDuringRequestStartupThrows() async throws {
+        let (transport, url) = try await startTransport()
+        defer { LoopbackTeardown.run { try? await transport.stop() } }
+
+        let proxy = MCPServerProxy(config: .sse(config: MCPServerSseConfig(url: url)))
+        defer { LoopbackTeardown.run { await proxy.disconnect() } }
+
+        try await proxy.connect()
+        let session = try #require(await proxy.httpSession)
+        let gate = StartGate()
+        session.setStartGate { await gate.pass() }
+        let startedTasks = session.startedTasks
+
+        // Hold the request after it captured the session but before it may
+        // create a Foundation task, then disconnect underneath it. (#277)
+        let ping = Task { try await proxy.ping() }
+        await gate.waitForArrival()
+        await proxy.disconnect()
+        #expect(session.retired)
+        #expect(await proxy.urlSession == nil)
+
+        await gate.release()
+        await #expect(throws: CancellationError.self) {
+            try await ping.value
+        }
+        #expect(session.startedTasks == startedTasks)
+    }
+
+    @Test("A request held across disconnect and reconnect does not migrate onto the new session")
+    func staleRequestDoesNotUseReconnectedSession() async throws {
+        let (transport, url) = try await startTransport()
+        defer { LoopbackTeardown.run { try? await transport.stop() } }
+
+        let proxy = MCPServerProxy(config: .sse(config: MCPServerSseConfig(url: url)))
+        defer { LoopbackTeardown.run { await proxy.disconnect() } }
+
+        try await proxy.connect()
+        let staleSession = try #require(await proxy.httpSession)
+        let gate = StartGate()
+        staleSession.setStartGate { await gate.pass() }
+        let staleStartedTasks = staleSession.startedTasks
+
+        let ping = Task { try await proxy.ping() }
+        await gate.waitForArrival()
+        await proxy.disconnect()
+        try await proxy.connect()
+        let freshSession = try #require(await proxy.httpSession)
+        #expect(freshSession !== staleSession)
+        let freshStartedTasks = freshSession.startedTasks
+
+        await gate.release()
+        await #expect(throws: CancellationError.self) {
+            try await ping.value
+        }
+        #expect(staleSession.startedTasks == staleStartedTasks)
+        #expect(freshSession.startedTasks == freshStartedTasks)
+
+        // The reconnected proxy is unaffected by the stale request.
+        try await proxy.ping()
+        #expect(await proxy.httpSession === freshSession)
+    }
+
+    @Test("Requests after disconnect fail without creating another session")
+    func requestAfterDisconnectDoesNotCreateSession() async throws {
+        let (transport, url) = try await startTransport()
+        defer { LoopbackTeardown.run { try? await transport.stop() } }
+
+        let proxy = MCPServerProxy(config: .sse(config: MCPServerSseConfig(url: url)))
+        defer { LoopbackTeardown.run { await proxy.disconnect() } }
+
+        try await proxy.connect()
+        await proxy.disconnect()
+
+        await #expect(throws: CancellationError.self) {
+            try await proxy.ping()
+        }
+        #expect(await proxy.urlSession == nil)
+        await #expect(throws: CancellationError.self) {
+            _ = try await proxy.sharedURLSession()
+        }
+        #expect(await proxy.urlSession == nil)
+
+        try await proxy.connect()
+        #expect(await proxy.urlSession != nil)
+        try await proxy.ping()
+    }
+
+    @Test("Disconnect terminates a request that is already in flight")
+    func disconnectTerminatesInFlightRequest() async throws {
+        let server = HeldToolServer()
+        let (transport, url) = try await startTransport(server: server)
+        defer { LoopbackTeardown.run { try? await transport.stop() } }
+        defer { LoopbackTeardown.run { await server.release() } }
+
+        let proxy = MCPServerProxy(config: .sse(config: MCPServerSseConfig(url: url)))
+        defer { LoopbackTeardown.run { await proxy.disconnect() } }
+
+        try await proxy.connect()
+        let call = Task { try await proxy.callToolResult("waitForRelease") }
+        let reachedServer = await waitForCondition {
+            await server.pendingCount > 0
+        }
+        #expect(reachedServer)
+
+        await proxy.disconnect()
+        await #expect(throws: (any Error).self) {
+            _ = try await call.value
+        }
+    }
+
     @Test("Proxy captures the negotiated protocol version and keeps sending matching headers")
     func capturesNegotiatedVersion() async throws {
         let (transport, url) = try await startTransport()
