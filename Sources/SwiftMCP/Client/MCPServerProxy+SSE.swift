@@ -13,17 +13,23 @@ extension MCPServerProxy {
     /// `Int`.
     static let streamTimeout: TimeInterval = TimeInterval(1 << 53)
 
-    internal func sharedURLSession() -> URLSession {
-        if let urlSession {
-            return urlSession
+    /// The current connection's HTTP session, created on first use. Throws
+    /// once `disconnect()` has run instead of lazily creating a session for a
+    /// connection that no longer exists; `connect()` re-enables it. (#277)
+    internal func sharedURLSession() throws -> MCPProxyHTTPSession {
+        if isDisconnecting {
+            throw CancellationError()
+        }
+        if let httpSession {
+            return httpSession
         }
 
         let configuration = URLSessionConfiguration.default
         // Keep the default finite request timeout for legacy POSTs. Streaming
         // requests override it on their URLRequest below.
         configuration.timeoutIntervalForResource = Self.streamTimeout
-        let session = URLSession(configuration: configuration)
-        urlSession = session
+        let session = MCPProxyHTTPSession(configuration: configuration)
+        httpSession = session
         return session
     }
 
@@ -141,7 +147,7 @@ extension MCPServerProxy {
             throw MCPServerProxyError.unsupportedProtocolVersion(supported: [])
         }
 
-        let session = sharedURLSession()
+        let session = try sharedURLSession()
         var request = URLRequest(url: sseConfig.url)
         request.httpMethod = "GET"
         configureSSEGETRequest(&request, sseConfig: sseConfig)
@@ -184,7 +190,9 @@ extension MCPServerProxy {
     // swiftlint:disable:next function_body_length
     internal func startStreamableGeneralSSE(sseConfig: MCPServerSseConfig) {
         let generation = streamGeneration
-        let session = sharedURLSession()
+        guard let session = try? sharedURLSession() else {
+            return
+        }
         streamTask = Task {
             var lastEventID: String?
             var retryMilliseconds = 1000

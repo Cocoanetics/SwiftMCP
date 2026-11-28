@@ -156,8 +156,8 @@ extension MCPServerProxy {
 
         retireStream()
         cancelListenSubscription()
-        urlSession?.invalidateAndCancel()
-        urlSession = nil
+        httpSession?.retire()
+        httpSession = nil
         endpointURL = nil
 
         switch config {

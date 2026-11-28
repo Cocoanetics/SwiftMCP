@@ -75,8 +75,14 @@ public final actor MCPServerProxy {
     internal var streamFailure: Error?
     internal var isDisconnecting = false
     /// The shared HTTP connection pool for every SSE / streamable-HTTP request
-    /// made by this proxy. Created lazily and replaced after `disconnect()`.
-    internal var urlSession: URLSession?
+    /// made by this proxy. Created lazily per connection and retired by
+    /// `disconnect()`; a request keeps the one it started on.
+    internal var httpSession: MCPProxyHTTPSession?
+
+    /// The current connection's `URLSession`, if one has been created.
+    internal var urlSession: URLSession? {
+        httpSession?.session
+    }
 
     public internal(set) var endpointURL: URL?
     public internal(set) var sessionID: String?
