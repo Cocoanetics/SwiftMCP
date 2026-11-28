@@ -373,4 +373,16 @@ func testSingleLineDocumentationBlocks() {
     #expect(doc2.returns == nil)
 }
 
+@Test("Keeps non-ASCII text and drops only control characters")
+func testNonASCIIDocumentation() {
+    let docText = """
+    /// Runs it — at most 1–600 seconds; see Settings › Commands. Café, naïve, 日本語, ✓
+    /// - Parameter limit: Seconds (1–600) \u{7}before it stops
+    """
+    let doc = Documentation(from: docText)
+    let expected = "Runs it — at most 1–600 seconds; see Settings › Commands. Café, naïve, 日本語, ✓"
+    #expect(doc.description == expected)
+    #expect(doc.parameters["limit"] == "Seconds (1–600) before it stops")
+}
+
 #endif
