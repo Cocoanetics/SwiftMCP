@@ -154,7 +154,7 @@ struct MCPServerProxyStreamableHTTPTests {
         try await proxy.ping()
     }
 
-    @Test("Disconnect terminates a request that is already in flight")
+    @Test("Disconnect terminates a request that is already in flight", .timeLimit(.minutes(1)))
     func disconnectTerminatesInFlightRequest() async throws {
         let server = HeldToolServer()
         let (transport, url) = try await startTransport(server: server)

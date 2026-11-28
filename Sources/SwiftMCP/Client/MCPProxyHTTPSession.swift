@@ -11,19 +11,21 @@ import SwiftCross
 /// has been invalidated") that aborted the process. (#277)
 ///
 /// Every start is registered under ``lock`` before it may reach Foundation.
-/// ``retire()`` refuses new starts from then on, cancels the registered ones,
-/// and only invalidates the session once none of them can still create a task.
-/// A retired session never comes back, so a request that captured it can never
-/// migrate onto the session of a later connection.
+/// ``retire()`` refuses new starts from then on, fails and cancels the
+/// registered ones, and only invalidates the session once none of them can
+/// still create a task. A retired session never comes back, so a request that
+/// captured it can never migrate onto the session of a later connection.
 internal final class MCPProxyHTTPSession: @unchecked Sendable {
     let session: URLSession
 
     private let lock = NSLock()
     private var isRetired = false
     private var isInvalidated = false
-    private var nextStartID = 0
-    /// Cancels the starts that may still create a Foundation task, by id.
+    private var nextID = 0
+    /// Fails and cancels the starts that may still create a Foundation task, by id.
     private var pendingStarts: [Int: @Sendable () -> Void] = [:]
+    /// Cancels the operations running on this session (see ``run(_:)``), by id.
+    private var activeOperations: [Int: @Sendable () -> Void] = [:]
     private var startedTaskCount = 0
     private var startGate: (@Sendable () async -> Void)?
 
@@ -55,10 +57,27 @@ internal final class MCPProxyHTTPSession: @unchecked Sendable {
         try await start { session in try await session.data(for: request) }
     }
 
-    /// Refuses further starts, cancels in-flight work, and invalidates the
+    /// Runs `operation` (a whole request, including reading its body) in a task
+    /// that ``retire()`` cancels. Invalidating the session alone does not end
+    /// every stream: off Apple platforms SwiftCross's `bytes(for:)` reads on a
+    /// one-shot session of its own, which only task cancellation reaches.
+    func run<Value: Sendable>(
+        _ operation: @escaping @Sendable () async throws -> Value
+    ) async throws -> Value {
+        let (operationID, task) = try registerOperation(operation)
+        defer { lock.withLock { activeOperations[operationID] = nil } }
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    /// Refuses further starts, ends in-flight work, and invalidates the
     /// session as soon as no start can still create a task on it.
     func retire() {
         let pending: [@Sendable () -> Void]
+        let operations: [@Sendable () -> Void]
         let invalidateNow: Bool
         lock.lock()
         if isRetired {
@@ -67,19 +86,23 @@ internal final class MCPProxyHTTPSession: @unchecked Sendable {
         }
         isRetired = true
         pending = Array(pendingStarts.values)
+        operations = Array(activeOperations.values)
         invalidateNow = pending.isEmpty
         if invalidateNow {
             isInvalidated = true
         }
         lock.unlock()
 
+        for cancel in operations {
+            cancel()
+        }
         if invalidateNow {
             session.invalidateAndCancel()
             return
         }
 
         // Starts still in flight will invalidate the session when the last one
-        // finishes; until then cancel them and every task already running.
+        // finishes; until then fail them and cancel every task already running.
         for cancel in pending {
             cancel()
         }
@@ -90,19 +113,19 @@ internal final class MCPProxyHTTPSession: @unchecked Sendable {
         }
     }
 
-    private func start<Value>(
+    internal func start<Value>(
         _ operation: @escaping @Sendable (URLSession) async throws -> Value
     ) async throws -> Value {
         if let gate = lock.withLock({ startGate }) {
             await gate()
         }
 
-        let (startID, task) = try registerStart(operation)
-        defer { finishStart(startID) }
+        let pending = PendingStart<UncheckedSendableBox<Value>>()
+        try registerStart(pending, operation)
         let result = try await withTaskCancellationHandler {
-            try await task.value
+            try await pending.value()
         } onCancel: {
-            task.cancel()
+            pending.cancel()
         }
         // The session was retired while the response was on its way; its
         // invalidation cancels the body, so do not hand the stale result back.
@@ -114,21 +137,48 @@ internal final class MCPProxyHTTPSession: @unchecked Sendable {
 
     /// Spawns the task that calls into Foundation while holding ``lock``, so it
     /// either exists before ``retire()`` looks for pending starts or is refused.
+    /// The caller waits on `pending`, which ``retire()`` fails directly: the
+    /// SwiftCross `bytes(for:)` shim ignores cancellation until headers arrive.
     private func registerStart<Value>(
+        _ pending: PendingStart<UncheckedSendableBox<Value>>,
         _ operation: @escaping @Sendable (URLSession) async throws -> Value
-    ) throws -> (Int, Task<UncheckedSendableBox<Value>, Error>) {
+    ) throws {
         lock.lock()
         defer { lock.unlock() }
         guard !isRetired else {
             throw CancellationError()
         }
-        let startID = nextStartID
-        nextStartID += 1
+        let startID = nextID
+        nextID += 1
         startedTaskCount += 1
         let session = self.session
-        let task = Task { UncheckedSendableBox(value: try await operation(session)) }
-        pendingStarts[startID] = { task.cancel() }
-        return (startID, task)
+        let task = Task {
+            let result: Result<UncheckedSendableBox<Value>, Error>
+            do {
+                result = .success(UncheckedSendableBox(value: try await operation(session)))
+            } catch {
+                result = .failure(error)
+            }
+            self.finishStart(startID)
+            pending.resolve(result)
+        }
+        pending.setTask(task)
+        pendingStarts[startID] = { pending.cancel() }
+    }
+
+    private func registerOperation<Value: Sendable>(
+        _ operation: @escaping @Sendable () async throws -> Value
+    ) throws -> (Int, Task<Value, Error>) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !isRetired else {
+            throw CancellationError()
+        }
+        let operationID = nextID
+        nextID += 1
+        let task = Task { try await operation() }
+        activeOperations[operationID] = { task.cancel() }
+        return (operationID, task)
     }
 
     private func finishStart(_ startID: Int) {
@@ -142,6 +192,55 @@ internal final class MCPProxyHTTPSession: @unchecked Sendable {
 
         if invalidate {
             session.invalidateAndCancel()
+        }
+    }
+}
+
+/// The caller's side of one start: resolved by whichever comes first — the
+/// Foundation call finishing, the caller being cancelled, or ``MCPProxyHTTPSession/retire()``.
+private final class PendingStart<Value: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var result: Result<Value, Error>?
+    private var continuation: CheckedContinuation<Value, Error>?
+    private var task: Task<Void, Never>?
+
+    func setTask(_ task: Task<Void, Never>) {
+        lock.withLock { self.task = task }
+    }
+
+    func value() async throws -> Value {
+        try await withCheckedThrowingContinuation { continuation in
+            if let result = install(continuation) {
+                continuation.resume(with: result)
+            }
+        }
+    }
+
+    /// Fails the waiting caller now and cancels the Foundation call behind it.
+    func cancel() {
+        let task = lock.withLock { self.task }
+        resolve(.failure(CancellationError()))
+        task?.cancel()
+    }
+
+    func resolve(_ newResult: Result<Value, Error>) {
+        let waiting: CheckedContinuation<Value, Error>? = lock.withLock {
+            guard result == nil else { return nil }
+            result = newResult
+            defer { continuation = nil }
+            return continuation
+        }
+        waiting?.resume(with: newResult)
+    }
+
+    /// Stores the caller's continuation, or returns the result if it is already in.
+    private func install(_ continuation: CheckedContinuation<Value, Error>) -> Result<Value, Error>? {
+        lock.withLock {
+            if let result {
+                return result
+            }
+            self.continuation = continuation
+            return nil
         }
     }
 }

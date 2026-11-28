@@ -1,4 +1,4 @@
-#if Server
+#if Client
 // Helpers for the proxy HTTP session lifecycle tests (#277).
 
 import SwiftMCP
@@ -35,6 +35,7 @@ actor StartGate {
     }
 }
 
+#if Server
 /// A server whose tool stays in flight until released.
 @MCPServer(name: "HeldToolServer", version: "1.0.0")
 actor HeldToolServer {
@@ -59,4 +60,5 @@ actor HeldToolServer {
         waiters.removeAll()
     }
 }
+#endif
 #endif

@@ -27,17 +27,22 @@ extension MCPServerProxy {
         }
 
         let requestBody = try JSONRPCMessage.makeEncoder().encode(message)
+        let session = try sharedURLSession()
 
-        return try await streamableRequestResponse(
-            session: try sharedURLSession(),
-            endpointURL: endpointURL,
-            sseConfig: sseConfig,
-            requestID: requestID,
-            requestBody: requestBody,
-            lastEventID: nil,
-            retryMilliseconds: 1000,
-            extraHeaders: extraHeaders
-        )
+        // Run the whole exchange under the session so `disconnect()` also ends
+        // a response that is still streaming.
+        return try await session.run {
+            try await self.streamableRequestResponse(
+                session: session,
+                endpointURL: endpointURL,
+                sseConfig: sseConfig,
+                requestID: requestID,
+                requestBody: requestBody,
+                lastEventID: nil,
+                retryMilliseconds: 1000,
+                extraHeaders: extraHeaders
+            )
+        }
     }
 
     // swiftlint:disable:next function_parameter_count function_body_length cyclomatic_complexity
